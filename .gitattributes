@@ -1,0 +1,8 @@
+# Force LF on every platform. Load-bearing, not cosmetic:
+#  - migration files are checksummed (BUILD-SPEC.md §17.1): CRLF vs LF would change the checksum
+#    and make the ledger reject an unedited file
+#  - the .claude/hooks/*.sh scripts break under bash with CRLF line endings
+#  - the spec files are verified by md5sum
+* text=auto eol=lf
+*.sh text eol=lf
+*.sql text eol=lf

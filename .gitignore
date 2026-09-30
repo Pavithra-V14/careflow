@@ -1,0 +1,28 @@
+# Virtual environment
+.venv/
+
+# Secrets — never commit real values. Only .env.example is tracked.
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Claude Code local-only settings (project settings.json IS tracked)
+.claude/settings.local.json

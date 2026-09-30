@@ -1,0 +1,754 @@
+# CareFlow metrics catalog.
+#
+# Every metric used anywhere (Live/Test dashboard, Grafana alerts, CI gates) is defined exactly
+# once here and referenced by id. Do not hand-duplicate a definition elsewhere — generate the
+# dashboard panels and Grafana alert rules from this file.
+#
+# Fields:
+#   id            unique, snake_case
+#   definition    one sentence, precise enough to implement from
+#   source        live_computed | live_labeled | offline_gold | checklist | business
+#   origins       which origin tags (live/test/eval/canary) this metric is computed for —
+#                 the Live-tab CI guard (BUILD-SPEC.md §13.6) checks every live-tab panel
+#                 references only metrics whose `origins` includes `live`
+#   cadence       how often it refreshes
+#   target        starting threshold — a clinical lead or business owner may revise
+#   gate          hard | threshold | reported | none — see BUILD-SPEC.md §14.3
+#   alert         alert id from alerts.yaml section below, or null
+#   owner         role responsible for the number
+
+metrics:
+
+  # ---- mandatory minimum (reference architecture's non-negotiable floor) ----
+
+  - id: grounding_rate
+    definition: "Share of decision-relevant extracted facts that pass their tiered grounding check (BUILD-SPEC.md §11.2), computed live since no free-text answers reach patients."
+    source: live_computed
+    origins: [live, test, eval]
+    cadence: 60s
+    target: ">= 0.98"
+    gate: threshold
+    alert: grounding_rate_drop
+    owner: engineering
+
+  - id: context_recall
+    definition: "Of the facts needed to answer a labeled retrieval query, the fraction the retriever actually returned."
+    source: offline_gold
+    origins: [test, eval]
+    cadence: nightly_and_pre_release
+    target: ">= 0.80"
+    gate: threshold
+    alert: null
+    owner: engineering
+
+  - id: answer_relevancy
+    definition: "For model-drafted text only (records-request letters, plan summaries) — judge score of whether the draft addresses what was asked."
+    source: offline_gold
+    origins: [test, eval]
+    cadence: nightly_and_pre_release
+    target: reported
+    gate: reported
+    alert: null
+    owner: engineering
+
+  - id: latency_p95_machine
+    definition: "p95 wall-clock time for the machine-controlled portion of a completed job — excludes human wait and external wait (patient reply, pending result), reported separately."
+    source: live_computed
+    origins: [live, test]
+    cadence: 60s
+    target: "within agreed SLA per workflow"
+    gate: reported
+    alert: latency_spike
+    owner: engineering
+
+  - id: latency_human_wait
+    definition: "Elapsed time a completed job spent waiting on a human review decision."
+    source: live_computed
+    origins: [live]
+    cadence: 60s
+    target: reported
+    gate: none
+    alert: null
+    owner: business_owner
+
+  - id: latency_external_wait
+    definition: "Elapsed time a completed job spent waiting on a patient reply or an external result (e.g. an echo report)."
+    source: live_computed
+    origins: [live]
+    cadence: 60s
+    target: reported
+    gate: none
+    alert: null
+    owner: business_owner
+
+  - id: cost_per_query
+    definition: "Total retrieval plus generation cost for one model-touching request."
+    source: live_computed
+    origins: [live, test]
+    cadence: 60s
+    target: reported
+    gate: reported
+    alert: null
+    owner: engineering
+
+  - id: task_completion_rate
+    definition: "Share of jobs verified against their actual end state as successful — not merely 'the agent stopped'."
+    source: live_labeled
+    origins: [live]
+    cadence: daily
+    target: reported
+    gate: reported
+    alert: null
+    owner: business_owner
+
+  - id: tool_call_accuracy
+    definition: "Share of tool calls that selected the correct tool with valid, correct arguments, against the labeled trajectory set."
+    source: offline_gold
+    origins: [test, eval]
+    cadence: nightly_and_pre_release
+    target: ">= 0.95"
+    gate: threshold
+    alert: null
+    owner: engineering
+
+  - id: cost_per_completed_task
+    definition: "Total token plus tool-call cost for tasks that actually succeeded — the failure multiplier (see below) folds a cheap-but-wrong path back into this number."
+    source: live_computed
+    origins: [live]
+    cadence: daily
+    target: "within cost-canvas tolerance (BUILD-SPEC.md §15.1), +/-20% of dry-run estimate"
+    gate: reported
+    alert: cost_tail_spike
+    owner: business_owner
+
+  - id: loop_failure_rate
+    definition: "Share of jobs that hit a step ceiling, retry ceiling, or a detectable unproductive loop (BUILD-SPEC.md §7.3 ceilings)."
+    source: live_computed
+    origins: [live, test]
+    cadence: 60s
+    target: "< 0.02"
+    gate: threshold
+    alert: dead_letter_growth
+    owner: engineering
+
+  - id: escalation_rate_and_accuracy
+    definition: "How often the system escalates to a human, split by reason code 'unnecessary escalation' (over-escalation) and 'missed by system' (under-escalation, surfaced via the 5% after-the-fact review and canaries)."
+    source: live_labeled
+    origins: [live]
+    cadence: daily
+    target: "matches the calibrated autonomy dial for the clinic's current mode"
+    gate: reported
+    alert: escalation_accuracy_drift
+    owner: clinical_lead
+
+  - id: golden_set_vs_variance_band
+    definition: "Current golden-set score against the variance band (baseline mean minus 2 standard deviations over 3 unchanged runs) for each gated metric."
+    source: offline_gold
+    origins: [test, eval]
+    cadence: nightly_and_pre_release
+    target: "inside the band"
+    gate: threshold
+    alert: golden_set_drift
+    owner: engineering
+
+  - id: guardrail_trigger_accuracy
+    definition: "False-positive and false-negative rate of every guardrail (input isolation classifier, tiered grounding checks, scope-enforcement classifier) against the adversarial gold set."
+    source: offline_gold
+    origins: [test, eval]
+    cadence: nightly_and_pre_release
+    target: "100% of known attack patterns blocked or safely handled (red-team pass rate)"
+    gate: hard
+    alert: null
+    owner: engineering
+
+  - id: audit_log_completeness
+    definition: "Share of in-scope actions (every write, every approval, every model decision feeding an approval) that are reconstructable from the audit log."
+    source: live_computed
+    origins: [live]
+    cadence: monthly
+    target: "100%"
+    gate: hard
+    alert: audit_completeness_gap
+    owner: engineering
+
+  # ---- safety-critical (ranked above generic reliability alerts) ----
+
+  - id: red_flag_recall
+    definition: "Of the gold-set cases with a genuine red flag, the fraction the deterministic rules correctly fired on, before any model call."
+    source: offline_gold
+    origins: [test, eval]
+    cadence: every_change_and_nightly
+    target: "= 1.00"
+    gate: hard
+    alert: null
+    owner: clinical_lead
+
+  - id: urgent_case_recall
+    definition: "Of the gold-set cases labeled urgent, the fraction the system correctly prioritized as urgent."
+    source: offline_gold
+    origins: [test, eval]
+    cadence: nightly_and_pre_release
+    target: "= 1.00"
+    gate: hard
+    alert: null
+    owner: clinical_lead
+
+  - id: red_flag_task_overdue
+    definition: "Any open red-flag escalation task past its due time (due time is immediate for emergency-template cases)."
+    source: live_computed
+    origins: [live]
+    cadence: 60s
+    target: "0 at all times"
+    gate: hard
+    alert: red_flag_overdue
+    owner: clinical_lead
+
+  - id: safety_net_fail_closed_rate
+    definition: "Count of times the decision-engine safety net had no available engine and correctly escalated to a nurse rather than proceeding unscreened."
+    source: live_computed
+    origins: [live]
+    cadence: 60s
+    target: reported
+    gate: none
+    alert: safety_net_failed_closed
+    owner: engineering
+
+  - id: canary_catch_rate
+    definition: "Share of planted canary tasks (1-2% of the review queue, synthetic referrals with a deliberate error) that were correctly caught (not approved) by reviewers."
+    source: live_computed
+    origins: [live, canary]
+    cadence: daily
+    target: ">= 0.95 (required for autonomous-mode promotion, BUILD-SPEC.md §14.7)"
+    gate: threshold
+    alert: canary_approved
+    owner: clinical_lead
+
+  - id: after_the_fact_review_error_rate
+    definition: "Error rate found in the ~5% sample of auto-approved cases re-reviewed after the fact — the only measurement of the automatic path's true error rate."
+    source: live_labeled
+    origins: [live]
+    cadence: weekly
+    target: "< 0.02 (triggers automatic demotion to shadow mode if exceeded, BUILD-SPEC.md §14.7)"
+    gate: threshold
+    alert: after_the_fact_error_spike
+    owner: clinical_lead
+
+  - id: wrong_merge_rate
+    definition: "Any patient-record merge later reversed via the unmerge procedure, against the labeled identity-matching pair set."
+    source: offline_gold
+    origins: [test, eval, live]
+    cadence: nightly_and_pre_release
+    target: "= 0"
+    gate: hard
+    alert: null
+    owner: clinical_lead
+
+  # ---- retrieval and matching ----
+
+  - id: card_recall_at_3
+    definition: "Of the gold-set referrals with an expected card, the fraction where that card appeared in the top 3 retrieved candidates."
+    source: offline_gold
+    origins: [test, eval]
+    cadence: nightly_and_pre_release
+    target: ">= 0.80"
+    gate: threshold
+    alert: null
+    owner: engineering
+
+  - id: correct_abstention_rate
+    definition: "Of the deliberately out-of-scope gold-set referrals, the fraction where the system correctly returned no card rather than a false match."
+    source: offline_gold
+    origins: [test, eval]
+    cadence: nightly_and_pre_release
+    target: ">= 0.90"
+    gate: threshold
+    alert: null
+    owner: engineering
+
+  - id: priority_accuracy
+    definition: "Of the gold-set referrals, the fraction where the computed priority matched the clinician-labeled priority."
+    source: offline_gold
+    origins: [test, eval]
+    cadence: nightly_and_pre_release
+    target: ">= 0.95"
+    gate: threshold
+    alert: null
+    owner: clinical_lead
+
+  - id: false_routing_rate
+    definition: "Of the out-of-scope gold-set referrals, the fraction incorrectly routed to some card instead of abstaining."
+    source: offline_gold
+    origins: [test, eval]
+    cadence: nightly_and_pre_release
+    target: "as low as possible; tracked alongside correct_abstention_rate"
+    gate: reported
+    alert: null
+    owner: engineering
+
+  - id: index_freshness_lag
+    definition: "Time delta between a card's publish event and its reflected version in the vector index (BUILD-SPEC.md §10.8)."
+    source: live_computed
+    origins: [live, test]
+    cadence: 60s
+    target: "< 5 min p95"
+    gate: reported
+    alert: index_staleness
+    owner: engineering
+
+  - id: engine_agreement
+    definition: "Agreement rate between Laya, Jev, and the LLM fallback on the same golden decision-engine inputs (the three-engine contract test, BUILD-SPEC.md §5.2/§14.3)."
+    source: offline_gold
+    origins: [test, eval]
+    cadence: every_change
+    target: "within stated tolerance"
+    gate: hard
+    alert: null
+    owner: engineering
+
+  # ---- reliability and operations ----
+
+  - id: uptime
+    definition: "Availability of the deterministic path (API + database) on paid hosting."
+    source: live_computed
+    origins: [live]
+    cadence: continuous
+    target: "> 99.9% (best-effort only on free-tier components, BUILD-SPEC.md §16.3)"
+    gate: reported
+    alert: null
+    owner: engineering
+
+  - id: error_rate
+    definition: "Share of API requests returning a 5xx response."
+    source: live_computed
+    origins: [live]
+    cadence: continuous
+    target: "< 0.1%"
+    gate: reported
+    alert: error_rate_spike
+    owner: engineering
+
+  - id: step_efficiency
+    definition: "Steps/tool-calls actually taken per completed job versus the minimum necessary — catches a 'busy but wasteful' agent."
+    source: live_computed
+    origins: [live, test]
+    cadence: daily
+    target: reported
+    gate: reported
+    alert: null
+    owner: engineering
+
+  - id: tool_status_mix
+    definition: "Distribution of tool-call outcomes (ok / empty / degraded / unavailable) per tool, per day."
+    source: live_computed
+    origins: [live]
+    cadence: daily
+    target: reported
+    gate: reported
+    alert: null
+    owner: engineering
+
+  - id: queue_depth_and_oldest_age
+    definition: "Current queue depth and the age of the oldest unclaimed job."
+    source: live_computed
+    origins: [live]
+    cadence: 60s
+    target: "oldest job age < 10 min"
+    gate: reported
+    alert: oldest_job_stale
+    owner: engineering
+
+  - id: review_queue_age
+    definition: "Age distribution of open review tasks, by required role."
+    source: live_computed
+    origins: [live]
+    cadence: 60s
+    target: "within the task class's deadline"
+    gate: reported
+    alert: review_task_overdue
+    owner: clinical_lead
+
+  - id: dead_letter_count
+    definition: "Count of jobs in the dead-letter table awaiting manual intervention."
+    source: live_computed
+    origins: [live]
+    cadence: 60s
+    target: "0"
+    gate: reported
+    alert: dead_letter_growth
+    owner: engineering
+
+  - id: rollback_frequency
+    definition: "Count of production rollbacks per month — a rising trend signals an unstable release process."
+    source: live_computed
+    origins: [live]
+    cadence: monthly
+    target: "trending down over time"
+    gate: reported
+    alert: null
+    owner: engineering
+
+  - id: model_dependency_health
+    definition: "Deprecation notices or silent behavior changes detected by the scheduled model-verification job (BUILD-SPEC.md §5.3)."
+    source: live_computed
+    origins: [live]
+    cadence: scheduled_job
+    target: "no unplanned breaking change reaches production"
+    gate: reported
+    alert: model_deprecated
+    owner: engineering
+
+  - id: fallback_and_abstention_spike
+    definition: "Sudden rise in decision-engine fallback usage or retrieval abstention rate versus the rolling baseline — an early signal of a provider issue."
+    source: live_computed
+    origins: [live]
+    cadence: 60s
+    target: "flat or explainable"
+    gate: reported
+    alert: fallback_spike
+    owner: engineering
+
+  # ---- cost ----
+
+  - id: cost_per_successful_workflow
+    definition: "Total cost divided by count of workflows verified successful, per workflow type."
+    source: live_computed
+    origins: [live]
+    cadence: daily
+    target: "within cost-canvas tolerance"
+    gate: reported
+    alert: null
+    owner: business_owner
+
+  - id: first_pass_success_rate
+    definition: "Share of workflows that succeeded without any retry, escalation to a larger model, or human correction."
+    source: live_computed
+    origins: [live]
+    cadence: daily
+    target: reported
+    gate: reported
+    alert: null
+    owner: engineering
+
+  - id: cache_hit_rate
+    definition: "Hit rate for each caching mechanism separately (prompt-prefix, exact-match, semantic, request-scoped) — never blended into one number."
+    source: live_computed
+    origins: [live, test]
+    cadence: daily
+    target: reported
+    gate: reported
+    alert: null
+    owner: engineering
+
+  - id: failure_multiplier
+    definition: "Effective cost per success divided by nominal cost per call — the number that reveals a 'cheap' model is actually expensive once its error rate is priced in."
+    source: live_computed
+    origins: [live]
+    cadence: weekly
+    target: "as close to 1.0 as possible"
+    gate: reported
+    alert: null
+    owner: business_owner
+
+  - id: cost_tail_top_5_percent
+    definition: "The costliest 5% of jobs by spend, reviewed weekly."
+    source: live_computed
+    origins: [live]
+    cadence: weekly
+    target: reported
+    gate: reported
+    alert: cost_tail_spike
+    owner: business_owner
+
+  - id: evaluation_spend
+    definition: "Total spend attributable to evaluation runs (nightly + pre-release), tracked separately from production spend."
+    source: live_computed
+    origins: [eval]
+    cadence: weekly
+    target: "within an explicit monthly cap"
+    gate: reported
+    alert: eval_spend_cap
+    owner: engineering
+
+  # ---- business impact (needs a baseline; simulated + labeled in demo mode) ----
+
+  - id: referral_to_appointment_time
+    definition: "Elapsed time from referral receipt to a booked appointment."
+    source: business
+    origins: [live]
+    cadence: monthly
+    target: "set by business owner"
+    gate: reported
+    alert: null
+    owner: business_owner
+
+  - id: urgent_cases_seen_within_target
+    definition: "Share of urgent-priority referrals seen within the clinic's target window."
+    source: business
+    origins: [live]
+    cadence: monthly
+    target: "set by business owner"
+    gate: reported
+    alert: null
+    owner: business_owner
+
+  - id: backfill_fill_rate
+    definition: "Share of cancelled slots successfully refilled from the waitlist before the appointment time."
+    source: business
+    origins: [live]
+    cadence: monthly
+    target: "set by business owner"
+    gate: reported
+    alert: null
+    owner: business_owner
+
+  - id: followups_closed_vs_lost
+    definition: "Share of care-plan conditional follow-ups that reached a decided close-out versus went overdue/lost."
+    source: business
+    origins: [live]
+    cadence: monthly
+    target: "set by business owner"
+    gate: reported
+    alert: null
+    owner: business_owner
+
+  - id: no_show_rate
+    definition: "Share of booked appointments where the patient did not attend."
+    source: business
+    origins: [live]
+    cadence: monthly
+    target: "set by business owner"
+    gate: reported
+    alert: null
+    owner: business_owner
+
+  # ---- visit readiness, voice, and care gaps (BUILD-SPEC.md §22-24) ----
+
+  - id: intake_completion_rate
+    definition: "Share of visits with a matched card's declared intake questions fully answered before the visit, versus left as an incomplete-intake flag for front desk."
+    source: live_computed
+    origins: [live]
+    cadence: daily
+    target: reported
+    gate: reported
+    alert: null
+    owner: business_owner
+
+  - id: readiness_escalation_rate
+    definition: "Share of procedure-readiness checklists with at least one not-done or unclear answer, requiring nurse escalation (BUILD-SPEC.md §22.3). Not a target to minimize by relaxing the escalation rule -- every one of these is a correct, required escalation."
+    source: live_computed
+    origins: [live]
+    cadence: daily
+    target: reported
+    gate: reported
+    alert: null
+    owner: clinical_lead
+
+  - id: barrier_resolution_rate
+    definition: "Share of identified no-show barriers (BUILD-SPEC.md §22.4) resolved -- either rebooked or the front-desk follow-up closed -- versus left open."
+    source: live_labeled
+    origins: [live]
+    cadence: weekly
+    target: reported
+    gate: reported
+    alert: null
+    owner: business_owner
+
+  - id: voice_safety_escalation_rate
+    definition: "Count of mid-session red-flag detections during an in-app Gemini Live voice session (BUILD-SPEC.md \u00a711.6, \u00a723.3) and whether each correctly triggered the spoken safety response and nurse acknowledgment. Mirrors red_flag_task_overdue's urgency: a missed voice escalation leaves no text trail to catch it later."
+    source: live_computed
+    origins: [live]
+    cadence: 60s
+    target: "100% of detected red flags trigger the safety response"
+    gate: hard
+    alert: voice_safety_missed
+    owner: clinical_lead
+
+  - id: voice_scope_adherence_rate
+    definition: "Share of in-app voice sessions (BUILD-SPEC.md §23.2) where the patient's request stayed within the session's scoped task (a booking reply, a specific intake or readiness question) and any out-of-scope attempt (a clinical question, an open-ended request) was correctly declined and routed to text-based human review rather than the model improvising an answer outside its instructed scope."
+    source: live_computed
+    origins: [live, test]
+    cadence: daily
+    target: reported
+    gate: reported
+    alert: null
+    owner: engineering
+
+  - id: care_gap_open_count
+    definition: "Count of open items on the Care Gaps panel (BUILD-SPEC.md §24.1), by source: overdue-recurrence, after-the-fact-review, unresolved-barrier."
+    source: live_computed
+    origins: [live]
+    cadence: 60s
+    target: reported
+    gate: reported
+    alert: care_gap_growth
+    owner: clinical_lead
+
+  - id: care_gap_median_age
+    definition: "Median age of open Care Gaps panel items, by source. A rising trend signals the review process is falling behind generation of new gaps, independent of the raw count."
+    source: live_computed
+    origins: [live]
+    cadence: daily
+    target: "trending flat or down"
+    gate: reported
+    alert: null
+    owner: clinical_lead
+
+  - id: adoption_rate
+    definition: "Active users divided by eligible users."
+    source: business
+    origins: [live]
+    cadence: monthly
+    target: "rising toward target penetration"
+    gate: reported
+    alert: null
+    owner: business_owner
+
+  - id: automation_rate
+    definition: "Share of jobs handled without human intervention, shown beside the clinic's current autonomy mode — not a target to maximize on its own."
+    source: business
+    origins: [live]
+    cadence: monthly
+    target: "matches the business case assumption for the current mode"
+    gate: reported
+    alert: null
+    owner: business_owner
+
+# ---------------------------------------------------------------------------------------------
+# Alert definitions. Each alert references the metric(s) that trigger it. "channel" values map to
+# BUILD-SPEC.md §13.4's routing table. Safety-class alerts are listed first and are never subject
+# to the spend/budget suppression that applies to cost alerts.
+# ---------------------------------------------------------------------------------------------
+
+alerts:
+
+  - id: red_flag_overdue
+    severity: critical_safety
+    condition: "red_flag_task_overdue > 0"
+    channel: [in_app_role, admin_slack, email_nudge]
+    suppressible_by_budget: false
+
+  - id: safety_net_failed_closed
+    severity: critical_safety
+    condition: "safety_net_fail_closed_rate increments"
+    channel: [admin_slack, in_app_admin]
+    suppressible_by_budget: false
+
+  - id: canary_approved
+    severity: critical_safety
+    condition: "a canary task is approved by a reviewer"
+    channel: [admin_slack, in_app_admin]
+    note: "never shown to the reviewer who approved it"
+    suppressible_by_budget: false
+
+  - id: after_the_fact_error_spike
+    severity: critical_safety
+    condition: "after_the_fact_review_error_rate > 0.02"
+    channel: [admin_slack, in_app_admin]
+    note: "triggers automatic demotion to shadow mode, BUILD-SPEC.md §14.7"
+    suppressible_by_budget: false
+
+  - id: escalation_accuracy_drift
+    severity: safety
+    condition: "escalation_rate_and_accuracy trending outside calibrated band for current autonomy mode"
+    channel: [admin_slack, in_app_admin]
+    suppressible_by_budget: false
+
+  - id: golden_set_drift
+    severity: safety
+    condition: "any gated metric in golden_set_vs_variance_band falls outside its variance band"
+    channel: [admin_slack, in_app_admin]
+    suppressible_by_budget: false
+
+  - id: audit_completeness_gap
+    severity: safety
+    condition: "audit_log_completeness < 1.0"
+    channel: [admin_slack, in_app_admin]
+    suppressible_by_budget: false
+
+  - id: review_task_overdue
+    severity: safety
+    condition: "review_queue_age exceeds the task class's deadline"
+    channel: [in_app_role, email_nudge]
+    escalation: "next role up the chain if still unclaimed"
+    suppressible_by_budget: false
+
+  - id: dead_letter_growth
+    severity: operational
+    condition: "dead_letter_count > 0"
+    channel: [admin_slack, in_app_admin]
+    suppressible_by_budget: false
+
+  - id: oldest_job_stale
+    severity: operational
+    condition: "queue_depth_and_oldest_age.oldest_age > 10 min"
+    channel: [admin_slack]
+    suppressible_by_budget: false
+
+  - id: grounding_rate_drop
+    severity: operational
+    condition: "grounding_rate drops below target"
+    channel: [admin_slack]
+    suppressible_by_budget: false
+
+  - id: fallback_spike
+    severity: operational
+    condition: "fallback_and_abstention_spike deviates from rolling baseline"
+    channel: [admin_slack]
+    suppressible_by_budget: false
+
+  - id: index_staleness
+    severity: operational
+    condition: "index_freshness_lag p95 exceeds target"
+    channel: [admin_slack]
+    suppressible_by_budget: false
+
+  - id: model_deprecated
+    severity: operational
+    condition: "model_dependency_health detects a vanished or changed model id"
+    channel: [admin_slack]
+    suppressible_by_budget: false
+
+  - id: error_rate_spike
+    severity: operational
+    condition: "error_rate exceeds target"
+    channel: [admin_slack]
+    suppressible_by_budget: false
+
+  - id: latency_spike
+    severity: operational
+    condition: "latency_p95_machine > 2x rolling average, or duration > 2x average (reference architecture default)"
+    channel: [admin_slack]
+    suppressible_by_budget: false
+
+  - id: cost_tail_spike
+    severity: cost
+    condition: "cost per job > 3x rolling average, or absolute hard-stop $1-equivalent per job reached"
+    channel: [admin_slack]
+    suppressible_by_budget: false
+    note: "the hard-stop itself is a circuit breaker, not just an alert — see BUILD-SPEC.md §15.2"
+
+  - id: eval_spend_cap
+    severity: cost
+    condition: "evaluation_spend approaches its explicit monthly cap"
+    channel: [admin_slack]
+    suppressible_by_budget: false
+
+  - id: delivery_failure
+    severity: operational
+    condition: "any notification channel (Slack, email, SMS) fails to deliver"
+    channel: [in_app_admin_banner]
+    note: "ensures a dead channel is never silently dead"
+    suppressible_by_budget: false
+
+  - id: voice_safety_missed
+    severity: critical_safety
+    condition: "voice_safety_escalation_rate < 1.0 -- a detected red flag on a call did not trigger the safety response or nurse acknowledgment"
+    channel: [admin_slack, in_app_admin]
+    note: "no text trail exists for a missed voice escalation the way one exists for a missed message, so this fires immediately rather than waiting for a rollup"
+    suppressible_by_budget: false
+
+  - id: care_gap_growth
+    severity: safety
+    condition: "care_gap_open_count rising week over week with no explanatory change in patient volume"
+    channel: [admin_slack, in_app_admin]
+    suppressible_by_budget: false
