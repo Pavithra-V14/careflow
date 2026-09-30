@@ -17,7 +17,8 @@ Phase 0 (foundations) — in progress. See `BUILD-SPEC.md` Appendix D.
 
 - Python 3.12 and [`uv`](https://docs.astral.sh/uv/).
 - **No Docker anywhere** (`CLAUDE.md` rule 12). Development and CI each use their own hosted
-  Supabase project (Mumbai region) with synthetic data only.
+  Supabase project (Tokyo, `ap-northeast-1`; synthetic data only — production must be an India region,
+  see `BUILD-SPEC.md` §16.5).
 
 ```
 uv sync                       # install from pyproject.toml / uv.lock
