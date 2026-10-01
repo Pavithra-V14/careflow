@@ -1,0 +1,73 @@
+# CareFlow CI (BUILD-SPEC.md §21). GitHub Actions; no Docker anywhere (CLAUDE.md rule 12).
+#
+# Runs the full pytest suite on every pull request (and on pushes to main) against the hosted CI Supabase
+# project, as the restricted careflow_app role: row-level security is genuinely exercised, never bypassed.
+#
+# ONE-TIME SETUP before the first run (it cannot be automated here because it creates a password):
+#   1. Add the CI project's credentials as repository secrets, using the SAME names as .env.example:
+#        SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY, SUPABASE_JWKS_URL,
+#        DATABASE_URL_MIGRATOR (session pooler, port 5432), DATABASE_URL_APP (transaction pooler, 6543)
+#      DATABASE_URL_APP only exists after step 2. CORS_ALLOWED_ORIGINS is not needed in CI.
+#   2. Create the restricted role on the CI project from a trusted machine:
+#        python scripts/create_app_role.py --env ci --env-file .env.cli
+#      then copy the DATABASE_URL_APP it wrote into the repository secret.
+# Until both are done, the "Apply migrations" step fails with "role careflow_app must exist".
+#
+# Appendix B, still unconfirmed: that the session-mode pooler's advisory lock holds from a GitHub-hosted
+# runner. This workflow's migration step is that confirmation: the first green run confirms it, and the
+# note in BUILD-SPEC.md should be updated then.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# All runs share ONE hosted CI database, so they must not overlap (concurrent migrations/fixtures would race).
+concurrency:
+  group: careflow-ci-database
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CAREFLOW_ENV: ci
+      CAREFLOW_PROFILE: demo
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      SUPABASE_JWKS_URL: ${{ secrets.SUPABASE_JWKS_URL }}
+      DATABASE_URL_MIGRATOR: ${{ secrets.DATABASE_URL_MIGRATOR }}
+      DATABASE_URL_APP: ${{ secrets.DATABASE_URL_APP }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Install dependencies from the lockfile
+        run: |
+          python -m pip install --upgrade pip uv
+          uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check careflow tests
+
+      - name: Apply migrations to the CI project
+        run: uv run python -m careflow.migrate
+
+      - name: "Tests (a skipped test is a failure - it means a credential or migration is missing)"
+        run: |
+          set -o pipefail
+          uv run pytest -q -rs -p no:cacheprovider 2>&1 | tee pytest.out
+          if grep -q "^SKIPPED" pytest.out; then
+            echo "::error::tests were skipped; CI requires zero skips"
+            exit 1
+          fi

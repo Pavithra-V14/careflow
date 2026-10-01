@@ -105,10 +105,18 @@ async def visible(conn, uid, sql):
 async def test_all_eleven_schemas_exist_and_nine_have_no_tables(db):
     names = {r["nspname"] for r in await db.fetch("select nspname from pg_namespace")}
     assert {"iam", "audit", *NINE_EMPTY} <= names
-    tables = await db.fetch(
+    rows = await db.fetch(
         "select schemaname, tablename from pg_tables where schemaname = any($1::text[])", NINE_EMPTY
     )
-    assert tables == []
+    found: dict[str, set[str]] = {}
+    for r in rows:
+        found.setdefault(r["schemaname"], set()).add(r["tablename"])
+    # 0001 created these nine empty. Later phases add tables only where their migration says so; any other
+    # table appearing here is unplanned, so this list is updated in the same change as the migration.
+    assert found == {
+        "mpi": {"patients", "identity_tokens", "match_candidates"},
+        "sched": {"locations", "providers", "visit_types", "slots", "priority_levels", "holds", "bookings", "waitlist"},
+    }
 
 
 async def test_every_table_has_forced_rls(db):

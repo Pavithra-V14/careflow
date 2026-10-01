@@ -1,0 +1,69 @@
+# CareFlow data-flow register (BUILD-SPEC.md §17.6; CLAUDE.md rule 7).
+#
+# One entry for EVERY call that leaves this process: the service, what data it receives, its data_policy
+# classification, and whether it is permitted in the `clinical` operating profile (§2). This is what an
+# auditor asks for first. Rule 7: patient data never leaves the local trust boundary except through a listed,
+# approved call, and rule 13: a new external service is asked about before it is added.
+#
+# tests/test_data_flow_register.py enforces three things:
+#   * every entry has every field below, with an allowed value;
+#   * `permitted_in_clinical: true` requires a named approver and date (no self-approval by omission);
+#   * every module under careflow/ that imports an HTTP/network client has an entry whose `source` is that
+#     file. A new outbound call without a register entry fails the build.
+#
+# Field reference
+#   id                     short unique slug
+#   service                who is called (provider and product)
+#   host                   host or URL pattern called
+#   source                 path of the module that makes the call
+#   data_sent              what leaves the process, in words; "no patient data" only if that is literally true
+#   data_class             none | pseudonymous | patient_ciphertext | patient_plaintext
+#   data_policy            synthetic_only | phi_approved   (same vocabulary as the model registry, §5)
+#   permitted_in_clinical  true | false | unconfirmed      (unconfirmed = nobody has decided; treated as false)
+#   approved_by / approved_on   named human and ISO date; required when permitted_in_clinical is true
+#   status                 proposed | approved | retired
+#   appendix_b             the Appendix B item that must be hands-on verified, or null
+#   notes                  anything the next reader needs
+
+calls:
+  - id: supabase-auth-jwks
+    service: Supabase Auth (the project's own, same project as the database)
+    host: "<SUPABASE_URL>/auth/v1/.well-known/jwks.json"
+    source: careflow/auth.py
+    data_sent: "Nothing. A public, unauthenticated GET of the project's signing-key set. No request body, no token, no patient text."
+    data_class: none
+    data_policy: phi_approved
+    permitted_in_clinical: unconfirmed
+    approved_by: null
+    approved_on: null
+    status: proposed
+    appendix_b: "JWT signing method and verification (RESOLVED; confirmed again by tests/test_api_real_token_live.py: ES256, P-256, kid served by the live endpoint)"
+    notes: "Cached 10 minutes (matches the endpoint's Cache-Control: max-age=600) and refreshes are rate-limited. Contains public keys only."
+
+  - id: supabase-postgres
+    service: Supabase hosted Postgres (the project's own database; session pooler for migrations, transaction pooler for the app)
+    host: "<project>.pooler.supabase.com:5432 (migrator), :6543 (app)"
+    source: careflow/db.py
+    data_sent: "Patient demographics as AES-256-GCM ciphertext only, plus keyed-HMAC tokens, scheduling rows, and identity claims for RLS. No plaintext name, date of birth or phone is ever sent (careflow/crypto.py)."
+    data_class: patient_ciphertext
+    data_policy: phi_approved
+    permitted_in_clinical: unconfirmed
+    approved_by: null
+    approved_on: null
+    status: proposed
+    appendix_b: null
+    notes: "Dev and CI projects are Tokyo and hold synthetic data only (§18.1, accepted deviation); production must be an India region (§16.5). The encryption key never leaves the application environment."
+
+  - id: supabase-postgres-migrator
+    service: Supabase hosted Postgres (session-mode pooler, used only by the migration runner)
+    host: "<project>.pooler.supabase.com:5432"
+    source: careflow/migrate.py
+    data_sent: "SQL migration files (schema and grants only, no patient data) and the ledger of their checksums. Runs with the migrator credential, never the app role."
+    data_class: none
+    data_policy: phi_approved
+    permitted_in_clinical: unconfirmed
+    approved_by: null
+    approved_on: null
+    status: proposed
+    appendix_b: "Session-mode pooler holds a session-level advisory lock: RESOLVED from a developer machine; still unconfirmed from a GitHub-hosted runner (first CI run confirms it)"
+    notes: "Refuses the transaction-mode port (6543) because the advisory lock needs one backend across statements."

@@ -30,6 +30,7 @@ from careflow.scheduling import SlotManager
 ROOT = Path(__file__).resolve().parent.parent
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or dotenv_values(ROOT / ".env").get("DATABASE_URL_MIGRATOR")
 SQL_0004 = (ROOT / "db" / "migrations" / "0004_scheduling_operations.sql").read_text(encoding="utf-8")
+SQL_0005 = (ROOT / "db" / "migrations" / "0005_audit_doctor_signoff_security_fix.sql").read_text(encoding="utf-8")
 
 pytestmark = [
     pytest.mark.asyncio(loop_scope="module"),
@@ -66,6 +67,12 @@ async def _conn():
         await conn.exec_driver_sql("grant careflow_app to current_user with set true")
         if (await conn.execute(text("select to_regclass('sched.holds') is null"))).scalar_one():
             await raw(conn, SQL_0004)
+        # 0005 narrows the app role's UPDATE on priority_levels; if it is not applied yet, apply it here too.
+        still_open = await conn.execute(
+            text("select has_column_privilege('careflow_app', 'sched.priority_levels', 'approved_by', 'update')")
+        )
+        if still_open.scalar_one():
+            await raw(conn, SQL_0005)
         yield conn
     finally:
         await outer.rollback()
@@ -555,3 +562,53 @@ async def test_forced_rls_everywhere_and_no_delete_for_the_app_role(db):
         assert await one(db, "select has_table_privilege('careflow_app', :t, 'insert')", t=f"sched.{table}")
         for role in ("anon", "authenticated"):
             assert not await one(db, "select has_table_privilege(:r, :t, 'select')", r=role, t=f"sched.{table}")
+
+
+# ---- 0005: the approver on a priority level is the signed-in doctor, and cannot be rewritten --------
+
+
+async def test_a_doctor_can_only_sign_off_as_themselves(db, mgr):
+    w = await world(db)
+    other_doctor = _u()
+    await raw(
+        db,
+        f"insert into iam.accounts (id, account_type, status, origin) values ('{other_doctor}', 'staff', 'active', 'test'); "
+        f"insert into iam.staff_roles (account_id, clinic_id, role, origin) values ('{other_doctor}', '{w.a}', 'doctor', 'test');",
+    )
+    await act(db, w.doctor, _insert_level, w.a, "tier_a", 1, w.doctor)  # own sign-off: allowed
+    for forged in (other_doctor, w.admin, w.fd):
+        with pytest.raises(DBAPIError, match="row-level security"):
+            await act(db, w.doctor, _insert_level, w.a, "tier_forged", 7, forged)
+    assert [r.code for r in await q(db, "select code from sched.priority_levels")] == ["tier_a"]
+
+
+async def test_the_approver_and_the_ranking_cannot_be_changed_by_the_app_role(db, mgr):
+    w = await world(db)
+    await act(db, w.doctor, _insert_level, w.a, "tier_a", 1, w.doctor)
+    for column, value in (("approved_by", w.admin), ("approved_at", None), ("rank", 5), ("code", "tier_z"), ("clinic_id", w.b)):
+        with pytest.raises(DBAPIError, match="permission denied"):
+            await act(db, w.doctor, _set_level_column, column, value)
+    row = (await q(db, "select approved_by, rank, code from sched.priority_levels"))[0]
+    assert (row.approved_by, row.rank, row.code) == (w.doctor, 1, "tier_a")
+
+
+async def _set_level_column(conn, column, value):
+    if column == "approved_at":
+        await conn.execute(text("update sched.priority_levels set approved_at = now()"))
+    else:
+        await conn.execute(text(f"update sched.priority_levels set {column} = :v"), {"v": value})
+
+
+async def test_a_doctor_can_still_relabel_or_retire_a_level(db, mgr):
+    w = await world(db)
+    await act(db, w.doctor, _insert_level, w.a, "tier_a", 1, w.doctor)
+    await act(db, w.doctor, _relabel)
+    row = (await q(db, "select label, active, approved_by from sched.priority_levels"))[0]
+    assert (row.label, row.active, row.approved_by) == ("renamed", False, w.doctor)
+    for who in (w.fd, w.nurse, w.admin):  # still doctor-only
+        assert await act(db, who, _relabel) == 0
+
+
+async def _relabel(conn):
+    result = await conn.execute(text("update sched.priority_levels set label = 'renamed', active = false"))
+    return result.rowcount
