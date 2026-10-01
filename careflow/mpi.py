@@ -232,7 +232,9 @@ class PatientIngestionPipeline:
             )
             return IngestResult("replayed", pid, tuple(r[0] for r in rows))
 
-        # 4. Look the tokens up (clinic- and origin-scoped; erased records never match) and decide.
+        # 4. Look the tokens up (clinic- and origin-scoped; erased records never match) and decide. A subordinate
+        #    of an ACTIVE merge counts as its master, and the identifiers of both pool together, so a merged person
+        #    never looks like two confident matches (which would be "ambiguous").
         hits = await self._find(conn, clinic_id, origin, tokens)
         decision, reasons = classify(hits)
         if decision == "match":
@@ -309,13 +311,14 @@ class PatientIngestionPipeline:
             params["ph"] = tokens[PHONE]
         rows = await conn.execute(
             text(
-                f"""select t.patient_id, array_agg(distinct t.kind) as kinds
+                f"""select coalesce(mg.master_patient_id, t.patient_id) as patient_id, array_agg(distinct t.kind) as kinds
                     from mpi.identity_tokens t
                     join mpi.patients p on p.id = t.patient_id and p.clinic_id = t.clinic_id
+                    left join mpi.merges mg on mg.subordinate_patient_id = t.patient_id and mg.status = 'active'
                     where t.clinic_id = :clinic and t.key_version = :kv
                       and p.origin = :origin and p.erased_at is null
                       and ({' or '.join(clauses)})
-                    group by t.patient_id"""
+                    group by 1"""
             ),
             params,
         )

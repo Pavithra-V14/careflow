@@ -33,6 +33,7 @@ _ENV = dotenv_values(ROOT / ".env")
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or _ENV.get("DATABASE_URL_MIGRATOR")
 APP = os.environ.get("DATABASE_URL_APP") or _ENV.get("DATABASE_URL_APP")
 SQL_0003 = (ROOT / "db" / "migrations" / "0003_mpi_match_candidates.sql").read_text(encoding="utf-8")
+SQL_0008 = (ROOT / "db" / "migrations" / "0008_mpi_merge_ledger.sql").read_text(encoding="utf-8")
 
 pytestmark = [
     pytest.mark.asyncio(loop_scope="module"),
@@ -79,6 +80,9 @@ async def _conn():
         await conn.exec_driver_sql("grant careflow_app to current_user with set true")
         if (await conn.execute(text("select to_regclass('mpi.match_candidates') is null"))).scalar_one():
             await raw(conn, SQL_0003)
+        # Matching now routes a merged subordinate to its master, so it reads mpi.merges (migration 0008).
+        if (await conn.execute(text("select to_regclass('mpi.merges') is null"))).scalar_one():
+            await raw(conn, SQL_0008)
         yield conn
     finally:
         await outer.rollback()

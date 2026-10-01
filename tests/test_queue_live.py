@@ -520,12 +520,17 @@ async def test_parallel_workers_each_job_is_delivered_to_exactly_one_worker(comm
 
 
 async def test_a_claimed_job_is_invisible_then_returns_after_the_timeout(committed, queue):
-    clinic, fd, worker, engine, _ = committed
+    clinic, fd, worker, engine, admin = committed
     job_id = (await _as(engine, fd, queue.enqueue, clinic, "test", "demo.task", {"v": 1}, _key())).job_id
-    first = await _as(engine, worker, queue.claim, "slow-worker", 2)
+    # A generous window: on a slow link the second claim can arrive seconds after the first, and the test must
+    # check "hidden while the first works" inside the window, then wait out whatever is genuinely left of it.
+    first = await _as(engine, worker, queue.claim, "slow-worker", 15)
     assert first.id == job_id
-    assert await _as(engine, worker, queue.claim, "impatient-worker", 2) is None  # hidden while the first works
-    await asyncio.sleep(2.5)
+    assert await _as(engine, worker, queue.claim, "impatient-worker", 15) is None  # hidden while the first works
+    async with admin.connect() as c:
+        left = (await c.execute(text("select extract(epoch from visible_after - clock_timestamp()) from ops.queue where id = :j"), {"j": job_id})).scalar_one()
+    assert left > 0, "the visibility window ended before the hidden-job check finished; raise the timeout"
+    await asyncio.sleep(float(left) + 0.5)
     second = await _as(engine, worker, queue.claim, "rescuer", 30)
     assert (second.id, second.attempt_count) == (job_id, 2)
     with pytest.raises(q.NotOwner):  # the slow worker's late finish does not count
