@@ -14,10 +14,12 @@ The migrator does NOT use this module: it needs a session-mode connection (advis
 statements) and is configured separately.
 """
 
+import json
 from uuid import uuid4
 
+from sqlalchemy import text
 from sqlalchemy.engine import URL, make_url
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 
 
 def _unique_statement_name() -> str:
@@ -44,3 +46,13 @@ def make_app_engine(url: str | URL, **engine_kwargs) -> AsyncEngine:
     """Async engine for the restricted app role (NOBYPASSRLS), transaction-pooler safe."""
     connect_args = {**app_connect_args(), **engine_kwargs.pop("connect_args", {})}
     return create_async_engine(app_engine_url(url), connect_args=connect_args, **engine_kwargs)
+
+
+async def set_request_claims(conn: AsyncConnection, claims: dict) -> None:
+    """Make auth.uid() resolve to the verified caller for the current transaction (BUILD-SPEC.md §18.1).
+
+    `set_config(..., true)` with a BOUND parameter, never an interpolated `SET LOCAL`; the third argument
+    makes it transaction-local, so a pooled connection carries no identity into the next transaction.
+    Call it first inside the request's transaction, with claims that were already verified.
+    """
+    await conn.execute(text("select set_config('request.jwt.claims', :c, true)"), {"c": json.dumps(claims)})
