@@ -116,6 +116,9 @@ async def test_all_eleven_schemas_exist_and_nine_have_no_tables(db):
     assert found == {
         "mpi": {"patients", "identity_tokens", "match_candidates"},
         "sched": {"locations", "providers", "visit_types", "slots", "priority_levels", "holds", "bookings", "waitlist"},
+        "ops": {"queue", "outbox"},
+        "kb": {"red_flag_rules"},
+        "agents": {"review_tasks"},
     }
 
 
