@@ -20,7 +20,9 @@ cffi==2.1.1 ; platform_python_implementation != 'PyPy'
 click==8.5.0
     # via uvicorn
 cryptography==50.0.1
-    # via pyjwt
+    # via
+    #   careflow
+    #   pyjwt
 fastapi==0.142.1
     # via careflow
 greenlet==3.5.6
