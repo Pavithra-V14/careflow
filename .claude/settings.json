@@ -6,8 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-migration-edit.sh",
-            "args": []
+            "command": "./.claude/hooks/block-migration-edit.sh"
           }
         ]
       }
@@ -18,8 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/check-clinical-placeholder.sh",
-            "args": []
+            "command": "./.claude/hooks/check-clinical-placeholder.sh"
           }
         ]
       }
@@ -30,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'Reminder: read CLAUDE.md and BUILD-SPEC.md before continuing. Run /phase-status to see where the build stands. If /run-skill-generator has not been run yet, do that early -- it teaches /run and /verify to actually launch this app, which is how BUILD-SPEC.md section 19.1s requirement to check every screen in a real browser gets satisfied, rather than left undone.'"
+            "command": "echo 'Reminder: read CLAUDE.md and BUILD-SPEC.md before continuing. Run /phase-status to see where the build stands.'"
           }
         ]
       }
