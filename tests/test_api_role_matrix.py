@@ -17,6 +17,7 @@ a route without adding its matrix case breaks the build.
 import asyncio
 import os
 import time
+from datetime import timedelta
 import uuid
 from collections.abc import Callable
 from pathlib import Path
@@ -152,6 +153,16 @@ async def _seed_scheduling(ids, conn) -> None:
     )
     ids.patients_a = [p for p, c in patients if c == a]
     ids.patient_b = patients[-1][0]
+    ids.provider_a, ids.location_a = provider, location
+    # A waiting queue to read: the LOWER-priority patient joined EARLIER, so order by rank must beat order by time.
+    ids.wait_low, ids.wait_high = ids.patients_a[43], ids.patients_a[44]
+    now = datetime.now(timezone.utc)
+    await conn.executemany(
+        "insert into sched.waitlist (clinic_id, patient_id, visit_type_id, priority_code, joined_at, origin, idempotency_key) "
+        "values ($1, $2, $3, $4, $5, 'test', $6)",
+        [(a, ids.wait_low, ids.vt_a, "level_two", now - timedelta(days=2), k("wl-low")),
+         (a, ids.wait_high, ids.vt_a, "level_one", now - timedelta(days=1), k("wl-high"))],
+    )
 
     start = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0) + timedelta(days=60)
     slots, pools, n = [], {}, 0
@@ -236,6 +247,9 @@ def check_route_matrix(client, method, path, cases):
         )
         if response.status_code != status:
             failures.append(f"{label}: expected {status}, got {response.status_code}")
+        elif callable(body):  # a predicate over the parsed JSON, for bodies that carry generated ids and times
+            if not body(response.json()):
+                failures.append(f"{label}: body check failed: {str(response.json())[:300]}")
         elif body is not None and response.json() != body:
             failures.append(f"{label}: unexpected body {response.json()}")
     assert not failures, f"{method} {path}:\n  " + "\n  ".join(failures)
@@ -297,10 +311,10 @@ def _new_key() -> str:
     return f"matrix-{uuid.uuid4()}"
 
 
-def _case(ids, label, who, status, path, *, json=None, key="new"):
+def _case(ids, label, who, status, path, *, json=None, key="new", body=None):
     """One request. key='new' sends a fresh X-Idempotency-Key, key=None omits the header, any other string is sent as is."""
     headers = {} if key is None else {"X-Idempotency-Key": _new_key() if key == "new" else key}
-    return (label, _who(ids, who), status, None, {"path": path, "json": json, "headers": headers})
+    return (label, _who(ids, who), status, body, {"path": path, "json": json, "headers": headers})
 
 
 def _unauthenticated(ids, path, json):
@@ -400,6 +414,70 @@ def join_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, JOIN, body())
 
 
+def _page(ids, *, clinic_only=None, check=lambda items: True, non_empty=False):
+    """Predicate for a list response: the paging envelope is well formed, nothing from another clinic is in it, and
+    `check(items)` holds. `non_empty` also requires at least one item."""
+
+    def predicate(body):
+        items = body.get("items")
+        if set(body) != {"items", "limit", "has_more"} or not isinstance(items, list):
+            return False
+        if non_empty and not items:
+            return False
+        if clinic_only and any(i["clinic_id"] != str(clinic_only) for i in items):
+            return False
+        return check(items)
+
+    return predicate
+
+
+def read_cases(ids, route) -> list[tuple]:
+    """GET slots / bookings / waitlist. Readers: front desk, nurse, doctor (of the clinic whose rows they see). Everyone else
+    gets 403 before any query runs: admin, auditor, business owner, patients, guardians, suspended or invited accounts, and a
+    user with no account. A reader of another clinic is allowed, and simply sees none of this clinic's rows."""
+    path = PREFIX + "/" + route
+    A = ids.clinic_a
+    in_order = lambda items, key: all(key(i) <= key(j) for i, j in zip(items, items[1:]))  # noqa: E731
+    wait_pair = (str(ids.wait_low), str(ids.wait_high))
+    shape = {
+        "slots": dict(check=lambda items: all(i["status"] in ("open", "held") for i in items) and in_order(items, lambda i: i["starts_at"])),
+        "bookings": dict(check=lambda items: in_order(items, lambda i: i["starts_at"])),
+        "waitlist": dict(check=lambda items: in_order(items, lambda i: (i["rank"], i["joined_at"]))
+                         and [i["patient_id"] for i in items if i["patient_id"] in wait_pair] == [wait_pair[1], wait_pair[0]]),
+    }[route]  # waitlist: the higher-priority patient is listed first although they joined later
+    reads = lambda who, label: _case(ids, label, who, 200, path, key=None, body=_page(ids, clinic_only=A, non_empty=True, **shape))  # noqa: E731
+    cases = [reads(r, f"{r} of the clinic reads") for r in ("front_desk_a", "nurse_a", "doctor_a")]
+    cases += [
+        _case(ids, "a reader of another clinic is allowed and sees none of this clinic's rows", "front_desk_b", 200, path, key=None,
+              body=_page(ids, check=lambda items: items == [])),
+        reads("multi", "a nurse here who is a doctor elsewhere reads, and only this clinic has rows"),
+        _case(ids, "limit=1 returns one row and says there are more", "front_desk_a", 200, path + "?limit=1", key=None,
+              body=lambda b: len(b["items"]) == 1 and b["limit"] == 1 and b["has_more"] is True),
+        _case(ids, "limit=0 is rejected", "front_desk_a", 422, path + "?limit=0", key=None),
+        _case(ids, "limit=501 is rejected", "front_desk_a", 422, path + "?limit=501", key=None),
+    ]
+    filters = {
+        "slots": [("provider_id", ids.provider_a), ("location_id", ids.location_a)],
+        "waitlist": [("visit_type_id", ids.vt_a)],
+        "bookings": [],
+    }[route]
+    for name, known in filters:
+        cases += [
+            _case(ids, f"filter {name}=known returns rows", "front_desk_a", 200, f"{path}?{name}={known}", key=None,
+                  body=_page(ids, clinic_only=A, non_empty=True)),
+            _case(ids, f"filter {name}=unknown returns nothing", "front_desk_a", 200, f"{path}?{name}={uuid.uuid4()}", key=None,
+                  body=_page(ids, check=lambda items: items == [])),
+            _case(ids, f"filter {name} that is not a uuid is rejected", "front_desk_a", 422, f"{path}?{name}=nope", key=None),
+        ]
+    if route == "waitlist":
+        cases.append(_case(ids, "another clinic's visit type returns nothing", "front_desk_a", 200, f"{path}?visit_type_id={ids.vt_b}",
+                           key=None, body=_page(ids, check=lambda items: items == [])))
+    denied = [p for p in ids.people if p not in ("front_desk_a", "front_desk_b", "nurse_a", "doctor_a", "multi")]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path, key=None) for p in denied]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, path, key=None))
+    return cases + _unauthenticated(ids, path, None)
+
+
 # One entry per route: add the new route's cases here in the same change that adds the route.
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
@@ -407,6 +485,9 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", BOOK): lambda ids: slot_write_cases(ids, "book"),
     ("POST", CANCEL): cancel_cases,
     ("POST", JOIN): join_cases,
+    ("GET", PREFIX + "/slots"): lambda ids: read_cases(ids, "slots"),
+    ("GET", PREFIX + "/bookings"): lambda ids: read_cases(ids, "bookings"),
+    ("GET", PREFIX + "/waitlist"): lambda ids: read_cases(ids, "waitlist"),
 }
 
 
@@ -575,3 +656,80 @@ def test_concurrent_writes_from_two_clinics_neither_leak_identity_nor_connection
     assert sorted(results) == sorted([("front_desk_a", 200)] * 10 + [("front_desk_b", 404)] * 10)
     assert checked_out == 0
     assert {r["status"] for r in _run(_fetch("select status from sched.slots where id = any($1)", slots))} == {"held"}
+
+
+# ---- scheduling reads: behaviour beyond the allow/deny matrix -------------------------------------------------------
+
+
+def _get(client, ids, who, path):
+    return client.get(path, headers=bearer(mint(ids.people[who][0])))
+
+
+def _window(start):
+    """Query string that makes the slot starting at `start` the first row returned."""
+    return f"{PREFIX}/slots?limit=1&starts_after={(start - timedelta(seconds=1)).isoformat().replace('+', '%2B')}"
+
+
+def test_a_held_slot_shows_its_live_hold_and_an_expired_hold_shows_as_open(client, ids):
+    slot = ids.pools["extra"].pop()
+    window = _window(_run(_fetch("select starts_at from sched.slots where id = $1", slot))[0]["starts_at"])
+    assert _post(client, ids, "front_desk_a", HOLD.format(slot_id=slot), {"duration_minutes": 10}).status_code == 200
+    (item,) = _get(client, ids, "front_desk_a", window).json()["items"]
+    assert (item["slot_id"], item["status"]) == (str(slot), "held") and item["hold_expires_at"] is not None
+    # Let the hold lapse with no sweep having run: the listing must report the slot as bookable.
+    _run(_fetch("update sched.holds set expires_at = created_at + interval '1 millisecond' where slot_id = $1 returning id", slot))
+    (item,) = _get(client, ids, "front_desk_a", window).json()["items"]
+    assert (item["slot_id"], item["status"], item["hold_expires_at"]) == (str(slot), "open", None)
+
+
+def test_a_booked_slot_leaves_the_slot_list_and_a_cancelled_booking_leaves_the_booking_list(client, ids):
+    slot = ids.pools["extra"].pop()
+    window = _window(_run(_fetch("select starts_at from sched.slots where id = $1", slot))[0]["starts_at"])
+    booking = _post(client, ids, "front_desk_a", BOOK.format(slot_id=slot), {"patient_id": str(ids.patients_a[0])}).json()["booking_id"]
+    assert _get(client, ids, "front_desk_a", window).json()["items"][0]["slot_id"] != str(slot)
+    listed = {b["booking_id"] for b in _get(client, ids, "nurse_a", f"{PREFIX}/bookings?limit=500").json()["items"]}
+    assert booking in listed
+    assert _post(client, ids, "front_desk_a", CANCEL.format(booking_id=booking)).status_code == 200
+    listed = {b["booking_id"] for b in _get(client, ids, "nurse_a", f"{PREFIX}/bookings?limit=500").json()["items"]}
+    assert booking not in listed
+    assert _get(client, ids, "front_desk_a", window).json()["items"][0]["slot_id"] == str(slot)  # open again
+
+
+def test_list_responses_carry_identifiers_only(client, ids):
+    """Nothing in a list response is a name, date of birth or phone: only ids, times, status and rank."""
+    allowed = {"slot_id", "clinic_id", "provider_id", "location_id", "visit_type_id", "starts_at", "ends_at", "status",
+               "hold_expires_at", "booking_id", "patient_id", "created_at", "waitlist_id", "clinical_priority", "rank", "joined_at"}
+    for route in ("slots", "bookings", "waitlist"):
+        items = _get(client, ids, "doctor_a", f"{PREFIX}/{route}?limit=5").json()["items"]
+        assert items, route
+        for item in items:
+            assert set(item) <= allowed, (route, set(item) - allowed)
+
+
+def test_concurrent_reads_from_different_identities_neither_mix_rows_nor_leak_connections(app, ids):
+    """Forty concurrent reads over a pool of five: clinic A readers see only clinic A rows, clinic B's front desk sees
+    none, admin, auditor and a patient are refused, and every connection is back in the pool."""
+    plan = [("front_desk_a", 200), ("nurse_a", 200), ("front_desk_b", 200), ("admin_a", 403), ("auditor_a", 403), ("patient", 403)]
+
+    async def run():
+        async with app.router.lifespan_context(app):
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+
+                async def read(i):
+                    who, _ = plan[i % len(plan)]
+                    route = ("slots", "bookings", "waitlist")[i % 3]
+                    r = await http.get(f"{PREFIX}/{route}?limit=5", headers=bearer(mint(ids.people[who][0])))
+                    return who, r.status_code, (r.json()["items"] if r.status_code == 200 else None)
+
+                return await asyncio.gather(*(read(i) for i in range(40))), app.state.engine.pool.checkedout()
+
+    results, checked_out = _run(run())
+    assert checked_out == 0
+    expected = dict(plan)
+    for who, status, items in results:
+        assert status == expected[who], who
+        if who == "front_desk_b":
+            assert items == []
+        if who == "front_desk_a":
+            assert all(i["clinic_id"] == str(ids.clinic_a) for i in items)

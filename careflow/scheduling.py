@@ -126,6 +126,10 @@ class CancelResult:
     replayed: bool = False
 
 
+# The ONE definition of queue order, shared by `rank_waitlist` and `list_waitlist`.
+_WAITLIST_ORDER = "pl.rank asc, w.joined_at asc, w.id asc"
+
+
 def _sqlstate(exc: DBAPIError) -> str | None:
     return getattr(exc.orig, "sqlstate", None)
 
@@ -385,11 +389,80 @@ class SlotManager:
                    from sched.waitlist w
                    join sched.priority_levels pl on pl.clinic_id = w.clinic_id and pl.code = w.priority_code
                    where w.clinic_id = :c and w.visit_type_id = :v and w.status = 'waiting'
-                   order by pl.rank asc, w.joined_at asc, w.id asc"""
+                   order by """ + _WAITLIST_ORDER
             ),
             {"c": clinic_id, "v": visit_type_id},
         )
         return tuple(WaitlistCandidate(r.id, r.patient_id, r.priority_code, r.rank, r.joined_at) for r in rows)
+
+    # ---- reads (staff console) ---------------------------------------------------------------------
+    #
+    # Read-only, no side effect. `clinic_ids` narrows the result to clinics the caller is allowed to read for this
+    # purpose; row-level security still decides underneath, so this can only ever remove rows, never add them. Each
+    # returns up to `limit` rows; callers ask for limit + 1 to learn whether there are more.
+
+    async def list_slots(
+        self,
+        conn: AsyncConnection,
+        clinic_ids: list[uuid.UUID],
+        *,
+        provider_id: uuid.UUID | None = None,
+        location_id: uuid.UUID | None = None,
+        starts_after: datetime | None = None,
+        limit: int,
+    ):
+        """Open and held slots, soonest first. Status is the EFFECTIVE one (A): a slot marked 'held' whose hold has
+        expired is reported 'open', so a late sweep never shows a bookable slot as taken."""
+        sql = (
+            "select s.id, s.clinic_id, s.provider_id, s.location_id, s.visit_type_id, s.starts_at, s.ends_at, "
+            "case when s.status = 'held' and h.id is null then 'open' else s.status end as status, "
+            "h.expires_at as hold_expires_at "
+            "from sched.slots s "
+            "left join lateral (select id, expires_at from sched.holds "
+            "where slot_id = s.id and status = 'active' and expires_at > clock_timestamp() limit 1) h on true "
+            "where s.clinic_id = any(:clinics) and s.status in ('open', 'held')"
+        )
+        params: dict = {"clinics": clinic_ids, "n": limit}
+        for column, name, value in (("s.provider_id", "p", provider_id), ("s.location_id", "l", location_id)):
+            if value is not None:
+                sql += f" and {column} = :{name}"
+                params[name] = value
+        if starts_after is not None:
+            sql += " and s.starts_at >= :after"
+            params["after"] = starts_after
+        return (await conn.execute(text(sql + " order by s.starts_at, s.id limit :n"), params)).all()
+
+    async def list_bookings(self, conn: AsyncConnection, clinic_ids: list[uuid.UUID], *, limit: int):
+        """Confirmed bookings, soonest appointment first. Identifiers only: no patient text is read or decrypted."""
+        return (
+            await conn.execute(
+                text(
+                    "select b.id, b.clinic_id, b.slot_id, b.patient_id, b.created_at, s.provider_id, s.location_id, "
+                    "s.visit_type_id, s.starts_at, s.ends_at "
+                    "from sched.bookings b join sched.slots s on s.id = b.slot_id and s.clinic_id = b.clinic_id "
+                    "where b.clinic_id = any(:clinics) and b.status = 'confirmed' "
+                    "order by s.starts_at, b.id limit :n"
+                ),
+                {"clinics": clinic_ids, "n": limit},
+            )
+        ).all()
+
+    async def list_waitlist(
+        self, conn: AsyncConnection, clinic_ids: list[uuid.UUID], *, visit_type_id: uuid.UUID | None = None, limit: int
+    ):
+        """Waiting patients: clinical priority rank first (1 first), then who joined first, then id. The same order
+        `rank_waitlist` uses, so the queue a person reads is the queue a freed slot is offered through."""
+        sql = (
+            "select w.id, w.clinic_id, w.patient_id, w.visit_type_id, w.priority_code, pl.rank, w.joined_at "
+            "from sched.waitlist w "
+            "join sched.priority_levels pl on pl.clinic_id = w.clinic_id and pl.code = w.priority_code "
+            "where w.clinic_id = any(:clinics) and w.status = 'waiting'"
+        )
+        params: dict = {"clinics": clinic_ids, "n": limit}
+        if visit_type_id is not None:
+            sql += " and w.visit_type_id = :v"
+            params["v"] = visit_type_id
+        return (await conn.execute(text(sql + " order by " + _WAITLIST_ORDER + " limit :n"), params)).all()
 
     # ---- sweep -------------------------------------------------------------------------------------
 

@@ -30,9 +30,9 @@ import uuid
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -178,13 +178,20 @@ class _Body(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class _Out(BaseModel):
+    """Base for every scheduling response: building one with a field the schema does not name is an error, so a
+    query that starts returning a new column cannot leak it to clients by accident."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class HoldIn(_Body):
     # The cap is only a guard against interval overflow in the database, not an operational policy.
     duration_minutes: int = Field(gt=0, le=1_000_000)
     patient_id: uuid.UUID | None = None  # optional: hold the slot for one patient; nobody else can then book it
 
 
-class HoldOut(BaseModel):
+class HoldOut(_Out):
     hold_id: uuid.UUID
     slot_id: uuid.UUID
     expires_at: datetime
@@ -195,7 +202,7 @@ class BookIn(_Body):
     patient_id: uuid.UUID
 
 
-class BookOut(BaseModel):
+class BookOut(_Out):
     booking_id: uuid.UUID
     slot_id: uuid.UUID
     patient_id: uuid.UUID
@@ -203,7 +210,7 @@ class BookOut(BaseModel):
     replayed: bool
 
 
-class CandidateOut(BaseModel):
+class CandidateOut(_Out):
     waitlist_id: uuid.UUID
     patient_id: uuid.UUID
     priority_code: str
@@ -211,7 +218,7 @@ class CandidateOut(BaseModel):
     joined_at: datetime
 
 
-class CancelOut(BaseModel):
+class CancelOut(_Out):
     booking_id: uuid.UUID
     slot_id: uuid.UUID
     candidates: list[CandidateOut]  # best first; informational only, nobody is held, booked or contacted
@@ -225,7 +232,7 @@ class WaitlistJoinIn(_Body):
     clinical_priority: str = Field(min_length=1, max_length=64)
 
 
-class WaitlistJoinOut(BaseModel):
+class WaitlistJoinOut(_Out):
     waitlist_id: uuid.UUID
     patient_id: uuid.UUID
     visit_type_id: uuid.UUID
@@ -300,6 +307,143 @@ async def join_waitlist(body: WaitlistJoinIn, idempotency_key: IdempotencyKey, c
         clinical_priority=r.priority_code,
         replayed=r.replayed,
     )
+
+
+# ---- staff scheduling: reads ---------------------------------------------------------------------------------
+#
+# Who may read: front desk, nurse and doctor. Row-level security would let an admin read slots and return an empty
+# list for everyone else, so on its own it cannot give a clean refusal. These routes therefore add a coarse gate on
+# top: the caller must hold one of those three roles in some clinic (403 otherwise), and every query is narrowed to
+# the clinics where they hold one. That only ever REMOVES rows: RLS remains the isolation layer underneath. Lists are
+# paged by `limit` (default 100, max 500) and say whether more exist; they return identifiers, never patient text.
+
+SCHEDULING_READERS = ("front_desk", "nurse", "doctor")
+Limit = Annotated[int, Query(ge=1, le=500)]
+
+
+async def _readable_clinics(conn: AsyncConnection, claims: dict[str, Any]) -> list[uuid.UUID]:
+    rows = await conn.execute(
+        text(
+            "select distinct sr.clinic_id from iam.staff_roles sr join iam.accounts a on a.id = sr.account_id "
+            "where sr.account_id = :u and sr.revoked_at is null and sr.role = any(:roles) "
+            "and a.status = 'active' and a.account_type = 'staff'"
+        ),
+        {"u": uuid.UUID(claims["sub"]), "roles": list(SCHEDULING_READERS)},
+    )
+    clinics = [r[0] for r in rows]
+    if not clinics:
+        raise HTTPException(status_code=403, detail="your role may not read this")
+    return clinics
+
+
+class SlotOut(_Out):
+    slot_id: uuid.UUID
+    clinic_id: uuid.UUID
+    provider_id: uuid.UUID
+    location_id: uuid.UUID
+    visit_type_id: uuid.UUID
+    starts_at: datetime
+    ends_at: datetime
+    status: Literal["open", "held"]
+    hold_expires_at: datetime | None  # set only while a live hold exists
+
+
+class SlotList(_Out):
+    items: list[SlotOut]
+    limit: int
+    has_more: bool
+
+
+class BookingOut(_Out):
+    booking_id: uuid.UUID
+    clinic_id: uuid.UUID
+    slot_id: uuid.UUID
+    patient_id: uuid.UUID
+    provider_id: uuid.UUID
+    location_id: uuid.UUID
+    visit_type_id: uuid.UUID
+    starts_at: datetime
+    ends_at: datetime
+    created_at: datetime
+
+
+class BookingList(_Out):
+    items: list[BookingOut]
+    limit: int
+    has_more: bool
+
+
+class WaitlistEntryOut(_Out):
+    waitlist_id: uuid.UUID
+    clinic_id: uuid.UUID
+    patient_id: uuid.UUID
+    visit_type_id: uuid.UUID
+    clinical_priority: str
+    rank: int
+    joined_at: datetime
+
+
+class WaitlistList(_Out):
+    items: list[WaitlistEntryOut]  # clinical priority first (rank 1 first), then who joined first
+    limit: int
+    has_more: bool
+
+
+@scheduling.get("/slots", response_model=SlotList)
+async def list_slots(
+    conn: TxConn,
+    claims: dict[str, Any] = Depends(verified_claims),
+    provider_id: uuid.UUID | None = None,
+    location_id: uuid.UUID | None = None,
+    starts_after: datetime | None = None,
+    limit: Limit = 100,
+) -> SlotList:
+    """Open and held slots, soonest first, optionally for one provider and/or location."""
+    clinics = await _readable_clinics(conn, claims)
+    rows = await _slots.list_slots(
+        conn, clinics, provider_id=provider_id, location_id=location_id, starts_after=starts_after, limit=limit + 1
+    )
+    items = [
+        SlotOut(slot_id=r.id, clinic_id=r.clinic_id, provider_id=r.provider_id, location_id=r.location_id,
+                visit_type_id=r.visit_type_id, starts_at=r.starts_at, ends_at=r.ends_at, status=r.status,
+                hold_expires_at=r.hold_expires_at)
+        for r in rows[:limit]
+    ]
+    return SlotList(items=items, limit=limit, has_more=len(rows) > limit)
+
+
+@scheduling.get("/bookings", response_model=BookingList)
+async def list_bookings(
+    conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 100
+) -> BookingList:
+    """Confirmed bookings, soonest appointment first."""
+    clinics = await _readable_clinics(conn, claims)
+    rows = await _slots.list_bookings(conn, clinics, limit=limit + 1)
+    items = [
+        BookingOut(booking_id=r.id, clinic_id=r.clinic_id, slot_id=r.slot_id, patient_id=r.patient_id,
+                   provider_id=r.provider_id, location_id=r.location_id, visit_type_id=r.visit_type_id,
+                   starts_at=r.starts_at, ends_at=r.ends_at, created_at=r.created_at)
+        for r in rows[:limit]
+    ]
+    return BookingList(items=items, limit=limit, has_more=len(rows) > limit)
+
+
+@scheduling.get("/waitlist", response_model=WaitlistList)
+async def list_waitlist(
+    conn: TxConn,
+    claims: dict[str, Any] = Depends(verified_claims),
+    visit_type_id: uuid.UUID | None = None,
+    limit: Limit = 100,
+) -> WaitlistList:
+    """The waiting queue, clinical priority first and join time second, optionally for one visit type."""
+    clinics = await _readable_clinics(conn, claims)
+    rows = await _slots.list_waitlist(conn, clinics, visit_type_id=visit_type_id, limit=limit + 1)
+    items = [
+        WaitlistEntryOut(waitlist_id=r.id, clinic_id=r.clinic_id, patient_id=r.patient_id, visit_type_id=r.visit_type_id,
+                         clinical_priority=r.priority_code, rank=r.rank, joined_at=r.joined_at)
+        for r in rows[:limit]
+    ]
+    return WaitlistList(items=items, limit=limit, has_more=len(rows) > limit)
 
 
 # ---- application -----------------------------------------------------------------------------------
