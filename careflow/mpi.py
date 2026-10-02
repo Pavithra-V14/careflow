@@ -169,6 +169,18 @@ def classify(hits: dict[uuid.UUID, set[str]]) -> tuple[Literal["match", "review"
     return "review", reasons
 
 
+def derive_tokens(
+    vault: DemographicVault, *, name: str, dob_iso: str, phone_canonical: str | None, key_version: int
+) -> dict[str, bytes]:
+    """The identity tokens of one person under one key version. Ingestion and key rotation both call this, so a
+    token written by a rotation is byte-for-byte what a fresh ingest would have written (one definition, no drift).
+    Inputs are already canonical: whitespace-collapsed name, ISO date of birth, `+91` phone or None."""
+    tokens = {NAME_DOB: vault.identity_token(NAME_DOB, f"{name} {dob_iso}", key_version=key_version)}
+    if phone_canonical is not None:
+        tokens[PHONE] = vault.identity_token(PHONE, phone_canonical, key_version=key_version)
+    return tokens
+
+
 def _lock_key(clinic_id: uuid.UUID, kind: str, token: bytes) -> int:
     digest = hashlib.sha256(f"mpi-ingest:{clinic_id}:{kind}:{token.hex()}".encode()).digest()
     return int.from_bytes(digest[:8], "big", signed=True)
@@ -204,9 +216,7 @@ class PatientIngestionPipeline:
         phone_c = None if phone is None else canonicalize_phone(phone)
 
         # 2. Tokens (deterministic keyed HMAC), then serialise concurrent ingests that share any of them.
-        tokens = {NAME_DOB: self._vault.identity_token(NAME_DOB, f"{name} {dob_iso}", key_version=self._kv)}
-        if phone_c is not None:
-            tokens[PHONE] = self._vault.identity_token(PHONE, phone_c, key_version=self._kv)
+        tokens = derive_tokens(self._vault, name=name, dob_iso=dob_iso, phone_canonical=phone_c, key_version=self._kv)
         for key in sorted(_lock_key(clinic_id, kind, tok) for kind, tok in tokens.items()):
             await conn.execute(text("select pg_advisory_xact_lock(:k)"), {"k": key})
 
