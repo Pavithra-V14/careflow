@@ -97,6 +97,7 @@ async def _seed() -> Identities:
         ("suspended", "staff", "suspended", [(ids.clinic_a, "nurse")]),
         ("invited", "staff", "invited", [(ids.clinic_a, "nurse")]),
         ("closed", "patient", "closed", []),
+        ("front_desk_suspended", "staff", "suspended", [(ids.clinic_a, "front_desk")]),
     ]
     for key, kind, status, grants in spec:
         ids.people[key] = (uuid.uuid4(), kind, status, grants)
@@ -112,6 +113,7 @@ async def _seed() -> Identities:
             "insert into iam.staff_roles (account_id, clinic_id, role, origin) values ($1, $2, $3, 'test')",
             [(a, c, r) for a, _, _, grants in ids.people.values() for c, r in grants],
         )
+        await _seed_scheduling(ids, conn)
     except Exception:
         await _cleanup(ids, conn)
         await conn.close()
@@ -120,11 +122,70 @@ async def _seed() -> Identities:
     return ids
 
 
+POOL = {"hold": 40, "book": 40, "extra": 30, "cancel": 30}  # slots / bookings handed out one per test case
+N_PATIENTS = 45
+
+
+async def _seed_scheduling(ids, conn) -> None:
+    """Synthetic scheduling rows for clinic A (and just enough for clinic B), all origin='test'. Patients hold dummy
+    ciphertext: these routes never decrypt. The two priority levels are test fixtures with neutral names, not
+    clinical content."""
+    from datetime import datetime, timedelta, timezone
+
+    tag = uuid.uuid4().hex[:8]
+    k = lambda name: f"matrix-{tag}-{name}"  # noqa: E731  (idempotency keys for seed rows)
+    a, b = ids.clinic_a, ids.clinic_b
+    doctor = ids.people["doctor_a"][0]
+    provider = await conn.fetchval("insert into sched.providers (clinic_id, display_name, origin, idempotency_key) values ($1, 'Test provider', 'test', $2) returning id", a, k("prov"))
+    location = await conn.fetchval("insert into sched.locations (clinic_id, name, origin, idempotency_key) values ($1, 'Test room', 'test', $2) returning id", a, k("loc"))
+    ids.vt_a = await conn.fetchval("insert into sched.visit_types (clinic_id, name, duration_minutes, origin, idempotency_key) values ($1, 'Test visit', 30, 'test', $2) returning id", a, k("vta"))
+    ids.vt_b = await conn.fetchval("insert into sched.visit_types (clinic_id, name, duration_minutes, origin, idempotency_key) values ($1, 'Test visit', 30, 'test', $2) returning id", b, k("vtb"))
+    await conn.executemany(
+        "insert into sched.priority_levels (clinic_id, code, label, rank, approved_by, origin, idempotency_key) values ($1, $2, $3, $4, $5, 'test', $6)",
+        [(a, "level_one", "Test level one", 1, doctor, k("pl1")), (a, "level_two", "Test level two", 2, doctor, k("pl2"))],
+    )
+    patients = [(uuid.uuid4(), a) for _ in range(N_PATIENTS)] + [(uuid.uuid4(), b)]
+    await conn.executemany(
+        "insert into mpi.patients (id, clinic_id, name_ct, name_key_version, dob_ct, dob_key_version, origin, idempotency_key) "
+        "values ($1, $2, $3, 1, $3, 1, 'test', $4)",
+        [(pid, c, b"x" * 40, k(f"pt{i}")) for i, (pid, c) in enumerate(patients)],
+    )
+    ids.patients_a = [p for p, c in patients if c == a]
+    ids.patient_b = patients[-1][0]
+
+    start = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0) + timedelta(days=60)
+    slots, pools, n = [], {}, 0
+    for pool, size in POOL.items():
+        pools[pool] = []
+        for _ in range(size):
+            sid = uuid.uuid4()
+            booked = pool == "cancel"
+            slots.append((sid, a, provider, location, ids.vt_a, start + timedelta(hours=n), start + timedelta(hours=n, minutes=30),
+                          "booked" if booked else "open", k(f"slot{n}")))
+            pools[pool].append(sid)
+            n += 1
+    await conn.executemany(
+        "insert into sched.slots (id, clinic_id, provider_id, location_id, visit_type_id, starts_at, ends_at, status, origin, idempotency_key) "
+        "values ($1, $2, $3, $4, $5, $6, $7, $8, 'test', $9)",
+        slots,
+    )
+    bookings = [(uuid.uuid4(), sid, ids.patients_a[i % N_PATIENTS], k(f"bk{i}")) for i, sid in enumerate(pools["cancel"])]
+    await conn.executemany(
+        "insert into sched.bookings (id, clinic_id, slot_id, patient_id, origin, idempotency_key) values ($1, $2, $3, $4, 'test', $5)",
+        [(bid, a, sid, pid, key) for bid, sid, pid, key in bookings],
+    )
+    ids.pools = {**{p: list(v) for p, v in pools.items() if p != "cancel"}, "cancel": [bid for bid, *_ in bookings]}
+
+
 async def _cleanup(ids, conn=None):
     own = conn is None
     conn = conn or await asyncpg.connect((MIGRATOR or "").replace("+asyncpg", ""), statement_cache_size=0)
     try:
         accounts = [a for a, *_ in ids.people.values()]
+        clinics = [ids.clinic_a, ids.clinic_b]
+        for table in ("sched.bookings", "sched.holds", "sched.waitlist", "sched.slots", "sched.priority_levels",
+                      "mpi.patients", "sched.visit_types", "sched.providers", "sched.locations"):
+            await conn.execute(f"delete from {table} where clinic_id = any($1)", clinics)
         await conn.execute("delete from iam.staff_roles where clinic_id = any($1)", [ids.clinic_a, ids.clinic_b])
         await conn.execute("delete from iam.accounts where id = any($1)", accounts)
         await conn.execute("delete from iam.clinics where id = any($1)", [ids.clinic_a, ids.clinic_b])
@@ -168,8 +229,11 @@ def expected_me(ids, key):
 def check_route_matrix(client, method, path, cases):
     """Run every (label, headers, status, body|None) case and raise ONE AssertionError listing all failures."""
     failures = []
-    for label, headers, status, body in cases:
-        response = client.request(method, path, headers=headers)
+    for label, headers, status, body, *rest in cases:
+        extra = rest[0] if rest else {}  # optional: {"path": concrete path, "json": request body, "headers": more headers}
+        response = client.request(
+            method, extra.get("path", path), headers={**headers, **extra.get("headers", {})}, json=extra.get("json")
+        )
         if response.status_code != status:
             failures.append(f"{label}: expected {status}, got {response.status_code}")
         elif body is not None and response.json() != body:
@@ -217,8 +281,133 @@ def mint_without(sub, claim):
     return jwt.encode(claims, SIGNING, algorithm="ES256", headers={"kid": "matrix-key"})
 
 
+# ---- staff scheduling routes (rule 8: these cases ship in the same change as the routes) ---------------------------
+
+PREFIX = "/v1/staff/scheduling"
+HOLD, BOOK = PREFIX + "/slots/{slot_id}/hold", PREFIX + "/slots/{slot_id}/book"
+CANCEL, JOIN = PREFIX + "/bookings/{booking_id}/cancel", PREFIX + "/waitlist/join"
+
+
+def _who(ids, who):
+    """A person key from `ids.people`, or a ready-made header dict (for the unauthenticated cases)."""
+    return who if isinstance(who, dict) else bearer(mint(ids.people[who][0]))
+
+
+def _new_key() -> str:
+    return f"matrix-{uuid.uuid4()}"
+
+
+def _case(ids, label, who, status, path, *, json=None, key="new"):
+    """One request. key='new' sends a fresh X-Idempotency-Key, key=None omits the header, any other string is sent as is."""
+    headers = {} if key is None else {"X-Idempotency-Key": _new_key() if key == "new" else key}
+    return (label, _who(ids, who), status, None, {"path": path, "json": json, "headers": headers})
+
+
+def _unauthenticated(ids, path, json):
+    sub = ids.people["front_desk_a"][0]
+    return [
+        _case(ids, "no Authorization header", {}, 401, path, json=json),
+        _case(ids, "garbage token", bearer("not.a.jwt"), 401, path, json=json),
+        _case(ids, "expired token", bearer(mint(sub, exp=int(time.time()) - 3600)), 401, path, json=json),
+        _case(ids, "signed by another key under the right kid", bearer(mint(sub, key=ATTACKER)), 401, path, json=json),
+        _case(ids, "no header and no key still 401 (authentication comes first)", {}, 401, path, json=json, key=None),
+    ]
+
+
+def _everyone_else(ids, status_by_person, make_path, make_json, default):
+    """front_desk_a is tested by the caller; every other seeded identity must get `status_by_person.get(p, default)`."""
+    cases = [
+        _case(ids, f"{p} ({ids.people[p][2]}) is refused", p, status_by_person.get(p, default), make_path(), json=make_json())
+        for p in ids.people
+        if p != "front_desk_a"
+    ]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), default, make_path(), json=make_json()))
+    return cases
+
+
+def slot_write_cases(ids, op) -> list[tuple]:
+    """hold / book. Only front desk of the slot's clinic may write. Admin can lock a slot (its own UPDATE policy) but the
+    hold/booking INSERT is front-desk-only, so admin gets 403; every role that cannot lock the slot sees it as not found."""
+    template = HOLD if op == "hold" else BOOK
+    path = lambda slot=None: template.format(slot_id=slot or ids.pools[op].pop())  # noqa: E731
+    body = (lambda **o: {"duration_minutes": 15, **o}) if op == "hold" else (lambda **o: {"patient_id": str(ids.patients_a[0]), **o})
+    fd, key, slot = "front_desk_a", _new_key(), ids.pools[op].pop()
+    taken = "slot is held" if op == "hold" else "slot is booked"
+    cases = [
+        _case(ids, "front desk of the clinic succeeds", fd, 200, path(slot), json=body(), key=key),
+        _case(ids, "replaying the same key and request succeeds again (idempotent)", fd, 200, path(slot), json=body(), key=key),
+        _case(ids, f"a second request with a new key finds the {taken.split()[-1]} slot taken", fd, 409, path(slot), json=body()),
+        _case(ids, "the same key on a different slot is a conflict", fd, 409, path(), json=body(), key=key),
+        _case(ids, "a patient of another clinic is not found", fd, 404, path(), json=body(patient_id=str(ids.patient_b))),
+        _case(ids, "an unknown slot is not found", fd, 404, template.format(slot_id=uuid.uuid4()), json=body()),
+        _case(ids, "missing X-Idempotency-Key is rejected", fd, 422, path(), json=body(), key=None),
+        _case(ids, "blank X-Idempotency-Key is rejected", fd, 422, path(), json=body(), key="   "),
+        _case(ids, "slot id that is not a uuid is rejected", fd, 422, template.format(slot_id="nope"), json=body()),
+        _case(ids, "unknown body field is rejected", fd, 422, path(), json=body(unexpected=1)),
+        _case(ids, "empty body is rejected", fd, 422, path(), json={}),
+    ]
+    if op == "hold":
+        cases += [
+            _case(ids, "zero minutes is rejected", fd, 422, path(), json=body(duration_minutes=0)),
+            _case(ids, "negative minutes is rejected", fd, 422, path(), json=body(duration_minutes=-5)),
+            _case(ids, "minutes as text is rejected", fd, 422, path(), json=body(duration_minutes="soon")),
+        ]
+    cases += _everyone_else(ids, {"admin_a": 403}, path, body, 404)
+    return cases + _unauthenticated(ids, template.format(slot_id=ids.pools["extra"][0]), body())
+
+
+def cancel_cases(ids) -> list[tuple]:
+    """Cancelling rewrites the booking and its slot: front desk only. Others either cannot see the booking or cannot lock its slot."""
+    path = lambda booking=None: CANCEL.format(booking_id=booking or ids.pools["cancel"].pop())  # noqa: E731
+    fd, key, booking = "front_desk_a", _new_key(), ids.pools["cancel"].pop()
+    cases = [
+        _case(ids, "front desk of the clinic succeeds", fd, 200, path(booking), key=key),
+        _case(ids, "replaying the same key succeeds again (idempotent)", fd, 200, path(booking), key=key),
+        _case(ids, "cancelling it again with a new key is refused", fd, 409, path(booking)),
+        _case(ids, "the same key on a different booking is a conflict", fd, 409, path(), key=key),
+        _case(ids, "an unknown booking is not found", fd, 404, CANCEL.format(booking_id=uuid.uuid4())),
+        _case(ids, "missing X-Idempotency-Key is rejected", fd, 422, path(), key=None),
+        _case(ids, "blank X-Idempotency-Key is rejected", fd, 422, path(), key="   "),
+        _case(ids, "booking id that is not a uuid is rejected", fd, 422, CANCEL.format(booking_id="nope")),
+    ]
+    cases += _everyone_else(ids, {}, path, lambda: None, 404)
+    return cases + _unauthenticated(ids, CANCEL.format(booking_id=ids.pools["extra"][0]), None)
+
+
+def join_cases(ids) -> list[tuple]:
+    """Joining the waitlist is a front-desk write. Staff who can read the visit type but not write get 403; anyone who
+    cannot see the visit type at all gets 404."""
+    patients = iter(ids.patients_a[1:])
+    body = lambda **o: {"patient_id": str(next(patients)), "visit_type_id": str(ids.vt_a), "clinical_priority": "level_one", **o}  # noqa: E731
+    fd, key = "front_desk_a", _new_key()
+    same = body()
+    other_patient = {**same, "patient_id": str(next(patients))}
+    cases = [
+        _case(ids, "front desk of the clinic succeeds", fd, 200, JOIN, json=same, key=key),
+        _case(ids, "replaying the same key succeeds again (idempotent)", fd, 200, JOIN, json=same, key=key),
+        _case(ids, "the same patient already waiting is refused", fd, 409, JOIN, json=same),
+        _case(ids, "the same key for a different patient is a conflict", fd, 409, JOIN, json=other_patient, key=key),
+        _case(ids, "a priority level the clinic never defined is not found", fd, 404, JOIN, json=body(clinical_priority="level_nine")),
+        _case(ids, "a patient of another clinic is not found", fd, 404, JOIN, json=body(patient_id=str(ids.patient_b))),
+        _case(ids, "another clinic's visit type is not found", fd, 404, JOIN, json=body(visit_type_id=str(ids.vt_b))),
+        _case(ids, "missing X-Idempotency-Key is rejected", fd, 422, JOIN, json=body(), key=None),
+        _case(ids, "blank X-Idempotency-Key is rejected", fd, 422, JOIN, json=body(), key="   "),
+        _case(ids, "empty priority is rejected", fd, 422, JOIN, json=body(clinical_priority="")),
+        _case(ids, "missing priority is rejected", fd, 422, JOIN, json={k: v for k, v in body().items() if k != "clinical_priority"}),
+        _case(ids, "unknown body field is rejected", fd, 422, JOIN, json=body(unexpected=1)),
+    ]
+    cases += _everyone_else(ids, {r: 403 for r in ("nurse_a", "doctor_a", "admin_a", "multi")}, lambda: JOIN, body, 404)
+    return cases + _unauthenticated(ids, JOIN, body())
+
+
 # One entry per route: add the new route's cases here in the same change that adds the route.
-MATRIX: dict[tuple[str, str], Callable] = {("GET", "/v1/iam/me"): me_cases}
+MATRIX: dict[tuple[str, str], Callable] = {
+    ("GET", "/v1/iam/me"): me_cases,
+    ("POST", HOLD): lambda ids: slot_write_cases(ids, "hold"),
+    ("POST", BOOK): lambda ids: slot_write_cases(ids, "book"),
+    ("POST", CANCEL): cancel_cases,
+    ("POST", JOIN): join_cases,
+}
 
 
 # ---- tests -----------------------------------------------------------------------------------------
@@ -290,3 +479,99 @@ def test_identity_never_leaks_between_pooled_requests(app, ids):
     for key, status, body in _run(run()):
         assert status == 200, key
         assert body == expected_me(ids, key), key
+
+
+# ---- scheduling routes: behaviour beyond the allow/deny matrix --------------------------------------------------
+
+
+async def _fetch(sql, *args):
+    conn = await asyncpg.connect((MIGRATOR or "").replace("+asyncpg", ""), statement_cache_size=0)
+    try:
+        return await conn.fetch(sql, *args)
+    finally:
+        await conn.close()
+
+
+def _post(client, ids, who, path, json=None, key="new"):
+    headers = {**bearer(mint(ids.people[who][0]))}
+    if key is not None:
+        headers["X-Idempotency-Key"] = _new_key() if key == "new" else key
+    return client.post(path, headers=headers, json=json)
+
+
+def test_a_write_is_committed_before_its_response_is_returned(client, ids):
+    """The 200 must mean the row is durable: a separate connection sees it the moment the response arrives."""
+    slot = ids.pools["extra"].pop()
+    r = _post(client, ids, "front_desk_a", HOLD.format(slot_id=slot), {"duration_minutes": 10})
+    assert r.status_code == 200
+    (hold,) = _run(_fetch("select status, slot_id from sched.holds where id = $1", uuid.UUID(r.json()["hold_id"])))
+    assert (hold["status"], hold["slot_id"]) == ("active", slot)
+    (row,) = _run(_fetch("select status from sched.slots where id = $1", slot))
+    assert row["status"] == "held"
+
+
+def test_a_refused_write_changes_nothing(client, ids):
+    slot = ids.pools["extra"].pop()
+    for who, status in (("admin_a", 403), ("nurse_a", 404), ("front_desk_b", 404), ("auditor_a", 404)):
+        assert _post(client, ids, who, HOLD.format(slot_id=slot), {"duration_minutes": 10}).status_code == status, who
+        assert _post(client, ids, who, BOOK.format(slot_id=slot), {"patient_id": str(ids.patients_a[0])}).status_code == status, who
+    assert _run(_fetch("select status from sched.slots where id = $1", slot))[0]["status"] == "open"
+    assert _run(_fetch("select count(*) as n from sched.holds where slot_id = $1", slot))[0]["n"] == 0
+    assert _run(_fetch("select count(*) as n from sched.bookings where slot_id = $1", slot))[0]["n"] == 0
+
+
+def test_replay_returns_the_original_result_and_says_so(client, ids):
+    slot, key = ids.pools["extra"].pop(), _new_key()
+    first = _post(client, ids, "front_desk_a", BOOK.format(slot_id=slot), {"patient_id": str(ids.patients_a[0])}, key=key).json()
+    again = _post(client, ids, "front_desk_a", BOOK.format(slot_id=slot), {"patient_id": str(ids.patients_a[0])}, key=key).json()
+    assert (first["replayed"], again["replayed"]) == (False, True)
+    assert {k: v for k, v in first.items() if k != "replayed"} == {k: v for k, v in again.items() if k != "replayed"}
+    assert first["status"] == "confirmed"
+    assert _run(_fetch("select count(*) as n from sched.bookings where slot_id = $1", slot))[0]["n"] == 1
+
+
+def test_cancel_returns_candidates_by_clinical_priority_not_by_who_waited_longer(client, ids):
+    slot = ids.pools["extra"].pop()
+    booked, low, high = ids.patients_a[40], ids.patients_a[41], ids.patients_a[42]
+    booking = _post(client, ids, "front_desk_a", BOOK.format(slot_id=slot), {"patient_id": str(booked)}).json()["booking_id"]
+    for patient, level in ((low, "level_two"), (high, "level_one")):  # the lower-priority patient joins FIRST
+        r = _post(client, ids, "front_desk_a", JOIN, {"patient_id": str(patient), "visit_type_id": str(ids.vt_a), "clinical_priority": level})
+        assert r.status_code == 200 and r.json()["clinical_priority"] == level
+    r = _post(client, ids, "front_desk_a", CANCEL.format(booking_id=booking))
+    assert r.status_code == 200
+    everyone = r.json()["candidates"]  # the visit type's whole queue, which other tests' waiting patients are also in
+    assert [(c["rank"], c["joined_at"]) for c in everyone] == sorted((c["rank"], c["joined_at"]) for c in everyone)
+    got = [c for c in everyone if c["patient_id"] in (str(high), str(low))]
+    assert [(c["patient_id"], c["priority_code"], c["rank"]) for c in got] == [(str(high), "level_one", 1), (str(low), "level_two", 2)]
+    # Informational only: the slot is open again and nobody was held, booked or contacted.
+    assert _run(_fetch("select status from sched.slots where id = $1", slot))[0]["status"] == "open"
+    both = [high, low]
+    assert _run(_fetch("select count(*) as n from sched.bookings where patient_id = any($1)", both))[0]["n"] == 0
+    assert _run(_fetch("select count(*) as n from sched.holds where patient_id = any($1)", both))[0]["n"] == 0
+    assert {r["status"] for r in _run(_fetch("select status from sched.waitlist where patient_id = any($1)", both))} == {"waiting"}
+
+
+def test_concurrent_writes_from_two_clinics_neither_leak_identity_nor_connections(app, ids):
+    """Twenty concurrent holds over a pool of five connections: front desk of clinic A succeeds on every slot, front desk
+    of clinic B is refused on every slot, and every connection is back in the pool afterwards."""
+    slots = [ids.pools["extra"].pop() for _ in range(10)]
+
+    async def run():
+        async with app.router.lifespan_context(app):
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+
+                async def hold(who, slot):
+                    r = await http.post(
+                        HOLD.format(slot_id=slot), json={"duration_minutes": 5},
+                        headers={**bearer(mint(ids.people[who][0])), "X-Idempotency-Key": _new_key()},
+                    )
+                    return who, r.status_code
+
+                results = await asyncio.gather(*(hold(w, s) for s in slots for w in ("front_desk_a", "front_desk_b")))
+                return results, app.state.engine.pool.checkedout()
+
+    results, checked_out = _run(run())
+    assert sorted(results) == sorted([("front_desk_a", 200)] * 10 + [("front_desk_b", 404)] * 10)
+    assert checked_out == 0
+    assert {r["status"] for r in _run(_fetch("select status from sched.slots where id = any($1)", slots))} == {"held"}
