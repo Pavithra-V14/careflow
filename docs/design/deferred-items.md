@@ -1,5 +1,10 @@
 # Deferred items and open findings
 
+**Migration numbering.** The design called the `account_id` protection 0013 and the screenings migration 0012. The
+`account_id` protection was built first, and the runner rejects a migration numbered below the highest applied one, so it
+took **0012** (`0012_patient_account_binding.sql`) and the screenings migration will take **0013**. Wherever the design
+document says "0012 (screenings)" read 0013, and where it says "0013 (account binding)" read 0012.
+
 Everything here is **known and intentionally not done yet**. Each line says what it is and what it waits for. If you finish
 one, delete its line in the same change. Source of the first group: the msg / iam design review of 2026-10-23
 (`docs/design/msg-screening-binding-design.md`).
@@ -82,3 +87,12 @@ These must be resolved in the design before 0012 is written; 0012 does not proce
 - **LOW**: the migration must DROP 0007's `review_tasks_select` and `review_tasks_insert` before creating the new ones
   (permissive policies OR together); existing tests to change: `tests/test_rules_live.py` lines 417, 425, 449-457 and 407-414,
   and `tests/test_rules.py:328`.
+
+## State of the dev project (not a code item)
+- The dev project holds **leftover `origin = 'test'` rows** from a stray run of the live suites on 2026-10-23 (a `.env` made
+  pytest connect to dev; the run was killed before its teardown). Counts at the time: 4 clinics, 28 accounts, 24 staff roles,
+  92 patients, 2 locations, 2 providers, 4 visit types, 280 slots, 4 priority levels, 60 bookings, 4 waitlist entries; the
+  one `kb.red_flag_rules` row is the legitimate stub from migration 0007. By decision nothing was deleted. Test clinics
+  carry no real data, but they appear in any dev query that does not filter on origin.
+- `audit.log` is append-only for every role (including the table owner), so any `audit.log` rows written by tests or
+  scripts against a database can never be cleaned up; keep audit-writing tests inside rolled-back transactions.

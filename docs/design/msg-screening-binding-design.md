@@ -1,6 +1,6 @@
 # DESIGN for migrations 0011, 0012, 0013
 
-Status: 0011 is implemented (see db/migrations/0011_msg_threads_messages.sql). 0013 is designed and reviewed SAFE TO MERGE. 0012 is designed but its last review was BLOCKED: see docs/design/deferred-items.md, section "Open findings on the 0012 design". This file concatenates the design and its amendments in order; a LATER section supersedes any conflicting text in an earlier one. Test names in the amendments are the plan; tests that exist are in tests/.
+NUMBERING: as built, the account-binding migration is **0012** and the screenings migration will be **0013** (this text predates the swap: where it says 0012 screenings read 0013, where it says 0013 binding read 0012). Status: 0011 is implemented (see db/migrations/0011_msg_threads_messages.sql). 0013 is designed and reviewed SAFE TO MERGE. 0012 is designed but its last review was BLOCKED: see docs/design/deferred-items.md, section "Open findings on the 0012 design". This file concatenates the design and its amendments in order; a LATER section supersedes any conflicting text in an earlier one. Test names in the amendments are the plan; tests that exist are in tests/.
 
 ---
 

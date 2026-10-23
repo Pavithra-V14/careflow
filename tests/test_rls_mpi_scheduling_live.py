@@ -19,7 +19,8 @@ careflow_app with that identity's claims, each in its own sub-transaction, and r
 'ok:<rowcount>' or 'err:<sqlstate>'; `pg_temp.rows_as(uid, sql)` returns the rows a query yields for
 that identity as JSON. The assertions are the same ones a one-statement-per-round-trip loop would make.
 
-What "denied" means here, stated precisely: the app role HAS select/insert/update on these tables, and
+What "denied" means here, stated precisely: the app role HAS select/insert/update on these tables (on mpi.patients,
+since migration 0012, INSERT on every column but account_id and UPDATE on seven named columns only), and
 row-level security decides the rows. So a role with no policy reads ZERO rows (not an error), a write
 it is not allowed fails with "new row violates row-level security policy" (SQLSTATE 42501), and an
 update it is not allowed matches zero rows ('ok:0'). DELETE has no grant at all and fails with 42501.
@@ -42,6 +43,7 @@ _ENV = dotenv_values(ROOT / ".env")
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or _ENV.get("DATABASE_URL_MIGRATOR")
 APP = os.environ.get("DATABASE_URL_APP") or _ENV.get("DATABASE_URL_APP")
 SQL_0002 = (ROOT / "db" / "migrations" / "0002_mpi_and_scheduling.sql").read_text(encoding="utf-8")
+SQL_0012 = (ROOT / "db" / "migrations" / "0012_patient_account_binding.sql").read_text(encoding="utf-8")
 
 pytestmark = [
     pytest.mark.asyncio(loop_scope="module"),
@@ -145,6 +147,9 @@ async def _conn():
         await conn.execute("grant careflow_app to current_user with set true")
         if await conn.fetchval("select to_regclass('mpi.patients') is null"):
             await conn.execute(SQL_0002)
+        # The column privileges these tests describe are 0012's: load it inside this never-committed transaction if needed.
+        if await conn.fetchval("select to_regprocedure('mpi.guard_patient_account()') is null"):
+            await conn.execute(SQL_0012)
         await conn.execute(HELPERS)
         yield conn
     finally:
@@ -302,8 +307,12 @@ async def test_only_front_desk_of_the_clinic_can_update_a_patient(db):
 async def test_front_desk_cannot_move_a_patient_into_another_clinic(db):
     a, b, p = await seed(db)
     ids = await seed_patients(db, a, b, p)
+    # Since 0012 the denial comes from the COLUMN privilege (the app role may not update clinic_id at all). The row-level
+    # WITH CHECK behind it is tested separately in tests/test_patient_binding_live.py, which grants the column inside a
+    # rolled-back transaction, so this test no longer pretends to prove the policy.
+    assert not await db.fetchval("select has_column_privilege('careflow_app', 'mpi.patients', 'clinic_id', 'UPDATE')")
     res = await attempts(db, p["front_desk_a"], [f"update mpi.patients set clinic_id = '{b}' where id = '{ids['a1']}'"])
-    assert res == [RLS_DENIED]  # WITH CHECK fails on the new clinic_id
+    assert res == [RLS_DENIED]
 
 
 async def test_nobody_can_delete_patient_rows(db):
