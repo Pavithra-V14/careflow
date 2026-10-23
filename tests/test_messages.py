@@ -257,15 +257,14 @@ def test_an_erased_message_cannot_be_screened(vault):
     assert engine.calls == []
 
 
-def test_a_key_version_that_is_not_loaded_is_reported_and_records_nothing(vault):
-    from careflow.messages import KeyNotLoaded
-
+def test_a_key_version_that_is_not_loaded_is_recorded_unassessable_not_left_unscreened(vault):
+    """Unknown is not clear and not silent: the message gets a nurse task, and the result names the error CLASS for the route's log."""
     bigger = DemographicVault.from_env({f"CAREFLOW_{k}_SECRET_V{v}": _b64() for v in (1, 9) for k in ("ENC", "HMAC")})
     row = _stored(bigger, version=9)
-    engine = _ScreenEngine()
-    with pytest.raises(KeyNotLoaded):
-        _screen(_ScreenConn(row), vault, engine, row.id)  # `vault` only has versions 1 and 2
-    assert engine.calls == []
+    engine = _ScreenEngine("unassessable")
+    out = _screen(_ScreenConn(row), vault, engine, row.id, profile="clinical")  # `vault` only has versions 1 and 2
+    assert [c[:2] for c in engine.calls] == [("record", "unassessable")]
+    assert (out.outcome, out.unreadable_reason, out.clinic_id) == ("unassessable", "UnknownKeyVersionError", row.clinic_id)
 
 
 def test_a_body_that_fails_authentication_is_recorded_unassessable_not_raised(vault):
@@ -274,7 +273,7 @@ def test_a_body_that_fails_authentication_is_recorded_unassessable_not_raised(va
     engine = _ScreenEngine("unassessable")
     out = _screen(_ScreenConn(row, reply="not_required"), vault, engine, row.id, profile="clinical")
     assert [c[0] for c in engine.calls] == ["record"] and engine.calls[0][1:3] == ("unassessable", "clinical")
-    assert out.outcome == "unassessable" and out.screening_id == engine.sid
+    assert out.outcome == "unassessable" and out.screening_id == engine.sid and out.unreadable_reason == "DecryptionError"
 
 
 def test_the_decrypted_text_goes_to_the_rule_engine_only_and_never_into_the_result_or_the_logs(vault, caplog):
@@ -285,6 +284,7 @@ def test_the_decrypted_text_goes_to_the_rule_engine_only_and_never_into_the_resu
     out = _screen(_ScreenConn(row, reply="pending_clinician_template"), vault, engine, row.id, profile="clinical", idempotency_key="abc")
     assert engine.calls == [("evaluate", secret, "clinical", "abc")]
     assert (out.outcome, out.patient_reply, out.replayed, out.message_id) == ("red_flag", "pending_clinician_template", False, row.id)
+    assert out.unreadable_reason is None
     assert secret not in repr(out) and secret not in caplog.text
 
 
@@ -293,7 +293,8 @@ def test_the_screening_result_has_only_ids_and_enums():
 
     from careflow.messages import ScreenedMessage
 
-    assert [f.name for f in fields(ScreenedMessage)] == ["message_id", "screening_id", "outcome", "replayed", "patient_reply"]
+    assert [f.name for f in fields(ScreenedMessage)] == [
+        "message_id", "screening_id", "outcome", "replayed", "patient_reply", "clinic_id", "unreadable_reason"]
 
 
 def test_screening_never_calls_a_model_or_the_network():

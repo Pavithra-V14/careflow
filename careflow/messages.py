@@ -45,10 +45,6 @@ class MessageErased(MessageError):
     """The body was erased; there is nothing left to screen."""
 
 
-class KeyNotLoaded(MessageError):
-    """The key version the body was encrypted under is not loaded in this process."""
-
-
 @dataclass(frozen=True)
 class EncryptedBody:
     """What goes into `msg.messages`: the client-chosen message id (the ciphertext is bound to it), the ciphertext
@@ -109,6 +105,10 @@ class ScreenedMessage:
     outcome: str  # what the row holds: red_flag, unassessable or clear
     replayed: bool
     patient_reply: str | None  # not_required, or pending_clinician_template: NO reply is sent by anything yet
+    # For the CALLER's operational log, never for a response: the clinic, and the CLASS NAME of the error when the body could not be read
+    # (DecryptionError for a tampered or mis-bound body, UnknownKeyVersionError for a key version that is not loaded). Never any text.
+    clinic_id: uuid.UUID
+    unreadable_reason: str | None = None
 
 
 async def screen_stored_message(
@@ -127,9 +127,10 @@ async def screen_stored_message(
     msg.record_screening; NO emergency reply is sent or written (a clinician-approved template does not exist yet, so the screening
     row records patient_reply = pending_clinician_template).
 
-    Unknown is not clear: a body that fails authentication (tampering, a wrong key) is recorded as UNASSESSABLE, which raises a nurse
-    task, rather than raising an error nobody sees. A body whose key version is not loaded is KeyNotLoaded (nothing is recorded: the
-    caller can retry once the key is available).
+    Unknown is not clear: a body that cannot be read, whether it fails authentication (tampering, a mis-bound ciphertext) or was
+    encrypted under a key version this process does not have, is recorded as UNASSESSABLE, which raises a nurse task, rather than
+    raising an error nobody sees or leaving the message unscreened. The result then carries `unreadable_reason` (an error CLASS NAME
+    only) so the route layer can log a warning; this module logs nothing.
 
     `conn` is inside a transaction with the verified claims set; row-level security decides which messages the caller can see, so an
     invisible message and a missing one are both MessageNotFound.
@@ -147,13 +148,13 @@ async def screen_stored_message(
     if row.erased_at is not None or row.body_ct is None:
         raise MessageErased("the message body was erased")
     resolved = profile or resolve_profile()
+    unreadable: str | None = None
     try:
         plaintext = decrypt_body(
             vault, row.body_ct, clinic_id=row.clinic_id, thread_id=row.thread_id, message_id=row.id, key_version=row.body_key_version
         )
-    except UnknownKeyVersionError:
-        raise KeyNotLoaded("the key this message was encrypted under is not loaded") from None
-    except DecryptionError:
+    except (UnknownKeyVersionError, DecryptionError) as exc:
+        unreadable = type(exc).__name__  # the class only: the exception text is never kept
         evaluation = Evaluation("unassessable", (), resolved, 0, 0, ("message body could not be read",), EMPTY_RULE_SET_HASH)  # type: ignore[arg-type]
         result = await engine.record_screening(conn, row.clinic_id, row.origin, message_id, evaluation, idempotency_key=idempotency_key)
     else:
@@ -164,4 +165,4 @@ async def screen_stored_message(
     reply = (
         await conn.execute(text("select patient_reply from msg.screenings where id = :s"), {"s": result.screening_id})
     ).scalar_one_or_none()
-    return ScreenedMessage(message_id, result.screening_id, result.outcome, result.replayed, reply)
+    return ScreenedMessage(message_id, result.screening_id, result.outcome, result.replayed, reply, row.clinic_id, unreadable)

@@ -17,7 +17,6 @@ from careflow.app import Settings, create_app, db_conn, verified_claims
 from careflow.auth import JWKSClient
 from careflow.crypto import DemographicVault
 from careflow.messages import (
-    KeyNotLoaded,
     MessageErased,
     MessageNotFound,
     ScreenedMessage,
@@ -55,7 +54,8 @@ def make_client(*, vault="default", authenticated=True):
 
 
 def _result(**kw):
-    base = {"message_id": uuid.uuid4(), "screening_id": uuid.uuid4(), "outcome": "unassessable", "replayed": False, "patient_reply": "not_required"}
+    base = {"message_id": uuid.uuid4(), "screening_id": uuid.uuid4(), "outcome": "unassessable", "replayed": False, "patient_reply": "not_required",
+            "clinic_id": uuid.uuid4(), "unreadable_reason": None}
     base.update(kw)
     return ScreenedMessage(**base)
 
@@ -117,7 +117,6 @@ def test_the_idempotency_key_reaches_the_screening(monkeypatch):
         (MessageNotFound("x"), 404, "not found"),
         (NotPermitted("your role may not screen this message"), 404, "not found"),  # indistinguishable from a missing message
         (MessageErased("x"), 409, "the message body was erased"),
-        (KeyNotLoaded("x"), 503, "message screening is unavailable: the encryption key is not loaded"),
     ],
 )
 def test_errors_map_to_clean_statuses_with_fixed_bodies(monkeypatch, error, status, detail):
@@ -143,7 +142,9 @@ def test_a_missing_message_and_a_forbidden_one_have_identical_responses(monkeypa
     assert bodies[0] == bodies[1]
 
 
-def test_without_a_key_vault_the_route_answers_503_visibly_and_never_screens(monkeypatch):
+def test_without_a_key_vault_the_route_answers_503_visibly_logs_an_error_and_never_screens(monkeypatch, caplog):
+    import logging
+
     called = []
 
     async def fake(*args, **kwargs):
@@ -151,9 +152,46 @@ def test_without_a_key_vault_the_route_answers_503_visibly_and_never_screens(mon
 
     monkeypatch.setattr(app_module, "screen_stored_message", fake)
     monkeypatch.setattr(app_module, "_load_vault", lambda: None)
+    caplog.set_level(logging.ERROR, logger="careflow.app")
     with TestClient(make_client(vault=None)) as c:
         r = c.post(PATH.format(uuid.uuid4()), headers=headers())
     assert r.status_code == 503 and "encryption keys are not configured" in r.json()["detail"] and called == []
+    errors = [x for x in caplog.records if x.levelno == logging.ERROR]
+    assert len(errors) == 1 and "no encryption keys are configured" in errors[0].getMessage()
+
+
+@pytest.mark.parametrize("reason", ["DecryptionError", "UnknownKeyVersionError"])
+def test_an_unreadable_body_is_a_200_unassessable_and_the_route_logs_one_warning_with_ids_and_the_error_class_only(monkeypatch, caplog, reason):
+    import logging
+
+    clinic, message = uuid.uuid4(), uuid.uuid4()
+
+    async def fake(conn, vault, engine, message_id, *, idempotency_key, profile=None):
+        return _result(message_id=message, clinic_id=clinic, unreadable_reason=reason)
+
+    monkeypatch.setattr(app_module, "screen_stored_message", fake)
+    caplog.set_level(logging.DEBUG)
+    with TestClient(make_client()) as c:
+        r = c.post(PATH.format(message), headers=headers())
+    assert r.status_code == 200 and r.json()["outcome"] == "unassessable"
+    warnings = [x for x in caplog.records if x.levelno == logging.WARNING and x.name == "careflow.app"]
+    assert len(warnings) == 1
+    line = warnings[0].getMessage()
+    assert str(message) in line and str(clinic) in line and reason in line
+    assert SECRET_TEXT not in caplog.text and SECRET_TEXT not in r.text
+
+
+def test_a_readable_body_logs_no_warning(monkeypatch, caplog):
+    import logging
+
+    async def fake(conn, vault, engine, message_id, *, idempotency_key, profile=None):
+        return _result(message_id=message_id)
+
+    monkeypatch.setattr(app_module, "screen_stored_message", fake)
+    caplog.set_level(logging.WARNING, logger="careflow.app")
+    with TestClient(make_client()) as c:
+        assert c.post(PATH.format(uuid.uuid4()), headers=headers()).status_code == 200
+    assert [x for x in caplog.records if x.name == "careflow.app" and x.levelno >= logging.WARNING] == []
 
 
 def test_an_unexpected_failure_is_a_500_without_echoing_anything(monkeypatch):

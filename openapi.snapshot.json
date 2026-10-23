@@ -718,7 +718,7 @@
     },
     "/v1/staff/messages/{message_id}/screen": {
       "post": {
-        "description": "Screen a stored message for red flags. 404 if you cannot see it; 409 if its body was erased; 503 if the encryption key is unavailable.",
+        "description": "Screen a stored message for red flags. 404 if you cannot see it; 409 if its body was erased; 503 only if no encryption keys are\nconfigured at all. An unreadable body is recorded `unassessable` (a nurse task), never left unscreened.",
         "operationId": "screen_message_v1_staff_messages__message_id__screen_post",
         "parameters": [
           {

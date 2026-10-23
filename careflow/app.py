@@ -43,7 +43,6 @@ from careflow.auth import AuthError, AuthUnavailable, JWKSClient, verify_token
 from careflow.crypto import CryptoError, DemographicVault
 from careflow.db import make_app_engine, set_request_claims
 from careflow.messages import (
-    KeyNotLoaded,
     MessageErased,
     MessageNotFound,
     screen_stored_message,
@@ -466,6 +465,11 @@ async def list_waitlist(
 #   # CLINICAL-PLACEHOLDER: needs clinician sign-off  (pending clinical lead confirmation; set in migration 0013, not here)
 # The body is decrypted only inside careflow.messages.screen_stored_message and never leaves it.
 #
+# A body that cannot be read (tampered or mis-bound, or encrypted under a key version this process does not have) is NEVER left
+# unscreened: it is recorded UNASSESSABLE, which raises a nurse task, and this layer logs one warning with the message id, the clinic id
+# and the error CLASS only (never any text or key material). Only a missing key vault, meaning no encryption secrets are configured at
+# all, is a 503: that is a deployment fault, logged loudly, and nothing can be screened.
+#
 # Who may call it is decided by row-level security and by msg.record_screening, not by this route: nurse and doctor (every topic) and
 # front desk (appointments and safety only) can SEE the message, so only they can screen it. Everyone else, an unknown id and a message
 # in another clinic all get the same 404, so a guess reveals nothing. A queue_worker has no HTTP role here (it screens in-process).
@@ -487,9 +491,11 @@ class ScreenOut(_Out):
 
 @staff_messages.post("/{message_id}/screen", response_model=ScreenOut)
 async def screen_message(message_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, request: Request) -> ScreenOut:
-    """Screen a stored message for red flags. 404 if you cannot see it; 409 if its body was erased; 503 if the encryption key is unavailable."""
+    """Screen a stored message for red flags. 404 if you cannot see it; 409 if its body was erased; 503 only if no encryption keys are
+    configured at all. An unreadable body is recorded `unassessable` (a nurse task), never left unscreened."""
     vault: DemographicVault | None = request.app.state.vault
     if vault is None:
+        log.error("message screening is unavailable: no encryption keys are configured (deployment fault; nothing can be screened)")
         raise HTTPException(status_code=503, detail="message screening is unavailable: encryption keys are not configured")
     try:
         r = await screen_stored_message(conn, vault, _screening_engine, message_id, idempotency_key=idempotency_key)
@@ -497,8 +503,11 @@ async def screen_message(message_id: uuid.UUID, idempotency_key: IdempotencyKey,
         raise HTTPException(status_code=404, detail="not found") from None
     except MessageErased:
         raise HTTPException(status_code=409, detail="the message body was erased") from None
-    except KeyNotLoaded:
-        raise HTTPException(status_code=503, detail="message screening is unavailable: the encryption key is not loaded") from None
+    if r.unreadable_reason is not None:
+        log.warning(
+            "stored message body could not be read; recorded unassessable (message=%s clinic=%s error=%s)",
+            r.message_id, r.clinic_id, r.unreadable_reason,
+        )
     return ScreenOut(message_id=r.message_id, screening_id=r.screening_id, outcome=r.outcome, replayed=r.replayed, patient_reply=r.patient_reply)  # type: ignore[arg-type]
 
 

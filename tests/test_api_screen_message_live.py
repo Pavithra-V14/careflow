@@ -10,6 +10,15 @@ registers this route (SEPARATE_HARNESS) so `test_every_route_is_in_the_matrix` s
 
 # CLINICAL-PLACEHOLDER: needs clinician sign-off
 The only rule used is a SYNTHETIC token (`zzalpha`); nothing here is a clinical term, and no emergency reply wording exists anywhere.
+
+WHAT THIS HARNESS DOES NOT COVER, and where that IS covered (documented exception to CLAUDE.md rule 8; docs/design/role-matrix-exceptions.md):
+  * the real transaction-mode pooler engine and the real restricted login: it uses SET LOCAL ROLE careflow_app on a shared connection.
+    Covered instead by tests/test_db_engine_config.py, scripts/verify_app_role.py and the committed-fixture matrix in tests/test_api_role_matrix.py.
+  * commit-before-response (a 200 means the write is durable): nothing here commits. Covered by the scheduling write tests in
+    tests/test_api_role_matrix.py (test_a_write_is_committed_before_its_response_is_returned) and the TxConn scope="function" dependency.
+  * the deferred "a patient-kind message needs a screening by commit" trigger: it only fires at commit, which never happens here.
+    Covered by the 0013 live tests in tests/test_rls_screenings_live.py (SET CONSTRAINTS ... IMMEDIATE inside the rolled-back transaction).
+It must run in CI with ZERO skips: its only skip condition is a missing DATABASE_URL_MIGRATOR, which CI provides, and CI fails on any skip.
 """
 
 import base64
@@ -79,6 +88,12 @@ async def world():
     conn = await engine.connect()
     outer = await conn.begin()
     try:
+        # Read-only precondition: committed approved rules with criteria would change every outcome below. Nothing is deleted.
+        n = (await conn.execute(text(
+            "select count(*) from kb.red_flag_rules where origin = 'test' and status = 'approved' and (cardinality(phrases) > 0 or cardinality(patterns) > 0)"
+        ))).scalar_one()
+        if n:
+            pytest.fail(f"This suite assumes the database holds NO committed approved origin='test' red-flag rule with criteria (it inserts its own inside a rolled-back transaction); found {n}. Such a rule changes what screenings and rule-set hashes the tests expect. Nothing was deleted: an engineer with the migrator credential must retire or remove those rules deliberately, then re-run.", pytrace=False)
         await conn.exec_driver_sql("grant careflow_app to current_user with set true")
         vault = DemographicVault.from_env(_keys(1, 2))
         other = DemographicVault.from_env(_keys(9))  # a key this app does not have
@@ -276,11 +291,15 @@ async def test_a_red_flag_raises_the_immediate_nurse_task_and_nothing_is_sent_to
     assert PRIVATE not in stored and "zzalpha" not in stored and PRIVATE not in caplog.text and "zzalpha" not in caplog.text
 
 
-async def test_a_body_that_fails_authentication_is_recorded_unassessable_with_a_nurse_task(w):
+async def test_a_body_that_fails_authentication_is_recorded_unassessable_with_a_nurse_task_and_one_route_warning(w, caplog):
+    caplog.set_level("DEBUG")
     r = await post(w, "nurse_a", w.messages["tampered"])
     assert r.status_code == 200 and assert_ids_only(r, w)["outcome"] == "unassessable"
     ((kind,),) = await one(w, "select kind from agents.review_tasks where source_message_id = :m", m=str(w.messages["tampered"]))
     assert kind == "screening_unassessable"
+    warnings = [x.getMessage() for x in caplog.records if x.name == "careflow.app" and x.levelno >= 30]
+    assert len(warnings) == 1 and str(w.messages["tampered"]) in warnings[0] and str(w.a) in warnings[0] and "DecryptionError" in warnings[0]
+    assert PRIVATE not in caplog.text  # ids and the error class only: never any body text or key material
 
 
 async def test_an_erased_message_is_409_for_those_who_can_see_it_and_404_for_those_who_cannot(w):
@@ -288,10 +307,16 @@ async def test_an_erased_message_is_409_for_those_who_can_see_it_and_404_for_tho
     assert (await post(w, "fd_a", w.messages["erased"])).status_code == 404  # a care message: invisible to front desk
 
 
-async def test_a_key_version_that_is_not_loaded_is_503_and_records_nothing(w):
+async def test_a_key_version_that_is_not_loaded_is_recorded_unassessable_with_a_nurse_task_and_one_route_warning(w, caplog):
+    """Unknown routes to a human: the message is NOT left unscreened and there is no bare 503 for a key version that is missing."""
+    caplog.set_level("DEBUG")
     r = await post(w, "nurse_a", w.messages["other_key"])
-    assert r.status_code == 503 and "not loaded" in r.json()["detail"]
-    assert await one(w, "select id from msg.screenings where message_id = :m", m=w.messages["other_key"]) == []
+    assert r.status_code == 200 and assert_ids_only(r, w)["outcome"] == "unassessable"
+    ((kind,),) = await one(w, "select kind from agents.review_tasks where source_message_id = :m", m=str(w.messages["other_key"]))
+    assert kind == "screening_unassessable"
+    warnings = [x.getMessage() for x in caplog.records if x.name == "careflow.app" and x.levelno >= 30]
+    assert len(warnings) == 1 and "UnknownKeyVersionError" in warnings[0] and str(w.messages["other_key"]) in warnings[0]
+    assert PRIVATE not in caplog.text
 
 
 async def test_every_screening_writes_an_audit_row_with_ids_only(w):
