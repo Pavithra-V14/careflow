@@ -87,7 +87,7 @@ jobs:
           uv sync --frozen
 
       - name: Lint
-        run: uv run ruff check careflow tests
+        run: uv run ruff check careflow tests scripts
 
       - name: OpenAPI snapshot is current (BUILD-SPEC.md §21)
         run: uv run python scripts/export_openapi.py --check
