@@ -65,5 +65,5 @@ calls:
     approved_by: null
     approved_on: null
     status: proposed
-    appendix_b: "Session-mode pooler holds a session-level advisory lock: RESOLVED from a developer machine; still unconfirmed from a GitHub-hosted runner (first CI run confirms it)"
+    appendix_b: "Session-mode pooler holds a session-level advisory lock: RESOLVED from a developer machine and from a GitHub-hosted runner (GitHub Actions run 36845835671, commit 6da1ca5, 2026-10-01), as BUILD-SPEC.md Appendix B records"
     notes: "Refuses the transaction-mode port (6543) because the advisory lock needs one backend across statements."
