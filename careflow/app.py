@@ -26,8 +26,9 @@ missing.
 """
 
 import logging
+import time
 import uuid
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime
 from typing import Annotated, Any, Literal
@@ -41,8 +42,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from careflow import mpi
-from careflow.auth import AuthError, AuthUnavailable, JWKSClient, verify_token
+from careflow import identity, mpi
+from careflow.auth import (
+    AuthError,
+    AuthUnavailable,
+    JWKSClient,
+    step_up_failure,
+    verify_token,
+)
 from careflow.crypto import CryptoError, DemographicVault
 from careflow.db import make_app_engine, set_request_claims
 from careflow.messages import (
@@ -87,6 +94,12 @@ class Settings(BaseSettings):
     # a visible 503 until it is set.
     active_key_version: int | None = Field(default=None, validation_alias=AliasChoices("CAREFLOW_ACTIVE_KEY_VERSION", "active_key_version"))
 
+    # How recently a second factor must have been verified for a sensitive action (BUILD-SPEC 18.1 step-up). REQUIRED, no code default:
+    # until it is set the merge routes answer a visible 503 (and log an error) instead of guessing a window.
+    step_up_max_age_seconds: int | None = Field(
+        default=None, validation_alias=AliasChoices("CAREFLOW_STEP_UP_MAX_AGE_SECONDS", "step_up_max_age_seconds")
+    )
+
     @property
     def issuer(self) -> str:
         return self.supabase_url.rstrip("/") + "/auth/v1"
@@ -123,6 +136,21 @@ async def db_conn(request: Request, claims: dict[str, Any] = Depends(verified_cl
 
 # Commit before the response goes out (see the lifecycle note above).
 TxConn = Annotated[AsyncConnection, Depends(db_conn, scope="function")]
+
+
+async def require_step_up(request: Request, claims: dict[str, Any] = Depends(verified_claims)) -> None:
+    """Step-up re-authentication (BUILD-SPEC 18.1): a second factor verified within CAREFLOW_STEP_UP_MAX_AGE_SECONDS. The decision is the pure
+    careflow.auth.step_up_failure; this wrapper supplies the configured window and the clock. A refusal is ONE fixed 401 with
+    `WWW-Authenticate: step-up` and no reason; the reason code goes to the log, never a claim value. It runs before any database work.
+    Authentication still comes first (verified_claims). The claim shape is UNVERIFIED against a real token (docs/design/step-up-spike.md)."""
+    max_age = request.app.state.step_up_max_age_seconds
+    if not isinstance(max_age, int) or isinstance(max_age, bool) or max_age <= 0:
+        log.error("step-up is unavailable: CAREFLOW_STEP_UP_MAX_AGE_SECONDS is not set to a positive number of seconds")
+        raise HTTPException(status_code=503, detail="step-up re-authentication is not configured")
+    reason = step_up_failure(claims, max_age_seconds=max_age, now=request.app.state.clock())
+    if reason is not None:
+        log.info("step-up refused: %s", reason)
+        raise HTTPException(status_code=401, detail="step-up required", headers={"WWW-Authenticate": "step-up"})
 
 # ---- routes ----------------------------------------------------------------------------------------
 
@@ -616,6 +644,140 @@ async def _validation_error_handler(request: Request, exc: RequestValidationErro
     return JSONResponse(status_code=422, content={"detail": errors})
 
 
+# ---- staff merges: propose, approve, unmerge (BUILD-SPEC.md §17.2, §18.1; CLAUDE.md rules 3, 5, 8) ------------------------------------------
+#
+# STEP-UP IMPLEMENTED, CLAIM SHAPE PENDING LIVE VERIFICATION. Every route here needs a recently verified second factor
+# (`require_step_up`). The `amr` entry shape it reads is documented but NOT yet confirmed against a real token (Appendix B spike,
+# docs/design/step-up-spike.md): do not treat the step-up check as verified until that is recorded.
+#
+# STRONG_IDENTIFIERS (careflow/mpi.py) decides which matches are strong enough to avoid a review row, and it is reachable over HTTP through
+# POST /v1/staff/patients. It is PENDING SIGN-OFF by Priya (Health-information lead): no real patient data until that is recorded.
+#
+# A merge is a ledger row, never destructive (careflow.identity). Propose = front desk person 1; approve = a DIFFERENT front desk person 2;
+# unmerge = one person, and it raises the nurse review task when the link had been active (none for a never-confirmed proposal).
+# Responses are ids and statuses only. The origin is read from the clinic row, never the client. A patient or merge you cannot see
+# (including one in another clinic) is the same 404 as one that does not exist. Every refusal from the identity module is one FIXED body.
+
+staff_merges = APIRouter(prefix="/v1/staff/merges", tags=["staff merges"], dependencies=[Depends(require_step_up)])
+
+
+class ProposeMergeIn(_Body):
+    clinic_id: uuid.UUID
+    master_patient_id: uuid.UUID
+    subordinate_patient_id: uuid.UUID
+
+
+class MergeOut(_Out):
+    """Ids and a status only."""
+
+    merge_id: uuid.UUID
+    status: Literal["awaiting_second_approval", "active", "unmerged"]
+    master_patient_id: uuid.UUID
+    subordinate_patient_id: uuid.UUID
+    replayed: bool
+
+
+class UnmergeOut(_Out):
+    merge_id: uuid.UUID
+    status: Literal["unmerged"]
+    review_task_id: uuid.UUID | None  # None when a never-confirmed proposal was cancelled
+    decisions_flagged: int
+    replayed: bool
+
+
+@contextmanager
+def _identity_errors() -> Iterator[None]:
+    """Every refusal is a fixed body: nothing says which record, or whether one exists elsewhere."""
+    try:
+        yield
+    except (identity.PatientNotFound, identity.MergeNotFound):
+        raise HTTPException(status_code=404, detail="not found") from None
+    except identity.NotPermitted:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    except identity.IdempotencyConflict:
+        raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request") from None
+    except identity.InvalidTransition:
+        raise HTTPException(status_code=409, detail="this merge is not in a state that allows that") from None
+    except identity.MergeNotAllowed:
+        # One body for every rule (same person approving, already linked, no review row, erased...): the reason stays out of the response.
+        raise HTTPException(status_code=409, detail="this merge cannot be carried out") from None
+
+
+async def _front_desk_gate(conn: AsyncConnection, claims: dict[str, Any], clinic_id: uuid.UUID) -> str:
+    """The clinic's origin, after checking the caller is active front desk there. 404 if the clinic is invisible, 403 if visible but not front desk."""
+    clinic = (await conn.execute(text("select origin from iam.clinics where id = :c"), {"c": clinic_id})).first()
+    if clinic is None:
+        raise HTTPException(status_code=404, detail="not found")
+    is_front_desk = (
+        await conn.execute(
+            text(
+                "select 1 from iam.staff_roles sr join iam.accounts a on a.id = sr.account_id "
+                "where sr.account_id = :u and sr.clinic_id = :c and sr.role = 'front_desk' and sr.revoked_at is null "
+                "and a.status = 'active' and a.account_type = 'staff'"
+            ),
+            {"u": uuid.UUID(claims["sub"]), "c": clinic_id},
+        )
+    ).first()
+    if is_front_desk is None:
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    return clinic[0]
+
+
+async def _merge_clinic(conn: AsyncConnection, merge_id: uuid.UUID) -> uuid.UUID:
+    """The clinic of a merge the caller can see under RLS; invisible and nonexistent are the same 404."""
+    row = (await conn.execute(text("select clinic_id from mpi.merges where id = :i"), {"i": merge_id})).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return row[0]
+
+
+def _merge_out(r: identity.MergeResult) -> MergeOut:
+    return MergeOut(
+        merge_id=r.merge_id, status=r.status, master_patient_id=r.master_id, subordinate_patient_id=r.subordinate_id, replayed=r.replayed  # type: ignore[arg-type]
+    )
+
+
+@staff_merges.post("", response_model=MergeOut)
+async def propose_merge(
+    body: ProposeMergeIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)
+) -> MergeOut:
+    """Step 1: propose linking the subordinate to the master (the caller signs). Not effective until a different front desk person approves.
+    401 step-up required, 404 unknown clinic/patient, 403 not front desk there, 409 refused (one fixed body), 422 invalid input."""
+    origin = await _front_desk_gate(conn, claims, body.clinic_id)
+    with _identity_errors():
+        result = await identity.IdentityManager().execute_merge(
+            conn, body.clinic_id, origin, body.master_patient_id, body.subordinate_patient_id, uuid.UUID(claims["sub"]), idempotency_key
+        )
+    return _merge_out(result)
+
+
+@staff_merges.post("/{merge_id}/approve", response_model=MergeOut)
+async def approve_merge(
+    merge_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)
+) -> MergeOut:
+    """Step 2: a DIFFERENT front desk person confirms. The same person approving is refused with the one generic 409."""
+    clinic_id = await _merge_clinic(conn, merge_id)
+    origin = await _front_desk_gate(conn, claims, clinic_id)
+    with _identity_errors():
+        result = await identity.IdentityManager().approve_merge(conn, clinic_id, origin, merge_id, uuid.UUID(claims["sub"]), idempotency_key)  # type: ignore[arg-type]
+    return _merge_out(result)
+
+
+@staff_merges.post("/{merge_id}/unmerge", response_model=UnmergeOut)
+async def unmerge(
+    merge_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)
+) -> UnmergeOut:
+    """Break the link (one person). For a link that had been active this raises the nurse review task; cancelling a never-confirmed proposal raises none."""
+    clinic_id = await _merge_clinic(conn, merge_id)
+    origin = await _front_desk_gate(conn, claims, clinic_id)
+    with _identity_errors():
+        result = await identity.IdentityManager().execute_unmerge(conn, clinic_id, origin, merge_id, uuid.UUID(claims["sub"]), idempotency_key)  # type: ignore[arg-type]
+    return UnmergeOut(
+        merge_id=result.merge_id, status="unmerged", review_task_id=result.review_task_id, decisions_flagged=result.decisions_flagged,
+        replayed=result.replayed,
+    )
+
+
 # ---- application -----------------------------------------------------------------------------------
 
 
@@ -630,9 +792,10 @@ def _load_vault() -> DemographicVault | None:
 
 def create_app(
     settings: Settings | None = None, *, jwks: JWKSClient | None = None, engine: AsyncEngine | None = None,
-    vault: DemographicVault | None = None,
+    vault: DemographicVault | None = None, clock: Callable[[], float] = time.time,
 ) -> FastAPI:
-    """Build the app. `jwks`, `engine` and `vault` can be injected (tests do); otherwise they come from settings / the environment."""
+    """Build the app. `jwks`, `engine`, `vault` and `clock` (for the step-up window) can be injected (tests do); otherwise they come from
+    settings / the environment."""
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -642,6 +805,8 @@ def create_app(
         app.state.engine = engine or make_app_engine(cfg.database_url_app, pool_size=5, max_overflow=5, pool_pre_ping=True)
         app.state.vault = vault if vault is not None else _load_vault()
         app.state.active_key_version = cfg.active_key_version
+        app.state.step_up_max_age_seconds = cfg.step_up_max_age_seconds
+        app.state.clock = clock
         try:
             yield
         finally:
@@ -656,6 +821,7 @@ def create_app(
     app.include_router(scheduling)
     app.include_router(staff_messages)
     app.include_router(staff_patients)
+    app.include_router(staff_merges)
     return app
 
 

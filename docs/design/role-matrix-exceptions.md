@@ -34,6 +34,12 @@ applied; CI applies migrations before the tests.
 | Commit-before-response (a 200 means the write is durable; nothing commits here) | the scheduling write tests in `tests/test_api_role_matrix.py` (`test_a_write_is_committed_before_its_response_is_returned`) and the `TxConn` dependency (`scope="function"`) |
 | The deferred "a patient-kind message needs a screening by commit" trigger (it only fires at commit) | the 0013 live tests in `tests/test_rls_screenings_live.py` (`SET CONSTRAINTS ... IMMEDIATE` inside the rolled-back transaction) |
 
+## Not an exception: the merge routes
+
+`POST /v1/staff/merges`, `.../{id}/approve` and `.../{id}/unmerge` write only `mpi.merges` and `agents.review_tasks`, which the owner can
+delete, so they use the normal committed matrix in `tests/test_api_role_matrix.py` (cleanup deletes `mpi.merges` and `agents.review_tasks`
+before `mpi.match_candidates` and `mpi.patients`). Every identity is tried with a stepped-up and a not-stepped-up token.
+
 ## Rule for future routes
 
 A route uses the normal committed matrix unless every row it writes can be deleted by the owner. A route that writes to an append-only table

@@ -32,6 +32,15 @@ one, delete its line in the same change. Source of the first group: the msg / ia
   counsel.
 
 ## Waiting for a later phase or feature
+- **Step-up claim shape: required spike (Appendix B).** The merge routes read `aal` and `amr` entries of the form
+  `{"method": "totp", "timestamp": <int seconds>}`; that shape comes from documentation, not a real token. The owner enrols TOTP on
+  a dev staff account and pastes the `aal`/`amr`/`iat` claims; until then the step-up check is not verified.
+  See `docs/design/step-up-spike.md`.
+- **Around step-up**: enforcing MFA enrolment at first staff login; an `aal2` restrictive policy in the database; a clock-skew
+  allowance for a fresh timestamp (zero today); reuse of `require_step_up` for publish card/rule, autonomy-mode change, erasure and
+  role change when those routes exist.
+- **`STRONG_IDENTIFIERS` is reachable over HTTP** (`POST /v1/staff/patients`) and is pending Priya's sign-off; no real patient data
+  until it is recorded.
 - **Staff message read route**: decrypts through `careflow/messages.py` only; adds its own role-matrix case in the same change.
 - **Application-level get-or-create for threads and messages** (`ON CONFLICT (idempotency_key) DO NOTHING`, then a keyed
   SELECT that compares thread, sender and clinic; a different key for the same patient and topic returns the existing

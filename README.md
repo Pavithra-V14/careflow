@@ -24,10 +24,18 @@ suite against the CI Supabase project as `careflow_app`, with zero skips allowed
 - Built: scheduling (holds, bookings, cancel, clinical-priority waitlist), MPI ingestion with AES-256-GCM and HMAC
   tokens, key rotation (runbook in `docs/runbooks/key_rotation.md`), two-person merge and unmerge, the red-flag rule
   engine (mechanism only), the Postgres queue and outbox.
-- Routes that exist: `GET /v1/iam/me` and `/v1/staff/scheduling/*`. Every route has role-matrix coverage.
-- Built since: migration 0011 (`msg.threads`, `msg.messages` with an encrypted body, staff-only).
-- Not built yet: routes for patient ingestion, merge/unmerge and red-flag screening; screenings (0012, design under
-  review), the `account_id` protection (0013), the `iam` consent, activation and grievance tables; the minimal patient portal (no frontend exists).
+- Routes that exist: `GET /v1/iam/me`, `/v1/staff/scheduling/*`, `POST /v1/staff/messages/{id}/screen`,
+  `POST /v1/staff/patients` (registration / identity resolution) and the merge routes `POST /v1/staff/merges`,
+  `/v1/staff/merges/{id}/approve` and `/v1/staff/merges/{id}/unmerge`. Every route has role-matrix coverage (the screening
+  route's is in a documented separate harness, `docs/design/role-matrix-exceptions.md`).
+- Built since: migrations 0011 to 0013 (encrypted message bodies, patient account binding, screenings).
+- **Merge routes: step-up implemented, claim shape pending live verification.** They need a recently verified second factor
+  (`CAREFLOW_STEP_UP_MAX_AGE_SECONDS`, required; 503 while unset). The token claim shape it reads has not been checked against
+  a real token: see [`docs/design/step-up-spike.md`](docs/design/step-up-spike.md) for the spike the owner must run.
+- **`STRONG_IDENTIFIERS` is reachable over HTTP** through `POST /v1/staff/patients`, and it is still **pending sign-off by Priya**
+  (Health-information lead). **Do not use real patient data until that sign-off is recorded.**
+- Not built yet: the staff message read route; the `iam` consent, activation and grievance tables; the minimal patient portal
+  (no frontend exists).
 - Queue and outbox stay in-process: no HTTP routes for claim, acknowledge or dead-letter, and no `/internal` auth
   until the Phase 2 worker proposal (short-lived signed token per job, §18.4) is decided.
 
@@ -36,7 +44,8 @@ suite against the CI Supabase project as `careflow_app`, with zero skips allowed
   `draft_unreviewed` stub. No rule or phrase may be written by an engineer (`CLAUDE.md` rule 1). The test cannot be
   written, and Phase 1 cannot be called complete, until a clinical lead supplies and approves rules.
 - **Patient identity match rule (`STRONG_IDENTIFIERS`, `careflow/mpi.py`): pending sign-off** by Priya, Health-information
-  lead. It stays a single constant until then.
+  lead. It stays a single constant until then. It is already reachable over HTTP (`POST /v1/staff/patients`), so no real
+  patient data may be used until the sign-off is recorded.
 - **No emergency auto-reply wording exists.** The immediate nurse task is raised on a red flag; the patient-facing
   send is pending a clinician-approved template.
 - **Phase 2 acceptance item: the §7.3 ceilings** (12 model calls, 25 tool calls, 40 steps, 40 s per tick) have no

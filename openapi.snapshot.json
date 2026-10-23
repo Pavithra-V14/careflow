@@ -404,6 +404,76 @@
         "title": "Me",
         "type": "object"
       },
+      "MergeOut": {
+        "additionalProperties": false,
+        "description": "Ids and a status only.",
+        "properties": {
+          "master_patient_id": {
+            "format": "uuid",
+            "title": "Master Patient Id",
+            "type": "string"
+          },
+          "merge_id": {
+            "format": "uuid",
+            "title": "Merge Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "awaiting_second_approval",
+              "active",
+              "unmerged"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subordinate_patient_id": {
+            "format": "uuid",
+            "title": "Subordinate Patient Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "merge_id",
+          "status",
+          "master_patient_id",
+          "subordinate_patient_id",
+          "replayed"
+        ],
+        "title": "MergeOut",
+        "type": "object"
+      },
+      "ProposeMergeIn": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "master_patient_id": {
+            "format": "uuid",
+            "title": "Master Patient Id",
+            "type": "string"
+          },
+          "subordinate_patient_id": {
+            "format": "uuid",
+            "title": "Subordinate Patient Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "master_patient_id",
+          "subordinate_patient_id"
+        ],
+        "title": "ProposeMergeIn",
+        "type": "object"
+      },
       "RoleGrant": {
         "properties": {
           "clinic_id": {
@@ -574,6 +644,50 @@
           "hold_expires_at"
         ],
         "title": "SlotOut",
+        "type": "object"
+      },
+      "UnmergeOut": {
+        "additionalProperties": false,
+        "properties": {
+          "decisions_flagged": {
+            "title": "Decisions Flagged",
+            "type": "integer"
+          },
+          "merge_id": {
+            "format": "uuid",
+            "title": "Merge Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "review_task_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Task Id"
+          },
+          "status": {
+            "const": "unmerged",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "merge_id",
+          "status",
+          "review_task_id",
+          "decisions_flagged",
+          "replayed"
+        ],
+        "title": "UnmergeOut",
         "type": "object"
       },
       "ValidationError": {
@@ -793,6 +907,195 @@
           }
         ],
         "summary": "Me"
+      }
+    },
+    "/v1/staff/merges": {
+      "post": {
+        "description": "Step 1: propose linking the subordinate to the master (the caller signs). Not effective until a different front desk person approves.\n401 step-up required, 404 unknown clinic/patient, 403 not front desk there, 409 refused (one fixed body), 422 invalid input.",
+        "operationId": "propose_merge_v1_staff_merges_post",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposeMergeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MergeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Propose Merge",
+        "tags": [
+          "staff merges"
+        ]
+      }
+    },
+    "/v1/staff/merges/{merge_id}/approve": {
+      "post": {
+        "description": "Step 2: a DIFFERENT front desk person confirms. The same person approving is refused with the one generic 409.",
+        "operationId": "approve_merge_v1_staff_merges__merge_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "merge_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Merge Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MergeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Approve Merge",
+        "tags": [
+          "staff merges"
+        ]
+      }
+    },
+    "/v1/staff/merges/{merge_id}/unmerge": {
+      "post": {
+        "description": "Break the link (one person). For a link that had been active this raises the nurse review task; cancelling a never-confirmed proposal raises none.",
+        "operationId": "unmerge_v1_staff_merges__merge_id__unmerge_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "merge_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Merge Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnmergeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Unmerge",
+        "tags": [
+          "staff merges"
+        ]
       }
     },
     "/v1/staff/messages/{message_id}/screen": {
