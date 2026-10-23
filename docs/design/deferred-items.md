@@ -42,6 +42,12 @@ one, delete its line in the same change. Source of the first group: the msg / ia
   patient with a non-erased message.
 - **Admin escalation (12.3)** uses alerts with class, count and opaque id only, through the Phase 4 watchdog. Admin gets NO
   read access to message-sourced review tasks (decision 2026-10-23: rule codes can reveal a condition).
+- **A human resolution path for an `unassessable` message.** Today an `unassessable` screening row can never be cleared: the worst-of
+  view (`msg.message_screening_status`) reports `unassessable` permanently, and only the nurse task carries any resolution state.
+  Design when the nurse console is built: a resolution record written by a human decision, never by the engine.
+- **Voice sessions must run under a nurse, doctor or queue_worker identity.** `escalate_red_flag` (the path for non-message sources
+  such as a live transcript) is refused for front desk and admin since migration 0013, so a voice session under either identity
+  could not raise its red flag (CLAUDE.md rule 11).
 - **Merged patients**: threads and messages on a patient who is the subordinate of an active merge (0008) land on a thread
   nobody routes to; routing belongs to the future read route.
 - **A deferred "no live message for an erased patient" constraint** on `mpi.patients.erased_at` would make the erasure order
