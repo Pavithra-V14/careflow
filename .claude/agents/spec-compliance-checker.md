@@ -16,7 +16,7 @@ When invoked with a description of what was just built:
 2. Cross-reference Appendix B ("verify at build"). If the feature depends on any fact listed there
    (a specific API shape, a library's behavior, a provider's rate limit), confirm it was actually
    checked against the real service or library — a comment, a passing integration test, or a
-   documented spike. If it wasn's checked and the code just assumes the researched behavior is
+   documented spike. If it wasn't checked and the code just assumes the researched behavior is
    correct, flag it by name.
 3. Check Appendix A (rejected options). If the implementation quietly reintroduces something
    listed there as rejected, flag it and ask whether that was deliberate.
