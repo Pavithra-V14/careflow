@@ -69,24 +69,17 @@ one, delete its line in the same change. Source of the first group: the msg / ia
   database cannot close that; the worst-of view lists every unscreened message regardless of label.
 - A demo-profile deployment on live origin raises an `unassessable` nurse task for every message (fail-safe but noisy).
 
-## Open findings on the 0012 design (re-review of 2026-10-23, verdict BLOCKED, NOT yet fixed)
-These must be resolved in the design before 0012 is written; 0012 does not proceed until they are:
-- **HIGH: the per-message advisory lock can be held by any app-role session** (`pg_advisory_xact_lock` is executable by
-  PUBLIC), so a known message uuid lets a caller block `record_screening` for that message. Proposed fix: serialise on a
-  row lock the app role cannot take, `select ... from msg.messages where id = p_message_id for no key update` as the
-  definer (the app role has no UPDATE privilege on messages), and take the same lock in the table trigger; the lock test
-  changes to match.
-- **HIGH: `rule_set_hash` is NULL when the in-force rule set is empty** (`string_agg` over no rows is NULL), and the column
-  is NOT NULL, so every `unassessable` in a clinic with no approved rules (the state 0007 ships in) would be refused.
-  Proposed fix: `coalesce(string_agg(...), '')` before hashing, an empty-set parity fixture and test, and an exception
-  fallback to a sentinel hash for red_flag and unassessable.
-- **MEDIUM**: the stored caller-key hash column must be non-unique (or unique only with the message id); strike the v3.1
-  sentence that turns a `unique_violation` into an error for red_flag and unassessable (re-select and return the existing
-  row instead); NULL `p_idempotency_key`, NULL provenance and an unknown `p_profile` must not refuse a red_flag (coalesce,
-  treat unknown as `clinical`, never declare the function STRICT).
-- **LOW**: the migration must DROP 0007's `review_tasks_select` and `review_tasks_insert` before creating the new ones
-  (permissive policies OR together); existing tests to change: `tests/test_rules_live.py` lines 417, 425, 449-457 and 407-414,
-  and `tests/test_rules.py:328`.
+## Screenings migration (as built: 0013): design settled, awaiting owner approval
+The earlier open findings (advisory lock, NULL hash on an empty rule set, key hash column, NULL/unknown inputs, policy
+replacement) are fixed in the design (amendments v3.5 and v3.6 in `msg-screening-binding-design.md`), and the last scoped review
+returned SAFE TO MERGE. What remains is implementation and the owner's approval of one deviation: the serialising lock is on
+the **thread** row, not the message row, so key rotation can never stall an escalation. Items to implement with the migration:
+- NULL-safe comparisons (`IS DISTINCT FROM`), `clear` refused on any NULL claim or empty key; the rule-set hash never NULL
+  (empty set = sha256 of nothing; zero-hash fallback flagged `rule_set_unverified`, never a clear).
+- Explicit DROP of 0007's `review_tasks_select` and `review_tasks_insert`; front desk and admin see and insert only
+  `unmerge_review`.
+- Existing tests that change in the SAME commit: `tests/test_rules_live.py` lines 407-414, 417-422, 449-457;
+  `tests/test_rules.py` lines 328 and 345; `tests/test_rls_iam_audit_live.py` adds `screenings` to the msg table map.
 
 ## State of the dev project (not a code item)
 - The dev project holds **leftover `origin = 'test'` rows** from a stray run of the live suites on 2026-10-23 (a `.env` made
