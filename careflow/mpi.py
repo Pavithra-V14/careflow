@@ -52,6 +52,8 @@ ORIGINS: Final = ("live", "test", "eval", "canary")
 Outcome = Literal["matched", "created", "review", "replayed"]
 
 # The ONE rule for "confident match": every token kind listed must agree on the same record.
+# PENDING SIGN-OFF: this rule is a patient-identity policy decision. Its owner is Priya, Health-information lead, who
+# has not yet signed it off. Keep it in this single constant until she does; do not widen or narrow it without her.
 STRONG_IDENTIFIERS: Final = frozenset({"name_dob", "phone"})
 NAME_DOB = "name_dob"
 PHONE = "phone"
