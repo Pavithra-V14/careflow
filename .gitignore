@@ -26,3 +26,6 @@ Thumbs.db
 
 # Claude Code local-only settings (project settings.json IS tracked)
 .claude/settings.local.json
+
+# Archives: a zip of the repo can contain .env files, so never track one
+*.zip
