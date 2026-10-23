@@ -178,3 +178,126 @@ def test_a_lone_surrogate_is_a_clean_error_that_does_not_echo_the_text(vault):
         encrypt_body(vault, "before \ud800 after", key_version=1, **IDS)
     assert "before" not in str(exc.value) and "after" not in str(exc.value)
     assert exc.value.__cause__ is None and exc.value.__suppress_context__
+
+
+# ---- screen_stored_message: decrypt, screen, record, return ids only (route D1). Fake connection and engine, real encryption ---------
+
+
+class _Res:
+    def __init__(self, row=None, scalar=None):
+        self._row, self._scalar = row, scalar
+
+    def first(self):
+        return self._row
+
+    def scalar_one_or_none(self):
+        return self._scalar
+
+
+class _ScreenConn:
+    def __init__(self, row, reply="not_required"):
+        self.row, self.reply, self.sql = row, reply, []
+
+    async def execute(self, statement, params=None):
+        text_ = str(statement)
+        self.sql.append(text_)
+        return _Res(row=self.row) if "from msg.messages" in text_ else _Res(scalar=self.reply)
+
+
+class _ScreenEngine:
+    def __init__(self, outcome="red_flag"):
+        self.calls, self.outcome, self.sid = [], outcome, uuid.uuid4()
+
+    async def evaluate_and_escalate(self, conn, clinic_id, origin, text_content, message_id, *, profile, idempotency_key):
+        from careflow.rules import Evaluation, ScreeningResult
+
+        self.calls.append(("evaluate", text_content, profile, idempotency_key))
+        return Evaluation(self.outcome, (), profile, 0), ScreeningResult(self.sid, False, self.outcome)  # type: ignore[arg-type]
+
+    async def record_screening(self, conn, clinic_id, origin, message_id, evaluation, *, idempotency_key):
+        from careflow.rules import ScreeningResult
+
+        self.calls.append(("record", evaluation.outcome, evaluation.profile, idempotency_key))
+        return ScreeningResult(self.sid, False, evaluation.outcome)  # type: ignore[arg-type]
+
+
+def _stored(vault, text_="some private words", *, version=1, erased=False, bind_to=None):
+    from types import SimpleNamespace
+
+    ids = {"clinic_id": uuid.uuid4(), "thread_id": uuid.uuid4(), "message_id": uuid.uuid4()}
+    enc = encrypt_body(vault, text_, key_version=version, clinic_id=ids["clinic_id"], thread_id=ids["thread_id"], message_id=bind_to or ids["message_id"])
+    row = SimpleNamespace(id=ids["message_id"], clinic_id=ids["clinic_id"], origin="test", thread_id=ids["thread_id"],
+                          body_ct=None if erased else enc.body_ct, body_key_version=None if erased else version,
+                          erased_at=object() if erased else None)
+    return row
+
+
+def _screen(conn, vault, engine, message_id, **kw):
+    from careflow.messages import screen_stored_message
+
+    return asyncio.run(screen_stored_message(conn, vault, engine, message_id, idempotency_key=kw.pop("idempotency_key", "k1"), **kw))
+
+
+def test_a_missing_or_invisible_message_is_not_found_and_nothing_is_screened(vault):
+    from careflow.messages import MessageNotFound
+
+    engine = _ScreenEngine()
+    with pytest.raises(MessageNotFound):
+        _screen(_ScreenConn(None), vault, engine, uuid.uuid4())
+    assert engine.calls == []
+
+
+def test_an_erased_message_cannot_be_screened(vault):
+    from careflow.messages import MessageErased
+
+    row = _stored(vault, erased=True)
+    engine = _ScreenEngine()
+    with pytest.raises(MessageErased):
+        _screen(_ScreenConn(row), vault, engine, row.id)
+    assert engine.calls == []
+
+
+def test_a_key_version_that_is_not_loaded_is_reported_and_records_nothing(vault):
+    from careflow.messages import KeyNotLoaded
+
+    bigger = DemographicVault.from_env({f"CAREFLOW_{k}_SECRET_V{v}": _b64() for v in (1, 9) for k in ("ENC", "HMAC")})
+    row = _stored(bigger, version=9)
+    engine = _ScreenEngine()
+    with pytest.raises(KeyNotLoaded):
+        _screen(_ScreenConn(row), vault, engine, row.id)  # `vault` only has versions 1 and 2
+    assert engine.calls == []
+
+
+def test_a_body_that_fails_authentication_is_recorded_unassessable_not_raised(vault):
+    """Unknown is not clear: a tampered or mis-bound body must reach a nurse, not disappear into an error."""
+    row = _stored(vault, bind_to=uuid.uuid4())  # ciphertext bound to ANOTHER message id
+    engine = _ScreenEngine("unassessable")
+    out = _screen(_ScreenConn(row, reply="not_required"), vault, engine, row.id, profile="clinical")
+    assert [c[0] for c in engine.calls] == ["record"] and engine.calls[0][1:3] == ("unassessable", "clinical")
+    assert out.outcome == "unassessable" and out.screening_id == engine.sid
+
+
+def test_the_decrypted_text_goes_to_the_rule_engine_only_and_never_into_the_result_or_the_logs(vault, caplog):
+    secret = "my-very-private-sentence-9981"
+    row = _stored(vault, secret)
+    engine = _ScreenEngine("red_flag")
+    caplog.set_level(logging.DEBUG)
+    out = _screen(_ScreenConn(row, reply="pending_clinician_template"), vault, engine, row.id, profile="clinical", idempotency_key="abc")
+    assert engine.calls == [("evaluate", secret, "clinical", "abc")]
+    assert (out.outcome, out.patient_reply, out.replayed, out.message_id) == ("red_flag", "pending_clinician_template", False, row.id)
+    assert secret not in repr(out) and secret not in caplog.text
+
+
+def test_the_screening_result_has_only_ids_and_enums():
+    from dataclasses import fields
+
+    from careflow.messages import ScreenedMessage
+
+    assert [f.name for f in fields(ScreenedMessage)] == ["message_id", "screening_id", "outcome", "replayed", "patient_reply"]
+
+
+def test_screening_never_calls_a_model_or_the_network():
+    tree = ast.parse((ROOT / "careflow" / "messages.py").read_text(encoding="utf-8"))
+    roots = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
+    roots |= {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
+    assert roots & {"httpx", "requests", "aiohttp", "urllib", "socket", "anthropic", "openai", "google", "langchain"} == set()

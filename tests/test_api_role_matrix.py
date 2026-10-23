@@ -495,11 +495,47 @@ MATRIX: dict[tuple[str, str], Callable] = {
 # ---- tests -----------------------------------------------------------------------------------------
 
 
+# Routes whose role matrix runs in a DEDICATED module because their rows are append-only (msg.messages, msg.screenings, audit.log) and
+# so cannot be committed and cleaned up by this module's committed-fixture harness. That module drives the same app over HTTP with real
+# signed tokens inside one never-committed transaction. Listing a route here is not an exemption: the dedicated file must exist and
+# must cover the route (see test_separately_tested_routes_have_a_dedicated_matrix_that_covers_them).
+SEPARATE_HARNESS: dict[tuple[str, str], str] = {
+    ("POST", "/v1/staff/messages/{message_id}/screen"): "test_api_screen_message_live.py",
+}
+
+
 def test_every_route_is_in_the_matrix(app):
     """Rule 8: a route with no role-matrix case is not done."""
     # The generated OpenAPI document lists every served operation, including routers added by include_router.
     served = {(m.upper(), path) for path, ops in app.openapi()["paths"].items() if path.startswith("/v1") for m in ops}
-    assert served == set(MATRIX), f"routes without a matrix case: {served - set(MATRIX)}; stale cases: {set(MATRIX) - served}"
+    covered = set(MATRIX) | set(SEPARATE_HARNESS)
+    assert served == covered, f"routes without a matrix case: {served - covered}; stale cases: {covered - served}"
+    assert not set(MATRIX) & set(SEPARATE_HARNESS), "a route is either in MATRIX or in SEPARATE_HARNESS, not both"
+
+
+# Every kind of identity the main matrix covers must also be exercised by a separately tested route: each staff role, a nurse here who is a
+# doctor elsewhere, another clinic's staff, a queue worker, a patient, a guardian, and invited / suspended staff accounts.
+REQUIRED_SEPARATE_ROLES = {
+    "nurse_a", "doctor_a", "fd_a", "worker_a", "admin_a", "auditor_a", "owner_a", "nurse_b", "fd_b", "multi", "patient", "guardian",
+    "invited", "suspended",
+}
+
+
+def test_separately_tested_routes_have_a_dedicated_matrix_that_covers_them():
+    """Not a text search: the dedicated module is IMPORTED, it must export the roles it covers, and the test that drives them must be a real
+    parametrized test function over exactly those roles, so commenting the tests out or emptying them fails here."""
+    import importlib
+
+    for (method, path), filename in SEPARATE_HARNESS.items():
+        module = importlib.import_module(f"tests.{filename.removesuffix('.py')}")
+        roles = module.COVERED[(method, path)]
+        assert REQUIRED_SEPARATE_ROLES <= set(roles), f"{filename} is missing roles: {REQUIRED_SEPARATE_ROLES - set(roles)}"
+        driver = module.test_who_can_screen_which_topic
+        parametrized = [m for m in getattr(driver, "pytestmark", []) if m.name == "parametrize"]
+        assert parametrized and list(parametrized[0].args[1]) == list(roles), "the driving test must be parametrized over every covered role"
+        for needed in ("test_authentication_comes_first_for_every_kind_of_bad_credential", "test_the_idempotency_key_and_the_path_are_validated",
+                       "test_a_replay_with_the_same_key_returns_the_original_and_a_new_key_is_a_no_op_not_a_second_task"):
+            assert callable(getattr(module, needed, None)), f"{filename} no longer defines {needed}"
 
 
 @pytest.mark.parametrize(("method", "path"), sorted(MATRIX))

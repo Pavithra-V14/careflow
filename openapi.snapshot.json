@@ -344,6 +344,59 @@
         "title": "RoleGrant",
         "type": "object"
       },
+      "ScreenOut": {
+        "additionalProperties": false,
+        "description": "Ids and enums only: never message text, a rule phrase, a rule code or any patient detail.",
+        "properties": {
+          "message_id": {
+            "format": "uuid",
+            "title": "Message Id",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "red_flag",
+              "unassessable",
+              "clear"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "patient_reply": {
+            "anyOf": [
+              {
+                "enum": [
+                  "not_required",
+                  "pending_clinician_template"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Reply"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "screening_id": {
+            "format": "uuid",
+            "title": "Screening Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message_id",
+          "screening_id",
+          "outcome",
+          "replayed",
+          "patient_reply"
+        ],
+        "title": "ScreenOut",
+        "type": "object"
+      },
       "SlotList": {
         "additionalProperties": false,
         "properties": {
@@ -661,6 +714,69 @@
           }
         ],
         "summary": "Me"
+      }
+    },
+    "/v1/staff/messages/{message_id}/screen": {
+      "post": {
+        "description": "Screen a stored message for red flags. 404 if you cannot see it; 409 if its body was erased; 503 if the encryption key is unavailable.",
+        "operationId": "screen_message_v1_staff_messages__message_id__screen_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Message Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Screen Message",
+        "tags": [
+          "staff messages"
+        ]
       }
     },
     "/v1/staff/scheduling/bookings": {

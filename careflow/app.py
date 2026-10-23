@@ -40,7 +40,16 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from careflow.auth import AuthError, AuthUnavailable, JWKSClient, verify_token
+from careflow.crypto import CryptoError, DemographicVault
 from careflow.db import make_app_engine, set_request_claims
+from careflow.messages import (
+    KeyNotLoaded,
+    MessageErased,
+    MessageNotFound,
+    screen_stored_message,
+)
+from careflow.rules import NotPermitted as ScreeningNotPermitted
+from careflow.rules import RedFlagEngine
 from careflow.scheduling import (
     BookingNotFound,
     IdempotencyConflict,
@@ -446,13 +455,70 @@ async def list_waitlist(
     return WaitlistList(items=items, limit=limit, has_more=len(rows) > limit)
 
 
+# ---- staff messages: red-flag screening of a stored message (BUILD-SPEC.md §5.2, §12.1; CLAUDE.md rules 2, 3, 5, 7, 8) --------------
+#
+# `POST /v1/staff/messages/{message_id}/screen` screens the stored (encrypted) body of one message with the deterministic rules, FIRST
+# and ALONE (no model), and records the result through msg.record_screening: a red flag, or an unassessable result, raises the nurse
+# task. NO emergency reply is sent or written:
+#   # CLINICAL-PLACEHOLDER: needs clinician sign-off
+# (the patient-facing wording is clinician-authored and does not exist yet; the screening row records patient_reply =
+# pending_clinician_template). The nurse task for an UNASSESSABLE result has priority 'standard':
+#   # CLINICAL-PLACEHOLDER: needs clinician sign-off  (pending clinical lead confirmation; set in migration 0013, not here)
+# The body is decrypted only inside careflow.messages.screen_stored_message and never leaves it.
+#
+# Who may call it is decided by row-level security and by msg.record_screening, not by this route: nurse and doctor (every topic) and
+# front desk (appointments and safety only) can SEE the message, so only they can screen it. Everyone else, an unknown id and a message
+# in another clinic all get the same 404, so a guess reveals nothing. A queue_worker has no HTTP role here (it screens in-process).
+# Needs `X-Idempotency-Key` (rule 5): replaying it returns the original screening with `replayed: true`.
+
+staff_messages = APIRouter(prefix="/v1/staff/messages", tags=["staff messages"])
+_screening_engine = RedFlagEngine()
+
+
+class ScreenOut(_Out):
+    """Ids and enums only: never message text, a rule phrase, a rule code or any patient detail."""
+
+    message_id: uuid.UUID
+    screening_id: uuid.UUID
+    outcome: Literal["red_flag", "unassessable", "clear"]
+    replayed: bool
+    patient_reply: Literal["not_required", "pending_clinician_template"] | None
+
+
+@staff_messages.post("/{message_id}/screen", response_model=ScreenOut)
+async def screen_message(message_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, request: Request) -> ScreenOut:
+    """Screen a stored message for red flags. 404 if you cannot see it; 409 if its body was erased; 503 if the encryption key is unavailable."""
+    vault: DemographicVault | None = request.app.state.vault
+    if vault is None:
+        raise HTTPException(status_code=503, detail="message screening is unavailable: encryption keys are not configured")
+    try:
+        r = await screen_stored_message(conn, vault, _screening_engine, message_id, idempotency_key=idempotency_key)
+    except (MessageNotFound, ScreeningNotPermitted):
+        raise HTTPException(status_code=404, detail="not found") from None
+    except MessageErased:
+        raise HTTPException(status_code=409, detail="the message body was erased") from None
+    except KeyNotLoaded:
+        raise HTTPException(status_code=503, detail="message screening is unavailable: the encryption key is not loaded") from None
+    return ScreenOut(message_id=r.message_id, screening_id=r.screening_id, outcome=r.outcome, replayed=r.replayed, patient_reply=r.patient_reply)  # type: ignore[arg-type]
+
+
 # ---- application -----------------------------------------------------------------------------------
 
 
+def _load_vault() -> DemographicVault | None:
+    """The key vault from the environment, or None (the screening route then answers 503: degrade visibly, never silently)."""
+    try:
+        return DemographicVault.from_env()
+    except CryptoError as exc:
+        log.warning("message encryption keys are not configured; message routes are unavailable (%s)", type(exc).__name__)
+        return None
+
+
 def create_app(
-    settings: Settings | None = None, *, jwks: JWKSClient | None = None, engine: AsyncEngine | None = None
+    settings: Settings | None = None, *, jwks: JWKSClient | None = None, engine: AsyncEngine | None = None,
+    vault: DemographicVault | None = None,
 ) -> FastAPI:
-    """Build the app. `jwks` and `engine` can be injected (tests do); otherwise they come from settings."""
+    """Build the app. `jwks`, `engine` and `vault` can be injected (tests do); otherwise they come from settings / the environment."""
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -460,6 +526,7 @@ def create_app(
         app.state.issuer = cfg.issuer
         app.state.jwks = jwks or JWKSClient(cfg.jwks_url)
         app.state.engine = engine or make_app_engine(cfg.database_url_app, pool_size=5, max_overflow=5, pool_pre_ping=True)
+        app.state.vault = vault if vault is not None else _load_vault()
         try:
             yield
         finally:
@@ -471,6 +538,7 @@ def create_app(
     app = FastAPI(title="CareFlow", lifespan=lifespan)
     app.include_router(router)
     app.include_router(scheduling)
+    app.include_router(staff_messages)
     return app
 
 

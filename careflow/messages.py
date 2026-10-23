@@ -19,13 +19,34 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Final
 
-from careflow.crypto import DemographicVault
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncConnection
+
+from careflow.crypto import DecryptionError, DemographicVault, UnknownKeyVersionError
+from careflow.rules import (
+    EMPTY_RULE_SET_HASH,
+    Evaluation,
+    RedFlagEngine,
+    resolve_profile,
+)
 
 MAX_BODY_CHARS: Final = 10_000
 
 
 class MessageError(Exception):
     """The body was refused. The message never contains the body."""
+
+
+class MessageNotFound(MessageError):
+    """No such message, or the caller's role cannot see it (the two look the same on purpose)."""
+
+
+class MessageErased(MessageError):
+    """The body was erased; there is nothing left to screen."""
+
+
+class KeyNotLoaded(MessageError):
+    """The key version the body was encrypted under is not loaded in this process."""
 
 
 @dataclass(frozen=True)
@@ -77,3 +98,70 @@ def decrypt_body(
     return vault.decrypt_message_body(
         bytes(body_ct), clinic_id=clinic_id, thread_id=thread_id, message_id=message_id, key_version=key_version
     )
+
+
+@dataclass(frozen=True)
+class ScreenedMessage:
+    """What a screening of a stored message produced: ids and enums only. There is no text, rule phrase or patient detail here."""
+
+    message_id: uuid.UUID
+    screening_id: uuid.UUID
+    outcome: str  # what the row holds: red_flag, unassessable or clear
+    replayed: bool
+    patient_reply: str | None  # not_required, or pending_clinician_template: NO reply is sent by anything yet
+
+
+async def screen_stored_message(
+    conn: AsyncConnection,
+    vault: DemographicVault,
+    engine: RedFlagEngine,
+    message_id: uuid.UUID,
+    *,
+    idempotency_key: str,
+    profile: str | None = None,
+) -> ScreenedMessage:
+    """Screen a STORED message for red flags and record the result (BUILD-SPEC.md §5.2, §12.1; CLAUDE.md rules 2 and 3).
+
+    The body is decrypted here, held in memory only for the rule engine, and dropped: it is never logged, never put in an error and
+    never returned. The deterministic rules run first and alone (no model). A red flag raises the immediate nurse task through
+    msg.record_screening; NO emergency reply is sent or written (a clinician-approved template does not exist yet, so the screening
+    row records patient_reply = pending_clinician_template).
+
+    Unknown is not clear: a body that fails authentication (tampering, a wrong key) is recorded as UNASSESSABLE, which raises a nurse
+    task, rather than raising an error nobody sees. A body whose key version is not loaded is KeyNotLoaded (nothing is recorded: the
+    caller can retry once the key is available).
+
+    `conn` is inside a transaction with the verified claims set; row-level security decides which messages the caller can see, so an
+    invisible message and a missing one are both MessageNotFound.
+    """
+    row = (
+        await conn.execute(
+            text(
+                "select id, clinic_id, origin, thread_id, body_ct, body_key_version, erased_at from msg.messages where id = :i"
+            ),
+            {"i": message_id},
+        )
+    ).first()
+    if row is None:
+        raise MessageNotFound("message not found")
+    if row.erased_at is not None or row.body_ct is None:
+        raise MessageErased("the message body was erased")
+    resolved = profile or resolve_profile()
+    try:
+        plaintext = decrypt_body(
+            vault, row.body_ct, clinic_id=row.clinic_id, thread_id=row.thread_id, message_id=row.id, key_version=row.body_key_version
+        )
+    except UnknownKeyVersionError:
+        raise KeyNotLoaded("the key this message was encrypted under is not loaded") from None
+    except DecryptionError:
+        evaluation = Evaluation("unassessable", (), resolved, 0, 0, ("message body could not be read",), EMPTY_RULE_SET_HASH)  # type: ignore[arg-type]
+        result = await engine.record_screening(conn, row.clinic_id, row.origin, message_id, evaluation, idempotency_key=idempotency_key)
+    else:
+        _, result = await engine.evaluate_and_escalate(
+            conn, row.clinic_id, row.origin, plaintext, message_id, profile=resolved, idempotency_key=idempotency_key  # type: ignore[arg-type]
+        )
+        del plaintext
+    reply = (
+        await conn.execute(text("select patient_reply from msg.screenings where id = :s"), {"s": result.screening_id})
+    ).scalar_one_or_none()
+    return ScreenedMessage(message_id, result.screening_id, result.outcome, result.replayed, reply)
