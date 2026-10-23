@@ -45,6 +45,11 @@ one, delete its line in the same change. Source of the first group: the msg / ia
 - **A human resolution path for an `unassessable` message.** Today an `unassessable` screening row can never be cleared: the worst-of
   view (`msg.message_screening_status`) reports `unassessable` permanently, and only the nurse task carries any resolution state.
   Design when the nurse console is built: a resolution record written by a human decision, never by the engine.
+  This also covers a body that is `unassessable` only because a key version was missing from one instance (a transient deployment fault):
+  it stays `unassessable` until that path exists.
+- **Patient registration and a "matched" outcome store no idempotency key.** If a different person is later registered under the same key,
+  a retry of the original `matched` request returns 409 instead of `matched`. An edge case, not a rule-5 violation; revisit with the portal
+  registration design.
 - **Voice sessions must run under a nurse, doctor or queue_worker identity.** `escalate_red_flag` (the path for non-message sources
   such as a live transcript) is refused for front desk and admin since migration 0013, so a voice session under either identity
   could not raise its red flag (CLAUDE.md rule 11).

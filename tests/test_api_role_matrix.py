@@ -15,7 +15,10 @@ a route without adding its matrix case breaks the build.
 """
 
 import asyncio
+import base64
+import json
 import os
+import random
 import time
 import uuid
 from collections.abc import Callable
@@ -34,6 +37,7 @@ from starlette.testclient import TestClient
 
 from careflow.app import Settings, create_app
 from careflow.auth import JWKSClient
+from careflow.crypto import DemographicVault
 
 ENV = dotenv_values(Path(__file__).resolve().parent.parent / ".env")
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or ENV.get("DATABASE_URL_MIGRATOR")
@@ -196,7 +200,8 @@ async def _cleanup(ids, conn=None):
         accounts = [a for a, *_ in ids.people.values()]
         clinics = [ids.clinic_a, ids.clinic_b]
         for table in ("sched.bookings", "sched.holds", "sched.waitlist", "sched.slots", "sched.priority_levels",
-                      "mpi.patients", "sched.visit_types", "sched.providers", "sched.locations"):
+                      "mpi.match_candidates", "mpi.identity_tokens", "mpi.patients", "sched.visit_types", "sched.providers",
+                      "sched.locations"):
             await conn.execute(f"delete from {table} where clinic_id = any($1)", clinics)
         await conn.execute("delete from iam.staff_roles where clinic_id = any($1)", [ids.clinic_a, ids.clinic_b])
         await conn.execute("delete from iam.accounts where id = any($1)", accounts)
@@ -213,10 +218,14 @@ def ids():
     _run(_cleanup(seeded))
 
 
+# Per-run keys: nothing secret is committed. The patient-registration route encrypts demographics with them (version 1, the only one loaded).
+TEST_VAULT = DemographicVault.from_env({f"CAREFLOW_{k}_SECRET_V1": base64.b64encode(os.urandom(32)).decode() for k in ("ENC", "HMAC")})
+
+
 @pytest.fixture(scope="module")
 def app() -> FastAPI:
     settings = Settings(supabase_url=PROJECT, database_url_app=APP_URL or "")
-    return create_app(settings, jwks=fake_jwks_client())
+    return create_app(settings, jwks=fake_jwks_client(), vault=TEST_VAULT)
 
 
 @pytest.fixture(scope="module")
@@ -479,6 +488,70 @@ def read_cases(ids, route) -> list[tuple]:
     return cases + _unauthenticated(ids, path, None)
 
 
+# ---- POST /v1/staff/patients: patient registration / identity resolution (D2) ---------------------------------------------------------------
+#
+# Front desk of the clinic registers; every other identity is refused. A clinic you cannot see is 404, a clinic you can see without being its
+# front desk is 403. EVERY response, success or error, must be free of the person's name, date of birth and phone: ids and an outcome only.
+
+INGEST = "/v1/staff/patients"
+
+
+def _person() -> dict:
+    n = uuid.uuid4().hex
+    return {"name": f"Zz Sentinel {n}", "dob": "1990-01-01", "phone": "9" + str(random.randrange(10**8, 10**9))}
+
+
+def _clean_of(*values):
+    """Predicate: the parsed JSON contains none of these values anywhere."""
+    return lambda b: not any(v in json.dumps(b) for v in values)
+
+
+def ingest_cases(ids) -> list[tuple]:
+    fd, person, key = "front_desk_a", _person(), _new_key()
+    base = lambda **o: {"clinic_id": str(ids.clinic_a), **person, **o}
+    fresh = lambda **o: {"clinic_id": str(ids.clinic_a), **_person(), **o}
+    secrets = (person["name"], person["phone"], person["dob"])
+
+    def ids_only(outcome, candidates=None):
+        def check(b):
+            return (set(b) == {"patient_id", "outcome", "candidate_ids"} and b["outcome"] == outcome
+                    and (candidates is None or len(b["candidate_ids"]) == candidates) and _clean_of(*secrets)(b))
+        return check
+
+    def refused_without_echo(*values):
+        return lambda b: isinstance(b.get("detail"), (str, list)) and _clean_of(*values)(b)
+
+    cases = [
+        _case(ids, "front desk of the clinic registers a new person", fd, 200, INGEST, json=base(), key=key, body=ids_only("created", 0)),
+        _case(ids, "replaying the same key and the same person is a replay", fd, 200, INGEST, json=base(), key=key, body=ids_only("replayed", 0)),
+        _case(ids, "the same key for a different person is a conflict", fd, 409, INGEST, json=fresh(), key=key),
+        _case(ids, "the same person under a new key matches the existing record", fd, 200, INGEST, json=base(), body=ids_only("matched", 0)),
+        _case(ids, "the same name and birth date with another phone is a near-match queued for review", fd, 200, INGEST,
+              json=base(phone="9" + str(random.randrange(10**8, 10**9))), body=ids_only("review", 1)),
+        _case(ids, "a person with no phone is registered", fd, 200, INGEST, json={k: v for k, v in fresh().items() if k != "phone"},
+              body=lambda b: b["outcome"] == "created"),
+        _case(ids, "an unknown clinic is not found", fd, 404, INGEST, json=fresh(clinic_id=str(uuid.uuid4()))),
+        _case(ids, "missing X-Idempotency-Key is rejected", fd, 422, INGEST, json=fresh(), key=None),
+        _case(ids, "blank X-Idempotency-Key is rejected", fd, 422, INGEST, json=fresh(), key="   "),
+        _case(ids, "no clinic is rejected", fd, 422, INGEST, json={k: v for k, v in fresh().items() if k != "clinic_id"}),
+        _case(ids, "a clinic id that is not a uuid is rejected", fd, 422, INGEST, json=fresh(clinic_id="nope")),
+        _case(ids, "an empty body is rejected", fd, 422, INGEST, json={}),
+        _case(ids, "a client-supplied origin is an unknown field", fd, 422, INGEST, json=fresh(origin="live")),
+        _case(ids, "an unknown field carrying the person is rejected without echoing it", fd, 422, INGEST,
+              json=fresh(note=person["name"]), body=refused_without_echo(person["name"])),
+    ]
+    for label, bad in (
+        ("a month that does not exist", {"dob": "1990-13-45"}), ("an age instead of a birth date", {"dob": "58"}),
+        ("a birth date in the future", {"dob": "2999-01-01"}), ("a phone that is not a mobile number", {"phone": "12345"}),
+        ("a landline", {"phone": "0442345678"}), ("a blank name", {"name": "   "}),
+    ):
+        value = next(iter(bad.values()))
+        cases.append(_case(ids, f"{label} is rejected and never echoed", fd, 422, INGEST, json=fresh(**bad), body=refused_without_echo(value)))
+    visible_but_not_front_desk = {r: 403 for r in ("nurse_a", "doctor_a", "admin_a", "business_owner_a", "auditor_a", "multi")}
+    cases += _everyone_else(ids, visible_but_not_front_desk, lambda: INGEST, fresh, 404)
+    return cases + _unauthenticated(ids, INGEST, fresh())
+
+
 # One entry per route: add the new route's cases here in the same change that adds the route.
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
@@ -489,6 +562,7 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", PREFIX + "/slots"): lambda ids: read_cases(ids, "slots"),
     ("GET", PREFIX + "/bookings"): lambda ids: read_cases(ids, "bookings"),
     ("GET", PREFIX + "/waitlist"): lambda ids: read_cases(ids, "waitlist"),
+    ("POST", INGEST): ingest_cases,
 }
 
 
@@ -770,3 +844,87 @@ def test_concurrent_reads_from_different_identities_neither_mix_rows_nor_leak_co
             assert items == []
         if who == "front_desk_a":
             assert all(i["clinic_id"] == str(ids.clinic_a) for i in items)
+
+
+# ---- patient registration: behaviour beyond the allow/deny matrix ---------------------------------------------------------------------------
+
+
+def _register(client, ids, person, *, who="front_desk_a", key="new", **over):
+    return _post(client, ids, who, INGEST, {"clinic_id": str(ids.clinic_a), **person, **over}, key=key)
+
+
+def test_registration_stores_only_ciphertext_and_tokens_never_the_plaintext(client, ids):
+    person = _person()
+    r = _register(client, ids, person)
+    assert r.status_code == 200 and r.json()["outcome"] == "created"
+    (row,) = _run(_fetch("select name_ct, dob_ct, phone_ct, name_key_version, origin from mpi.patients where id = $1", uuid.UUID(r.json()["patient_id"])))
+    for column, value in (("name_ct", person["name"]), ("dob_ct", person["dob"]), ("phone_ct", "+91" + person["phone"])):
+        assert value.encode() not in bytes(row[column]) and person["phone"].encode() not in bytes(row[column])
+    assert TEST_VAULT.decrypt(bytes(row["name_ct"]), field="name", key_version=row["name_key_version"]) == person["name"]
+    assert row["origin"] == "test"  # read from the clinic's own row, not from the request
+    kinds = {t["kind"] for t in _run(_fetch("select kind from mpi.identity_tokens where patient_id = $1", uuid.UUID(r.json()["patient_id"])))}
+    assert kinds == {"name_dob", "phone"}
+
+
+def test_a_replay_returns_the_original_patient_and_writes_nothing_more(client, ids):
+    person, key = _person(), _new_key()
+    first, again = _register(client, ids, person, key=key).json(), _register(client, ids, person, key=key).json()
+    assert (first["outcome"], again["outcome"]) == ("created", "replayed") and first["patient_id"] == again["patient_id"]
+    assert _run(_fetch("select count(*) as n from mpi.patients where idempotency_key = $1", key))[0]["n"] == 1
+
+
+def test_a_matched_person_creates_no_new_record_and_a_near_match_queues_a_pending_review(client, ids):
+    person = _person()
+    original = _register(client, ids, person).json()
+    matched = _register(client, ids, person).json()
+    assert (matched["outcome"], matched["patient_id"]) == ("matched", original["patient_id"])
+    near = _register(client, ids, person, phone="9" + str(random.randrange(10**8, 10**9))).json()
+    assert near["outcome"] == "review" and near["candidate_ids"] == [original["patient_id"]] and near["patient_id"] != original["patient_id"]
+    (cand,) = _run(_fetch("select status, reason from mpi.match_candidates where patient_id = $1", uuid.UUID(near["patient_id"])))
+    assert cand["status"] == "pending"
+
+
+def test_a_refused_registration_writes_nothing(client, ids):
+    person, key = _person(), _new_key()
+    for who, status in (("nurse_a", 403), ("front_desk_b", 404), ("patient", 404), ("auditor_a", 403)):
+        assert _register(client, ids, person, who=who, key=key).status_code == status, who
+    assert _register(client, ids, person, key=key, dob="1990-13-45").status_code == 422
+    assert _run(_fetch("select count(*) as n from mpi.patients where idempotency_key = $1", key))[0]["n"] == 0
+
+
+def test_error_responses_and_logs_never_contain_the_person(client, ids, caplog):
+    caplog.set_level("DEBUG")
+    person = _person()
+    attempts = [
+        _register(client, ids, person, who="nurse_a"), _register(client, ids, person, who="front_desk_b"),
+        _register(client, ids, person, dob="2999-01-01"), _register(client, ids, person, phone="12345"),
+        _register(client, ids, person, key=None), _post(client, ids, "front_desk_a", INGEST, {"clinic_id": str(ids.clinic_a), **person, "extra": person["name"]}),
+    ]
+    assert all(r.status_code >= 400 for r in attempts)
+    for r in attempts:
+        assert not any(v in r.text for v in (person["name"], person["phone"], person["dob"])), r.status_code
+    assert not any(v in caplog.text for v in (person["name"], person["phone"], person["dob"]))
+
+
+def test_concurrent_registrations_of_the_same_person_converge_on_one_record(app, ids):
+    person = _person()
+
+    async def run():
+        async with app.router.lifespan_context(app):
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+
+                async def register(_):
+                    r = await http.post(
+                        INGEST, json={"clinic_id": str(ids.clinic_a), **person},
+                        headers={**bearer(mint(ids.people["front_desk_a"][0])), "X-Idempotency-Key": _new_key()},
+                    )
+                    return r.status_code, r.json()
+
+                return await asyncio.gather(*(register(i) for i in range(8)))
+
+    results = _run(run())
+    assert {status for status, _ in results} == {200}
+    outcomes = sorted(body["outcome"] for _, body in results)
+    assert outcomes == ["created"] + ["matched"] * 7  # the token locks serialise them: exactly one creates
+    assert len({body["patient_id"] for _, body in results}) == 1

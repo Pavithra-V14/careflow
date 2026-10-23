@@ -39,9 +39,16 @@ makes the demographics encrypted under it unrecoverable.
 Redeploy or restart so the API and workers load both versions. The vault refuses to start if an `ENC` key has no `HMAC`
 partner (or the reverse), so a half-added pair fails loudly rather than running degraded.
 
-**New writes keep using version `N` until you change which version the ingestion pipeline is constructed with**
-(`PatientIngestionPipeline(vault, key_version=...)`). Switch it to `N+1` in the same release as step 3, so that nothing
-new is written under the old key while you re-encrypt the old rows. Until then, step 3 simply runs again at the end.
+**Which version NEW patients are written under is an explicit setting: `CAREFLOW_ACTIVE_KEY_VERSION`.** While exactly one version is
+loaded it is optional. **Once you load a second version (this step) the setting is REQUIRED, and until it is set the patient-registration
+route answers a visible 503** ("the active encryption key version is not configured", plus an error log). That is deliberate: a new key must
+never be adopted by accident. So in the same redeploy as this step, set `CAREFLOW_ACTIVE_KEY_VERSION=<N>` (the OLD version) to keep writing
+under `N` while you re-encrypt.
+
+**Do not switch it to `N+1` until step 3 has finished and step 4 (`verify`) is clean.** Identity matching looks tokens up by key version, so a
+patient who has not been re-keyed yet is invisible to a registration made under `N+1`: the same person would be registered again as a new
+record instead of being matched, or queued for review. Switch to `N+1` only after `status` shows no ciphertext columns left on `N`, then
+run `rotate` once more to catch anyone registered in between.
 
 ## 2. See where things stand
 

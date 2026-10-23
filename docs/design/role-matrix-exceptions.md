@@ -2,7 +2,7 @@
 
 `CLAUDE.md` rule 8 says every new route adds its own case to the role-matrix test (`tests/test_api_role_matrix.py`) in the same change,
 and that the matrix runs against the real restricted database role. `CLAUDE.md` itself is not edited; this page records the one
-**documented, owner-approved exception** (decision of 2026-10-24).
+**documented, owner-approved exception** (decision of 2026-10-23).
 
 ## The exception: `POST /v1/staff/messages/{message_id}/screen`
 

@@ -33,12 +33,15 @@ from datetime import datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
+from careflow import mpi
 from careflow.auth import AuthError, AuthUnavailable, JWKSClient, verify_token
 from careflow.crypto import CryptoError, DemographicVault
 from careflow.db import make_app_engine, set_request_claims
@@ -47,6 +50,7 @@ from careflow.messages import (
     MessageNotFound,
     screen_stored_message,
 )
+from careflow.mpi import PatientIngestionPipeline
 from careflow.rules import NotPermitted as ScreeningNotPermitted
 from careflow.rules import RedFlagEngine
 from careflow.scheduling import (
@@ -73,11 +77,15 @@ def _unauthenticated() -> HTTPException:
 class Settings(BaseSettings):
     """Read from the environment (or a local .env). Never logged."""
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", populate_by_name=True)
 
     supabase_url: str
     database_url_app: str
     supabase_jwks_url: str | None = None
+    # Which key version NEW demographics are encrypted under (BUILD-SPEC 17.2, docs/runbooks/key_rotation.md). Optional while exactly one
+    # version is loaded; REQUIRED once several are (rotation), so a new key is never adopted by accident: the registration route answers
+    # a visible 503 until it is set.
+    active_key_version: int | None = Field(default=None, validation_alias=AliasChoices("CAREFLOW_ACTIVE_KEY_VERSION", "active_key_version"))
 
     @property
     def issuer(self) -> str:
@@ -511,6 +519,103 @@ async def screen_message(message_id: uuid.UUID, idempotency_key: IdempotencyKey,
     return ScreenOut(message_id=r.message_id, screening_id=r.screening_id, outcome=r.outcome, replayed=r.replayed, patient_reply=r.patient_reply)  # type: ignore[arg-type]
 
 
+# ---- staff patients: registration / identity resolution (BUILD-SPEC.md §17.2, §12.1; CLAUDE.md rules 5, 6, 7, 8) ----------------------------
+#
+# `POST /v1/staff/patients` takes a person's name, date of birth and (optionally) phone, and either links to an existing record, creates
+# a new one, or creates a new one AND queues a duplicate review: careflow.mpi.PatientIngestionPipeline. It never merges and never edits.
+#
+# PRIVACY CONTRACT. The name, date of birth and phone are encrypted before they reach the database and are NEVER returned, logged or put in
+# an error: the response is ids and an outcome only; every error body is a fixed string; and FastAPI's default 422 body (which echoes the
+# offending input) is replaced app-wide by one that never includes it. Which clinic is part of the request, but the ORIGIN tag is read from
+# that clinic's own row, never from the client. A clinic you cannot see and a clinic you can see but are not front desk of are different
+# answers on purpose (404 and 403), as for the scheduling writes: nobody can probe clinics they have no relationship with.
+# Needs `X-Idempotency-Key` (rule 5): replaying it returns the original result with outcome `replayed`.
+
+staff_patients = APIRouter(prefix="/v1/staff/patients", tags=["staff patients"])
+
+
+class IngestIn(_Body):
+    clinic_id: uuid.UUID
+    name: str = Field(min_length=1, max_length=200)
+    dob: str = Field(min_length=1, max_length=10, description="YYYY-MM-DD. An age is never a date of birth.")
+    phone: str | None = Field(default=None, min_length=1, max_length=40)
+
+
+class IngestOut(_Out):
+    """Ids and an outcome only: never a name, date of birth or phone."""
+
+    patient_id: uuid.UUID
+    outcome: Literal["matched", "created", "review", "replayed"]
+    candidate_ids: list[uuid.UUID]  # existing records queued for a person to review (outcome `review`)
+
+
+def _active_key_version(request: Request) -> int | None:
+    vault: DemographicVault = request.app.state.vault
+    configured: int | None = request.app.state.active_key_version
+    if configured is not None:
+        return configured if configured in vault.key_versions else None
+    versions = vault.key_versions
+    return versions[0] if len(versions) == 1 else None
+
+
+@staff_patients.post("", response_model=IngestOut)
+async def register_patient(
+    body: IngestIn, idempotency_key: IdempotencyKey, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims)
+) -> IngestOut:
+    """Register or resolve a patient. 404 for a clinic you cannot see, 403 if you are not front desk there, 409 if the key was used for
+    another person, 422 for an invalid field (named, never echoed), 503 if the key vault or active key version is not configured."""
+    vault: DemographicVault | None = request.app.state.vault
+    if vault is None:
+        log.error("patient registration is unavailable: no encryption keys are configured (deployment fault)")
+        raise HTTPException(status_code=503, detail="patient registration is unavailable: encryption keys are not configured")
+    key_version = _active_key_version(request)
+    if key_version is None:
+        log.error("patient registration is unavailable: CAREFLOW_ACTIVE_KEY_VERSION must name a loaded key version when several are loaded")
+        raise HTTPException(status_code=503, detail="patient registration is unavailable: the active encryption key version is not configured")
+    clinic = (await conn.execute(text("select origin from iam.clinics where id = :c"), {"c": body.clinic_id})).first()
+    if clinic is None:
+        raise HTTPException(status_code=404, detail="not found")
+    is_front_desk = (
+        await conn.execute(
+            text(
+                "select 1 from iam.staff_roles sr join iam.accounts a on a.id = sr.account_id "
+                "where sr.account_id = :u and sr.clinic_id = :c and sr.role = 'front_desk' and sr.revoked_at is null "
+                "and a.status = 'active' and a.account_type = 'staff'"
+            ),
+            {"u": uuid.UUID(claims["sub"]), "c": body.clinic_id},
+        )
+    ).first()
+    if is_front_desk is None:
+        raise HTTPException(status_code=403, detail="your role may not register patients")
+    try:
+        result = await PatientIngestionPipeline(vault, key_version=key_version).ingest(
+            conn, clinic_id=body.clinic_id, origin=clinic[0], name=body.name, dob=body.dob, phone=body.phone, idempotency_key=idempotency_key
+        )
+    except mpi.NotPermitted:
+        raise HTTPException(status_code=403, detail="your role may not register patients") from None
+    except mpi.IdempotencyConflict:
+        raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request") from None
+    except mpi.InvalidDateOfBirth:
+        raise HTTPException(status_code=422, detail="date of birth must be a real past date in YYYY-MM-DD form") from None
+    except mpi.InvalidPhone:
+        raise HTTPException(status_code=422, detail="phone must be a valid Indian mobile number") from None
+    except mpi.IngestionError:
+        raise HTTPException(status_code=422, detail="a required field is missing or blank") from None
+    except UnicodeError:
+        # e.g. a lone surrogate in the name: it cannot be encrypted or tokenised. The built-in error holds the offending character, so it
+        # is dropped here and a fixed message returned.
+        raise HTTPException(status_code=422, detail="the name contains characters that cannot be stored") from None
+    return IngestOut(patient_id=result.patient_id, outcome=result.outcome, candidate_ids=list(result.candidate_ids))
+
+
+async def _validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """FastAPI's default 422 body includes the offending INPUT. On a route that takes a name, a date of birth and a phone that would put them
+    in an error response (and in anything that records responses), so every validation error is reduced to its type, location and
+    message. Pydantic's messages describe the rule that failed, not the value."""
+    errors = [{"type": e.get("type"), "loc": list(e.get("loc", ())), "msg": e.get("msg")} for e in exc.errors()]
+    return JSONResponse(status_code=422, content={"detail": errors})
+
+
 # ---- application -----------------------------------------------------------------------------------
 
 
@@ -536,6 +641,7 @@ def create_app(
         app.state.jwks = jwks or JWKSClient(cfg.jwks_url)
         app.state.engine = engine or make_app_engine(cfg.database_url_app, pool_size=5, max_overflow=5, pool_pre_ping=True)
         app.state.vault = vault if vault is not None else _load_vault()
+        app.state.active_key_version = cfg.active_key_version
         try:
             yield
         finally:
@@ -545,9 +651,11 @@ def create_app(
                 await app.state.jwks.aclose()
 
     app = FastAPI(title="CareFlow", lifespan=lifespan)
+    app.add_exception_handler(RequestValidationError, _validation_error_handler)  # type: ignore[arg-type]
     app.include_router(router)
     app.include_router(scheduling)
     app.include_router(staff_messages)
+    app.include_router(staff_patients)
     return app
 
 
