@@ -325,7 +325,9 @@ def test_only_the_rule_and_task_tables_are_touched():
     tables = set()
     for statement in sql:
         tables |= set(re.findall(r"\b(?:from|into|update|join)\s+([a-z_]+\.[a-z_]+)", statement, flags=re.IGNORECASE))
-    assert tables == {"kb.red_flag_rules", "agents.review_tasks"}
+    # msg.record_screening (migration 0013) is the one deliberate extra: stored messages are screened through that function, not by
+    # a direct write to the task table. No other table, and no other function, may appear here.
+    assert tables == {"kb.red_flag_rules", "agents.review_tasks", "msg.record_screening"}
 
 
 def test_the_module_carries_the_placeholder_and_no_embedded_rule_vocabulary():
@@ -355,3 +357,219 @@ def test_rule_inputs_are_checked_before_anything_touches_the_database():
         with pytest.raises(error):
             asyncio.run(attempt(**kw))
     assert isinstance(Rule, type)
+
+
+# ---- the rule-set identity and the screening client (migration 0013). Pure: a scripted fake connection, no database ----------
+
+EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+ID_A = uuid.UUID("0a000000-0000-4000-8000-000000000001")
+ID_B = uuid.UUID("ff000000-0000-4000-8000-000000000002")
+
+
+def _sha(text):
+    import hashlib
+
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def test_the_empty_rule_set_hashes_to_the_sha256_of_nothing():
+    """The state migration 0007 ships in: no approved rule. The database computes the same value (coalesce(string_agg, ''))."""
+    assert rules.rule_set_hash([]) == EMPTY_SHA256 == rules.EMPTY_RULE_SET_HASH
+    assert ruleset().rule_set_hash == EMPTY_SHA256
+
+
+def test_a_one_rule_set_hashes_the_single_id_version_line_with_no_trailing_newline():
+    assert rules.rule_set_hash([{"id": ID_A, "version_id": 3}]) == _sha(f"{ID_A}:3")
+
+
+def test_a_two_rule_set_is_sorted_as_plain_strings_joined_by_one_newline_and_order_independent():
+    rows = [{"id": ID_B, "version_id": 1}, {"id": ID_A, "version_id": 12}]
+    expected = _sha(f"{ID_A}:12\n{ID_B}:1")
+    assert rules.rule_set_hash(rows) == expected == rules.rule_set_hash(list(reversed(rows)))
+
+
+def test_the_hash_covers_rows_that_failed_to_compile():
+    """compile_rule drops an uncompilable pattern, but the rule is still IN FORCE, so it is still part of the identity."""
+    broken = {"id": ID_A, "rule_code": "broken", "version_id": 1, "status": "approved", "phrases": [], "patterns": ["("]}
+    rule, problem = compile_rule(broken)
+    assert rule is None and problem
+    assert rules.rule_set_hash([broken]) == _sha(f"{ID_A}:1")
+
+
+def test_a_different_version_is_a_different_rule_set():
+    assert rules.rule_set_hash([{"id": ID_A, "version_id": 1}]) != rules.rule_set_hash([{"id": ID_A, "version_id": 2}])
+
+
+class _Nested:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+class _Result:
+    def __init__(self, row):
+        self._row = row
+
+    def one(self):
+        return self._row
+
+
+class _Row:
+    def __init__(self, screening_id, replayed=False, recorded_outcome=None):
+        # recorded_outcome=None means "echo the outcome that was asked for" (see FakeConn.execute)
+        self.screening_id, self.replayed, self.recorded_outcome = screening_id, replayed, recorded_outcome
+
+
+class FakeConn:
+    """Scripted answers for `select * from msg.record_screening(...)`: a row, or an exception to raise. Records every call."""
+
+    def __init__(self, *script):
+        self.script = list(script)
+        self.calls: list[dict] = []
+
+    def begin_nested(self):
+        return _Nested()
+
+    async def execute(self, statement, params=None):
+        self.calls.append(params)
+        step = self.script.pop(0)
+        if isinstance(step, Exception):
+            raise step
+        if step.recorded_outcome is None:
+            step.recorded_outcome = params["o"]
+        return _Result(step)
+
+
+def _db_error(message, sqlstate=None):
+    from sqlalchemy.exc import DBAPIError
+
+    class Orig(Exception):
+        pass
+
+    orig = Orig(message)
+    orig.sqlstate = sqlstate  # type: ignore[attr-defined]
+    return DBAPIError("select ...", {}, orig)
+
+
+def _evaluation(outcome="clear", profile="clinical", matches=(), n=1):
+    return Evaluation(outcome, tuple(matches), profile, n, 0, (), "ab" * 32)
+
+
+def _run(coro):
+    import asyncio
+
+    return asyncio.run(coro)
+
+
+def test_a_clear_is_sent_to_the_database_with_the_rule_set_identity():
+    sid = uuid.uuid4()
+    conn = FakeConn(_Row(sid))
+    out = _run(rules.RedFlagEngine().record_screening(conn, uuid.uuid4(), "test", uuid.uuid4(), _evaluation(), idempotency_key="k1"))
+    assert (out.screening_id, out.replayed, out.outcome) == (sid, False, "clear")
+    (call,) = conn.calls
+    assert (call["o"], call["p"], call["n"], call["h"], call["k"]) == ("clear", "clinical", 1, "ab" * 32, "k1")
+
+
+def test_a_clear_refused_by_the_database_is_recorded_as_unassessable_and_warned_once_without_patient_text(caplog):
+    import logging
+
+    clinic, message, sid = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    conn = FakeConn(_db_error("CLEAR_REFUSED"), _Row(sid))
+    caplog.set_level(logging.WARNING, logger="careflow.rules")
+    out = _run(rules.RedFlagEngine().record_screening(conn, clinic, "test", message, _evaluation(), idempotency_key="k1"))
+    assert out.outcome == "unassessable" and out.screening_id == sid
+    assert [c["o"] for c in conn.calls] == ["clear", "unassessable"]  # never retried as a clear
+    assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 1
+    assert str(clinic) in caplog.text and str(message) in caplog.text
+
+
+def test_a_demo_clear_on_live_origin_is_never_sent_as_a_clear_and_logs_the_explainable_warning(caplog):
+    import logging
+
+    clinic, message = uuid.uuid4(), uuid.uuid4()
+    conn = FakeConn(_Row(uuid.uuid4()))
+    caplog.set_level(logging.WARNING, logger="careflow.rules")
+    out = _run(rules.RedFlagEngine().record_screening(conn, clinic, "live", message, _evaluation(profile="demo"), idempotency_key="k1"))
+    assert out.outcome == "unassessable" and [c["o"] for c in conn.calls] == ["unassessable"]
+    assert f"screening: demo-profile clear on live origin treated as unassessable (clinic={clinic} message={message})" in caplog.text
+
+
+def test_a_demo_clear_on_a_test_origin_is_still_sent_as_a_clear():
+    conn = FakeConn(_Row(uuid.uuid4()))
+    out = _run(rules.RedFlagEngine().record_screening(conn, uuid.uuid4(), "test", uuid.uuid4(), _evaluation(profile="demo"), idempotency_key="k1"))
+    assert out.outcome == "clear" and [c["o"] for c in conn.calls] == ["clear"]
+
+
+def test_a_red_flag_is_sent_with_at_most_fifty_matches_and_says_when_it_truncated():
+    matches = [rules.Match(uuid.uuid4(), "r", 1, "approved", "phrase", 0, i, i + 1) for i in range(60)]
+    conn = FakeConn(_Row(uuid.uuid4()))
+    _run(rules.RedFlagEngine().record_screening(conn, uuid.uuid4(), "test", uuid.uuid4(), _evaluation("red_flag", matches=matches), idempotency_key="k"))
+    import json
+
+    sent = json.loads(conn.calls[0]["prov"])
+    assert len(sent["matches"]) == 50 and sent["matches_truncated"] is True and sent["outcome"] == "red_flag"
+    assert set(sent["matches"][0]) == {"rule_id", "rule_code", "version_id", "rule_status", "kind", "index", "start", "end"}
+
+
+def test_the_result_reports_the_outcome_of_the_row_the_database_returned_not_the_one_requested():
+    """An unassessable satisfied by an existing red flag comes back as the red flag."""
+    sid = uuid.uuid4()
+    conn = FakeConn(_Row(sid, replayed=True, recorded_outcome="red_flag"))
+    out = _run(rules.RedFlagEngine().record_screening(conn, uuid.uuid4(), "test", uuid.uuid4(), _evaluation("unassessable"), idempotency_key="k"))
+    assert (out.screening_id, out.replayed, out.outcome) == (sid, True, "red_flag")
+
+
+class _FixedEvaluationEngine(rules.RedFlagEngine):
+    """An engine whose rules are not under test: evaluate_text returns a prepared Evaluation."""
+
+    def __init__(self, evaluation):
+        self._evaluation = evaluation
+
+    async def evaluate_text(self, *args, **kwargs):
+        return self._evaluation
+
+
+def test_the_default_screening_key_changes_with_the_rule_set_and_profile():
+    message = uuid.UUID(int=7)
+    keys = []
+    for evaluation in (_evaluation(), Evaluation("clear", (), "clinical", 1, 0, (), "cd" * 32), Evaluation("clear", (), "demo", 1, 0, (), "ab" * 32)):
+        conn = FakeConn(_Row(uuid.uuid4()))
+        _run(_FixedEvaluationEngine(evaluation).evaluate_and_escalate(conn, uuid.uuid4(), "test", "text", message))
+        keys.append(conn.calls[0]["k"])
+    assert len(set(keys)) == 3 and all(str(message) in k for k in keys)
+
+
+def test_a_permission_refusal_is_not_permitted_and_is_never_swallowed():
+    conn = FakeConn(_db_error("new row violates row-level security policy", "42501"))
+    with pytest.raises(rules.NotPermitted):
+        _run(rules.RedFlagEngine().record_screening(conn, uuid.uuid4(), "test", uuid.uuid4(), _evaluation("red_flag"), idempotency_key="k"))
+
+
+def test_an_unexpected_database_error_on_a_red_flag_propagates_loudly():
+    conn = FakeConn(_db_error("boom", "XX000"))
+    with pytest.raises(Exception, match="boom|select"):
+        _run(rules.RedFlagEngine().record_screening(conn, uuid.uuid4(), "test", uuid.uuid4(), _evaluation("red_flag"), idempotency_key="k"))
+
+
+def test_screening_inputs_are_checked_before_the_database_is_touched():
+    engine = rules.RedFlagEngine()
+    conn = FakeConn()
+    for kwargs, error in (
+        ({"origin": "production"}, ValueError),
+        ({"message_id": "not-a-uuid"}, TypeError),
+        ({"idempotency_key": "  "}, rules.RulesError),
+    ):
+        args = {"clinic_id": uuid.uuid4(), "origin": "test", "message_id": uuid.uuid4(), "idempotency_key": "k", **kwargs}
+        with pytest.raises(error):
+            _run(engine.record_screening(conn, args["clinic_id"], args["origin"], args["message_id"], _evaluation(), idempotency_key=args["idempotency_key"]))
+    assert conn.calls == []
+
+
+def test_the_screening_client_never_sends_the_patient_text():
+    """record_screening takes an Evaluation (rule ids and offsets), not the message text, so there is nothing to leak."""
+    import inspect
+
+    params = inspect.signature(rules.RedFlagEngine.record_screening).parameters
+    assert "text_content" not in params and "text" not in params

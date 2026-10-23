@@ -31,6 +31,7 @@ from careflow.rules import RedFlagEngine, evaluate_with
 ROOT = Path(__file__).resolve().parent.parent
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or dotenv_values(ROOT / ".env").get("DATABASE_URL_MIGRATOR")
 SQL_0007 = (ROOT / "db" / "migrations" / "0007_red_flag_rules_schema.sql").read_text(encoding="utf-8")
+SQL_0013 = (ROOT / "db" / "migrations" / "0013_msg_screenings.sql").read_text(encoding="utf-8")
 
 pytestmark = [
     pytest.mark.asyncio(loop_scope="module"),
@@ -61,6 +62,9 @@ async def _conn():
         await conn.exec_driver_sql("grant careflow_app to current_user with set true")
         if (await conn.execute(text("select to_regclass('kb.red_flag_rules') is null"))).scalar_one():
             await raw(conn, SQL_0007)
+        # Message-sourced tasks and the screening function are 0013's (msg.* itself is 0011's, applied before this suite runs).
+        if (await conn.execute(text("select to_regprocedure('msg.record_screening(uuid,text,text,integer,text,jsonb,text)') is null"))).scalar_one():
+            await raw(conn, SQL_0013)
         yield conn
     finally:
         await outer.rollback()
@@ -142,6 +146,26 @@ async def add_rule(conn, w, code, *, phrases=(), patterns=(), status="approved",
 
 
 TEXT = "please note ZZAlpha   is mentioned here"
+
+
+async def stored_message(conn, w, *, topic="care"):
+    """A real stored message (patient, thread, message) in clinic A, written as the owner with the nurse's claims (the
+    erased-patient guard also fires for the owner). The body is a dummy ciphertext: these tests never decrypt it."""
+    patient, thread, message = _u(), _u(), _u()
+    ct = "'\\x" + "01" * 40 + "'::bytea"
+    claims = '{"sub": "' + str(w.nurse) + '", "role": "authenticated"}'
+    await raw(
+        conn,
+        "insert into mpi.patients (id, clinic_id, name_ct, name_key_version, dob_ct, dob_key_version, origin, idempotency_key) "
+        f"values ('{patient}', '{w.a}', {ct}, 1, {ct}, 1, 'test', 'p-{patient}'); "
+        f"select set_config('request.jwt.claims', '{claims}', true); "
+        "insert into msg.threads (id, clinic_id, patient_id, topic, created_by, origin, idempotency_key) "
+        f"values ('{thread}', '{w.a}', '{patient}', '{topic}', '{w.nurse}', 'test', 't-{thread}'); "
+        "insert into msg.messages (id, clinic_id, origin, topic, thread_id, sender_kind, recorded_by, body_ct, body_key_version, idempotency_key) "
+        f"values ('{message}', '{w.a}', 'test', '{topic}', '{thread}', 'staff', '{w.nurse}', {ct}, 1, 'm-{message}'); "
+        "select set_config('request.jwt.claims', '', true);",
+    )
+    return message
 
 
 # ---- the stub and the table's guarantees -----------------------------------------------------------
@@ -404,17 +428,52 @@ async def test_escalation_is_idempotent_and_distinct_per_message(db, engine):
     assert await one(db, "select count(*) from agents.review_tasks") == 2
 
 
-async def test_evaluate_and_escalate_raises_a_task_only_for_a_red_flag(db, engine):
+async def test_evaluate_and_escalate_records_a_screening_and_raises_a_task_only_for_a_red_flag(db, engine):
+    """Since 0013 a STORED message is screened through msg.record_screening for every role: a red flag raises the immediate
+    nurse task, a clear (the database agrees with the rule set) raises none."""
     w = await world(db)
     await add_rule(db, w, "e2e", phrases=["zzalpha"])
-    evaluation, task = await act(db, w.worker, engine.evaluate_and_escalate, w.a, "test", TEXT, "msg-e2e", profile="clinical")
-    assert evaluation.outcome == "red_flag" and task is not None
-    quiet, none = await act(db, w.worker, engine.evaluate_and_escalate, w.a, "test", "a quiet message", "msg-quiet", profile="clinical")
-    assert quiet.outcome == "clear" and none is None
+    flagged, quiet_message = await stored_message(db, w), await stored_message(db, w)
+    evaluation, result = await act(db, w.worker, engine.evaluate_and_escalate, w.a, "test", TEXT, flagged, profile="clinical")
+    assert evaluation.outcome == "red_flag" and result.outcome == "red_flag" and not result.replayed
+    quiet, recorded = await act(db, w.worker, engine.evaluate_and_escalate, w.a, "test", "a quiet message", quiet_message, profile="clinical")
+    assert quiet.outcome == "clear" and recorded.outcome == "clear"
     assert await one(db, "select count(*) from agents.review_tasks") == 1
+    assert await one(db, "select kind from agents.review_tasks") == "red_flag"
+    assert await one(db, "select count(*) from msg.screenings") == 2
 
 
-@pytest.mark.parametrize("who", ["worker", "fd", "nurse", "doctor"])
+async def test_evaluate_and_escalate_with_no_usable_rule_records_unassessable_and_raises_a_nurse_task(db, engine):
+    """The migration-0007 state: no approved rule. Unknown is never clear, and never a quiet dead end."""
+    w = await world(db)
+    message = await stored_message(db, w)
+    evaluation, result = await act(db, w.worker, engine.evaluate_and_escalate, w.a, "test", "anything", message, profile="clinical")
+    assert evaluation.outcome == "unassessable" and result.outcome == "unassessable"
+    (row,) = await rows(db, "select kind, priority, assigned_role, provenance from agents.review_tasks")
+    assert tuple(row[:3]) == ("screening_unassessable", "standard", "nurse")
+    assert row[3]["placeholder"] == rules.PLACEHOLDER and row[3]["priority_note"] == "pending clinical lead confirmation"
+
+
+@pytest.mark.parametrize("who", ["worker", "nurse", "doctor", "fd"])
+async def test_every_role_that_may_screen_a_message_can_record_its_screening(db, engine, who):
+    """Front desk may screen an appointments message (not care); the others any topic."""
+    w = await world(db)
+    await add_rule(db, w, "e2e", phrases=["zzalpha"])
+    message = await stored_message(db, w, topic="appointments")
+    _evaluation, result = await act(db, getattr(w, who), engine.evaluate_and_escalate, w.a, "test", TEXT, message, profile="clinical")
+    assert result.outcome == "red_flag"
+
+
+async def test_front_desk_cannot_screen_a_care_message(db, engine):
+    w = await world(db)
+    await add_rule(db, w, "e2e", phrases=["zzalpha"])
+    message = await stored_message(db, w, topic="care")
+    with pytest.raises(rules.NotPermitted):
+        await act(db, w.fd, engine.evaluate_and_escalate, w.a, "test", TEXT, message, profile="clinical")
+    assert await one(db, "select count(*) from msg.screenings") == 0
+
+
+@pytest.mark.parametrize("who", ["worker", "nurse", "doctor"])  # not front desk since 0013: it screens through msg.record_screening
 async def test_staff_and_workers_of_the_clinic_can_raise_the_task(db, engine, who):
     w = await world(db)
     result = await flagged_evaluation(db, engine, w)
@@ -422,7 +481,7 @@ async def test_staff_and_workers_of_the_clinic_can_raise_the_task(db, engine, wh
     assert task.task_id is not None
 
 
-@pytest.mark.parametrize("who", ["worker_b", "auditor", "patient", None])
+@pytest.mark.parametrize("who", ["fd", "worker_b", "auditor", "patient", None])
 async def test_everyone_else_is_refused(db, engine, who):
     w = await world(db)
     result = await flagged_evaluation(db, engine, w)
@@ -450,10 +509,31 @@ async def test_only_the_clinics_own_staff_and_workers_see_the_task(db, engine):
     w = await world(db)
     await _make_task(db, engine, w)
     count = lambda: _count_tasks
-    for who in (w.nurse, w.doctor, w.worker, w.fd):
+    for who in (w.nurse, w.doctor, w.worker):
         assert await act(db, who, count()) == 1
-    for who in (w.auditor, w.nurse_b, w.worker_b, w.patient, None):
+    # Front desk lost message-sourced tasks in 0013 (the existence of a flag, and the rule code, can reveal a condition).
+    for who in (w.fd, w.auditor, w.nurse_b, w.worker_b, w.patient, None):
         assert await act(db, who, count()) == 0, who
+
+
+async def test_front_desk_still_sees_and_inserts_unmerge_review_tasks(db):
+    w = await world(db)
+    insert = (
+        "insert into agents.review_tasks (clinic_id, origin, kind, priority, assigned_role, source_message_id, provenance, idempotency_key) "
+        "values (:c, 'test', :k, 'immediate', 'nurse', 'merge:1', '{}', :ik)"
+    )
+    await db.execute(text(insert), {"c": w.a, "k": "unmerge_review", "ik": f"u-{_u()}"})
+    await db.execute(text(insert), {"c": w.a, "k": "screening_unassessable", "ik": f"s-{_u()}"})
+    assert await act(db, w.fd, _count_tasks) == 1  # only the unmerge_review one
+    assert await act(db, w.nurse, _count_tasks) == 2
+
+    async def front_desk_insert(conn, kind):
+        await conn.execute(text(insert), {"c": w.a, "k": kind, "ik": f"x-{_u()}"})
+
+    await act(db, w.fd, front_desk_insert, "unmerge_review")
+    for kind in ("red_flag", "screening_unassessable", "anything_new"):
+        with pytest.raises(DBAPIError, match="row-level security"):
+            await act(db, w.fd, front_desk_insert, kind)
 
 
 async def _count_tasks(conn):

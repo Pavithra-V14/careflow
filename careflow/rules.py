@@ -71,6 +71,9 @@ USABLE_STATUSES: Final[dict[str, frozenset[str]]] = {
 }
 MAX_MATCHES_PER_PATTERN: Final = 50
 MAX_PATTERN_CHARS: Final = 500
+MAX_PROVENANCE_MATCHES: Final = 50  # msg.record_screening keeps at most this many matches (migration 0013)
+# The hash of "no rules in force": sha256 of the empty string, which is also what the database computes for the empty set.
+EMPTY_RULE_SET_HASH: Final = hashlib.sha256(b"").hexdigest()
 
 
 class RulesError(Exception):
@@ -79,6 +82,10 @@ class RulesError(Exception):
 
 class NotPermitted(RulesError):
     """Row-level security refused the write: the caller's role may not do this."""
+
+
+class ClearRefused(RulesError):
+    """msg.record_screening refused a `clear` (fail closed). The caller records `unassessable` instead."""
 
 
 def resolve_profile(value: str | None = None) -> Profile:
@@ -151,6 +158,7 @@ class RuleSet:
     profile: Profile
     drafts_excluded: int = 0  # unreviewed rules left out because the profile forbids them
     problems: tuple[str, ...] = ()  # rules that could not be compiled; an approved rule failing is never silent
+    rule_set_hash: str = EMPTY_RULE_SET_HASH  # identity of the rules in force, compiled or not (see rule_set_hash())
 
     @property
     def usable_with_criteria(self) -> int:
@@ -169,6 +177,15 @@ def compile_rule(row: Mapping[str, Any]) -> tuple[Rule | None, str | None]:
     except (re.error, ValueError, TypeError):
         return None, f"rule {row['rule_code']} v{row['version_id']} could not be compiled"
     return Rule(row["id"], row["rule_code"], row["version_id"], row["status"], phrases, tuple(compiled)), None
+
+
+def rule_set_hash(chosen: "list[Mapping[str, Any]]") -> str:
+    """Identity of the rule set in force: sha256 of the lines "rule_id:version_id", sorted as plain strings, joined with a single
+    newline and NO trailing newline. msg.record_screening computes the same value in SQL (kb.active_red_flag_rules, lines sorted
+    under COLLATE "C"), so a `clear` can be checked against what the database sees. The rows are the CHOSEN ones, before compiling,
+    so an uncompilable rule is still part of the identity (and makes a `clear` fail closed: the counts then differ)."""
+    lines = sorted(f"{row['id']}:{row['version_id']}" for row in chosen)
+    return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
 
 
 def select_active_versions(rows: list[Mapping[str, Any]], profile: Profile) -> tuple[list[Mapping[str, Any]], int]:
@@ -224,6 +241,7 @@ class Evaluation:
     rules_evaluated: int
     drafts_excluded: int = 0
     problems: tuple[str, ...] = ()
+    rule_set_hash: str = EMPTY_RULE_SET_HASH
 
     @property
     def safe_to_treat_as_clear(self) -> bool:
@@ -246,7 +264,10 @@ def _judge(ruleset: RuleSet, matches: list[Match]) -> Evaluation:
         outcome = "unassessable"
     else:
         outcome = "clear"
-    return Evaluation(outcome, tuple(matches), ruleset.profile, ruleset.usable_with_criteria, ruleset.drafts_excluded, ruleset.problems)
+    return Evaluation(
+        outcome, tuple(matches), ruleset.profile, ruleset.usable_with_criteria, ruleset.drafts_excluded, ruleset.problems,
+        ruleset.rule_set_hash,
+    )
 
 
 def evaluate_with(ruleset: RuleSet, text_content: str) -> Evaluation:
@@ -287,6 +308,15 @@ class EscalationResult:
     replayed: bool = False
 
 
+@dataclass(frozen=True)
+class ScreeningResult:
+    """What msg.record_screening recorded for a STORED message (migration 0013)."""
+
+    screening_id: uuid.UUID
+    replayed: bool
+    outcome: Outcome  # what was recorded: a refused `clear` is recorded as `unassessable`
+
+
 class RedFlagEngine:
     """Loads clinician-authored rules for a tenant and screens text. Runs as the restricted app role with the
     verified claims set; row-level security decides which rules the caller may read."""
@@ -311,7 +341,7 @@ class RedFlagEngine:
                 rules.append(rule)
             elif problem:
                 problems.append(problem)
-        return RuleSet(tuple(rules), resolved, drafts_passed, tuple(problems))
+        return RuleSet(tuple(rules), resolved, drafts_passed, tuple(problems), rule_set_hash(chosen))
 
     async def evaluate_text(
         self, conn: AsyncConnection, clinic_id: uuid.UUID, origin: Origin, text_content: str, *, profile: Profile | None = None
@@ -340,9 +370,11 @@ class RedFlagEngine:
         self, conn: AsyncConnection, clinic_id: uuid.UUID, origin: Origin, match_provenance: "Evaluation | Mapping[str, Any]",
         source_message_id: str,
     ) -> EscalationResult:
-        """Raise the immediate nurse task for a match (§12.1). Idempotent: the key is derived from the source
-        message and the rules that fired, so re-escalating the same message returns the same task. Only the
-        provenance (ids, versions, positions) is stored, never the patient's words."""
+        """Raise the immediate nurse task for a match (§12.1) for a source that is NOT a stored message (a live voice transcript).
+        For a stored message use `record_screening` / `evaluate_and_escalate`. Allowed for nurse, doctor and queue_worker only:
+        front desk and admin get NotPermitted (migration 0013 hides message-sourced tasks from them). Idempotent: the key is derived
+        from the source id and the rules that fired, so re-escalating the same source returns the same task. Only the provenance
+        (ids, versions, positions) is stored, never the patient's words."""
         if origin not in ORIGINS:
             raise ValueError(f"origin must be one of {ORIGINS}, got {origin!r}")
         if not isinstance(source_message_id, str) or not source_message_id.strip() or len(source_message_id) > 200:
@@ -384,12 +416,72 @@ class RedFlagEngine:
             raise RulesError("this escalation key is already used by another request")
         return EscalationResult(existing[0], replayed=True)
 
+    async def record_screening(
+        self, conn: AsyncConnection, clinic_id: uuid.UUID, origin: Origin, message_id: uuid.UUID, evaluation: Evaluation,
+        *, idempotency_key: str,
+    ) -> ScreeningResult:
+        """Record the result of screening a STORED message through msg.record_screening (migration 0013): the only way a screening
+        row, and for a red flag or an unassessable result its nurse task, comes to exist. Works for every role that may screen the
+        message (nurse, doctor, queue_worker; front desk for appointments / safety), because the database function does the writing.
+
+        Only `clear` can be refused by the database (fail closed). A refused clear, or a demo-profile clear on a live message, is
+        recorded as `unassessable` instead, which raises the nurse task: unknown is never clear. One warning is logged, with ids only."""
+        if origin not in ORIGINS:
+            raise ValueError(f"origin must be one of {ORIGINS}, got {origin!r}")
+        if not isinstance(message_id, uuid.UUID):
+            raise TypeError("message_id must be the uuid of a stored message")
+        if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+            raise RulesError("an idempotency key is required")
+        matches = [m.as_provenance() for m in evaluation.matches]
+        provenance = {
+            "outcome": evaluation.outcome, "profile": evaluation.profile,
+            "matches": matches[:MAX_PROVENANCE_MATCHES], "matches_truncated": len(matches) > MAX_PROVENANCE_MATCHES,
+        }
+        if evaluation.outcome == "clear" and evaluation.profile == "demo" and origin == "live":
+            log.warning(
+                "screening: demo-profile clear on live origin treated as unassessable (clinic=%s message=%s)", clinic_id, message_id
+            )
+            return await self._call_record_screening(conn, message_id, "unassessable", evaluation, {}, f"{idempotency_key}:unassessable")
+        try:
+            return await self._call_record_screening(conn, message_id, evaluation.outcome, evaluation, provenance, idempotency_key)
+        except ClearRefused:
+            log.warning(
+                "screening: clear refused by the database, recording unassessable (clinic=%s message=%s profile=%s)",
+                clinic_id, message_id, evaluation.profile,
+            )
+            return await self._call_record_screening(conn, message_id, "unassessable", evaluation, {}, f"{idempotency_key}:unassessable")
+
+    @staticmethod
+    async def _call_record_screening(
+        conn: AsyncConnection, message_id: uuid.UUID, outcome: str, evaluation: Evaluation, provenance: dict[str, Any], key: str
+    ) -> ScreeningResult:
+        try:
+            async with conn.begin_nested():  # a refusal must not abort the caller's transaction
+                row = (
+                    await conn.execute(
+                        text("select * from msg.record_screening(:m, :o, :p, :n, :h, cast(:prov as jsonb), :k)"),
+                        {"m": message_id, "o": outcome, "p": evaluation.profile, "n": evaluation.rules_evaluated,
+                         "h": evaluation.rule_set_hash, "prov": json.dumps(provenance, sort_keys=True), "k": key},
+                    )
+                ).one()
+        except DBAPIError as exc:
+            if getattr(exc.orig, "sqlstate", None) == "42501":
+                raise NotPermitted("your role may not screen this message") from exc
+            if "CLEAR_REFUSED" in str(exc.orig):
+                raise ClearRefused("the database refused a clear") from exc
+            raise
+        return ScreeningResult(row.screening_id, row.replayed, row.recorded_outcome)  # the row's own outcome, not the requested one
+
     async def evaluate_and_escalate(
-        self, conn: AsyncConnection, clinic_id: uuid.UUID, origin: Origin, text_content: str, source_message_id: str,
-        *, profile: Profile | None = None,
-    ) -> tuple[Evaluation, EscalationResult | None]:
-        """Screen a message and, if it matches, raise the nurse task in the same transaction."""
+        self, conn: AsyncConnection, clinic_id: uuid.UUID, origin: Origin, text_content: str, message_id: uuid.UUID,
+        *, profile: Profile | None = None, idempotency_key: str | None = None,
+    ) -> tuple[Evaluation, ScreeningResult]:
+        """Screen the text of a STORED message and record the result, in the caller's transaction, for every role. The rules run
+        first and alone: no model is consulted. A red flag or an unassessable result raises the nurse task (through
+        msg.record_screening); a clear is recorded only when the database agrees. For a source that is not a stored message (a live
+        voice transcript) use `evaluate_text` / `open_stream` and `escalate_red_flag` instead."""
         evaluation = await self.evaluate_text(conn, clinic_id, origin, text_content, profile=profile)
-        if evaluation.outcome != "red_flag":
-            return evaluation, None
-        return evaluation, await self.escalate_red_flag(conn, clinic_id, origin, evaluation, source_message_id)
+        result = await self.record_screening(
+            conn, clinic_id, origin, message_id, evaluation, idempotency_key=idempotency_key or f"screen-eval:{message_id}:{evaluation.profile}:{evaluation.rule_set_hash}"
+        )
+        return evaluation, result

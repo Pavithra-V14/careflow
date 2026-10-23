@@ -31,6 +31,7 @@ ROOT = Path(__file__).resolve().parent.parent
 _ENV = dotenv_values(ROOT / ".env")
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or _ENV.get("DATABASE_URL_MIGRATOR")
 SQL_0011 = (ROOT / "db" / "migrations" / "0011_msg_threads_messages.sql").read_text(encoding="utf-8")
+SQL_0013 = (ROOT / "db" / "migrations" / "0013_msg_screenings.sql").read_text(encoding="utf-8")
 
 pytestmark = [
     pytest.mark.asyncio(loop_scope="module"),
@@ -39,7 +40,7 @@ pytestmark = [
 
 DENIED = "err:42501"  # insufficient_privilege: RLS WITH CHECK, the guard trigger, or no grant
 TOPICS = ("care", "appointments", "safety")
-MSG_TABLES = ("msg.threads", "msg.messages", "msg.message_rotation_batches")
+MSG_TABLES = ("msg.threads", "msg.messages", "msg.message_rotation_batches", "msg.screenings")
 CT = b"\x01" * 40  # a plausible ciphertext length (29..40100); never decrypted by these tests
 
 
@@ -156,6 +157,9 @@ async def _conn():
         await conn.execute("grant careflow_app to current_user with set true")
         if await conn.fetchval("select to_regclass('msg.threads') is null"):
             await conn.execute(SQL_0011)
+        # 0013 widens the message INSERT policy to sender_kind 'patient' and adds msg.screenings: these tests describe that state.
+        if await conn.fetchval("select to_regclass('msg.screenings') is null"):
+            await conn.execute(SQL_0013)
         await conn.execute(HELPERS)
         yield conn
     finally:
@@ -250,7 +254,7 @@ async def test_forced_rls_on_every_msg_table(db):
 
 
 async def test_app_role_has_no_update_delete_truncate_on_messages_or_threads(db):
-    for table in ("msg.messages", "msg.threads", "msg.message_rotation_batches"):
+    for table in ("msg.messages", "msg.threads", "msg.message_rotation_batches", "msg.screenings"):
         for priv in ("UPDATE", "DELETE", "TRUNCATE"):
             assert not await db.fetchval("select has_table_privilege('careflow_app', $1, $2)", table, priv), (table, priv)
     columns = await db.fetch("select attname from pg_attribute where attrelid = 'msg.messages'::regclass and attnum > 0 and not attisdropped")
@@ -285,7 +289,10 @@ async def test_erasure_guard_and_trigger_functions_are_not_executable_by_the_app
     fns = await db.fetch("select oid::regprocedure::text as f from pg_proc where pronamespace = 'msg'::regnamespace")
     assert len(fns) >= 5
     for fn in fns:
+        if fn["f"].startswith("msg.record_screening("):
+            continue  # the ONE function the application role may call (0013); everything else here is internal
         assert not await db.fetchval("select has_function_privilege('careflow_app', $1, 'EXECUTE')", fn["f"]), fn["f"]
+    assert await db.fetchval("select has_function_privilege('careflow_app', 'msg.record_screening(uuid,text,text,integer,text,jsonb,text)', 'EXECUTE')")
 
 
 async def test_owner_bypasses_forced_rls_for_the_erasure_guard(db):
@@ -445,7 +452,9 @@ async def test_message_insert_matrix_roles_by_topics(db):
         assert out == [("ok:1" if t in allowed else DENIED) for t in TOPICS], who
 
 
-async def test_only_the_staff_sender_kind_is_accepted_in_0011(db):
+async def test_staff_and_relayed_patient_sender_kinds_are_accepted_but_system_is_not(db):
+    """0011 allowed only 'staff'; 0013 also allows 'patient' (a message RELAYED by staff, with recorded_by naming who typed it),
+    together with a deferred constraint that it cannot commit without a screening. 'system' stays denied."""
     w = await seed(db)
     nurse = w.people["nurse_a"]
     out = await attempts(
@@ -454,7 +463,7 @@ async def test_only_the_staff_sender_kind_is_accepted_in_0011(db):
          message_sql(w.a, w.threads["care"], "care", nurse, kind="system"),
          message_sql(w.a, w.threads["care"], "care", nurse, kind="staff")],
     )
-    assert out == [DENIED, DENIED, "ok:1"]
+    assert out == ["ok:1", DENIED, "ok:1"]
 
 
 async def test_message_recorded_by_must_be_the_caller(db):
