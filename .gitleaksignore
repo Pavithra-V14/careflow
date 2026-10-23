@@ -1,0 +1,6 @@
+# gitleaks false positives, suppressed by exact fingerprint (commit:file:rule:line), never by pattern.
+# Reviewed 2026-10-23: both are ordinary code, not credentials.
+#   * careflow/app.py: the identifier 'idempotency_key' in a route signature
+#   * tests/test_rotation_live.py: a table-name -> migration-filename mapping
+be0532a4b81a1f981e8ba1dc2a69f81f84f709bf:careflow/app.py:generic-api-key:263
+23f88b76a920b6b1158b20e7be39b82defee5d8e:tests/test_rotation_live.py:generic-api-key:39
