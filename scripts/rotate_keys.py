@@ -73,8 +73,11 @@ async def _run(args: argparse.Namespace, env: dict[str, str], vault: Demographic
                     print(f"key_version {v}: {n['ciphertexts']} ciphertext columns, {n['tokens']} tokens")
                 if await messages_table_exists(conn):
                     # Counted over this migrator connection, unscoped; an app-role count would be silently too low.
-                    for v, n in (await message_version_usage(conn)).items():
+                    usage = await message_version_usage(conn)
+                    for v, n in usage.items():
                         print(f"key_version {v}: {n} message bodies")
+                    if not usage:
+                        print("message bodies: none stored (0 on every key_version)")
                 else:
                     print("message bodies: msg.messages does not exist yet (migration 0011 not applied)")
                 print("a key may be retired only when BOTH the ciphertext columns AND the message bodies show 0")
