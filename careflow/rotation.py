@@ -40,7 +40,12 @@ from typing import Final
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from careflow.crypto import CryptoError, DemographicVault, DecryptionError, UnknownKeyVersionError
+from careflow.crypto import (
+    CryptoError,
+    DecryptionError,
+    DemographicVault,
+    UnknownKeyVersionError,
+)
 from careflow.mpi import derive_tokens
 
 DEFAULT_BATCH_SIZE: Final = 200

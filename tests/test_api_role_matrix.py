@@ -17,9 +17,10 @@ a route without adding its matrix case breaks the build.
 import asyncio
 import os
 import time
-from datetime import timedelta
 import uuid
 from collections.abc import Callable
+from datetime import UTC, timedelta
+from itertools import pairwise
 from pathlib import Path
 
 import asyncpg
@@ -131,10 +132,10 @@ async def _seed_scheduling(ids, conn) -> None:
     """Synthetic scheduling rows for clinic A (and just enough for clinic B), all origin='test'. Patients hold dummy
     ciphertext: these routes never decrypt. The two priority levels are test fixtures with neutral names, not
     clinical content."""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     tag = uuid.uuid4().hex[:8]
-    k = lambda name: f"matrix-{tag}-{name}"  # noqa: E731  (idempotency keys for seed rows)
+    k = lambda name: f"matrix-{tag}-{name}"
     a, b = ids.clinic_a, ids.clinic_b
     doctor = ids.people["doctor_a"][0]
     provider = await conn.fetchval("insert into sched.providers (clinic_id, display_name, origin, idempotency_key) values ($1, 'Test provider', 'test', $2) returning id", a, k("prov"))
@@ -156,7 +157,7 @@ async def _seed_scheduling(ids, conn) -> None:
     ids.provider_a, ids.location_a = provider, location
     # A waiting queue to read: the LOWER-priority patient joined EARLIER, so order by rank must beat order by time.
     ids.wait_low, ids.wait_high = ids.patients_a[43], ids.patients_a[44]
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     await conn.executemany(
         "insert into sched.waitlist (clinic_id, patient_id, visit_type_id, priority_code, joined_at, origin, idempotency_key) "
         "values ($1, $2, $3, $4, $5, 'test', $6)",
@@ -164,7 +165,7 @@ async def _seed_scheduling(ids, conn) -> None:
          (a, ids.wait_high, ids.vt_a, "level_one", now - timedelta(days=1), k("wl-high"))],
     )
 
-    start = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0) + timedelta(days=60)
+    start = datetime.now(UTC).replace(minute=0, second=0, microsecond=0) + timedelta(days=60)
     slots, pools, n = [], {}, 0
     for pool, size in POOL.items():
         pools[pool] = []
@@ -343,7 +344,7 @@ def slot_write_cases(ids, op) -> list[tuple]:
     """hold / book. Only front desk of the slot's clinic may write. Admin can lock a slot (its own UPDATE policy) but the
     hold/booking INSERT is front-desk-only, so admin gets 403; every role that cannot lock the slot sees it as not found."""
     template = HOLD if op == "hold" else BOOK
-    path = lambda slot=None: template.format(slot_id=slot or ids.pools[op].pop())  # noqa: E731
+    path = lambda slot=None: template.format(slot_id=slot or ids.pools[op].pop())
     body = (lambda **o: {"duration_minutes": 15, **o}) if op == "hold" else (lambda **o: {"patient_id": str(ids.patients_a[0]), **o})
     fd, key, slot = "front_desk_a", _new_key(), ids.pools[op].pop()
     taken = "slot is held" if op == "hold" else "slot is booked"
@@ -372,7 +373,7 @@ def slot_write_cases(ids, op) -> list[tuple]:
 
 def cancel_cases(ids) -> list[tuple]:
     """Cancelling rewrites the booking and its slot: front desk only. Others either cannot see the booking or cannot lock its slot."""
-    path = lambda booking=None: CANCEL.format(booking_id=booking or ids.pools["cancel"].pop())  # noqa: E731
+    path = lambda booking=None: CANCEL.format(booking_id=booking or ids.pools["cancel"].pop())
     fd, key, booking = "front_desk_a", _new_key(), ids.pools["cancel"].pop()
     cases = [
         _case(ids, "front desk of the clinic succeeds", fd, 200, path(booking), key=key),
@@ -392,7 +393,7 @@ def join_cases(ids) -> list[tuple]:
     """Joining the waitlist is a front-desk write. Staff who can read the visit type but not write get 403; anyone who
     cannot see the visit type at all gets 404."""
     patients = iter(ids.patients_a[1:])
-    body = lambda **o: {"patient_id": str(next(patients)), "visit_type_id": str(ids.vt_a), "clinical_priority": "level_one", **o}  # noqa: E731
+    body = lambda **o: {"patient_id": str(next(patients)), "visit_type_id": str(ids.vt_a), "clinical_priority": "level_one", **o}
     fd, key = "front_desk_a", _new_key()
     same = body()
     other_patient = {**same, "patient_id": str(next(patients))}
@@ -437,15 +438,15 @@ def read_cases(ids, route) -> list[tuple]:
     user with no account. A reader of another clinic is allowed, and simply sees none of this clinic's rows."""
     path = PREFIX + "/" + route
     A = ids.clinic_a
-    in_order = lambda items, key: all(key(i) <= key(j) for i, j in zip(items, items[1:]))  # noqa: E731
+    in_order = lambda items, key: all(key(i) <= key(j) for i, j in pairwise(items))
     wait_pair = (str(ids.wait_low), str(ids.wait_high))
     shape = {
-        "slots": dict(check=lambda items: all(i["status"] in ("open", "held") for i in items) and in_order(items, lambda i: i["starts_at"])),
-        "bookings": dict(check=lambda items: in_order(items, lambda i: i["starts_at"])),
-        "waitlist": dict(check=lambda items: in_order(items, lambda i: (i["rank"], i["joined_at"]))
-                         and [i["patient_id"] for i in items if i["patient_id"] in wait_pair] == [wait_pair[1], wait_pair[0]]),
+        "slots": {"check": lambda items: all(i["status"] in ("open", "held") for i in items) and in_order(items, lambda i: i["starts_at"])},
+        "bookings": {"check": lambda items: in_order(items, lambda i: i["starts_at"])},
+        "waitlist": {"check": lambda items: in_order(items, lambda i: (i["rank"], i["joined_at"]))
+                         and [i["patient_id"] for i in items if i["patient_id"] in wait_pair] == [wait_pair[1], wait_pair[0]]},
     }[route]  # waitlist: the higher-priority patient is listed first although they joined later
-    reads = lambda who, label: _case(ids, label, who, 200, path, key=None, body=_page(ids, clinic_only=A, non_empty=True, **shape))  # noqa: E731
+    reads = lambda who, label: _case(ids, label, who, 200, path, key=None, body=_page(ids, clinic_only=A, non_empty=True, **shape))
     cases = [reads(r, f"{r} of the clinic reads") for r in ("front_desk_a", "nurse_a", "doctor_a")]
     cases += [
         _case(ids, "a reader of another clinic is allowed and sees none of this clinic's rows", "front_desk_b", 200, path, key=None,

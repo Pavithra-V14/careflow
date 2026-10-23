@@ -98,7 +98,9 @@ def main() -> int:
     try:
         vault = DemographicVault.from_env(env)
         if args.command == "rotate":
-            from careflow.rotation import check_versions  # same validation the engine does, before any connection
+            from careflow.rotation import (
+                check_versions,  # same validation the engine does, before any connection
+            )
 
             check_versions(vault, args.from_version, args.to_version)
         elif args.command == "verify" and args.to_version not in vault.key_versions:

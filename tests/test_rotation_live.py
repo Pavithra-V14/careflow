@@ -25,10 +25,15 @@ from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from careflow.crypto import DemographicVault, UnknownKeyVersionError
+from careflow.crypto import CryptoError, DemographicVault, UnknownKeyVersionError
 from careflow.db import set_request_claims
 from careflow.mpi import PatientIngestionPipeline, derive_tokens
-from careflow.rotation import RotationError, rotate_key_version, verify_rotation, version_usage
+from careflow.rotation import (
+    RotationError,
+    rotate_key_version,
+    verify_rotation,
+    version_usage,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 _ENV = dotenv_values(ROOT / ".env")
@@ -185,7 +190,7 @@ async def test_rotation_keeps_every_demographic_readable_under_the_new_version(d
         else:
             assert r.phone_key_version == 2
             assert vault.decrypt(bytes(r.phone_ct), field="phone", key_version=2).startswith("+91")
-        with pytest.raises(Exception):  # the old key no longer opens it
+        with pytest.raises(CryptoError):  # the old key no longer opens it
             vault.decrypt(bytes(r.name_ct), field="name", key_version=1)
 
 
@@ -330,7 +335,7 @@ async def test_only_front_desk_of_the_clinic_rotates_and_only_that_clinic(db, va
 
 
 async def test_the_ledger_is_front_desk_only_and_never_edited(db):
-    a, b, p = await seed(db)
+    a, _b, p = await seed(db)
     row = {"c": a, "p": _u(), "k": f"rotate-test-{_u()}"}
     insert = ("insert into ops.key_rotation_batches (clinic_id, origin, from_version, to_version, patients_rotated, tokens_written, "
               "first_patient_id, last_patient_id, idempotency_key) values (:c, 'test', 1, 2, 1, 1, :p, :p, :k)")
@@ -357,9 +362,9 @@ async def test_the_ledger_is_front_desk_only_and_never_edited(db):
 async def test_cli_refuses_an_unconfigured_target_before_any_connection(keys):
     env = {k: v for k, v in os.environ.items() if not k.startswith(("CAREFLOW_", "DATABASE_URL"))}
     env.update({k: v for k, v in keys.items() if k.endswith("_V1")})  # only v1 is configured
-    run = subprocess.run(
+    run = subprocess.run(  # noqa: ASYNC221  (a short blocking call in a test is fine)
         [sys.executable, str(ROOT / "scripts" / "rotate_keys.py"), "--env-file", str(ROOT / "nonexistent.env"), "rotate", "--from", "1", "--to", "2"],
-        capture_output=True, text=True, env=env, timeout=60,
+        capture_output=True, text=True, env=env, timeout=60, check=False,
     )
     assert run.returncode == 2
     assert "key_version 2" in run.stderr
