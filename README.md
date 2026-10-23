@@ -11,7 +11,38 @@ This repository is built to a written specification. **Read these first, in orde
 
 ## Status
 
-Phase 0 (foundations) — in progress. See `BUILD-SPEC.md` Appendix D.
+Phase order is `BUILD-SPEC.md` Appendix D. **Phase 0 is complete; Phase 1 (deterministic core) is in progress.**
+A phase is not started until the previous phase's gates pass.
+
+**Phase 0 (foundations): done.** Checksummed migration runner, 11 schemas, forced RLS keyed on `auth.uid()`,
+restricted `careflow_app` role, ES256 JWT verification via JWKS, per-request `set_config('request.jwt.claims')`,
+role-matrix test harness, data-flow register. CI (`.github/workflows/ci.yml`) runs lint (`careflow`, `tests`,
+`scripts`), in-runner secret scanning (gitleaks), the OpenAPI snapshot check, the migrations and the full pytest
+suite against the CI Supabase project as `careflow_app`, with zero skips allowed.
+
+**Phase 1 (deterministic core): library code built, HTTP surface partial.**
+- Built: scheduling (holds, bookings, cancel, clinical-priority waitlist), MPI ingestion with AES-256-GCM and HMAC
+  tokens, key rotation (runbook in `docs/runbooks/key_rotation.md`), two-person merge and unmerge, the red-flag rule
+  engine (mechanism only), the Postgres queue and outbox.
+- Routes that exist: `GET /v1/iam/me` and `/v1/staff/scheduling/*`. Every route has role-matrix coverage.
+- Not built yet: routes for patient ingestion, merge/unmerge and red-flag screening; the `msg` tables and the
+  `iam` consent, activation and grievance tables; the minimal patient portal (no frontend exists).
+- Queue and outbox stay in-process: no HTTP routes for claim, acknowledge or dead-letter, and no `/internal` auth
+  until the Phase 2 worker proposal (short-lived signed token per job, §18.4) is decided.
+
+**Tracked blockers and open items**
+- **Red-flag gold-set regression test: blocked on clinicians.** `kb.red_flag_rules` holds only an inert
+  `draft_unreviewed` stub. No rule or phrase may be written by an engineer (`CLAUDE.md` rule 1). The test cannot be
+  written, and Phase 1 cannot be called complete, until a clinical lead supplies and approves rules.
+- **Patient identity match rule (`STRONG_IDENTIFIERS`, `careflow/mpi.py`): pending sign-off** by Priya, Health-information
+  lead. It stays a single constant until then.
+- **No emergency auto-reply wording exists.** The immediate nurse task is raised on a red flag; the patient-facing
+  send is pending a clinician-approved template.
+- **Phase 2 acceptance item: the §7.3 ceilings** (12 model calls, 25 tool calls, 40 steps, 40 s per tick) have no
+  runner yet and are not faked. Phase 2 is not done until a runner enforces and tests them.
+- `kb/cards/` is empty: protocol cards are clinician-authored and none have been supplied.
+
+Claude Code tooling (skills, reviewer agents, hooks) is documented in [`.claude/README.md`](.claude/README.md).
 
 ## Setup (development)
 
