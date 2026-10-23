@@ -27,6 +27,12 @@ Everything is validated before the first database statement: an unknown or equal
 nothing read and nothing written. Unknown is not a value: a ciphertext that does not authenticate is an error that
 stops the run, never skipped, never "assumed fine".
 
+Message bodies (`msg.messages`, migration 0011) rotate through a SEPARATE entry point, `rotate_message_bodies`, and are
+counted by `message_version_usage`. Both refuse to run unless the connection bypasses row-level security (the migrator),
+because the application role cannot UPDATE messages at all and, under RLS, would see only some topics: a count taken
+that way would be silently low, and "unknown is not zero" (rule 3), so a key could be retired while bodies still use
+it. A key may be retired only when BOTH `version_usage` (patients) and `message_version_usage` (messages) show zero.
+
 Role: the engine runs on whatever connection it is given. Under the restricted app role with a front-desk identity
 it rotates that clinic's rows (RLS decides); the maintenance script gives it the migrator connection to cover every
 clinic. Plaintext exists only in this process's memory and is never logged or put in an error message.
@@ -307,3 +313,186 @@ async def version_usage(conn: AsyncConnection, *, clinic_id: uuid.UUID | None = 
     ).all():
         usage.setdefault(v, {"ciphertexts": 0, "tokens": 0})["tokens"] += n
     return dict(sorted(usage.items()))
+
+
+# ---- message bodies (msg.messages) --------------------------------------------------------------------------------
+
+
+@dataclass
+class MessageRotationReport:
+    from_version: int
+    to_version: int
+    batches: int = 0
+    messages_rotated: int = 0
+    batch_keys: list[str] = field(default_factory=list)
+
+
+@dataclass
+class MessageVerifyReport:
+    to_version: int
+    messages_checked: int = 0
+    unreadable: list[uuid.UUID] = field(default_factory=list)  # a body did not authenticate
+
+    @property
+    def ok(self) -> bool:
+        return not self.unreadable
+
+
+async def messages_table_exists(conn: AsyncConnection) -> bool:
+    """False before migration 0011 is applied, so the CLI can say so instead of failing."""
+    return bool((await conn.execute(text("select to_regclass('msg.messages') is not null"))).scalar_one())
+
+
+async def require_rls_bypass(conn: AsyncConnection) -> None:
+    """Refuse (loudly, never a silent skip) unless the session's role bypasses row-level security."""
+    bypass = (await conn.execute(text("select rolbypassrls from pg_roles where rolname = current_user"))).scalar_one_or_none()
+    if bypass is not True:
+        raise RotationError(
+            "message bodies can only be rotated, verified or counted over a connection that bypasses row-level security "
+            "(the migrator credential): the application role cannot update messages, and under RLS it would see only "
+            "some topics, giving a count that is silently too low"
+        )
+
+
+def _message_batch_key(from_v: int, to_v: int, clinic_id: uuid.UUID, origin: str, first: uuid.UUID, last: uuid.UUID) -> str:
+    return f"rotate-messages:v{from_v}->v{to_v}:{clinic_id}:{origin}:{first}:{last}"
+
+
+async def rotate_message_bodies(
+    conn: AsyncConnection,
+    vault: DemographicVault,
+    *,
+    from_version: int,
+    to_version: int,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+    clinic_id: uuid.UUID | None = None,
+    commit_each_batch: bool = False,
+    on_batch: Callable[[MessageRotationReport], Awaitable[None] | None] | None = None,
+) -> MessageRotationReport:
+    """Re-encrypt every non-erased message body still on `from_version` under `to_version`, in batches (one SAVEPOINT
+    each). The selection predicate is the progress marker, so a stopped run resumes and a finished row is never touched
+    again. A body that does not authenticate stops the run and rolls back that batch; nothing is skipped or assumed fine.
+    Each batch writes one `msg.message_rotation_batches` row. Needs the migrator connection (see the module docstring)."""
+    check_versions(vault, from_version, to_version)
+    if not isinstance(batch_size, int) or isinstance(batch_size, bool) or not 1 <= batch_size <= MAX_BATCH_SIZE:
+        raise RotationError(f"batch_size must be between 1 and {MAX_BATCH_SIZE}")
+    await require_rls_bypass(conn)
+
+    report = MessageRotationReport(from_version, to_version)
+    scope = "" if clinic_id is None else " and clinic_id = :clinic"
+    groups = (
+        await conn.execute(
+            text(
+                f"""select distinct clinic_id, origin from msg.messages
+                    where erased_at is null and body_key_version = :f{scope} order by clinic_id, origin"""
+            ),
+            {"f": from_version, **({} if clinic_id is None else {"clinic": clinic_id})},
+        )
+    ).all()
+    if commit_each_batch:
+        await conn.commit()
+
+    for group_clinic, origin in groups:
+        while True:
+            async with conn.begin_nested():
+                rows = (
+                    await conn.execute(
+                        text(
+                            """select id, thread_id, body_ct from msg.messages
+                               where clinic_id = :c and origin = :o and erased_at is null and body_key_version = :f
+                               order by id limit :n for update"""
+                        ),
+                        {"c": group_clinic, "o": origin, "f": from_version, "n": batch_size},
+                    )
+                ).all()
+                if not rows:
+                    break
+                for row in rows:
+                    ids = {"clinic_id": group_clinic, "thread_id": row.thread_id, "message_id": row.id}
+                    try:
+                        plain = vault.decrypt_message_body(bytes(row.body_ct), key_version=from_version, **ids)
+                        fresh = vault.encrypt_message_body(plain, key_version=to_version, **ids)
+                        if vault.decrypt_message_body(fresh, key_version=to_version, **ids) != plain:
+                            raise RotationError("re-encrypted body did not read back identically")
+                    except (CryptoError, RotationError) as exc:
+                        # The message id is an identifier; the body is never included.
+                        raise RotationError(f"message {row.id}: {type(exc).__name__}: {exc}") from exc
+                    await conn.execute(
+                        text("update msg.messages set body_ct = :ct, body_key_version = :t where id = :i"),
+                        {"ct": fresh, "t": to_version, "i": row.id},
+                    )
+                key = _message_batch_key(from_version, to_version, group_clinic, origin, rows[0].id, rows[-1].id)
+                ledgered = await conn.execute(
+                    text(
+                        """insert into msg.message_rotation_batches
+                               (clinic_id, origin, from_version, to_version, messages_rotated,
+                                first_message_id, last_message_id, idempotency_key)
+                           values (:c, :o, :f, :t, :n, :first, :last, :k)
+                           on conflict (idempotency_key) do nothing"""
+                    ),
+                    {"c": group_clinic, "o": origin, "f": from_version, "t": to_version, "n": len(rows),
+                     "first": rows[0].id, "last": rows[-1].id, "k": key},
+                )
+            report.batches += 1
+            report.messages_rotated += len(rows)
+            if ledgered.rowcount:
+                report.batch_keys.append(key)
+            if commit_each_batch:
+                await conn.commit()
+            if on_batch is not None:
+                maybe = on_batch(report)
+                if maybe is not None:
+                    await maybe
+    return report
+
+
+async def verify_message_bodies(
+    conn: AsyncConnection,
+    vault: DemographicVault,
+    *,
+    to_version: int,
+    clinic_id: uuid.UUID | None = None,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+) -> MessageVerifyReport:
+    """Read-only: every non-erased body on `to_version` authenticates under that version. Needs the migrator
+    connection, because a check that sees only some topics would give false assurance."""
+    if to_version not in vault.key_versions:
+        raise UnknownKeyVersionError(f"no key loaded for key_version {to_version!r}")
+    await require_rls_bypass(conn)
+    report = MessageVerifyReport(to_version)
+    after = uuid.UUID(int=0)
+    scope = "" if clinic_id is None else " and clinic_id = :clinic"
+    while True:
+        rows = (
+            await conn.execute(
+                text(
+                    f"""select id, clinic_id, thread_id, body_ct from msg.messages
+                        where erased_at is null and body_key_version = :t and id > :after{scope}
+                        order by id limit :n"""
+                ),
+                {"t": to_version, "after": after, "n": batch_size, **({} if clinic_id is None else {"clinic": clinic_id})},
+            )
+        ).all()
+        if not rows:
+            return report
+        for row in rows:
+            report.messages_checked += 1
+            try:
+                vault.decrypt_message_body(
+                    bytes(row.body_ct), clinic_id=row.clinic_id, thread_id=row.thread_id, message_id=row.id, key_version=to_version
+                )
+            except DecryptionError:
+                report.unreadable.append(row.id)
+        after = rows[-1].id
+
+
+async def message_version_usage(conn: AsyncConnection, *, clinic_id: uuid.UUID | None = None) -> dict[int, int]:
+    """Non-erased message bodies still on each key_version: the message half of the retirement checklist. Refuses
+    over a connection that does not bypass RLS (an under-count could let a key be retired while bodies use it)."""
+    await require_rls_bypass(conn)
+    scope = "" if clinic_id is None else " and clinic_id = :clinic"
+    rows = await conn.execute(
+        text(f"select body_key_version, count(*) from msg.messages where erased_at is null{scope} group by 1 order by 1"),
+        {} if clinic_id is None else {"clinic": clinic_id},
+    )
+    return {v: n for v, n in rows.all()}

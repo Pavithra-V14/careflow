@@ -27,10 +27,14 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from careflow.crypto import CryptoError, DemographicVault, UnknownKeyVersionError
 from careflow.db import set_request_claims
+from careflow.messages import decrypt_body, encrypt_body
 from careflow.mpi import PatientIngestionPipeline, derive_tokens
 from careflow.rotation import (
     RotationError,
+    message_version_usage,
     rotate_key_version,
+    rotate_message_bodies,
+    verify_message_bodies,
     verify_rotation,
     version_usage,
 )
@@ -42,6 +46,7 @@ SQL = {n: (ROOT / "db" / "migrations" / f).read_text(encoding="utf-8") for n, f 
     "mpi.match_candidates": "0003_mpi_match_candidates.sql",
     "mpi.merges": "0008_mpi_merge_ledger.sql",
     "ops.key_rotation_batches": "0010_key_rotation_ledger.sql",
+    "msg.threads": "0011_msg_threads_messages.sql",
 }.items()}
 
 pytestmark = [
@@ -369,3 +374,136 @@ async def test_cli_refuses_an_unconfigured_target_before_any_connection(keys):
     assert run.returncode == 2
     assert "key_version 2" in run.stderr
     assert not any(secret in run.stdout + run.stderr for secret in keys.values())  # no key material ever printed
+
+
+# ---- message bodies (migration 0011): rotated under the migrator connection, never the app role -------------------------
+
+
+async def _claims(conn, uid):
+    """The erased-patient guard also fires for the table owner, so seeding as the owner sets a real caller's claims."""
+    await set_request_claims(conn, {"sub": str(uid), "role": "authenticated"})
+
+
+async def _clear_claims(conn):
+    await conn.execute(text("select set_config('request.jwt.claims', '', true)"))
+
+
+async def add_thread(conn, uid, clinic, patient, topic):
+    await _claims(conn, uid)
+    try:
+        return (
+            await conn.execute(
+                text(
+                    "insert into msg.threads (clinic_id, patient_id, topic, created_by, origin, idempotency_key) "
+                    "values (:c, :p, :t, :u, 'test', :k) returning id"
+                ),
+                {"c": clinic, "p": patient, "t": topic, "u": uid, "k": f"th-{_u()}"},
+            )
+        ).scalar_one()
+    finally:
+        await _clear_claims(conn)
+
+
+async def add_message(conn, vault, uid, clinic, thread, topic, body, *, version=1, message_id=None, body_ct=None):
+    enc = encrypt_body(vault, body, clinic_id=clinic, thread_id=thread, key_version=version, message_id=message_id)
+    await _claims(conn, uid)
+    try:
+        await conn.execute(
+            text(
+                "insert into msg.messages (id, clinic_id, origin, topic, thread_id, sender_kind, recorded_by, body_ct, body_key_version, idempotency_key) "
+                "values (:i, :c, 'test', :t, :th, 'staff', :u, :ct, :v, :k)"
+            ),
+            {"i": enc.message_id if message_id is None else message_id, "c": clinic, "t": topic, "th": thread, "u": uid,
+             "ct": body_ct or enc.body_ct, "v": version, "k": f"ms-{_u()}"},
+        )
+    finally:
+        await _clear_claims(conn)
+    return enc.message_id
+
+
+async def seed_messages(conn, vault, texts):
+    """Clinic A: a care thread and an appointments thread (nurse), clinic B: an appointments thread (front desk)."""
+    a, b, p = await seed(conn)
+    pa = (await register(conn, vault, p["fd_a"], a, people=[PEOPLE[0]]))[0]
+    pb = (await register(conn, vault, p["fd_b"], b, people=[PEOPLE[1]]))[0]
+    care = await add_thread(conn, p["nurse_a"], a, pa, "care")
+    appt = await add_thread(conn, p["nurse_a"], a, pa, "appointments")
+    appt_b = await add_thread(conn, p["fd_b"], b, pb, "appointments")
+    ids = []
+    for i, body in enumerate(texts):
+        thread, clinic, topic, uid = [(care, a, "care", p["nurse_a"]), (appt, a, "appointments", p["nurse_a"]),
+                                      (appt_b, b, "appointments", p["fd_b"])][i % 3]
+        ids.append((await add_message(conn, vault, uid, clinic, thread, topic, body), clinic, thread))
+    return a, b, p, ids
+
+
+async def test_rotation_covers_message_bodies_and_they_decrypt_under_the_new_version(db, vault):
+    texts = [f"message number {i} private words" for i in range(6)]
+    _a, _b, _p, ids = await seed_messages(db, vault, texts)
+    assert await message_version_usage(db) == {1: 6}
+    rep = await rotate_message_bodies(db, vault, from_version=1, to_version=2, batch_size=2)
+    assert (rep.messages_rotated, rep.batches) == (6, 3)  # clinic A: 4 messages in 2 batches; clinic B: 2 in 1
+    assert await message_version_usage(db) == {2: 6}
+    for (mid, clinic, thread), body in zip(ids, texts, strict=True):
+        row = (await q(db, "select body_ct, body_key_version from msg.messages where id = :i", i=mid))[0]
+        assert row.body_key_version == 2
+        assert decrypt_body(vault, bytes(row.body_ct), clinic_id=clinic, thread_id=thread, message_id=mid, key_version=2) == body
+    ledger = await q(db, "select sum(messages_rotated), count(*) from msg.message_rotation_batches where from_version = 1 and to_version = 2")
+    assert ledger[0][0] == 6 and ledger[0][1] == len(rep.batch_keys)
+    verified = await verify_message_bodies(db, vault, to_version=2)
+    assert verified.ok and verified.messages_checked == 6
+
+
+async def test_message_rotation_resumes_and_a_second_run_does_nothing(db, vault):
+    await seed_messages(db, vault, ["one", "two", "three"])
+    first = await rotate_message_bodies(db, vault, from_version=1, to_version=2, batch_size=1)
+    assert first.messages_rotated == 3 and first.batches == 3
+    again = await rotate_message_bodies(db, vault, from_version=1, to_version=2)
+    assert (again.messages_rotated, again.batches) == (0, 0)
+
+
+async def test_an_unreadable_body_stops_the_run_names_only_the_id_and_rolls_back_the_batch(db, vault):
+    _a, _b, p, ids = await seed_messages(db, vault, ["good one", "good two"])
+    _mid, clinic, thread = ids[0]
+    bogus = encrypt_body(vault, "secret sentence SHOULD-NOT-APPEAR", clinic_id=clinic, thread_id=thread, key_version=1)  # bound to ANOTHER message id
+    bad_id = await add_message(db, vault, p["nurse_a"], clinic, thread, "care", "placeholder", message_id=_u(), body_ct=bogus.body_ct)
+    with pytest.raises(RotationError) as exc:
+        await rotate_message_bodies(db, vault, from_version=1, to_version=2, clinic_id=clinic)
+    assert str(bad_id) in str(exc.value) and "SHOULD-NOT-APPEAR" not in str(exc.value)
+    assert await message_version_usage(db, clinic_id=clinic) == {1: 3}  # the whole failed batch rolled back: nothing moved
+    report = await verify_message_bodies(db, vault, to_version=1, clinic_id=clinic)
+    assert report.unreadable == [bad_id] and not report.ok
+
+
+async def test_the_message_usage_count_is_unscoped_and_ignores_erased_bodies(db, vault):
+    """The count sees every clinic and every topic (care included) because it runs as the migrator; an erased body is not counted."""
+    _a, b, _p, ids = await seed_messages(db, vault, ["care text", "appointments text", "other clinic text"])
+    assert await message_version_usage(db) == {1: 3}
+    assert await message_version_usage(db, clinic_id=b) == {1: 1}
+    await db.execute(text("update msg.messages set body_ct = null, body_key_version = null, erased_at = now() where id = :i"), {"i": ids[0][0]})
+    assert await message_version_usage(db) == {1: 2}
+    rep = await rotate_message_bodies(db, vault, from_version=1, to_version=2)
+    assert rep.messages_rotated == 2  # the erased message is never rotated
+
+
+async def test_message_rotation_refuses_to_run_as_the_app_role(db, vault):
+    await seed_messages(db, vault, ["only one"])
+    await db.exec_driver_sql("set local role careflow_app")
+    try:
+        with pytest.raises(RotationError, match="bypasses row-level security"):
+            await rotate_message_bodies(db, vault, from_version=1, to_version=2)
+        with pytest.raises(RotationError, match="bypasses row-level security"):
+            await message_version_usage(db)
+        with pytest.raises(RotationError, match="bypasses row-level security"):
+            await verify_message_bodies(db, vault, to_version=1)
+    finally:
+        await db.exec_driver_sql("reset role")
+    assert await message_version_usage(db) == {1: 1}  # nothing was changed
+
+
+async def test_message_usage_is_nonzero_while_bodies_use_a_key(db, vault):
+    """The retirement checklist reads this count; it must report bodies still on the old version."""
+    await seed_messages(db, vault, ["still on version one"])
+    assert (await message_version_usage(db)).get(1, 0) == 1
+    await rotate_message_bodies(db, vault, from_version=1, to_version=2)
+    assert (await message_version_usage(db)).get(1, 0) == 0

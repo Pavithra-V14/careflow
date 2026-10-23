@@ -1,7 +1,9 @@
 # Runbook: manual demographic key rotation
 
-BUILD-SPEC.md §17.2. Applies to the AES-256-GCM key (patient name, date of birth, phone in `mpi.patients`) and the
-HMAC key (identity tokens in `mpi.identity_tokens`). Both rotate together as one **key_version**.
+BUILD-SPEC.md §17.2. Applies to the AES-256-GCM key (patient name, date of birth, phone in `mpi.patients`, and, from migration 0011, message
+bodies in `msg.messages.body_ct`) and the HMAC key (identity tokens in `mpi.identity_tokens`). They rotate together as one
+**key_version**. Message bodies use a per-message subkey derived from the same version's key (careflow/crypto.py), so the
+same `CAREFLOW_ENC_SECRET_V<n>` covers them.
 
 **Who:** the operator holding the platform secret manager and the `DATABASE_URL_MIGRATOR` credential.
 **When:** on a schedule the clinic sets, after any suspected key exposure, and when someone with key access leaves.
@@ -88,8 +90,13 @@ python scripts/rotate_keys.py status
 recorded version and that the `N+1` identity tokens exist and equal what the decrypted data derives. It must report
 `0 unreadable, 0 token problems` (exit 0). Anything else: stop, do not retire the old key, investigate.
 
-`status` must show **`0 ciphertext columns` for version `N`**. If any remain (a patient registered under `N` while you
-rotated), run step 3 again, then verify again.
+`status` must show **`0 ciphertext columns` for version `N` AND `0 message bodies` for version `N`**. If any remain (a patient
+registered, or a message posted, under `N` while you rotated), run step 3 again, then verify again.
+
+The message-body count is taken over the migrator connection and is **unscoped** (every clinic, every topic). The
+application role cannot be used for it: it cannot update messages, and under row-level security it sees only some topics,
+so its count would be silently too low. The script refuses any connection that does not bypass row-level security
+(`rolbypassrls`), so a low count can never be mistaken for zero.
 
 Also check by hand that the ledger matches: `select count(*), sum(patients_rotated) from ops.key_rotation_batches
 where from_version = <N> and to_version = <N+1>;` — the sum equals the number of patients rotated (summed across
@@ -100,8 +107,9 @@ test patient who already exists to confirm it is recognised as a match rather th
 
 ## 5. Retire the old key
 
-Wait a full release cycle, and confirm for that period that `status` still shows `0 ciphertext columns` on `N` and that
-no code path or job still constructs a vault pipeline with `key_version=N`.
+Wait a full release cycle, and confirm for that period that `status` still shows `0 ciphertext columns` on `N` **and
+`0 message bodies` on `N`**, and that no code path or job still constructs a vault pipeline or message encryption with
+`key_version=N`. A message body encrypted under a retired key is unrecoverable: this check is not optional.
 
 1. Remove `CAREFLOW_ENC_SECRET_V<N>` and `CAREFLOW_HMAC_SECRET_V<N>` from the platform manager, **both together**
    (the vault refuses a lone half).
@@ -124,4 +132,5 @@ this runbook.
 | need to undo | old key still present, old ciphertexts already overwritten | `rotate --from <N+1> --to <N>` re-encrypts back, provided both keys are still loaded |
 | a key was lost before retirement | demographics under it are unrecoverable | restore from backup, then restart this runbook |
 
-Rotation and its ledger touch no clinical content and call no external service.
+Rotation and its ledgers (`ops.key_rotation_batches`, `msg.message_rotation_batches`) touch no clinical content and call
+no external service. Message bodies are patient text: the script never prints one, and an error names only a message id.

@@ -27,6 +27,20 @@ patient count; rotate keys long before that.
 
 Each ciphertext is bound to the field it belongs to (`name`, `dob` or `phone`) as GCM associated data,
 so a ciphertext cannot be moved from one column to another and still decrypt.
+
+Message bodies (`msg.messages.body_ct`) use a separate method pair, `encrypt_message_body` /
+`decrypt_message_body`, and `message_body` is deliberately NOT one of `FIELDS`, so the generic
+`encrypt`/`decrypt` refuse it. Messages grow far faster than patients, so instead of one long-lived AES key
+with random nonces, each message gets its OWN key:
+
+    root    = HKDF-SHA256(master_v, info = "careflow/message_body/root/v1")
+    subkey  = HKDF-SHA256(root,     info = "careflow/message_body/key/v1/" + message_id)
+
+and the AES-GCM associated data is "careflow/message_body/v1/" + clinic_id + "/" + thread_id + "/" + message_id,
+so a ciphertext cannot be moved to another message, thread or clinic. The distinct HKDF labels give domain
+separation from the demographic use of the same master key; they do not remove the shared secret (the root is
+still derived from it). The version's master key therefore selects both, and `body_key_version` names it. A retry
+with the same message id and different plaintext reuses that message's subkey with a new random nonce (harmless).
 """
 
 import base64
@@ -36,11 +50,14 @@ import hmac
 import os
 import re
 import unicodedata
+import uuid
 from collections.abc import Mapping
 from typing import Final
 
 from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 ENC_KEY_BYTES: Final = 32
 HMAC_MIN_KEY_BYTES: Final = 32
@@ -51,6 +68,9 @@ _KIND = re.compile(r"^[a-z][a-z0-9_]*$")  # identical to the check on mpi.identi
 _ENV_ENC = re.compile(r"^CAREFLOW_ENC_SECRET_V(\d+)$")
 _ENV_HMAC = re.compile(r"^CAREFLOW_HMAC_SECRET_V(\d+)$")
 _AAD_PREFIX: Final = b"careflow/demographic/v1/"
+_MSG_ROOT_INFO: Final = b"careflow/message_body/root/v1"
+_MSG_KEY_INFO: Final = b"careflow/message_body/key/v1/"
+_MSG_AAD_PREFIX: Final = b"careflow/message_body/v1/"
 
 
 class CryptoError(Exception):
@@ -139,6 +159,11 @@ class DemographicVault:
             if enc_keys[version] == hmac_keys[version]:
                 raise CryptoConfigError(f"V{version}: the encryption and HMAC secrets must be different values")
         self._aead = {v: AESGCM(k) for v, k in enc_keys.items()}
+        # Only the derived per-version root is kept for message bodies; it cannot be turned back into the master.
+        self._msg_root = {
+            v: HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=_MSG_ROOT_INFO).derive(k)
+            for v, k in enc_keys.items()
+        }
         self._hmac = {v: bytes(k) for v, k in hmac_keys.items()}
 
     @classmethod
@@ -198,6 +223,56 @@ class DemographicVault:
         except InvalidTag:
             raise DecryptionError(
                 "ciphertext failed authentication: wrong key version, wrong field, or the data was altered"
+            ) from None
+
+    # ---- message bodies (separate API; see the module docstring) ---------------------------------------
+
+    @staticmethod
+    def _message_ids(clinic_id: uuid.UUID, thread_id: uuid.UUID, message_id: uuid.UUID) -> tuple[str, str, str]:
+        for name, value in (("clinic_id", clinic_id), ("thread_id", thread_id), ("message_id", message_id)):
+            if not isinstance(value, uuid.UUID):
+                raise TypeError(f"{name} must be a uuid.UUID")
+        return str(clinic_id), str(thread_id), str(message_id)  # canonical lowercase hyphenated text
+
+    def _message_cipher(self, key_version: int, message_id: str) -> AESGCM:
+        try:
+            root = self._msg_root[key_version]
+        except KeyError:
+            raise UnknownKeyVersionError(f"no encryption key loaded for key_version {key_version!r}") from None
+        subkey = HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=_MSG_KEY_INFO + message_id.encode("ascii")).derive(root)
+        return AESGCM(subkey)
+
+    def encrypt_message_body(
+        self, plaintext: str, *, clinic_id: uuid.UUID, thread_id: uuid.UUID, message_id: uuid.UUID, key_version: int
+    ) -> bytes:
+        """Encrypt one message body: nonce (12 bytes) || AES-256-GCM(ciphertext || tag), under this message's own
+        subkey, bound to (clinic, thread, message). Line endings are normalised to LF and blank text is refused."""
+        clinic, thread, message = self._message_ids(clinic_id, thread_id, message_id)
+        cipher = self._message_cipher(key_version, message)
+        data = _clean_plaintext(plaintext).encode("utf-8")
+        nonce = os.urandom(NONCE_BYTES)
+        aad = _MSG_AAD_PREFIX + f"{clinic}/{thread}/{message}".encode("ascii")
+        return nonce + cipher.encrypt(nonce, data, aad)
+
+    def decrypt_message_body(
+        self, blob: bytes, *, clinic_id: uuid.UUID, thread_id: uuid.UUID, message_id: uuid.UUID, key_version: int
+    ) -> str:
+        """Reverse `encrypt_message_body`. Raises DecryptionError for anything that does not authenticate (wrong
+        version, wrong clinic/thread/message, truncated or altered). Callers: careflow/messages.py and
+        careflow/rotation.py only (tests/test_messages.py enforces it); the text is never logged or put in an error."""
+        clinic, thread, message = self._message_ids(clinic_id, thread_id, message_id)
+        cipher = self._message_cipher(key_version, message)
+        if not isinstance(blob, bytes | bytearray | memoryview):
+            raise TypeError("blob must be bytes")
+        blob = bytes(blob)
+        if len(blob) < NONCE_BYTES + TAG_BYTES + 1:
+            raise DecryptionError("ciphertext is too short to be valid")
+        aad = _MSG_AAD_PREFIX + f"{clinic}/{thread}/{message}".encode("ascii")
+        try:
+            return cipher.decrypt(blob[:NONCE_BYTES], blob[NONCE_BYTES:], aad).decode("utf-8")
+        except InvalidTag:
+            raise DecryptionError(
+                "ciphertext failed authentication: wrong key version, wrong message, or the data was altered"
             ) from None
 
     def identity_token(self, kind: str, value: str, *, key_version: int) -> bytes:

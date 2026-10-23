@@ -7,8 +7,12 @@ import base64
 import hashlib
 import hmac
 import os
+import uuid
 
 import pytest
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from careflow.crypto import (
     CryptoConfigError,
@@ -269,3 +273,105 @@ def test_from_env_defaults_to_the_process_environment(monkeypatch, env):
     for k, v in env.items():
         monkeypatch.setenv(k, v)
     assert DemographicVault.from_env().key_versions == [1, 2]
+
+
+# ---- message bodies (msg.messages.body_ct; migration 0011) ---------------------------------------------------------
+
+
+def _message_ids():
+    return {"clinic_id": uuid.uuid4(), "thread_id": uuid.uuid4(), "message_id": uuid.uuid4()}
+
+
+def test_message_body_round_trip(vault):
+    ids = _message_ids()
+    blob = vault.encrypt_message_body("Please call me back about Tuesday.", key_version=1, **ids)
+    assert vault.decrypt_message_body(blob, key_version=1, **ids) == "Please call me back about Tuesday."
+
+
+def test_message_body_line_endings_are_cleaned_and_blank_is_refused(vault):
+    ids = _message_ids()
+    blob = vault.encrypt_message_body("a\r\nb\rc", key_version=1, **ids)
+    assert vault.decrypt_message_body(blob, key_version=1, **ids) == "a\nb\nc"
+    for bad in ("", "   ", "\n\t"):
+        with pytest.raises(ValueError):
+            vault.encrypt_message_body(bad, key_version=1, **ids)
+
+
+@pytest.mark.parametrize("moved", ["message_id", "thread_id", "clinic_id"])
+def test_message_body_is_bound_to_its_message_thread_and_clinic(vault, moved):
+    ids = _message_ids()
+    blob = vault.encrypt_message_body("secret words", key_version=1, **ids)
+    with pytest.raises(DecryptionError):
+        vault.decrypt_message_body(blob, key_version=1, **{**ids, moved: uuid.uuid4()})
+
+
+def test_message_body_rejects_wrong_version_unloaded_version_and_tampering(vault):
+    ids = _message_ids()
+    blob = vault.encrypt_message_body("secret words", key_version=1, **ids)
+    with pytest.raises(DecryptionError):
+        vault.decrypt_message_body(blob, key_version=2, **ids)
+    with pytest.raises(UnknownKeyVersionError):
+        vault.decrypt_message_body(blob, key_version=9, **ids)
+    with pytest.raises(UnknownKeyVersionError):
+        vault.encrypt_message_body("x", key_version=9, **ids)
+    for i in range(len(blob)):
+        flipped = blob[:i] + bytes([blob[i] ^ 1]) + blob[i + 1 :]
+        with pytest.raises(DecryptionError):
+            vault.decrypt_message_body(flipped, key_version=1, **ids)
+    for size in (0, 5, 27, 28):
+        with pytest.raises(DecryptionError):
+            vault.decrypt_message_body(blob[:size], key_version=1, **ids)
+
+
+def test_message_body_arguments_must_be_uuids(vault):
+    ids = _message_ids()
+    with pytest.raises(TypeError):
+        vault.encrypt_message_body("x", key_version=1, **{**ids, "message_id": str(ids["message_id"])})
+    with pytest.raises(TypeError):
+        vault.decrypt_message_body(b"x" * 40, key_version=1, **{**ids, "thread_id": None})
+
+
+def test_each_message_gets_its_own_subkey_and_a_fresh_nonce(vault):
+    a, b = _message_ids(), _message_ids()
+    one = vault.encrypt_message_body("same text", key_version=1, **a)
+    two = vault.encrypt_message_body("same text", key_version=1, **a)
+    three = vault.encrypt_message_body("same text", key_version=1, **b)
+    assert len({one, two, three}) == 3
+    assert one[:12] != two[:12]
+
+
+def test_message_body_construction_matches_an_independent_hkdf_aesgcm_computation(env):
+    """Known-answer test: re-derive root, subkey and AAD with the library directly and decrypt the vault's output."""
+    vault = DemographicVault.from_env(env)
+    ids = _message_ids()
+    blob = vault.encrypt_message_body("known answer", key_version=2, **ids)
+    master = base64.b64decode(env["CAREFLOW_ENC_SECRET_V2"])
+    root = HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=b"careflow/message_body/root/v1").derive(master)
+    sub = HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=b"careflow/message_body/key/v1/" + str(ids["message_id"]).encode()).derive(root)
+    aad = b"careflow/message_body/v1/" + f"{ids['clinic_id']}/{ids['thread_id']}/{ids['message_id']}".encode()
+    assert AESGCM(sub).decrypt(blob[:12], blob[12:], aad) == b"known answer"
+    assert len(blob) == 12 + len(b"known answer") + 16
+
+
+def test_message_body_cannot_be_encrypted_or_decrypted_through_the_generic_field_api(vault):
+    ids = _message_ids()
+    with pytest.raises(ValueError):
+        vault.encrypt("x", field="message_body", key_version=1)
+    blob = vault.encrypt_message_body("x", key_version=1, **ids)
+    with pytest.raises(ValueError):
+        vault.decrypt(blob, field="message_body", key_version=1)
+
+
+def test_demographic_ciphertext_format_is_unchanged_by_message_support(env):
+    """Regression: name/dob/phone are still AES-256-GCM under the master key directly, with the old AAD."""
+    vault = DemographicVault.from_env(env)
+    blob = vault.encrypt("Asha Venkatesh", field="name", key_version=1)
+    master = base64.b64decode(env["CAREFLOW_ENC_SECRET_V1"])
+    assert AESGCM(master).decrypt(blob[:12], blob[12:], b"careflow/demographic/v1/name") == b"Asha Venkatesh"
+
+
+def test_the_message_root_is_not_the_master_and_is_not_exposed(env):
+    vault = DemographicVault.from_env(env)
+    master = base64.b64decode(env["CAREFLOW_ENC_SECRET_V1"])
+    assert master not in vault._msg_root.values()
+    assert master.hex() not in repr(vault) and "root" not in repr(vault)
