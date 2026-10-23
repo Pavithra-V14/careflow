@@ -911,7 +911,7 @@
     },
     "/v1/staff/merges": {
       "post": {
-        "description": "Step 1: propose linking the subordinate to the master (the caller signs). Not effective until a different front desk person approves.\n401 step-up required, 404 unknown clinic/patient, 403 not front desk there, 409 refused (one fixed body), 422 invalid input.",
+        "description": "Step 1: propose linking the subordinate to the master (the caller signs). Not effective until a different front desk person approves.\nSTEP-UP IMPLEMENTED, CLAIM SHAPE PENDING LIVE VERIFICATION (docs/design/step-up-spike.md).\n401 step-up required, 404 unknown clinic/patient, 403 not front desk there, 409 refused (one fixed body), 422 invalid input.",
         "operationId": "propose_merge_v1_staff_merges_post",
         "parameters": [
           {
@@ -974,7 +974,7 @@
     },
     "/v1/staff/merges/{merge_id}/approve": {
       "post": {
-        "description": "Step 2: a DIFFERENT front desk person confirms. The same person approving is refused with the one generic 409.",
+        "description": "Step 2: a DIFFERENT front desk person confirms. The same person approving is refused with the one generic 409.\nSTEP-UP IMPLEMENTED, CLAIM SHAPE PENDING LIVE VERIFICATION (docs/design/step-up-spike.md).",
         "operationId": "approve_merge_v1_staff_merges__merge_id__approve_post",
         "parameters": [
           {
@@ -1037,7 +1037,7 @@
     },
     "/v1/staff/merges/{merge_id}/unmerge": {
       "post": {
-        "description": "Break the link (one person). For a link that had been active this raises the nurse review task; cancelling a never-confirmed proposal raises none.",
+        "description": "Break the link (one person). For a link that had been active this raises the nurse review task; cancelling a never-confirmed proposal raises none.\nSTEP-UP IMPLEMENTED, CLAIM SHAPE PENDING LIVE VERIFICATION (docs/design/step-up-spike.md).",
         "operationId": "unmerge_v1_staff_merges__merge_id__unmerge_post",
         "parameters": [
           {

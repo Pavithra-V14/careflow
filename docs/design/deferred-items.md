@@ -41,6 +41,11 @@ one, delete its line in the same change. Source of the first group: the msg / ia
   role change when those routes exist.
 - **`STRONG_IDENTIFIERS` is reachable over HTTP** (`POST /v1/staff/patients`) and is pending Priya's sign-off; no real patient data
   until it is recorded.
+- **The merge-propose idempotency key is global, not per clinic** (`mpi.merges.idempotency_key` is unique across the table). A client
+  in clinic B that reuses a key clinic A used gets a 409, which is a small existence oracle for client-chosen keys across clinics.
+  Revisit with the portal design (per-clinic key scope or a server-derived prefix). `identity.py` is unchanged.
+- **An unmerge replay reports `decisions_flagged` as 0** instead of the original count (`identity.py` returns 0 on the replay path; the
+  review task itself is returned correctly). Revisit when `identity.py` is next changed.
 - **Staff message read route**: decrypts through `careflow/messages.py` only; adds its own role-matrix case in the same change.
 - **Application-level get-or-create for threads and messages** (`ON CONFLICT (idempotency_key) DO NOTHING`, then a keyed
   SELECT that compares thread, sender and clinic; a different key for the same patient and topic returns the existing

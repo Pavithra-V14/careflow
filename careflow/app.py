@@ -742,6 +742,7 @@ async def propose_merge(
     body: ProposeMergeIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)
 ) -> MergeOut:
     """Step 1: propose linking the subordinate to the master (the caller signs). Not effective until a different front desk person approves.
+    STEP-UP IMPLEMENTED, CLAIM SHAPE PENDING LIVE VERIFICATION (docs/design/step-up-spike.md).
     401 step-up required, 404 unknown clinic/patient, 403 not front desk there, 409 refused (one fixed body), 422 invalid input."""
     origin = await _front_desk_gate(conn, claims, body.clinic_id)
     with _identity_errors():
@@ -755,7 +756,8 @@ async def propose_merge(
 async def approve_merge(
     merge_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)
 ) -> MergeOut:
-    """Step 2: a DIFFERENT front desk person confirms. The same person approving is refused with the one generic 409."""
+    """Step 2: a DIFFERENT front desk person confirms. The same person approving is refused with the one generic 409.
+    STEP-UP IMPLEMENTED, CLAIM SHAPE PENDING LIVE VERIFICATION (docs/design/step-up-spike.md)."""
     clinic_id = await _merge_clinic(conn, merge_id)
     origin = await _front_desk_gate(conn, claims, clinic_id)
     with _identity_errors():
@@ -767,7 +769,8 @@ async def approve_merge(
 async def unmerge(
     merge_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)
 ) -> UnmergeOut:
-    """Break the link (one person). For a link that had been active this raises the nurse review task; cancelling a never-confirmed proposal raises none."""
+    """Break the link (one person). For a link that had been active this raises the nurse review task; cancelling a never-confirmed proposal raises none.
+    STEP-UP IMPLEMENTED, CLAIM SHAPE PENDING LIVE VERIFICATION (docs/design/step-up-spike.md)."""
     clinic_id = await _merge_clinic(conn, merge_id)
     origin = await _front_desk_gate(conn, claims, clinic_id)
     with _identity_errors():

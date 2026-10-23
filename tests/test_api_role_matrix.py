@@ -572,7 +572,7 @@ APPROVE, UNMERGE = MERGES + "/{merge_id}/approve", MERGES + "/{merge_id}/unmerge
 MERGE_KEYS = {"merge_id", "status", "master_patient_id", "subordinate_patient_id", "replayed"}
 
 
-def _totp(seconds_ago: int = 5) -> list:
+def _totp(seconds_ago: int = 30) -> list:
     return [{"method": "totp", "timestamp": int(time.time()) - seconds_ago}]
 
 
@@ -646,6 +646,19 @@ def new_merge(ids, state="awaiting"):
     return _run(_owner(make))
 
 
+FIXED_BODY = {
+    401: {"detail": "step-up required"}, 403: {"detail": "your role may not do this"}, 404: {"detail": "not found"},
+}
+
+
+def _fixed(status):
+    """The exact fixed refusal body for a status; a 422 is the app-wide handler's list of {type, loc, msg} with no echoed input."""
+    if status == 422:
+        return lambda b: (isinstance(b.get("detail"), list) and set(b) == {"detail"}
+                          and all(set(e) == {"type", "loc", "msg"} for e in b["detail"]))
+    return lambda b: b == FIXED_BODY[status]
+
+
 def _merge_body(merge_id=None, status=None, **expect):
     def check(b):
         return (set(b) == MERGE_KEYS and (merge_id is None or b["merge_id"] == str(merge_id)) and (status is None or b["status"] == status)
@@ -660,16 +673,16 @@ def _everyone_at_the_gate(ids, make_path, make_json, status_for, default):
     for p in people:
         sub = ids.no_account if p == "no account" else ids.people[p][0]
         if p != "front_desk_a":
-            cases.append(_case(ids, f"{p} with a second factor is refused", stepped(sub), status_for.get(p, default), make_path(), json=make_json()))
-        for label, headers in not_stepped_variants(sub)[:2]:
-            cases.append(_case(ids, f"{p} with {label} is told to step up", headers, 401, make_path(), json=make_json(),
-                               body=lambda b: b == {"detail": "step-up required"}))
+            status = status_for.get(p, default)
+            cases.append(_case(ids, f"{p} with a second factor is refused", stepped(sub), status, make_path(), json=make_json(), body=_fixed(status)))
+        for label, headers in not_stepped_variants(sub):
+            cases.append(_case(ids, f"{p} with {label} is told to step up", headers, 401, make_path(), json=make_json(), body=_fixed(401)))
     return cases
 
 
 def _not_stepped_cases(ids, make_path, make_json, who="front_desk_a"):
     sub = ids.people[who][0]
-    return [_case(ids, f"{who} with {label} is told to step up", headers, 401, make_path(), json=make_json(), body=lambda b: b == {"detail": "step-up required"})
+    return [_case(ids, f"{who} with {label} is told to step up", headers, 401, make_path(), json=make_json(), body=_fixed(401))
             for label, headers in not_stepped_variants(sub)]
 
 
@@ -697,13 +710,14 @@ def merge_propose_cases(ids) -> list[tuple]:
         _case(ids, "a record cannot be merged into itself", fd, 409, MERGES, json=body(m4, m4), body=lambda b: b == {"detail": "this merge cannot be carried out"}),
         _case(ids, "a patient of another clinic is simply not found", fd, 404, MERGES, json=body(m4, ids.patient_b), body=lambda b: b == {"detail": "not found"}),
         _case(ids, "a patient that does not exist gives the identical answer", fd, 404, MERGES, json=body(m4, uuid.uuid4()), body=lambda b: b == {"detail": "not found"}),
-        _case(ids, "an unknown clinic is not found", fd, 404, MERGES, json=body(m4, s4, clinic_id=str(uuid.uuid4()))),
-        _case(ids, "front desk of ANOTHER clinic cannot propose here", stepped(ids.people["front_desk_b"][0]), 404, MERGES, json=body(m4, s4)),
-        _case(ids, "missing X-Idempotency-Key is rejected", fd, 422, MERGES, json=body(m4, s4), key=None),
-        _case(ids, "blank X-Idempotency-Key is rejected", fd, 422, MERGES, json=body(m4, s4), key="   "),
-        _case(ids, "a patient id that is not a uuid is rejected", fd, 422, MERGES, json=body(m4, "nope")),
-        _case(ids, "a client-supplied origin is an unknown field", fd, 422, MERGES, json=body(m4, s4, origin="live")),
-        _case(ids, "an empty body is rejected", fd, 422, MERGES, json={}),
+        _case(ids, "an unknown clinic is not found", fd, 404, MERGES, json=body(m4, s4, clinic_id=str(uuid.uuid4())), body=_fixed(404)),
+        _case(ids, "front desk of ANOTHER clinic cannot propose here", stepped(ids.people["front_desk_b"][0]), 404, MERGES, json=body(m4, s4),
+              body=_fixed(404)),
+        _case(ids, "missing X-Idempotency-Key is rejected", fd, 422, MERGES, json=body(m4, s4), key=None, body=_fixed(422)),
+        _case(ids, "blank X-Idempotency-Key is rejected", fd, 422, MERGES, json=body(m4, s4), key="   ", body=_fixed(422)),
+        _case(ids, "a patient id that is not a uuid is rejected", fd, 422, MERGES, json=body(m4, "nope"), body=_fixed(422)),
+        _case(ids, "a client-supplied origin is an unknown field", fd, 422, MERGES, json=body(m4, s4, origin="live"), body=_fixed(422)),
+        _case(ids, "an empty body is rejected", fd, 422, MERGES, json={}, body=_fixed(422)),
     ]
     cases += _everyone_at_the_gate(ids, lambda: MERGES, lambda: body(mr, sr), visible_but_not_front_desk, 404)
     cases += _not_stepped_cases(ids, lambda: MERGES, lambda: body(mr, sr))
@@ -729,9 +743,9 @@ def merge_approve_cases(ids) -> list[tuple]:
               body=lambda b: b == {"detail": "this merge cannot be carried out"}),
         _case(ids, "an unknown merge is not found", fd2, 404, path(uuid.uuid4()), body=not_found),
         _case(ids, "front desk of ANOTHER clinic cannot even see the merge", stepped(ids.people["front_desk_b"][0]), 404, path(own), body=not_found),
-        _case(ids, "missing X-Idempotency-Key is rejected", fd2, 422, path(own), key=None),
-        _case(ids, "blank X-Idempotency-Key is rejected", fd2, 422, path(own), key="   "),
-        _case(ids, "a merge id that is not a uuid is rejected", fd2, 422, path("nope")),
+        _case(ids, "missing X-Idempotency-Key is rejected", fd2, 422, path(own), key=None, body=_fixed(422)),
+        _case(ids, "blank X-Idempotency-Key is rejected", fd2, 422, path(own), key="   ", body=_fixed(422)),
+        _case(ids, "a merge id that is not a uuid is rejected", fd2, 422, path("nope"), body=_fixed(422)),
     ]
     cases += _everyone_at_the_gate(ids, lambda: path(refused), lambda: None, visible_but_not_front_desk, 404)
     cases += _not_stepped_cases(ids, lambda: path(refused), lambda: None)
@@ -766,10 +780,11 @@ def merge_unmerge_cases(ids) -> list[tuple]:
         _case(ids, "unmerging again under a new key is refused", fd, 409, path(active), body=lambda b: b == {"detail": "this merge is not in a state that allows that"}),
         _case(ids, "cancelling a never-confirmed proposal raises no task", fd2, 200, path(awaiting), body=unmerged(False, False)),
         _case(ids, "an unknown merge is not found", fd, 404, path(uuid.uuid4()), body=lambda b: b == {"detail": "not found"}),
-        _case(ids, "front desk of ANOTHER clinic cannot even see the merge", stepped(ids.people["front_desk_b"][0]), 404, path(refused)),
-        _case(ids, "missing X-Idempotency-Key is rejected", fd, 422, path(refused), key=None),
-        _case(ids, "blank X-Idempotency-Key is rejected", fd, 422, path(refused), key="   "),
-        _case(ids, "a merge id that is not a uuid is rejected", fd, 422, path("nope")),
+        _case(ids, "front desk of ANOTHER clinic cannot even see the merge", stepped(ids.people["front_desk_b"][0]), 404, path(refused),
+              body=_fixed(404)),
+        _case(ids, "missing X-Idempotency-Key is rejected", fd, 422, path(refused), key=None, body=_fixed(422)),
+        _case(ids, "blank X-Idempotency-Key is rejected", fd, 422, path(refused), key="   ", body=_fixed(422)),
+        _case(ids, "a merge id that is not a uuid is rejected", fd, 422, path("nope"), body=_fixed(422)),
     ]
     cases += _everyone_at_the_gate(ids, lambda: path(refused), lambda: None, visible_but_not_front_desk, 404)
     cases += _not_stepped_cases(ids, lambda: path(refused), lambda: None)
