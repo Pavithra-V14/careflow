@@ -1,0 +1,1160 @@
+{
+  "components": {
+    "schemas": {
+      "BookIn": {
+        "additionalProperties": false,
+        "properties": {
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "patient_id"
+        ],
+        "title": "BookIn",
+        "type": "object"
+      },
+      "BookOut": {
+        "additionalProperties": false,
+        "properties": {
+          "booking_id": {
+            "format": "uuid",
+            "title": "Booking Id",
+            "type": "string"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "slot_id": {
+            "format": "uuid",
+            "title": "Slot Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "booking_id",
+          "slot_id",
+          "patient_id",
+          "status",
+          "replayed"
+        ],
+        "title": "BookOut",
+        "type": "object"
+      },
+      "BookingList": {
+        "additionalProperties": false,
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BookingOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "limit",
+          "has_more"
+        ],
+        "title": "BookingList",
+        "type": "object"
+      },
+      "BookingOut": {
+        "additionalProperties": false,
+        "properties": {
+          "booking_id": {
+            "format": "uuid",
+            "title": "Booking Id",
+            "type": "string"
+          },
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "ends_at": {
+            "format": "date-time",
+            "title": "Ends At",
+            "type": "string"
+          },
+          "location_id": {
+            "format": "uuid",
+            "title": "Location Id",
+            "type": "string"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "provider_id": {
+            "format": "uuid",
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "slot_id": {
+            "format": "uuid",
+            "title": "Slot Id",
+            "type": "string"
+          },
+          "starts_at": {
+            "format": "date-time",
+            "title": "Starts At",
+            "type": "string"
+          },
+          "visit_type_id": {
+            "format": "uuid",
+            "title": "Visit Type Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "booking_id",
+          "clinic_id",
+          "slot_id",
+          "patient_id",
+          "provider_id",
+          "location_id",
+          "visit_type_id",
+          "starts_at",
+          "ends_at",
+          "created_at"
+        ],
+        "title": "BookingOut",
+        "type": "object"
+      },
+      "CancelOut": {
+        "additionalProperties": false,
+        "properties": {
+          "booking_id": {
+            "format": "uuid",
+            "title": "Booking Id",
+            "type": "string"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateOut"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "slot_id": {
+            "format": "uuid",
+            "title": "Slot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "booking_id",
+          "slot_id",
+          "candidates",
+          "replayed"
+        ],
+        "title": "CancelOut",
+        "type": "object"
+      },
+      "CandidateOut": {
+        "additionalProperties": false,
+        "properties": {
+          "joined_at": {
+            "format": "date-time",
+            "title": "Joined At",
+            "type": "string"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "priority_code": {
+            "title": "Priority Code",
+            "type": "string"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "waitlist_id": {
+            "format": "uuid",
+            "title": "Waitlist Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "waitlist_id",
+          "patient_id",
+          "priority_code",
+          "rank",
+          "joined_at"
+        ],
+        "title": "CandidateOut",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HoldIn": {
+        "additionalProperties": false,
+        "properties": {
+          "duration_minutes": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1000000.0,
+            "title": "Duration Minutes",
+            "type": "integer"
+          },
+          "patient_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Id"
+          }
+        },
+        "required": [
+          "duration_minutes"
+        ],
+        "title": "HoldIn",
+        "type": "object"
+      },
+      "HoldOut": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "hold_id": {
+            "format": "uuid",
+            "title": "Hold Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "slot_id": {
+            "format": "uuid",
+            "title": "Slot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "hold_id",
+          "slot_id",
+          "expires_at",
+          "replayed"
+        ],
+        "title": "HoldOut",
+        "type": "object"
+      },
+      "Me": {
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "account_type": {
+            "title": "Account Type",
+            "type": "string"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/RoleGrant"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_id",
+          "account_type",
+          "status",
+          "roles"
+        ],
+        "title": "Me",
+        "type": "object"
+      },
+      "RoleGrant": {
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "role"
+        ],
+        "title": "RoleGrant",
+        "type": "object"
+      },
+      "SlotList": {
+        "additionalProperties": false,
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SlotOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "limit",
+          "has_more"
+        ],
+        "title": "SlotList",
+        "type": "object"
+      },
+      "SlotOut": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "ends_at": {
+            "format": "date-time",
+            "title": "Ends At",
+            "type": "string"
+          },
+          "hold_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hold Expires At"
+          },
+          "location_id": {
+            "format": "uuid",
+            "title": "Location Id",
+            "type": "string"
+          },
+          "provider_id": {
+            "format": "uuid",
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "slot_id": {
+            "format": "uuid",
+            "title": "Slot Id",
+            "type": "string"
+          },
+          "starts_at": {
+            "format": "date-time",
+            "title": "Starts At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "held"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "visit_type_id": {
+            "format": "uuid",
+            "title": "Visit Type Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slot_id",
+          "clinic_id",
+          "provider_id",
+          "location_id",
+          "visit_type_id",
+          "starts_at",
+          "ends_at",
+          "status",
+          "hold_expires_at"
+        ],
+        "title": "SlotOut",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "WaitlistEntryOut": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "clinical_priority": {
+            "title": "Clinical Priority",
+            "type": "string"
+          },
+          "joined_at": {
+            "format": "date-time",
+            "title": "Joined At",
+            "type": "string"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "visit_type_id": {
+            "format": "uuid",
+            "title": "Visit Type Id",
+            "type": "string"
+          },
+          "waitlist_id": {
+            "format": "uuid",
+            "title": "Waitlist Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "waitlist_id",
+          "clinic_id",
+          "patient_id",
+          "visit_type_id",
+          "clinical_priority",
+          "rank",
+          "joined_at"
+        ],
+        "title": "WaitlistEntryOut",
+        "type": "object"
+      },
+      "WaitlistJoinIn": {
+        "additionalProperties": false,
+        "properties": {
+          "clinical_priority": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Clinical Priority",
+            "type": "string"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "visit_type_id": {
+            "format": "uuid",
+            "title": "Visit Type Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "patient_id",
+          "visit_type_id",
+          "clinical_priority"
+        ],
+        "title": "WaitlistJoinIn",
+        "type": "object"
+      },
+      "WaitlistJoinOut": {
+        "additionalProperties": false,
+        "properties": {
+          "clinical_priority": {
+            "title": "Clinical Priority",
+            "type": "string"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "visit_type_id": {
+            "format": "uuid",
+            "title": "Visit Type Id",
+            "type": "string"
+          },
+          "waitlist_id": {
+            "format": "uuid",
+            "title": "Waitlist Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "waitlist_id",
+          "patient_id",
+          "visit_type_id",
+          "clinical_priority",
+          "replayed"
+        ],
+        "title": "WaitlistJoinOut",
+        "type": "object"
+      },
+      "WaitlistList": {
+        "additionalProperties": false,
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WaitlistEntryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "limit",
+          "has_more"
+        ],
+        "title": "WaitlistList",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "title": "CareFlow",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/v1/iam/me": {
+      "get": {
+        "description": "The caller's own active profile: account type, status, and live staff role grants.\n\nA valid token alone is not enough: the caller needs an ACTIVE row in iam.accounts. A person who signed\nup with Supabase Auth but has no account here (or whose account is invited, suspended or closed) gets\nthe same 403, and learns nothing about which case it was.",
+        "operationId": "me_v1_iam_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Me"
+      }
+    },
+    "/v1/staff/scheduling/bookings": {
+      "get": {
+        "description": "Confirmed bookings, soonest appointment first.",
+        "operationId": "list_bookings_v1_staff_scheduling_bookings_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookingList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Bookings",
+        "tags": [
+          "staff scheduling"
+        ]
+      }
+    },
+    "/v1/staff/scheduling/bookings/{booking_id}/cancel": {
+      "post": {
+        "description": "Cancel a booking, free its slot, and return the ranked waitlist candidates. Nobody is contacted or booked.",
+        "operationId": "cancel_booking_v1_staff_scheduling_bookings__booking_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "booking_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Booking Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CancelOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Cancel Booking",
+        "tags": [
+          "staff scheduling"
+        ]
+      }
+    },
+    "/v1/staff/scheduling/slots": {
+      "get": {
+        "description": "Open and held slots, soonest first, optionally for one provider and/or location.",
+        "operationId": "list_slots_v1_staff_scheduling_slots_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "provider_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Provider Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "location_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Location Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "starts_after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Starts After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SlotList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Slots",
+        "tags": [
+          "staff scheduling"
+        ]
+      }
+    },
+    "/v1/staff/scheduling/slots/{slot_id}/book": {
+      "post": {
+        "description": "Book an open slot (or one held for this patient) for `patient_id`. 409 if the slot is taken.",
+        "operationId": "book_slot_v1_staff_scheduling_slots__slot_id__book_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slot_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Slot Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BookIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Book Slot",
+        "tags": [
+          "staff scheduling"
+        ]
+      }
+    },
+    "/v1/staff/scheduling/slots/{slot_id}/hold": {
+      "post": {
+        "description": "Hold an open slot for `duration_minutes`. 409 if it is held, booked or cancelled.",
+        "operationId": "hold_slot_v1_staff_scheduling_slots__slot_id__hold_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slot_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Slot Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HoldIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Hold Slot",
+        "tags": [
+          "staff scheduling"
+        ]
+      }
+    },
+    "/v1/staff/scheduling/waitlist": {
+      "get": {
+        "description": "The waiting queue, clinical priority first and join time second, optionally for one visit type.",
+        "operationId": "list_waitlist_v1_staff_scheduling_waitlist_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "visit_type_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Visit Type Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaitlistList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Waitlist",
+        "tags": [
+          "staff scheduling"
+        ]
+      }
+    },
+    "/v1/staff/scheduling/waitlist/join": {
+      "post": {
+        "description": "Queue a patient for a visit type at a clinician-defined priority level. 409 if already waiting.",
+        "operationId": "join_waitlist_v1_staff_scheduling_waitlist_join_post",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WaitlistJoinIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaitlistJoinOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Join Waitlist",
+        "tags": [
+          "staff scheduling"
+        ]
+      }
+    }
+  }
+}

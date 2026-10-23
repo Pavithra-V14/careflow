@@ -89,6 +89,9 @@ jobs:
       - name: Lint
         run: uv run ruff check careflow tests
 
+      - name: OpenAPI snapshot is current (BUILD-SPEC.md §21)
+        run: uv run python scripts/export_openapi.py --check
+
       - name: Apply migrations to the CI project
         run: uv run python -m careflow.migrate
 
