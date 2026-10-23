@@ -447,6 +447,48 @@
         "title": "MergeOut",
         "type": "object"
       },
+      "MessageReadOut": {
+        "additionalProperties": false,
+        "description": "The only response in the API that carries message text: authorised staff only, never cached.",
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "message_id": {
+            "format": "uuid",
+            "title": "Message Id",
+            "type": "string"
+          },
+          "sender_kind": {
+            "title": "Sender Kind",
+            "type": "string"
+          },
+          "thread_id": {
+            "format": "uuid",
+            "title": "Thread Id",
+            "type": "string"
+          },
+          "topic": {
+            "enum": [
+              "care",
+              "appointments",
+              "safety"
+            ],
+            "title": "Topic",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message_id",
+          "thread_id",
+          "topic",
+          "sender_kind",
+          "body"
+        ],
+        "title": "MessageReadOut",
+        "type": "object"
+      },
       "ProposeMergeIn": {
         "additionalProperties": false,
         "properties": {
@@ -1095,6 +1137,55 @@
         "summary": "Unmerge",
         "tags": [
           "staff merges"
+        ]
+      }
+    },
+    "/v1/staff/messages/{message_id}": {
+      "get": {
+        "description": "Read one message (and audit the read). 404 if you cannot see it, 410 if its body was erased, 503/500 (fixed bodies) if it cannot be\ndecrypted. The body goes only to an authorised staff caller and is never cached.",
+        "operationId": "read_message_v1_staff_messages__message_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Message Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageReadOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read Message",
+        "tags": [
+          "staff messages"
         ]
       }
     },

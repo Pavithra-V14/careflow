@@ -25,16 +25,19 @@ suite against the CI Supabase project as `careflow_app`, with zero skips allowed
   tokens, key rotation (runbook in `docs/runbooks/key_rotation.md`), two-person merge and unmerge, the red-flag rule
   engine (mechanism only), the Postgres queue and outbox.
 - Routes that exist: `GET /v1/iam/me`, `/v1/staff/scheduling/*`, `POST /v1/staff/messages/{id}/screen`,
-  `POST /v1/staff/patients` (registration / identity resolution) and the merge routes `POST /v1/staff/merges`,
-  `/v1/staff/merges/{id}/approve` and `/v1/staff/merges/{id}/unmerge`. Every route has role-matrix coverage (the screening
-  route's is in a documented separate harness, `docs/design/role-matrix-exceptions.md`).
+  `POST /v1/staff/patients` (registration / identity resolution), the merge routes `POST /v1/staff/merges`,
+  `/v1/staff/merges/{id}/approve` and `/v1/staff/merges/{id}/unmerge`, and `GET /v1/staff/messages/{id}` (the staff message
+  read: decrypted only through `careflow/messages.py`, one audit row per successful read, `Cache-Control: no-store`; nurse and
+  doctor read every topic, front desk appointments and safety, nobody else). Every route has role-matrix coverage; the screening
+  route's is in a documented separate harness and the read route's in a documented split harness
+  (`docs/design/role-matrix-exceptions.md`).
 - Built since: migrations 0011 to 0013 (encrypted message bodies, patient account binding, screenings).
 - **Merge routes: step-up implemented, claim shape pending live verification.** They need a recently verified second factor
   (`CAREFLOW_STEP_UP_MAX_AGE_SECONDS`, required; 503 while unset). The token claim shape it reads has not been checked against
   a real token: see [`docs/design/step-up-spike.md`](docs/design/step-up-spike.md) for the spike the owner must run.
 - **`STRONG_IDENTIFIERS` is reachable over HTTP** through `POST /v1/staff/patients`, and it is still **pending sign-off by Priya**
   (Health-information lead). **Do not use real patient data until that sign-off is recorded.**
-- Not built yet: the staff message read route; the `iam` consent, activation and grievance tables; the minimal patient portal
+- Not built yet: the `iam` consent, activation and grievance tables; the minimal patient portal
   (no frontend exists).
 - Queue and outbox stay in-process: no HTTP routes for claim, acknowledge or dead-letter, and no `/internal` auth
   until the Phase 2 worker proposal (short-lived signed token per job, §18.4) is decided.

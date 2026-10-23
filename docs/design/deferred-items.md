@@ -46,7 +46,11 @@ one, delete its line in the same change. Source of the first group: the msg / ia
   Revisit with the portal design (per-clinic key scope or a server-derived prefix). `identity.py` is unchanged.
 - **An unmerge replay reports `decisions_flagged` as 0** instead of the original count (`identity.py` returns 0 on the replay path; the
   review task itself is returned correctly). Revisit when `identity.py` is next changed.
-- **Staff message read route**: decrypts through `careflow/messages.py` only; adds its own role-matrix case in the same change.
+- **Denied-access monitoring** (Phase 4 watchdog): repeated refused message reads by one actor. Refused reads (404/410) write no
+  audit row by decision; the route logs one line of ids only (message, actor, status), which is what the watchdog would count.
+- **Message read route, still open**: messages on the subordinate of an active merge are read by their own id (no routing to the
+  master yet); no list endpoint; no step-up (not listed in BUILD-SPEC 18.1). Admin, business owner and auditor have no read access to
+  message bodies by decision (the spec's "admin-only, every view audited" is about LLM prompt/response bodies).
 - **Application-level get-or-create for threads and messages** (`ON CONFLICT (idempotency_key) DO NOTHING`, then a keyed
   SELECT that compares thread, sender and clinic; a different key for the same patient and topic returns the existing
   thread; a message-id collision is an error): arrives with the route that writes them. The database half is tested.

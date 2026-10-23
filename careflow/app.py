@@ -33,7 +33,16 @@ from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+)
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -55,6 +64,8 @@ from careflow.db import make_app_engine, set_request_claims
 from careflow.messages import (
     MessageErased,
     MessageNotFound,
+    MessageUnreadable,
+    read_stored_message,
     screen_stored_message,
 )
 from careflow.mpi import PatientIngestionPipeline
@@ -545,6 +556,61 @@ async def screen_message(message_id: uuid.UUID, idempotency_key: IdempotencyKey,
             r.message_id, r.clinic_id, r.unreadable_reason,
         )
     return ScreenOut(message_id=r.message_id, screening_id=r.screening_id, outcome=r.outcome, replayed=r.replayed, patient_reply=r.patient_reply)  # type: ignore[arg-type]
+
+
+# ---- staff message read: GET /v1/staff/messages/{message_id} (BUILD-SPEC.md 9.4 audit principle; CLAUDE.md rules 5, 6, 8) -------------------
+#
+# Reading a decrypted message is a patient-data access. Who may read is decided by row-level security on msg.messages: nurse and doctor read
+# every topic, front desk reads appointments and safety, and every other role, every inactive account and every other clinic get the SAME
+# fixed 404 as a message that does not exist. Admin, business owner and auditor get no read access to message bodies.
+# The body is decrypted ONLY inside careflow.messages.read_stored_message, which also writes the `audit.log` row (ids only, key
+# `message-read:<uuid4>`) in this request's transaction BEFORE anything is returned: a body is never handed out without its audit row, and
+# commit-before-response (TxConn) makes a 200 mean the row is durable. Refused reads write no audit row; they log one line with ids only
+# (denied-access monitoring is a deferred Phase 4 watchdog item). The response is `Cache-Control: no-store`; the body is never logged and
+# never in an error. An erased message is 410 for a caller who can see it. A GET carries no X-Idempotency-Key: the audit key is server-made.
+
+
+class MessageReadOut(_Out):
+    """The only response in the API that carries message text: authorised staff only, never cached."""
+
+    message_id: uuid.UUID
+    thread_id: uuid.UUID
+    topic: Literal["care", "appointments", "safety"]
+    sender_kind: str
+    body: str
+
+
+@staff_messages.get("/{message_id}", response_model=MessageReadOut)
+async def read_message(
+    message_id: uuid.UUID, conn: TxConn, request: Request, response: Response, claims: dict[str, Any] = Depends(verified_claims)
+) -> MessageReadOut:
+    """Read one message (and audit the read). 404 if you cannot see it, 410 if its body was erased, 503/500 (fixed bodies) if it cannot be
+    decrypted. The body goes only to an authorised staff caller and is never cached."""
+    vault: DemographicVault | None = request.app.state.vault
+    if vault is None:
+        log.error("message reading is unavailable: no encryption keys are configured (deployment fault)")
+        raise HTTPException(status_code=503, detail="message reading is unavailable: encryption keys are not configured")
+    actor = uuid.UUID(claims["sub"])
+    try:
+        m = await read_stored_message(conn, vault, message_id, actor_id=actor)
+    except MessageNotFound:
+        log.warning("message read refused (message=%s actor=%s status=404)", message_id, actor)
+        raise HTTPException(status_code=404, detail="not found") from None
+    except MessageErased:
+        log.info("message read refused (message=%s actor=%s status=410)", message_id, actor)
+        raise HTTPException(status_code=410, detail="the message body was erased") from None
+    except MessageUnreadable as exc:
+        missing_key = exc.reason == "UnknownKeyVersionError"
+        log.log(
+            logging.ERROR if missing_key else logging.WARNING,
+            "stored message body could not be read (message=%s clinic=%s actor=%s error=%s)", exc.message_id, exc.clinic_id, actor, exc.reason,
+        )
+        if missing_key:
+            raise HTTPException(status_code=503, detail="this message cannot be read right now") from None
+        raise HTTPException(status_code=500, detail="this message cannot be read") from None
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    return MessageReadOut(message_id=m.message_id, thread_id=m.thread_id, topic=m.topic, sender_kind=m.sender_kind, body=m.body)  # type: ignore[arg-type]
 
 
 # ---- staff patients: registration / identity resolution (BUILD-SPEC.md §17.2, §12.1; CLAUDE.md rules 5, 6, 7, 8) ----------------------------

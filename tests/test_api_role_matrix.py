@@ -791,6 +791,28 @@ def merge_unmerge_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(refused), None)
 
 
+# ---- GET /v1/staff/messages/{message_id}: staff message read (D4), the COMMITTED half of a split matrix ----------------------------------
+#
+# Reading needs stored messages, and msg.messages / msg.threads are append-only for every role, so a committed fixture could never be cleaned
+# up. This route is therefore tested in TWO halves (SPLIT_HARNESS below): THIS half runs on the real pooler role with real commits and covers
+# everything that needs no stored message: every identity asking for a message that does not exist, authentication failures, a malformed id,
+# and that a refused read writes NO audit row. The topic-dependent paths (who may read which topic, the audit row of each 200, an erased,
+# tampered or unreadable body) are in tests/test_api_read_message_live.py. Documented in docs/design/role-matrix-exceptions.md.
+
+READ = "/v1/staff/messages/{message_id}"
+
+
+def message_read_cases(ids) -> list[tuple]:
+    path = lambda: READ.format(message_id=uuid.uuid4())
+    cases = []
+    for p in [*ids.people, "no account"]:
+        sub_ = ids.no_account if p == "no account" else ids.people[p][0]
+        cases.append(_case(ids, f"{p} asking for a message that does not exist gets the one fixed 404", bearer(mint(sub_)), 404, path(), key=None,
+                           body=_fixed(404)))
+    cases.append(_case(ids, "a message id that is not a uuid is rejected", "front_desk_a", 422, READ.format(message_id="nope"), key=None, body=_fixed(422)))
+    return cases + _unauthenticated(ids, path(), None)
+
+
 # One entry per route: add the new route's cases here in the same change that adds the route.
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
@@ -805,6 +827,7 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", MERGES): merge_propose_cases,
     ("POST", APPROVE): merge_approve_cases,
     ("POST", UNMERGE): merge_unmerge_cases,
+    ("GET", READ): message_read_cases,
 }
 
 
@@ -820,6 +843,14 @@ SEPARATE_HARNESS: dict[tuple[str, str], str] = {
 }
 
 
+# Routes tested in TWO halves: their refusal paths that need no stored message are in MATRIX above (committed, real pooler role), and their
+# topic-dependent paths are in a dedicated never-committed module because they read append-only msg rows. Unlike SEPARATE_HARNESS, a split
+# route MUST also be in MATRIX, and the dedicated half must cover every required role on every topic.
+SPLIT_HARNESS: dict[tuple[str, str], str] = {
+    ("GET", READ): "test_api_read_message_live.py",
+}
+
+
 def test_every_route_is_in_the_matrix(app):
     """Rule 8: a route with no role-matrix case is not done."""
     # The generated OpenAPI document lists every served operation, including routers added by include_router.
@@ -827,6 +858,8 @@ def test_every_route_is_in_the_matrix(app):
     covered = set(MATRIX) | set(SEPARATE_HARNESS)
     assert served == covered, f"routes without a matrix case: {served - covered}; stale cases: {covered - served}"
     assert not set(MATRIX) & set(SEPARATE_HARNESS), "a route is either in MATRIX or in SEPARATE_HARNESS, not both"
+    assert set(SPLIT_HARNESS) <= set(MATRIX), "a split route needs its committed half in MATRIX"
+    assert not set(SPLIT_HARNESS) & set(SEPARATE_HARNESS), "a route is split or separately tested, not both"
 
 
 # Every kind of identity the main matrix covers must also be exercised by a separately tested route: each staff role, a nurse here who is a
@@ -851,6 +884,27 @@ def test_separately_tested_routes_have_a_dedicated_matrix_that_covers_them():
         assert parametrized and list(parametrized[0].args[1]) == list(roles), "the driving test must be parametrized over every covered role"
         for needed in ("test_authentication_comes_first_for_every_kind_of_bad_credential", "test_the_idempotency_key_and_the_path_are_validated",
                        "test_a_replay_with_the_same_key_returns_the_original_and_a_new_key_is_a_no_op_not_a_second_task"):
+            assert callable(getattr(module, needed, None)), f"{filename} no longer defines {needed}"
+
+
+def test_split_routes_have_both_halves_and_the_dedicated_half_covers_every_role_on_every_topic():
+    """Imports the dedicated module: it must export the grid it covers (every required role tried on all three topics), and the test that
+    drives the grid must be a real parametrized function over exactly those roles, so emptying or commenting out either half fails here."""
+    import importlib
+
+    for (method, path), filename in SPLIT_HARNESS.items():
+        assert (method, path) in MATRIX and callable(MATRIX[(method, path)]), "the committed half is missing"
+        module = importlib.import_module(f"tests.{filename.removesuffix('.py')}")
+        grid = module.COVERED_GRID[(method, path)]
+        assert REQUIRED_SEPARATE_ROLES <= set(grid), f"{filename} is missing roles: {REQUIRED_SEPARATE_ROLES - set(grid)}"
+        assert set(module.TOPICS) == {"care", "appointments", "safety"}
+        assert all(set(topics) == set(module.TOPICS) for topics in grid.values()), "every role must be tried on every topic"
+        driver = module.test_who_can_read_which_topic
+        parametrized = [m for m in getattr(driver, "pytestmark", []) if m.name == "parametrize"]
+        assert parametrized and list(parametrized[0].args[1]) == list(grid), "the driving test must be parametrized over every covered role"
+        for needed in ("test_every_successful_read_writes_exactly_one_audit_row_with_ids_only", "test_refused_reads_write_no_audit_row",
+                       "test_an_erased_message_is_410_for_those_who_can_see_it_and_404_for_those_who_cannot",
+                       "test_authentication_comes_first_for_every_kind_of_bad_credential"):
             assert callable(getattr(module, needed, None)), f"{filename} no longer defines {needed}"
 
 
@@ -1253,3 +1307,16 @@ def test_the_step_up_check_is_off_the_database_path_when_the_window_is_unset(ids
         r = _merge_post(c, stepped(ids.people["front_desk_a"][0]), MERGES,
                         {"clinic_id": str(ids.clinic_a), "master_patient_id": str(master), "subordinate_patient_id": str(sub)})
     assert (r.status_code, r.json()) == (503, {"detail": "step-up re-authentication is not configured"})
+
+
+# ---- message reads: the committed half's behaviour -----------------------------------------------------------------------------------------
+
+
+def test_refused_message_reads_write_no_audit_row(client, ids):
+    actors = [ids.people[p][0] for p in ("nurse_a", "doctor_a", "front_desk_a", "admin_a")] + [ids.no_account]
+    for who in ("nurse_a", "doctor_a", "front_desk_a", "admin_a"):
+        r = client.get(READ.format(message_id=uuid.uuid4()), headers=bearer(mint(ids.people[who][0])))
+        assert (r.status_code, r.json()) == (404, {"detail": "not found"}), who
+        assert "cache-control" not in r.headers
+    rows = _run(_fetch("select count(*) as n from audit.log where action = 'message.read' and actor_id = any($1)", actors))
+    assert rows[0]["n"] == 0
