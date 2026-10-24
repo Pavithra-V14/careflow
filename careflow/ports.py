@@ -110,6 +110,34 @@ class EmbeddingPort(Protocol):
 
 
 @dataclass(frozen=True)
+class VectorPoint:
+    """One protocol card in the vector index (BUILD-SPEC.md 10.2: one card = one retrieval unit; cards hold no patient data). The index is
+    disposable: Postgres is truth, and `version` is what the index was built from, checked again at the join (10.8)."""
+
+    card_id: str
+    version: int
+    vector: tuple[float, ...] = field(repr=False)
+    scope: dict[str, str] = field(default_factory=dict)  # deterministic metadata only; the only fields allowed to gate a query (10.7)
+
+
+@dataclass(frozen=True)
+class VectorHit:
+    card_id: str
+    version: int
+    similarity: float  # cosine, in [-1, 1]
+
+
+class VectorStorePort(Protocol):
+    """The card index (Qdrant). `scope` is a PRE-filter (10.7) and is required: a search with an empty scope raises rather than searching everything."""
+
+    async def upsert(self, points: list[VectorPoint]) -> None: ...
+
+    async def search(self, vector: tuple[float, ...], *, limit: int, scope: dict[str, str]) -> list[VectorHit]: ...
+
+    async def delete(self, card_ids: list[str]) -> None: ...
+
+
+@dataclass(frozen=True)
 class RerankRequest:
     query: str = field(repr=False)
     candidates: tuple[str, ...] = field(repr=False)

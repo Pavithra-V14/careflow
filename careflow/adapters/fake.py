@@ -27,6 +27,8 @@ from careflow.ports import (
     TranslationRequest,
     TranslationResult,
     Usage,
+    VectorHit,
+    VectorPoint,
 )
 
 
@@ -183,3 +185,35 @@ class FakeUpload(_Fake):
         await self._enter()
         self.objects.pop(path, None)
         self.deleted.append(path)
+
+
+class FakeVectorStore(_Fake):
+    """An in-memory card index: exact cosine, pre-filtered by scope. Stands in for Qdrant (no client, no network, no data)."""
+
+    def __init__(self, name: str = "fake-vector-store", **kw) -> None:
+        super().__init__(name, **kw)
+        self.points: dict[str, VectorPoint] = {}
+
+    async def upsert(self, points: list[VectorPoint]) -> None:
+        await self._enter()
+        for p in points:
+            self.points[p.card_id] = p
+
+    async def delete(self, card_ids: list[str]) -> None:
+        await self._enter()
+        for c in card_ids:
+            self.points.pop(c, None)
+
+    async def search(self, vector: tuple[float, ...], *, limit: int, scope: dict[str, str]) -> list[VectorHit]:
+        await self._enter()
+        if not scope:
+            raise ValueError("a vector search needs a scope (10.7): it never defaults to searching everything")
+        norm_q = math.sqrt(sum(x * x for x in vector)) or 1.0
+        hits = []
+        for p in self.points.values():
+            if any(p.scope.get(k) != v for k, v in scope.items()):
+                continue
+            norm_p = math.sqrt(sum(x * x for x in p.vector)) or 1.0
+            hits.append(VectorHit(p.card_id, p.version, sum(a * b for a, b in zip(vector, p.vector, strict=True)) / (norm_q * norm_p)))
+        hits.sort(key=lambda h: (-h.similarity, h.card_id))
+        return hits[:limit]
