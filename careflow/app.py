@@ -887,7 +887,9 @@ async def readyz(request: Request) -> JSONResponse:
                 rows = await load_registry(request.app.state.engine, account, origins=("live",))
             except (RegistryError, SQLAlchemyError) as exc:
                 log.warning("readiness: the model registry could not be read (error=%s)", type(exc).__name__)
-    result = check_readiness(profile, rows, required, wired=request.app.state.wired_adapters)
+    result = check_readiness(
+        profile, rows, required, wired=request.app.state.wired_adapters, malware_scanner_configured=request.app.state.malware_scanner_configured
+    )
     if not result.ready:
         log.warning("not ready (profile=%s missing_roles=%s reasons=%s)", result.profile, list(result.missing_roles), list(result.reasons))
     return JSONResponse({"ready": result.ready}, status_code=200 if result.ready else 503)
@@ -925,6 +927,7 @@ def create_app(
         app.state.required_roles = cfg.required_roles
         app.state.worker_account_id = cfg.worker_account_id
         app.state.wired_adapters = frozenset()  # (provider, model_id) pairs with a wired adapter: none yet
+        app.state.malware_scanner_configured = False  # nothing sets it: no scanner exists (BUILD-SPEC.md 11.5); clinical stays not ready
         app.state.poker = Poker()  # routes that enqueue call `app.state.poker.poke()` after their transaction commits (7.4)
         worker: asyncio.Task | None = None
         if cfg.run_worker:

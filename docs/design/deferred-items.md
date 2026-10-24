@@ -39,6 +39,12 @@ one, delete its line in the same change. Source of the first group: the msg / ia
   clinician-reviewed labels.
 - **Minute tick, immediate poke and the 12/25/40/40 s ceilings** (BUILD-SPEC 7.3, 7.4): moved to Phase 2 package P2-1 and built there
   (`careflow/budget.py`, `careflow/tick.py`). Still open: no route calls the poke after enqueueing, and no handler exists.
+- **Documents (P2-3)**: no HTTP routes yet (the signed-upload hand-out and the register call need `/v1/staff/documents/...` routes, each with its own
+  role-matrix case in the same change, when a console or the extraction worker consumes them); a periodic reconciliation of storage against
+  `docs.documents` (an object can be orphaned only if the caller's own transaction fails to commit after a successful insert); erasure of a
+  document (DPDP) is not designed; no `audit.log` row is written on registration; the real Supabase Storage adapter, its bucket policies on
+  `storage.objects`, and a malware scanner (a pre-launch blocker, `docs/design/uploads-supabase-storage.md`). Privacy decisions flagged to the owner:
+  front desk can read every document of its clinic (it keys referral facts in by hand without a model route), and a doctor can read but not register.
 - **Per-clinic daily spend**: persisted in `ops.spend_ledger` (migration 0016) and read per origin by `careflow.spend.PostgresSpendLedger`;
   the daily ceiling has no default and arrives by configuration (owner). Still open: a ledger cannot be corrected (append-only, no negative
   amounts), so a mistaken entry needs the migrator; a reversal mechanism is a later change. The gateway is not yet constructed with the Postgres
@@ -140,3 +146,22 @@ the **thread** row, not the message row, so key rotation can never stall an esca
   carry no real data, but they appear in any dev query that does not filter on origin.
 - `audit.log` is append-only for every role (including the table owner), so any `audit.log` rows written by tests or
   scripts against a database can never be cleaned up; keep audit-writing tests inside rolled-back transactions.
+
+## P2-7 referral to identity (added with careflow/referral.py)
+- Role split for escalate vs identity insert, and a review-task path for an unassessable document screening: see docs/design/p2-7-referral-identity.md.
+- No route yet (and so no role-matrix case yet); add both in the same change when the route is built.
+
+## From the P2-3/5/6/7 spec-compliance review (2026-10-24)
+- P2-3 TOCTOU: a signed upload URL stays valid up to 600 s after `begin()`. If Supabase signed uploads can OVERWRITE an existing object, bytes could change after the verified sha256 was recorded. Unspiked (not in Appendix B yet; the owner owns BUILD-SPEC.md, so it is listed here): spike the overwrite behaviour with a real call before the adapter exists; consider single-use paths, and a re-hash in P2-4 before extraction.
+- P2-3 readiness: the design said a clinical deployment without a scanner should report not-ready. Not built (the block is inside `DocumentIntake`, fail-closed, `scanner_configured` is set by nothing). Add the readiness check when the scanner or the route lands.
+- P2-3 route design: force `registered_by` to the caller's `auth.uid()`; otherwise `register()` could delete the object at the clinic-derived path on a 42501.
+- P2-5: the wiring package (P2-8) must read facts only through `rule_value()`/`usable_by_rules` (`GroundedFact.value` is readable directly); add an end-to-end gate then. Tier 2 offers two options (`supported`/`not_supported`), not accept/verify/reject.
+- P2-6: scope keys (clinic/status) are not enforced beyond non-empty; define them with the card schema. Re-verify scope at the join (Postgres truth does not take it yet). The BM25-only version check is fixed (16782ae).
+- P2-7: extractor data-flow entry and gateway data class when the extractor is wired.
+
+## Owner decisions of 2026-10-24 on those items
+- DONE: `DocumentIntake.read_verified` re-hashes (size and sha256) before any worker gets the bytes and refuses `ContentChanged` (covers the overwrite window). Every future reader of a document MUST go through it.
+- DONE: `check_readiness(..., malware_scanner_configured=False)`: clinical (and any unrecognised profile) is not ready without a scanner; `/readyz` passes `app.state.malware_scanner_configured`, which nothing sets.
+- STAYS on the future-route list: force `registered_by` to the caller's `auth.uid()`.
+- Appendix B now lists the signed-upload overwrite/validity spike (appended, no existing text changed).
+- Retrieval scope keys: wait for the card schema.

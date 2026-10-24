@@ -27,6 +27,8 @@ from careflow.ports import (
     TranslationRequest,
     TranslationResult,
     Usage,
+    VectorHit,
+    VectorPoint,
 )
 
 
@@ -143,3 +145,79 @@ class FakeSms(_FakeSink):
 
     async def send(self, to: str, body: str, *, idempotency_key: str) -> SendResult:
         return await self._record({"to": to, "body": body}, idempotency_key)
+
+
+class FakeUpload(_Fake):
+    """An in-memory object store behind `UploadPort`. `client_put` plays the BROWSER: it stores whatever it is given, at any path, with whatever
+    type it claims and no limit enforced (a hostile client), because the server must re-verify and never rely on a signature's limits."""
+
+    def __init__(self, name: str = "fake-upload", *, now=None) -> None:
+        super().__init__(name)
+        import datetime as dt
+
+        self._now = now or (lambda: dt.datetime.now(dt.UTC))
+        self.objects: dict[str, tuple[bytes, str]] = {}
+        self.deleted: list[str] = []
+        self.signed: list[dict] = []
+
+    def client_put(self, path: str, content: bytes, content_type: str) -> None:
+        self.objects[path] = (content, content_type)
+
+    async def create_signed_upload(self, *, path: str, content_type: str, max_bytes: int, expires_in_seconds: int):
+        import datetime as dt
+
+        from careflow.ports import SignedUpload
+
+        await self._enter()
+        self.signed.append({"path": path, "content_type": content_type, "max_bytes": max_bytes, "expires_in_seconds": expires_in_seconds})
+        return SignedUpload(f"fake://upload/{path}", path, self._now() + dt.timedelta(seconds=expires_in_seconds))
+
+    async def describe(self, path: str):
+        from careflow.ports import StoredObject
+
+        await self._enter()
+        if path not in self.objects:
+            return None
+        content, ctype = self.objects[path]
+        return StoredObject(path, len(content), ctype, content[:16], hashlib.sha256(content).hexdigest())
+
+    async def read(self, path: str):
+        await self._enter()
+        return self.objects[path][0] if path in self.objects else None
+
+    async def delete(self, path: str) -> None:
+        await self._enter()
+        self.objects.pop(path, None)
+        self.deleted.append(path)
+
+
+class FakeVectorStore(_Fake):
+    """An in-memory card index: exact cosine, pre-filtered by scope. Stands in for Qdrant (no client, no network, no data)."""
+
+    def __init__(self, name: str = "fake-vector-store", **kw) -> None:
+        super().__init__(name, **kw)
+        self.points: dict[str, VectorPoint] = {}
+
+    async def upsert(self, points: list[VectorPoint]) -> None:
+        await self._enter()
+        for p in points:
+            self.points[p.card_id] = p
+
+    async def delete(self, card_ids: list[str]) -> None:
+        await self._enter()
+        for c in card_ids:
+            self.points.pop(c, None)
+
+    async def search(self, vector: tuple[float, ...], *, limit: int, scope: dict[str, str]) -> list[VectorHit]:
+        await self._enter()
+        if not scope:
+            raise ValueError("a vector search needs a scope (10.7): it never defaults to searching everything")
+        norm_q = math.sqrt(sum(x * x for x in vector)) or 1.0
+        hits = []
+        for p in self.points.values():
+            if any(p.scope.get(k) != v for k, v in scope.items()):
+                continue
+            norm_p = math.sqrt(sum(x * x for x in p.vector)) or 1.0
+            hits.append(VectorHit(p.card_id, p.version, sum(a * b for a, b in zip(vector, p.vector, strict=True)) / (norm_q * norm_p)))
+        hits.sort(key=lambda h: (-h.similarity, h.card_id))
+        return hits[:limit]

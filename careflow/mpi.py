@@ -309,7 +309,7 @@ class PatientIngestionPipeline:
             raise
         except DBAPIError as exc:
             if getattr(exc.orig, "sqlstate", None) == "42501":
-                raise NotPermitted("only front desk of this clinic may register patients") from exc
+                raise NotPermitted("this role may not register patients in this clinic") from exc
             raise
         return IngestResult("review" if reasons else "created", pid, tuple(reasons))
 
