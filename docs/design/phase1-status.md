@@ -19,7 +19,7 @@ gold-set regression tests; the transactional outbox and the Postgres-backed queu
 | Minimal patient portal | **Blocked** on a backend package | Needs patient-facing routes and RLS policies, the `iam` consent, activation and grievance tables, guardian binding, and the SMS provider path (Appendix B, MSG91 Send-SMS-Hook). Frontend F6 to F9 wait for it. Scheduling of that package is the owner's decision |
 | 200 concurrent bookings of one slot resolve to exactly one (BUILD-SPEC 21; 14.3 hard gate) | **Built** (not yet run in CI) | `tests/test_scheduling_concurrency_live.py` |
 | Concurrent duplicate hold and booking retries replay the original | **Built** (not yet run in CI) | same file |
-| Clinic isolation for child tables | **Built** (not yet run in CI), with a **finding** | `tests/test_rls_child_tables_live.py`; see "Finding: unpinned foreign keys" below |
+| Clinic isolation for child tables | **Built** (not yet run in CI); the finding it made is **fixed** by migration 0014 | `tests/test_rls_child_tables_live.py`; see "Finding: unpinned foreign keys" below |
 | Slot sweep and waitlist backfill running on their own | **Moved** to P2-1 | They need the tick (see Queue) |
 
 ## Identity (MPI)
@@ -53,20 +53,20 @@ gold-set regression tests; the transactional outbox and the Postgres-backed queu
 | Scheduled minute tick and immediate poke on enqueue (7.4) | **Moved** to P2-1 | Nothing drains the queue yet |
 | Second, unwired Redis/SQS adapter stub (7.4) | **Accepted deviation** | Appendix A rejects a message broker for this workload (jobs wait days; a broker adds a second always-on service and a split-brain risk with the database). The `QueuePort` interface keeps a later adapter possible. Not written. Revisit only if volume ever demands it |
 
-## Finding: unpinned foreign keys (child-table isolation)
+## Finding: unpinned foreign keys (child-table isolation) — FIXED by migration 0014
 
-Every clinic-scoped table carries `clinic_id` itself (the only tables without it are `iam.clinics` and `iam.accounts`). The spec's "child
-table with no clinic column" therefore does not exist yet. The realistic gap is a child whose foreign key does not pin the clinic. Three
-single-column foreign keys do not:
+Every clinic-scoped table carries `clinic_id` itself (the only tables without it are `iam.clinics` and `iam.accounts`), so the spec's "child
+table with no clinic column" does not exist. The realistic gap was a child whose foreign key did not pin the clinic. Three single-column
+foreign keys did not: `sched.bookings.hold_id`, `mpi.merges.candidate_id` and `ops.outbox.job_id`. A caller who knew another clinic's id
+could make their own row point at it (an integrity gap and a cross-clinic existence probe, not a read leak).
 
-- `sched.bookings.hold_id` references `sched.holds(id)`
-- `mpi.merges.candidate_id` references `mpi.match_candidates(id)`
-- `ops.outbox.job_id` references `ops.queue(id)`
-
-A caller who knows another clinic's id could make their own row point at it. The managers never do, and row-level security still hides the
-other clinic's data, so this is an integrity gap, not a read leak. `tests/test_rls_child_tables_live.py` lists the three exactly and fails if
-a fourth appears or one is fixed. **Fixing them needs a migration** (a unique `(id, clinic_id)` on each parent and a composite foreign key),
-which is the owner's decision and needs the RLS reviewer. Not started.
+`db/migrations/0014_pin_clinic_on_child_foreign_keys.sql` replaces them with composite `(child_id, clinic_id)` keys, backed by
+`unique (id, clinic_id)` on `sched.holds`, `mpi.match_candidates` and `ops.queue`. Origin is not part of these keys: the sibling keys in
+`sched`, `mpi` and `ops` pin the clinic only. Checked before writing it: the dev database holds no booking, merge or outbox row that points
+at a hold, candidate or job at all (counts 0, 0, 0), the default constraint names exist as the migration expects, and the migration itself
+re-checks and stops with counts if a database ever held a violating row. Reviewed by the RLS reviewer (SAFE TO MERGE: no policy or grant
+changes; the foreign-key probe across clinics is closed). `tests/test_rls_child_tables_live.py` now has `KNOWN_GAPS` empty and a refused
+cross-clinic insert for each of the three.
 
 ## Hosted infrastructure facts the owner still has to settle
 

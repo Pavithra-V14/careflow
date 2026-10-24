@@ -43,8 +43,8 @@ suite against the CI Supabase project as `careflow_app`, with zero skips allowed
   (Health-information lead). **Do not use real patient data until that sign-off is recorded.**
 - Concurrency and isolation tests added at the Phase 1 close-out (written, not yet run in CI): 200 concurrent bookings of one slot
   (exactly one wins), concurrent duplicate hold and booking retries, and child-table isolation. The last found three single-column foreign
-  keys that do not pin the clinic (`bookings.hold_id`, `merges.candidate_id`, `outbox.job_id`); fixing them needs a migration the owner has
-  not yet decided (`docs/design/phase1-status.md`).
+  keys that did not pin the clinic (`bookings.hold_id`, `merges.candidate_id`, `outbox.job_id`); migration 0014 fixes them
+  (`docs/design/phase1-status.md`).
 - Not built yet: the `iam` consent, activation and grievance tables; the staff console and the minimal patient portal (no frontend
   exists); the minute tick and the immediate poke.
 - Queue and outbox stay in-process: no HTTP routes for claim, acknowledge or dead-letter, and no `/internal` auth

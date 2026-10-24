@@ -32,11 +32,9 @@ one, delete its line in the same change. Source of the first group: the msg / ia
   counsel.
 
 ## Waiting for a later phase or feature
-- **Unpinned single-column foreign keys (found at the Phase 1 close-out).** `sched.bookings.hold_id` references `sched.holds(id)`,
-  `mpi.merges.candidate_id` references `mpi.match_candidates(id)` and `ops.outbox.job_id` references `ops.queue(id)`, so the database accepts
-  a child row that points at another clinic's parent. Integrity only: the managers never do it and RLS still hides the other clinic's
-  rows. The fix is a migration (unique `(id, clinic_id)` on each parent plus a composite foreign key), needing the owner's decision and the RLS
-  reviewer. `tests/test_rls_child_tables_live.py` lists them exactly (`KNOWN_GAPS`) and has a test that documents the `hold_id` case.
+- **Unpinned single-column foreign keys**: found at the Phase 1 close-out and FIXED by migration 0014 (see `docs/design/phase1-status.md`).
+  Remaining small item from its review: a cross-clinic idempotency-key collision inside `queue.relay_outbox` (only a worker holding
+  `queue_worker` in two clinics can hit it) now surfaces as an untranslated `23503` database error instead of a clear queue error.
 - **Labeled-pair merge gate** (BUILD-SPEC 14.3, "no wrong patient merge on the labeled identity-matching pairs"): moved to Phase 5, needs
   clinician-reviewed labels.
 - **Minute tick, immediate poke and the 12/25/40/40 s ceilings** (BUILD-SPEC 7.3, 7.4): moved to Phase 2 package P2-1; they bound a runner
