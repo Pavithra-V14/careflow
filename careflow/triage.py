@@ -72,7 +72,7 @@ class Routing:
 
 def route_proposal(
     *, mode: ApprovalMode, policy: AutoApprovalPolicy | None, candidates: Collection[CardFacts], abstained: bool, identity_resolved: bool,
-    identity_uncertain: bool, confidence: float | None, confidence_calibrated: bool, unverified_facts_read: Collection[str],
+    identity_uncertain: bool, confidence: float | None, confidence_calibrated: bool, unverified_facts_read: Collection[str] | None,
 ) -> Routing:
     reasons: list[str] = []
     if mode is not ApprovalMode.ASSISTED:
@@ -83,12 +83,14 @@ def route_proposal(
         reasons.append("retrieval_abstained")
     if not identity_resolved or identity_uncertain:
         reasons.append("identity_not_certain")  # 'uncertain-identity registration' is a locked human row (§12.1)
-    if unverified_facts_read:
+    if unverified_facts_read is None:
+        reasons.append("unverified_facts_unknown")  # unknown is not 'none unverified'
+    elif unverified_facts_read:
         reasons.append("unverified_fact_read_by_card")
     cards = list(candidates)
     if len(cards) != 1:
         reasons.append("not_exactly_one_candidate")
-    if confidence is None or not math.isfinite(confidence) or not confidence_calibrated:
+    if confidence is None or not math.isfinite(confidence) or not (0.0 <= confidence <= 1.0) or not confidence_calibrated:
         reasons.append("confidence_unknown_or_uncalibrated")
     if policy is not None and len(cards) == 1:
         card = cards[0]
@@ -115,5 +117,6 @@ def next_escalation(current_role: str, age_seconds: float, deadline_seconds: flo
 
 
 def is_training_label_source(decision_source: str) -> bool:
-    """Only a human decision may become a calibration/fine-tuning label; an auto-approved output never does (§12.6, CLAUDE.md rule 9)."""
+    """Only a human decision may become a calibration/fine-tuning label; an auto-approved output never does (§12.6, CLAUDE.md rule 9). The export step
+    must ALSO filter origin = 'live': a human decision on a canary or synthetic referral is not a label."""
     return decision_source == HUMAN_SOURCE

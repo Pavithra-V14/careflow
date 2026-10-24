@@ -7,7 +7,8 @@ Both run as `careflow_app` with the verified claims set; row-level security is t
 doctor of the clinic, as themselves). The Python checks here only give clean errors; they are not the control.
 
 Nothing is approved by these writers on their own: the proposer writes a proposal and an OPEN task, and the recorder needs a reviewer id. The task's own `priority`
-column ('standard') is the urgency class of the TASK, not a clinical triage priority (that belongs to a card or a clinician and is not stored here).
+column ('immediate' or 'standard') orders and escalates the queue, so it IS a clinical judgment: it is a REQUIRED constructor argument with no default.
+# CLINICAL-PLACEHOLDER: needs clinician sign-off (which task priority a triage-review task carries)
 """
 
 import json
@@ -44,11 +45,13 @@ def proposal_id_for(clinic_id: uuid.UUID, idempotency_key: str) -> uuid.UUID:
 
 
 class SqlTriageProposer:
-    def __init__(self, *, mode: ApprovalMode, assigned_role: str) -> None:
+    def __init__(self, *, mode: ApprovalMode, assigned_role: str, task_priority: str) -> None:
         # No default for the role: who reviews a triage proposal is a clinical-governance decision for the owner and clinicians.
         if assigned_role not in ASSIGNABLE_ROLES:
             raise ValueError(f"assigned_role must be one of {ASSIGNABLE_ROLES}")
-        self._mode, self._role = ApprovalMode(mode), assigned_role
+        if task_priority not in ("immediate", "standard"):
+            raise ValueError("task_priority must be 'immediate' or 'standard'")  # CLINICAL-PLACEHOLDER: needs clinician sign-off
+        self._mode, self._role, self._priority = ApprovalMode(mode), assigned_role, task_priority
 
     async def propose(
         self, conn: AsyncConnection, *, document_id: uuid.UUID, clinic_id: uuid.UUID, origin: str, patient_id: uuid.UUID | None,
@@ -67,9 +70,9 @@ class SqlTriageProposer:
                     await conn.execute(
                         text(
                             "insert into agents.review_tasks (clinic_id, origin, kind, priority, assigned_role, source_message_id, provenance, idempotency_key) "
-                            "values (:c, :o, 'triage_proposal', 'standard', :r, :s, cast(:p as jsonb), :k) on conflict (idempotency_key) do nothing returning id"
+                            "values (:c, :o, 'triage_proposal', :pr, :r, :s, cast(:p as jsonb), :k) on conflict (idempotency_key) do nothing returning id"
                         ),
-                        {"c": clinic_id, "o": origin, "r": self._role, "s": f"document:{document_id}", "p": json.dumps({"proposal_id": str(proposal_id)}), "k": task_key},
+                        {"c": clinic_id, "o": origin, "pr": self._priority, "r": self._role, "s": f"document:{document_id}", "p": json.dumps({"proposal_id": str(proposal_id)}), "k": task_key},
                     )
                 ).first()
                 if task is None:  # a replay: the task exists

@@ -82,8 +82,8 @@ class Conn:
         raise AssertionError(sql)
 
 
-def proposer(role="nurse"):
-    return SqlTriageProposer(mode=ApprovalMode.ASSISTED, assigned_role=role)
+def proposer(role="nurse", priority="standard"):  # test inputs
+    return SqlTriageProposer(mode=ApprovalMode.ASSISTED, assigned_role=role, task_priority=priority)
 
 
 async def propose(conn, **over):
@@ -98,7 +98,7 @@ async def test_a_proposal_writes_a_task_and_a_proposal_with_ids_only_and_returns
     result = await propose(conn, candidates=[{"card_id": "c1", "version": 2, "title": "SENTINEL-CARD-TEXT", "note": "SENTINEL-PATIENT"}])
     assert result.proposal_id == proposal_id_for(CLINIC, KEY) and result.task_id == TASK
     task_sql, task_params = next(c for c in conn.calls if "insert into agents.review_tasks" in c[0])
-    assert "'triage_proposal'" in task_sql and "'standard'" in task_sql
+    assert "'triage_proposal'" in task_sql and task_params["pr"] == "standard" and "'standard'" not in task_sql  # the priority is an input, never a literal
     assert task_params["k"] == f"triage-task:{DOC}" and task_params["r"] == "nurse" and task_params["s"] == f"document:{DOC}"
     _, prop_params = next(c for c in conn.calls if "insert into agents.triage_proposals" in c[0])
     assert json.loads(prop_params["cand"]) == [{"card_id": "c1", "version": 2}] and prop_params["k"] == KEY and prop_params["m"] == "assisted"
@@ -121,10 +121,10 @@ async def test_a_replay_finds_the_existing_task_and_proposal_and_writes_nothing_
 
 async def test_the_role_that_reviews_has_no_default_and_must_be_clinical():
     with pytest.raises(TypeError):
-        SqlTriageProposer(mode=ApprovalMode.ASSISTED)  # type: ignore[call-arg]
+        SqlTriageProposer(mode=ApprovalMode.ASSISTED, task_priority="standard")  # type: ignore[call-arg]
     for bad in ("front_desk", "admin", "", None):
         with pytest.raises(ValueError):
-            SqlTriageProposer(mode=ApprovalMode.ASSISTED, assigned_role=bad)  # type: ignore[arg-type]
+            SqlTriageProposer(mode=ApprovalMode.ASSISTED, assigned_role=bad, task_priority="standard")  # type: ignore[arg-type]
 
 
 async def test_a_proposal_needs_a_patient_and_a_key():
@@ -176,3 +176,14 @@ async def test_unknown_decisions_invisible_proposals_and_database_refusals_are_c
         with pytest.raises(error):
             await recorder.record(conn, proposal_id=pid, clinic_id=CLINIC, decision="approve", reviewer_id=REVIEWER, idempotency_key="k")
         assert not any("update agents.review_tasks" in c[0] for c in conn.calls)
+
+
+async def test_the_task_priority_has_no_default_and_must_be_one_the_table_allows():
+    with pytest.raises(TypeError):
+        SqlTriageProposer(mode=ApprovalMode.ASSISTED, assigned_role="nurse")  # type: ignore[call-arg]
+    for bad in ("urgent", "", None):
+        with pytest.raises(ValueError):
+            SqlTriageProposer(mode=ApprovalMode.ASSISTED, assigned_role="nurse", task_priority=bad)  # type: ignore[arg-type]
+    conn = Conn()
+    await proposer(priority="immediate").propose(conn, document_id=DOC, clinic_id=CLINIC, origin="test", patient_id=PATIENT, candidates=[], abstained=True, idempotency_key=KEY)
+    assert next(c for c in conn.calls if "insert into agents.review_tasks" in c[0])[1]["pr"] == "immediate"
