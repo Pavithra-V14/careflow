@@ -14,6 +14,8 @@ import pytest
 import pytest_asyncio
 from dotenv import dotenv_values
 
+from tests.db_helpers import ensure_app_role
+
 ROOT = Path(__file__).resolve().parent.parent
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or dotenv_values(ROOT / ".env").get("DATABASE_URL_MIGRATOR")
 SQL_0017 = (ROOT / "db" / "migrations" / "0017_docs_documents.sql").read_text(encoding="utf-8")
@@ -33,7 +35,7 @@ async def db():
     tx = conn.transaction()
     await tx.start()
     try:
-        await conn.execute("grant careflow_app to current_user with set true")
+        await ensure_app_role(conn)
         if await conn.fetchval("select to_regclass('docs.documents') is null"):
             await conn.execute(SQL_0017)
         yield conn
