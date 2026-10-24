@@ -67,8 +67,8 @@ exactly those roles, and the audit, refusal, erased and authentication tests to 
 
 | Not covered by the dedicated half | Covered by |
 |---|---|
-| The real transaction-mode pooler engine and restricted login | the committed half (same route, real pooler role), `tests/test_db_engine_config.py`, `scripts/verify_app_role.py` |
-| Commit-before-response (a `200` means the audit row is durable) | the `TxConn` `scope="function"` dependency and `test_a_write_is_committed_before_its_response_is_returned`; the audit insert runs on that same connection (`tests/test_message_read.py`) |
+| The real transaction-mode pooler engine and restricted login, **for the success path** (the role lookup, the decrypt and the audit INSERT on the real pooler login, and a `200`) | **Not covered by any test.** The committed half runs this route on the real pooler role but only reaches the first SELECT, which returns no rows (random message ids), so it proves authentication, validation, the fixed 404 and that a refusal writes no audit row, not the success path. The role and its grants are checked separately by `tests/test_db_engine_config.py` and `scripts/verify_app_role.py`. Closing this gap needs a committed message fixture, which append-only `msg.*` tables do not allow. |
+| Commit-before-response (a `200` means the audit row is durable) | Not tested for this route. It rests on the `TxConn` `scope="function"` dependency, which `test_a_write_is_committed_before_its_response_is_returned` proves for the scheduling writes. `tests/test_message_read.py` uses a fake connection, so it proves only the ORDER of the calls (find, role, decrypt, audit INSERT last), not any commit. |
 | The `audit.log` append-only trigger | `tests/test_rls_iam_audit_live.py` |
 
 Both halves must run in CI with zero skips.

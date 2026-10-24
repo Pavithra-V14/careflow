@@ -14,12 +14,13 @@ row written by each 200 (ids only, the authorising role, a server-made key) and 
 the fixed 500/503 for a tampered or unreadable body, and that no body text reaches a log or an error.
 
 WHAT IT DOES NOT COVER, and where that IS covered:
-  * the real transaction-mode pooler engine and the real restricted login (it uses SET LOCAL ROLE on a shared connection): the committed
-    half in tests/test_api_role_matrix.py runs this same route on the real pooler role (every identity, authentication, validation, and
-    that refusals write no audit row), plus tests/test_db_engine_config.py and scripts/verify_app_role.py.
-  * commit-before-response (a 200 means the audit row is durable): nothing commits here. Covered by the TxConn scope="function" dependency
-    and test_a_write_is_committed_before_its_response_is_returned in tests/test_api_role_matrix.py (the audit insert is on that same
-    TxConn connection: tests/test_api_read_message_route.py and tests/test_message_read.py).
+  * the real transaction-mode pooler engine and the real restricted login (it uses SET LOCAL ROLE on a shared connection), FOR THE SUCCESS
+    PATH. NOT COVERED BY ANY TEST: the committed half in tests/test_api_role_matrix.py runs this route on the real pooler role but only
+    reaches the first SELECT (random message ids, no rows), so the role lookup, the decrypt and the audit INSERT on the real pooler login
+    are never exercised there. The role and its grants are checked by tests/test_db_engine_config.py and scripts/verify_app_role.py.
+  * commit-before-response (a 200 means the audit row is durable): nothing commits here, and no test covers it for this route. It rests
+    on the TxConn scope="function" dependency, proved for the scheduling writes by test_a_write_is_committed_before_its_response_is_returned
+    in tests/test_api_role_matrix.py. tests/test_message_read.py uses a fake connection and proves only the ORDER of the calls.
   * the audit.log append-only trigger itself: tests/test_rls_iam_audit_live.py.
 It must run in CI with ZERO skips: its only skip condition is a missing DATABASE_URL_MIGRATOR, which CI provides.
 """
@@ -146,11 +147,18 @@ async def test_a_repeated_read_is_logged_again_under_a_new_key(w):
 
 async def test_refused_reads_write_no_audit_row(w):
     # every refusal: not visible to the role/topic, unknown message, erased, a clinic that is not yours
-    for who, mid in (("fd_a", w.messages["care"]), ("admin_a", w.messages["care"]), ("auditor_a", w.messages["appointments"]),
-                     ("nurse_b", w.messages["appointments"]), ("patient", w.messages["care"]), ("nurse_a", uuid.uuid4()),
-                     ("nurse_a", w.messages["erased"]), ("suspended", w.messages["care"])):
+    attempts = (("fd_a", w.messages["care"]), ("admin_a", w.messages["care"]), ("auditor_a", w.messages["appointments"]),
+                ("nurse_b", w.messages["appointments"]), ("patient", w.messages["care"]), ("nurse_a", uuid.uuid4()),
+                ("nurse_a", w.messages["erased"]), ("suspended", w.messages["care"]))
+    for who, mid in attempts:
         assert (await get(w, who, mid)).status_code in {404, 410}, (who, mid)
-    assert await rows(w, "select 1 from audit.log where action = 'message.read'") == []
+    # Scoped to the rows THIS test could have created (its actors and the resources it asked for), so an unrelated committed
+    # message.read row in the database cannot break it.
+    left = await rows(
+        w, "select 1 from audit.log where action = 'message.read' and actor_id = any(:actors) and resource_id = any(:resources)",
+        actors=list({w.ids[who] for who, _ in attempts}), resources=list({str(mid) for _, mid in attempts}),
+    )
+    assert left == []
 
 
 async def test_an_audit_row_cannot_be_written_as_someone_else(w):

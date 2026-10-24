@@ -140,7 +140,15 @@ def test_an_unreadable_body_raises_with_the_class_name_only_and_writes_no_audit_
         with pytest.raises(MessageUnreadable) as exc:
             read(conn, vault, row.id)
         assert exc.value.reason == reason
-    assert PRIVATE not in str(exc.value) and PRIVATE not in repr(exc.value) and exc.value.__cause__ is None
+    # `from None` hides the chain from a traceback but __context__ still holds the original decrypt error: walk the WHOLE chain and require
+    # that no exception in it, nor its arguments, carries the text. (Asserting `__cause__ is None` could never fail: `from None` guarantees it.)
+    chain, seen = [], exc.value
+    while seen is not None and seen not in chain:
+        chain.append(seen)
+        seen = seen.__cause__ or seen.__context__
+    assert len(chain) >= 2, "the decrypt error should still be reachable as __context__"
+    for link in chain:
+        assert PRIVATE not in str(link) and PRIVATE not in repr(link) and PRIVATE not in repr(link.args), type(link).__name__
     assert conn.audits == []
 
 
