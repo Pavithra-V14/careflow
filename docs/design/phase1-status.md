@@ -49,8 +49,8 @@ gold-set regression tests; the transactional outbox and the Postgres-backed queu
 |---|---|---|
 | Transactional outbox and `QueuePort` over Postgres | **Built** | migration 0006, `careflow/queue.py`, `tests/test_queue.py`, `tests/test_queue_live.py` |
 | Ceiling: 5 attempts then dead-letter | **Built** | `MAX_ATTEMPTS = 5`, a database CHECK, tests through the real pooler |
-| Ceilings: 40 steps, 25 tool calls, 12 model calls (warn at 8), 40 s wall-clock per tick | **Moved** to Phase 2 package P2-1 | They bound a runner and a tick, neither of which exists. They are not faked |
-| Scheduled minute tick and immediate poke on enqueue (7.4) | **Moved** to P2-1 | Nothing drains the queue yet |
+| Ceilings: 40 steps, 25 tool calls, 12 model calls (warn at 8), 40 s wall-clock per tick | **Moved** to Phase 2 package P2-1; **built there** (`careflow/budget.py`, `tests/test_budget.py`, `tests/test_tick.py`) | The red-flag path and safety net are never budget-limited (a SAFETY call class, tested). Enforced inside the tick and the gateway; no agent runs yet |
+| Scheduled minute tick and immediate poke on enqueue (7.4) | **Moved** to P2-1; **built there** (`careflow/tick.py`) | In-process, off unless `CAREFLOW_RUN_WORKER` is set. No handler is registered yet, so a job is dead-lettered visibly as "no handler"; no route calls the poke yet |
 | Second, unwired Redis/SQS adapter stub (7.4) | **Accepted deviation** | Appendix A rejects a message broker for this workload (jobs wait days; a broker adds a second always-on service and a split-brain risk with the database). The `QueuePort` interface keeps a later adapter possible. Not written. Revisit only if volume ever demands it |
 
 ## Finding: unpinned foreign keys (child-table isolation) — FIXED by migration 0014

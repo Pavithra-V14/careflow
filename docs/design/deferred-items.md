@@ -37,8 +37,15 @@ one, delete its line in the same change. Source of the first group: the msg / ia
   `queue_worker` in two clinics can hit it) now surfaces as an untranslated `23503` database error instead of a clear queue error.
 - **Labeled-pair merge gate** (BUILD-SPEC 14.3, "no wrong patient merge on the labeled identity-matching pairs"): moved to Phase 5, needs
   clinician-reviewed labels.
-- **Minute tick, immediate poke and the 12/25/40/40 s ceilings** (BUILD-SPEC 7.3, 7.4): moved to Phase 2 package P2-1; they bound a runner
-  that does not exist yet.
+- **Minute tick, immediate poke and the 12/25/40/40 s ceilings** (BUILD-SPEC 7.3, 7.4): moved to Phase 2 package P2-1 and built there
+  (`careflow/budget.py`, `careflow/tick.py`). Still open: no route calls the poke after enqueueing, and no handler exists.
+- **Per-clinic daily spend ledger** (`careflow/gateway.py`) is in memory behind a port, so a restart forgets the day's spend. Build a durable
+  one before any paid route is wired. The daily ceiling itself has no default (the owner chooses it).
+- **Registry approver check**: `ai.model_registry` requires a named approver and a date for a `phi_approved` row but does not check that the
+  approver is an active staff account (a CHECK cannot). Only the migrator writes it; add a trigger or an approval tool before the first
+  `phi_approved` row. A registry write path from the console would also need audit rows.
+- **Prompt versioning**: `prompts/` and its scan exist; the version-and-content-hash loader and the "every model call records which prompt
+  version answered" part of BUILD-SPEC 17.4 arrive with the first prompt.
 - **`aal2` database policy** (a restrictive policy requiring `aal = 'aal2'` for sensitive tables): deferred. Staff second-factor
   enrolment at login is enforced in frontend F2, not in the database.
 - **Key store**: environment variables stay (accepted); revisit when hosting is decided and the hosting provider's secret manager is known.

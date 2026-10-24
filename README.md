@@ -41,6 +41,10 @@ suite against the CI Supabase project as `careflow_app`, with zero skips allowed
   a real token: see [`docs/design/step-up-spike.md`](docs/design/step-up-spike.md) for the spike the owner must run.
 - **`STRONG_IDENTIFIERS` is reachable over HTTP** through `POST /v1/staff/patients`, and it is still **pending sign-off by Priya**
   (Health-information lead). **Do not use real patient data until that sign-off is recorded.**
+- **Phase 2 package P2-1 (runner and gateway, no hosted service) is built on branch `next-backend`**; see
+  [`docs/design/phase2-plan.md`](docs/design/phase2-plan.md): the per-run ceilings with a never-limited safety class, the worker tick and poke,
+  the `ai.model_registry` migration (0015), the six ports with fakes, the in-process gateway, `GET /readyz`, and the prompt-template scan. No
+  model, key or account exists; the `clinical` profile reports not ready until the owner sets `CAREFLOW_REQUIRED_ROLES`.
 - Concurrency and isolation tests added at the Phase 1 close-out (written, not yet run in CI): 200 concurrent bookings of one slot
   (exactly one wins), concurrent duplicate hold and booking retries, and child-table isolation. The last found three single-column foreign
   keys that did not pin the clinic (`bookings.hold_id`, `merges.candidate_id`, `outbox.job_id`); migration 0014 fixes them
