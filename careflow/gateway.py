@@ -20,10 +20,13 @@ never refused by the step, tool, model, time or cost ceilings, and it skips the 
 fallback, and still honours a circuit breaker (an open breaker means that engine is down, which is not a budget). Nothing about the safety
 class lets a call reach a route the data policy forbids.
 
-Not here (and why): the registry rows come from the caller (a loader over the `ai` schema arrives with migration 0015's reader); the per-clinic
-daily spend ledger is an in-memory `SpendLedger` behind a port, so a restart forgets the day's spend until a durable one is built. That
-under-enforces after a restart; it is recorded as an open item, and it is harmless while no paid route is wired. No logging: callers log
-what they choose, and the gateway has no text to log.
+Spend (§6.1, §15.2): the per-clinic daily total comes from a `SpendLedger` port. `careflow.spend.PostgresSpendLedger` persists it in
+`ops.spend_ledger` (migration 0016, append-only, the day taken from the database clock in India time), so a restart cannot reset it; the
+in-memory ledger below is for tests. The total is read PER ORIGIN (a test or eval row never counts against live spend) and includes the
+SAFETY class: a ceiling limits ordinary calls, but safety spend is real spend and is counted honestly.
+
+Not here: the registry rows come from the caller (`careflow.registry.load_registry`). No logging: callers log what they choose, and the
+gateway has no text to log.
 """
 
 import asyncio
@@ -33,7 +36,7 @@ import time
 import uuid
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Final, Protocol
 
@@ -43,6 +46,7 @@ from careflow.ports import (
     AdapterResult,
     DataClass,
     PermanentError,
+    RouteNotApplicable,
     TransientError,
     Unit,
     Usage,
@@ -139,7 +143,7 @@ class ModelRow:
 class RouteAttempt:
     provider: str
     model_id: str
-    outcome: str  # ok | skipped_no_adapter | skipped_breaker_open | skipped_spend | failed_transient | timeout | failed_permanent
+    outcome: str  # ok | skipped_no_adapter | skipped_not_applicable | skipped_breaker_open | skipped_spend | failed_transient | timeout | failed_permanent
     calls: int = 0
 
 
@@ -154,21 +158,51 @@ class GatewayResult[T]:
     attempts: tuple[RouteAttempt, ...]
 
 
-class SpendLedger(Protocol):
-    def spent(self, clinic_id: uuid.UUID, day: date) -> Decimal: ...
+IST: Final = timezone(timedelta(hours=5, minutes=30))  # India has no daylight saving: a fixed offset is exact
 
-    def record(self, clinic_id: uuid.UUID, day: date, usd: Decimal) -> None: ...
+
+@dataclass(frozen=True)
+class SpendEntry:
+    """One recorded call, ids and numbers only. `idempotency_key` is unique per clinic (rule 5)."""
+
+    clinic_id: uuid.UUID
+    role: str
+    provider: str
+    model_id: str
+    call_class: str
+    usd_actual: Decimal
+    usd_shadow: Decimal
+    origin: str
+    idempotency_key: str
+
+
+class SpendLedger(Protocol):
+    async def spent_today(self, clinic_id: uuid.UUID, origin: str) -> Decimal: ...
+
+    async def record(self, entry: SpendEntry) -> None: ...
 
 
 class InMemorySpendLedger:
-    def __init__(self) -> None:
-        self._spent: dict[tuple[uuid.UUID, date], Decimal] = {}
+    """For tests: the same contract as the Postgres ledger, in a dict. The day is India time, like the database's."""
 
-    def spent(self, clinic_id: uuid.UUID, day: date) -> Decimal:
-        return self._spent.get((clinic_id, day), Decimal(0))
+    def __init__(self, today: Callable[[], date] = lambda: datetime.now(IST).date()) -> None:
+        self._today = today
+        self._rows: list[tuple[date, SpendEntry]] = []
+        self._keys: set[tuple[uuid.UUID, str]] = set()
 
-    def record(self, clinic_id: uuid.UUID, day: date, usd: Decimal) -> None:
-        self._spent[(clinic_id, day)] = self.spent(clinic_id, day) + usd
+    async def spent_today(self, clinic_id: uuid.UUID, origin: str) -> Decimal:
+        day = self._today()
+        return sum((e.usd_actual for d, e in self._rows if d == day and e.clinic_id == clinic_id and e.origin == origin), Decimal(0))
+
+    async def record(self, entry: SpendEntry) -> None:
+        if (entry.clinic_id, entry.idempotency_key) in self._keys:
+            raise GatewayError("this spend entry was already recorded")
+        self._keys.add((entry.clinic_id, entry.idempotency_key))
+        self._rows.append((self._today(), entry))
+
+    @property
+    def entries(self) -> list[SpendEntry]:
+        return [e for _, e in self._rows]
 
 
 @dataclass(frozen=True)
@@ -225,8 +259,8 @@ class Gateway:
     adapters: Mapping[tuple[str, str], Adapter]
     ledger: SpendLedger
     limits: SpendLimits
+    origin: str = "live"  # the deployment's origin tag: spend is read and written under it (BUILD-SPEC §0)
     clock: Callable[[], float] = time.monotonic
-    today: Callable[[], date] = lambda: datetime.now(UTC).date()
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
     jitter: Callable[[], float] = random.random
     base_delay: float = 0.2
@@ -247,14 +281,14 @@ class Gateway:
             rows = [r for r in rows if r.data_policy == "phi_approved"]  # no call class bypasses this
         return rows
 
-    def _spend_blocked(self, row: ModelRow, clinic_id: uuid.UUID, estimate: Usage | None) -> bool:
+    async def _spend_blocked(self, row: ModelRow, clinic_id: uuid.UUID, estimate: Usage | None) -> bool:
         """True if an ORDINARY call to this row would pass the per-request or the per-clinic daily ceiling. A free row costs nothing, so no
         spend ceiling applies to it. With no estimate the cost is unknown, which is not zero: a paid row is then blocked once the day's
         spend has reached the ceiling."""
         if row.price_in_per_1k == 0 and row.price_out_per_1k == 0:
             return False
         est = row.cost(estimate)[0] if estimate is not None else Decimal(0)
-        spent = self.ledger.spent(clinic_id, self.today())
+        spent = await self.ledger.spent_today(clinic_id, self.origin)
         if est > self.limits.per_request_usd or spent + est > self.limits.clinic_daily_usd:
             return True
         return estimate is None and spent >= self.limits.clinic_daily_usd
@@ -280,7 +314,11 @@ class Gateway:
             if adapter is None:
                 attempts.append(RouteAttempt(row.provider, row.model_id, "skipped_no_adapter"))
                 continue
-            if call_class is CallClass.ORDINARY and self._spend_blocked(row, clinic_id, estimate):
+            accepts = getattr(adapter, "accepts", None)
+            if accepts is not None and not accepts(payload):  # not applicable to THIS input: no budget, no spend check, no breaker
+                attempts.append(RouteAttempt(row.provider, row.model_id, "skipped_not_applicable"))
+                continue
+            if call_class is CallClass.ORDINARY and await self._spend_blocked(row, clinic_id, estimate):
                 any_spend_skip = True
                 attempts.append(RouteAttempt(row.provider, row.model_id, "skipped_spend"))
                 continue
@@ -291,7 +329,7 @@ class Gateway:
             outcome = await self._try_route(row, adapter, breaker, payload, clinic_id, call_class, budget, attempts)
             if outcome is not None:
                 return outcome
-        if any_spend_skip and all(a.outcome in {"skipped_spend", "skipped_no_adapter", "skipped_breaker_open"} for a in attempts):
+        if any_spend_skip and all(a.outcome in {"skipped_spend", "skipped_no_adapter", "skipped_breaker_open", "skipped_not_applicable"} for a in attempts):
             raise SpendCeilingReached("every available route would pass a spend ceiling")
         raise AllRoutesFailed(role, tuple(attempts))
 
@@ -311,6 +349,9 @@ class Gateway:
             except TransientError:
                 breaker.failure()
                 last = "failed_transient"
+            except RouteNotApplicable:
+                last = "skipped_not_applicable"  # the adapter declined without calling its model: not a failure, no breaker hit
+                break
             except PermanentError:
                 breaker.failure()
                 last = "failed_permanent"
@@ -318,7 +359,9 @@ class Gateway:
             else:
                 breaker.success()
                 actual, shadow = row.cost(out.usage)
-                self.ledger.record(clinic_id, self.today(), actual)
+                await self.ledger.record(
+                    SpendEntry(clinic_id, row.role, row.provider, row.model_id, call_class.value, actual, shadow, self.origin, f"gw-{uuid.uuid4()}")
+                )
                 attempts.append(RouteAttempt(row.provider, row.model_id, "ok", calls))
                 if budget is not None:
                     budget.add_cost(float(actual), call_class)

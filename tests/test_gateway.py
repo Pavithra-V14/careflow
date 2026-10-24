@@ -28,6 +28,7 @@ from careflow.gateway import (
     ModelRow,
     NoApprovedRoute,
     SpendCeilingReached,
+    SpendEntry,
     SpendLimits,
 )
 from careflow.ports import (
@@ -61,18 +62,22 @@ class Clock:
 class Rig:
     def __init__(self, rows, adapters, daily="10.00", per_request="1.00"):
         self.clock, self.sleeps = Clock(), []
-        self.ledger = InMemorySpendLedger()
+        self.ledger = InMemorySpendLedger(today=lambda: date(2030, 1, 1))
 
         async def sleep(s):
             self.sleeps.append(s)
 
         self.gw = Gateway(
-            rows, adapters, self.ledger, SpendLimits(D(daily), D(per_request)), clock=self.clock, today=lambda: date(2030, 1, 1),
+            rows, adapters, self.ledger, SpendLimits(D(daily), D(per_request)), origin="test", clock=self.clock,
             sleep=sleep, jitter=lambda: 0.5,
         )
 
+    async def spend(self, clinic, usd):
+        """Pre-load the ledger with spend already made today."""
+        await self.ledger.record(SpendEntry(clinic, "decision", "p", "m", "ordinary", D(usd), D(0), "test", f"pre-{uuid.uuid4()}"))
+
     async def decide(self, **kw):
-        req = DecisionRequest("q", "some text", ("a", "b"))
+        req = DecisionRequest("q", "some text", ("a", "b"), DataClass.SYNTHETIC)
         return await self.gw.call("decision", req, data_class=kw.pop("data_class", DataClass.SYNTHETIC), clinic_id=kw.pop("clinic_id", CLINIC), **kw)
 
 
@@ -84,17 +89,17 @@ def adapters_for(*pairs):
 
 
 def test_a_decision_call_takes_between_two_and_twenty_distinct_options():
-    DecisionRequest("q", "t", tuple(f"o{i}" for i in range(20)))
+    DecisionRequest("q", "t", tuple(f"o{i}" for i in range(20)), DataClass.SYNTHETIC)
     for bad in (("only",), tuple(f"o{i}" for i in range(21)), ("a", "a")):
         with pytest.raises(ValueError):
-            DecisionRequest("q", "t", bad)
+            DecisionRequest("q", "t", bad, DataClass.SYNTHETIC)
     with pytest.raises(ValueError):
-        DecisionRequest(" ", "t", ("a", "b"))
+        DecisionRequest(" ", "t", ("a", "b"), DataClass.SYNTHETIC)
 
 
 def test_patient_text_never_appears_in_a_request_repr():
     secret = "SENTINEL-PATIENT-TEXT-5521"
-    for obj in (DecisionRequest("q", secret, ("a", "b")), RerankRequest(secret, (secret,)), TranslationRequest(secret, "ta", "en")):
+    for obj in (DecisionRequest("q", secret, ("a", "b"), DataClass.PHI), RerankRequest(secret, (secret,)), TranslationRequest(secret, "ta", "en")):
         assert secret not in repr(obj)
 
 
@@ -139,7 +144,7 @@ def test_voice_is_priced_per_audio_token_in_its_own_unit():
 @pytest.mark.asyncio
 async def test_the_fakes_are_deterministic_and_can_be_told_to_fail():
     d = FakeDecision("x")
-    req = DecisionRequest("q", "same text", ("a", "b", "c"))
+    req = DecisionRequest("q", "same text", ("a", "b", "c"), DataClass.SYNTHETIC)
     first, again = (await d.decide(req)).value, (await d.decide(req)).value
     assert first == again and first.choice in req.options and abs(sum(first.probabilities.values()) - 1) < 1e-9 and first.engine == "x"
     e = FakeEmbedding()
@@ -322,7 +327,7 @@ async def test_cost_is_recorded_per_clinic_and_day_with_the_shadow_cost_for_a_fr
     rf = row(provider="free", price=("0", "0"), shadow=("0.01", "0.02"))
     rig = Rig([rf], adapters_for((rf, free)))
     res = await rig.decide()
-    assert res.cost_usd == 0 and res.shadow_cost_usd > 0 and rig.ledger.spent(CLINIC, date(2030, 1, 1)) == 0
+    assert res.cost_usd == 0 and res.shadow_cost_usd > 0 and await rig.ledger.spent_today(CLINIC, "test") == 0
 
 
 @pytest.mark.asyncio
@@ -330,7 +335,7 @@ async def test_an_ordinary_call_skips_a_paid_row_at_the_daily_ceiling_and_a_free
     paid, free = FakeDecision("paid"), FakeDecision("free")
     rp, rf = row(provider="paid", priority=1, price=("1", "1")), row(provider="free", priority=2)
     rig = Rig([rp, rf], adapters_for((rp, paid), (rf, free)), daily="5.00")
-    rig.ledger.record(CLINIC, date(2030, 1, 1), D("5.00"))
+    await rig.spend(CLINIC, "5.00")
     res = await rig.decide()
     assert res.provider == "free" and paid.calls == 0 and res.attempts[0].outcome == "skipped_spend"
 
@@ -340,7 +345,7 @@ async def test_only_a_paid_row_at_the_ceiling_is_a_visible_spend_error_and_anoth
     paid = FakeDecision("paid")
     rp = row(provider="paid", price=("1", "1"))
     rig = Rig([rp], adapters_for((rp, paid)), daily="5.00")
-    rig.ledger.record(CLINIC, date(2030, 1, 1), D("5.00"))
+    await rig.spend(CLINIC, "5.00")
     with pytest.raises(SpendCeilingReached):
         await rig.decide()
     assert (await rig.decide(clinic_id=uuid.uuid4())).provider == "paid"  # the ceiling is per clinic
@@ -362,7 +367,7 @@ async def test_the_safety_class_ignores_the_spend_ceilings_and_is_not_refused_by
     paid = FakeDecision("paid")
     rp = row(provider="paid", price=("1", "1"))
     rig = Rig([rp], adapters_for((rp, paid)), daily="1.00", per_request="0.50")
-    rig.ledger.record(CLINIC, date(2030, 1, 1), D("99"))  # far over the daily ceiling
+    await rig.spend(CLINIC, "99")  # far over the daily ceiling
     with pytest.raises(SpendCeilingReached):
         await rig.decide()
     budget = RunBudget(TickClock(clock=rig.clock))
@@ -423,3 +428,140 @@ async def test_the_gateway_does_not_sleep_for_real_in_tests_and_a_cancelled_call
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
+
+
+# ---- applicability, and the persisted per-origin ledger --------------------------------------------------------------------------------
+
+
+class Picky:
+    """An adapter that declines some inputs BEFORE its model would be called (like Laya on an unsupported script)."""
+
+    def __init__(self, inner, takes):
+        self.inner, self.takes, self.calls = inner, takes, 0
+
+    def accepts(self, payload):
+        return self.takes(payload)
+
+    async def __call__(self, payload):
+        self.calls += 1
+        return await self.inner.decide(payload)
+
+
+@pytest.mark.asyncio
+async def test_an_adapter_that_does_not_accept_the_input_is_skipped_without_a_budget_count_a_spend_check_or_a_breaker_failure():
+    a, b = FakeDecision("a"), FakeDecision("b")
+    ra, rb = row(provider="a", priority=1, price=("1", "1")), row(provider="b", priority=2)
+    picky = Picky(a, takes=lambda p: False)
+    rig = Rig([ra, rb], {ra.key: picky, rb.key: b.decide})
+    budget = RunBudget(TickClock(clock=rig.clock))
+    for _ in range(11):
+        res = await rig.decide(budget=budget)
+        assert res.provider == "b" and res.attempts[0].outcome == "skipped_not_applicable"
+    assert picky.calls == 0 and budget.model_calls == 11  # only b's calls count
+    assert rig.gw.breaker(ra.key).state == "closed"  # 11 declines never trip the breaker (the threshold is 10 failures)
+
+
+@pytest.mark.asyncio
+async def test_an_adapter_that_raises_not_applicable_is_not_a_failure_either():
+    from careflow.ports import RouteNotApplicable
+
+    class Declines:
+        calls = 0
+
+        async def __call__(self, payload):
+            Declines.calls += 1
+            raise RouteNotApplicable("unsupported input")
+
+    ra, rb = row(provider="a", priority=1), row(provider="b", priority=2)
+    rig = Rig([ra, rb], {ra.key: Declines(), rb.key: FakeDecision("b").decide})
+    for _ in range(12):
+        assert (await rig.decide()).provider == "b"
+    assert rig.gw.breaker(ra.key).state == "closed"
+
+
+@pytest.mark.asyncio
+async def test_when_every_route_declines_the_call_fails_visibly_with_the_reason():
+    ra = row(provider="a")
+    rig = Rig([ra], {ra.key: Picky(FakeDecision("a"), takes=lambda p: False)})
+    with pytest.raises(AllRoutesFailed) as exc:
+        await rig.decide()
+    assert [x.outcome for x in exc.value.attempts] == ["skipped_not_applicable"]
+
+
+@pytest.mark.asyncio
+async def test_every_call_is_recorded_in_the_ledger_with_ids_and_amounts_and_a_unique_key():
+    paid = FakeDecision("paid")
+    rp = row(provider="paid", price=("1", "2"), shadow=("3", "4"))
+    rig = Rig([rp], adapters_for((rp, paid)), daily="100", per_request="100")
+    await rig.decide()
+    await rig.decide(call_class=CallClass.SAFETY)
+    first, second = rig.ledger.entries
+    assert (first.clinic_id, first.role, first.provider, first.model_id, first.call_class, first.origin) == (CLINIC, "decision", "paid", "m-1", "ordinary", "test")
+    assert second.call_class == "safety" and first.idempotency_key != second.idempotency_key
+    assert first.usd_actual > 0 and first.usd_shadow > first.usd_actual
+
+
+@pytest.mark.asyncio
+async def test_safety_spend_counts_toward_the_days_total_but_other_origins_and_clinics_do_not():
+    paid = FakeDecision("paid")
+    rp = row(provider="paid", price=("1", "1"))
+    rig = Rig([rp], adapters_for((rp, paid)), daily="100", per_request="100")
+    await rig.decide(call_class=CallClass.SAFETY)
+    total = await rig.ledger.spent_today(CLINIC, "test")
+    assert total > 0
+    assert await rig.ledger.spent_today(CLINIC, "live") == 0  # another origin
+    assert await rig.ledger.spent_today(uuid.uuid4(), "test") == 0  # another clinic
+    rig2 = Rig([rp], adapters_for((rp, paid)), daily=str(total), per_request="100")
+    rig2.ledger = rig.ledger
+    rig2.gw.ledger = rig.ledger
+    with pytest.raises(SpendCeilingReached):  # the safety call's spend now limits ORDINARY calls
+        await rig2.decide(estimate=Usage(10, 10))
+
+
+@pytest.mark.asyncio
+async def test_the_postgres_ledger_asks_the_database_for_today_in_india_time_and_for_one_origin(monkeypatch):
+    from contextlib import asynccontextmanager
+
+    from careflow import spend as spend_module
+    from careflow.spend import PostgresSpendLedger
+
+    seen = []
+
+    class Result:
+        def scalar_one(self):
+            return D("1.25")
+
+    class Conn:
+        async def execute(self, statement, params=None):
+            seen.append((str(statement), params))
+            return Result()
+
+        def begin(self):
+            @asynccontextmanager
+            async def cm():
+                yield self
+
+            return cm()
+
+    class Engine:
+        def connect(self):
+            @asynccontextmanager
+            async def cm():
+                yield Conn()
+
+            return cm()
+
+    async def fake_claims(conn, claims):
+        seen.append(("claims", claims["sub"]))
+
+    monkeypatch.setattr(spend_module, "set_request_claims", fake_claims)
+    account = uuid.uuid4()
+    ledger = PostgresSpendLedger(Engine(), account)  # type: ignore[arg-type]
+    assert await ledger.spent_today(CLINIC, "live") == D("1.25")
+    sql, params = next((s, p) for s, p in seen if "ops.spend_ledger" in str(s))
+    assert "Asia/Kolkata" in sql and "origin = :o" in sql and params == {"c": CLINIC, "o": "live"}
+    assert ("claims", str(account)) in seen
+    seen.clear()
+    await ledger.record(SpendEntry(CLINIC, "decision", "p", "m", "safety", D("0.5"), D("0.7"), "live", "k-1"))
+    sql, params = next((s, p) for s, p in seen if "insert into ops.spend_ledger" in str(s))
+    assert "day" not in sql and params["i"] == "k-1" and params["k"] == "safety"  # the day is never supplied by the caller

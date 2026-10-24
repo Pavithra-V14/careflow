@@ -31,6 +31,11 @@ class PermanentError(Exception):
     """A failure that retrying cannot fix (a refused request, a bad key). The gateway goes straight to the next route."""
 
 
+class RouteNotApplicable(Exception):
+    """This engine cannot handle THIS input (an unsupported script, an over-long text). It is not a failure: the gateway skips the route
+    without counting a model call or a breaker failure. An adapter that raises it must not have called its model."""
+
+
 class DataClass(StrEnum):
     SYNTHETIC = "synthetic"
     PHI = "phi"  # real patient text: only a phi_approved route may see it
@@ -59,7 +64,9 @@ class DecisionRequest:
     question_type: str  # calibration is stored per (engine, question_type), §5.2
     text: str = field(repr=False)  # may be patient text: never in a repr
     options: tuple[str, ...]
-    language: str = "en"
+    # REQUIRED, no default: a request that does not say what it carries is not assumed to be synthetic. A third-party adapter refuses PHI itself.
+    data_class: DataClass
+    language: str = "en"  # a hint for engine/checkpoint choice, e.g. "en", "ta", "ta-Latn" (romanised Tamil); never trusted over the script
 
     def __post_init__(self) -> None:
         if not self.question_type.strip():
@@ -78,6 +85,10 @@ class DecisionResult:
     probabilities: dict[str, float]
     confidence: float  # the probability of `choice`
     engine: str  # which engine answered (§5.2: every call records it)
+    # Whether `probabilities` were calibrated for (engine, question_type) (§5.2). False means the confidence is RAW and must be treated as
+    # unknown, not as a probability: nothing may auto-approve on it.
+    calibrated: bool = False
+    route: str = ""  # the checkpoint or prompt version that answered, for the record
 
 
 class DecisionPort(Protocol):
