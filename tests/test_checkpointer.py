@@ -452,3 +452,17 @@ async def test_a_special_write_put_twice_is_replaced_a_regular_one_stays_through
         await s.aput_writes(wc, [("__interrupt__", value), ("a", value)], "task", "")
     pending = {(w[1]): w[2] for w in (await s.aget_tuple(wc)).pending_writes}
     assert pending == {"__interrupt__": "two", "a": "one"}
+
+
+async def test_the_durability_key_in_the_run_config_is_really_honoured_sync_persists_every_step_exit_does_not():
+    """Guards the private LangGraph constant we import: if an upgrade stopped honouring it, the 'sync' run below would persist like the 'exit' run."""
+    counts = {}
+    for mode in ("sync", "exit"):
+        w = World()
+        w.proposer.crash_before_effect = 1
+        config = run_config(DOC, CLINIC, "test")
+        config["configurable"]["__pregel_durability"] = mode
+        with pytest.raises(RuntimeError):
+            await w.boot().ainvoke(START_STATE, config)
+        counts[mode] = len(w.store.checkpoints)
+    assert counts["sync"] > counts["exit"], counts  # every completed step was saved before the crash, versus only at exit

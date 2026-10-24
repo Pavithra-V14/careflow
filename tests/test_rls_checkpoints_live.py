@@ -277,11 +277,13 @@ async def test_another_clinics_worker_sees_nothing_and_cannot_write_into_this_cl
     foreign = PostgresCheckpointSaver(SqlCheckpointStore(make_session(db, w.people["worker_b"])))
     assert await foreign.aget_tuple(cfg(w, thread)) is None and [t async for t in foreign.alist(cfg(w, thread))] == []
     c = checkpoint({"x": 1})
-    with pytest.raises(DBAPIError):
+    with pytest.raises(DBAPIError) as refused:
         await foreign.aput(cfg(w, thread), c, {"step": 0}, c["channel_versions"])  # clinic A's id, clinic B's worker: row-level security refuses
+    assert refused.value.orig.sqlstate == "42501"
     desk = PostgresCheckpointSaver(SqlCheckpointStore(make_session(db, w.people["fd_a"])))
-    with pytest.raises(DBAPIError):
+    with pytest.raises(DBAPIError) as refused_desk:
         await desk.aput(cfg(w, f"desk-{_u()}"), c, {"step": 0}, c["channel_versions"])
+    assert refused_desk.value.orig.sqlstate == "42501"
 
 
 async def test_the_saver_s_upsert_replaces_a_special_write_and_keeps_a_regular_one_under_row_level_security(db):

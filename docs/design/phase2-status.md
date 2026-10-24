@@ -10,14 +10,14 @@ Updated 2026-10-24. Branch stack: next-backend (PR #2, CI green) <- p2-3-docs <-
 - P2-6 pure-code retrieval: structured-field text, BM25, RRF, version-checked join, abstention with no default threshold, fake vector store.
 - P2-7 referral to identity: rules before any model on every path; verified facts only into mpi.
 - P2-8 the Front Door graph: structural no-side-effect-across-a-pause hard CI gate (fails closed), topology and agent-inventory pins, crash-resume tests, tracing refused.
-  Postgres checkpointer: our own asyncpg saver on 0021 (forced RLS, append-only history), conformance with LangGraph's InMemorySaver, restart-durability test.
+  Postgres checkpointer: our own asyncpg saver on 0021 (forced RLS, append-only history), conformance with LangGraph's InMemorySaver, restart-durability test over the in-memory store (and a single rolled-back transaction against the real tables): NOT yet proven across a real process restart and commit, because no production session factory exists.
 - P2-9 triage: 0018 (proposal and human-only decision tables), routing policy with no clinical values, SQL writers.
 - No run ends silently: `hold_for_human` raises a `referral_hold` review task (0020: front desk can see and resolve its own).
 - The queue worker can register patients from a verified referral (0019: INSERT plus the reads matching needs; no UPDATE/DELETE; merges stay human and two-person).
 - P2-10 offline end-to-end with stand-ins at the edges.
 
 ## Buildable now
-- A LIVE end-to-end run against the real database (now possible: the worker can run the whole clean path under RLS). Needs the real vault, a rules fixture and the review console is NOT needed.
+- A LIVE end-to-end run against the real database. The policies now allow the worker to run the whole clean path (0017 to 0021), but no such run has happened yet and the new live tests have never been executed.
 - The worker/process that starts and resumes runs, and the authenticated resume route with its role-matrix cases (rule 8).
 - Retention/erasure procedure for checkpoints (history is append-only; deletion is refused today).
 

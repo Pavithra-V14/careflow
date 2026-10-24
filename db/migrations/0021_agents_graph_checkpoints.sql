@@ -30,7 +30,7 @@
 -- (4) No audit.log row is written. (5) Rows accumulate: there is no pruning (deletion is blocked); a retention procedure is a later, audited package. (6) CROSS-CLINIC: a queue worker holds its role in each clinic it serves, so row-level security alone would let it see two clinics' rows under the
 -- same thread id; the saver therefore filters EVERY read by the clinic in the run config, but a nurse of clinic A who knew clinic B's thread id could still WRITE a row under it in clinic A
 -- (harmless to B's reads, which are clinic-scoped). (7) LangGraph copies every string in the run config's `configurable` into the stored metadata, in the clear: put nothing sensitive there.
-(8) Atomicity of a put rests on the saver doing both inserts in one transaction; it is exercised against the real tables inside one rolled-back transaction, not across a commit.
+-- (8) Atomicity of a put rests on the saver doing both inserts in one transaction; it is exercised against the real tables inside one rolled-back transaction, not across a commit.
 
 create table agents.graph_checkpoints (
     clinic_id            uuid not null references iam.clinics (id),
