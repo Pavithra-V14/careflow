@@ -185,6 +185,7 @@ async def process_referral(
         # with more authority than data entry, so it is a nurse's hold, not the front desk's.
         return ReferralResult("identity_conflict", document_id, reasons=(*reasons, "identity_key_conflict"))
     except IngestionError:
+        # Data-entry refusals from the identity module (an unreadable date or phone) go to front desk. PENDING CLINIC CONFIRMATION (owner decision 2026-10-24).
         return ReferralResult("needs_front_desk", document_id, reasons=(*reasons, "identity_refused"))
     return ReferralResult("identity_resolved", document_id, reasons=tuple(reasons), identity=identity)
 

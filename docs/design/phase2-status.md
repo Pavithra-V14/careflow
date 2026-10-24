@@ -20,7 +20,6 @@ Updated 2026-10-24. Branch stack: next-backend (PR #2, CI green) <- p2-3-docs <-
 - A LIVE end-to-end run against the real database (now possible: the worker can run the whole clean path under RLS). Needs the real vault, a rules fixture and the review console is NOT needed.
 - The worker/process that starts and resumes runs, and the authenticated resume route with its role-matrix cases (rule 8).
 - Retention/erasure procedure for checkpoints (history is append-only; deletion is refused today).
-- A SECURITY DEFINER ingestion function so the worker cannot attach a token to an arbitrary patient (0019 residual risk 4), if wanted.
 
 ## Blocked on clinicians (see docs/design/clinician-decisions.md)
 - Card content, card attributes, scope keys, the retrieval gold set and the thresholds (so the retrieval gate and correct-abstention cannot be measured).
@@ -36,3 +35,10 @@ Updated 2026-10-24. Branch stack: next-backend (PR #2, CI green) <- p2-3-docs <-
 
 ## Not done and gating real use
 Real-engine contract tests; retrieval gold-set gate; P2-4; the route/worker to run the graph; the review console; the malware scanner; audit.log rows for the human decisions.
+
+## PRE-LAUNCH BLOCKERS (recorded decisions; nothing here blocks the merge, all of it blocks real patient data)
+1. **Worker token-attach and pending-duplicate forgery (0019 residual risk 4).** INSERT on `mpi.identity_tokens` and `mpi.match_candidates` lets a queue worker attach an identity token to ANY existing patient of its clinic, or forge a pending possible-duplicate between two patients; a wrongly attached token would make a later referral link to the wrong person. The owner decided (2026-10-24) NOT to build the SECURITY DEFINER ingestion function now, and to accept the risk while the worker is a trusted, synthetic-data-only identity. It must be closed (a function that touches only the record it just created) or explicitly re-accepted before any real patient data.
+2. The malware scanner (uploads are disabled outside demo; clinical readiness needs one).
+3. Priya's `STRONG_IDENTIFIERS` sign-off; `identity_refused` routing confirmed by the clinic.
+4. A retention/erasure procedure for checkpoints and review tasks (history is append-only today).
+5. audit.log rows for human clinical decisions.
