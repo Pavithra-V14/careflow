@@ -24,10 +24,13 @@ on:
   push:
     branches: [main]
 
-# All runs share ONE hosted CI database, so they must not overlap (concurrent migrations/fixtures would race).
+# A newer push to the same branch supersedes an older run of it, so superseded runs stop instead of piling up. Runs of DIFFERENT
+# branches still share ONE hosted CI database: the `test` (live) job below has its own, job-level group so two live jobs never overlap
+# (concurrent migrations/fixtures would race). NOTE: cancelling a live job mid-run skips its fixture teardown, which can leave committed
+# origin='test' rows behind in the CI project (they are tagged and harmless, and never deleted automatically).
 concurrency:
-  group: careflow-ci-database
-  cancel-in-progress: false
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -62,9 +65,46 @@ jobs:
         # Exact false positives are listed by fingerprint in .gitleaksignore; anything else fails the build.
         run: ./gitleaks git --redact --no-banner --exit-code 1 .
 
+  # The fast gate: lint, the OpenAPI snapshot and every test that needs no database or credentials. It gets NO repository secrets, so a
+  # test that quietly depends on one fails here. Zero skips, like the live job.
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Install dependencies from the lockfile
+        run: |
+          python -m pip install --upgrade pip uv
+          uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check careflow tests scripts
+
+      - name: OpenAPI snapshot is current (BUILD-SPEC.md §21)
+        run: uv run python scripts/export_openapi.py --check
+
+      - name: "Offline tests (a skipped test is a failure)"
+        run: |
+          set -o pipefail
+          uv run pytest -v -rs --durations=25 -p no:cacheprovider --ignore-glob='*live*' --ignore=tests/test_api_role_matrix.py 2>&1 | tee pytest-offline.out
+          if grep -qE "(^| )SKIPPED" pytest-offline.out; then
+            echo "::error::tests were skipped; CI requires zero skips"
+            exit 1
+          fi
+
+  # The live gate: migrations on the CI project, then the WHOLE suite (offline tests included, they take seconds) against it as the restricted careflow_app role.
+  # Serialised across branches by its own concurrency group (never cancelled mid-run by another branch's job).
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
+    concurrency:
+      group: careflow-ci-database
+      cancel-in-progress: false
     env:
       CAREFLOW_ENV: ci
       CAREFLOW_PROFILE: demo
@@ -86,20 +126,16 @@ jobs:
           python -m pip install --upgrade pip uv
           uv sync --frozen
 
-      - name: Lint
-        run: uv run ruff check careflow tests scripts
-
-      - name: OpenAPI snapshot is current (BUILD-SPEC.md §21)
-        run: uv run python scripts/export_openapi.py --check
-
       - name: Apply migrations to the CI project
         run: uv run python -m careflow.migrate
 
-      - name: "Tests (a skipped test is a failure - it means a credential or migration is missing)"
+      # -v names every test as it starts (the last line of a stuck run is the stuck test); --durations=25 lists the slowest at the end;
+      # faulthandler_timeout (pyproject.toml) dumps all stacks if one test runs over 300 s. A skipped test is a failure here.
+      - name: "Live tests (a skipped test is a failure - it means a credential or migration is missing)"
         run: |
           set -o pipefail
-          uv run pytest -q -rs -p no:cacheprovider 2>&1 | tee pytest.out
-          if grep -q "^SKIPPED" pytest.out; then
+          uv run pytest -v -rs --durations=25 -p no:cacheprovider 2>&1 | tee pytest.out
+          if grep -qE "(^| )SKIPPED" pytest.out; then
             echo "::error::tests were skipped; CI requires zero skips"
             exit 1
           fi
