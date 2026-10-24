@@ -51,6 +51,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from careflow import identity, mpi
@@ -72,8 +73,10 @@ from careflow.messages import (
 )
 from careflow.mpi import PatientIngestionPipeline
 from careflow.queue import PostgresQueue
+from careflow.readiness import check_readiness, parse_required_roles
+from careflow.registry import RegistryError, load_registry
 from careflow.rules import NotPermitted as ScreeningNotPermitted
-from careflow.rules import RedFlagEngine
+from careflow.rules import RedFlagEngine, resolve_profile
 from careflow.scheduling import (
     BookingNotFound,
     IdempotencyConflict,
@@ -119,6 +122,10 @@ class Settings(BaseSettings):
     # id of a `queue_worker` account (row-level security decides which clinics' jobs it can see). Both are plain deployment settings.
     run_worker: bool = Field(default=False, validation_alias=AliasChoices("CAREFLOW_RUN_WORKER", "run_worker"))
     worker_account_id: uuid.UUID | None = Field(default=None, validation_alias=AliasChoices("CAREFLOW_WORKER_ACCOUNT_ID", "worker_account_id"))
+
+    # Roles whose absence of a phi_approved route makes a `clinical` deployment report NOT ready (BUILD-SPEC 2). A comma list with no default in
+    # code: which roles are launch-blocking is a deployment decision. Unset means "not configured", and a clinical deployment is then not ready.
+    required_roles: str | None = Field(default=None, validation_alias=AliasChoices("CAREFLOW_REQUIRED_ROLES", "required_roles"))
 
     @property
     def issuer(self) -> str:
@@ -856,6 +863,36 @@ async def unmerge(
     )
 
 
+# ---- readiness (BUILD-SPEC.md 2) ---------------------------------------------------------------------------------------------------
+#
+# `GET /readyz` is unauthenticated and outside /v1 (a platform probe, like a load balancer's health check). It answers ONLY {"ready": bool}
+# (200 or 503): which role is missing is logged by name for the operator, never returned. In the `demo` profile it is ready. In `clinical`
+# (or any unrecognised profile) it is ready only if every required role has an enabled phi_approved route that has an adapter wired
+# (careflow.readiness); nothing is wired yet, so a clinical deployment that requires a model role reports not ready, by design.
+
+health = APIRouter(tags=["health"])
+
+
+@health.get("/readyz")
+async def readyz(request: Request) -> JSONResponse:
+    profile = resolve_profile()
+    required = parse_required_roles(request.app.state.required_roles)
+    rows = None
+    if profile != "demo" and required:
+        account = request.app.state.worker_account_id
+        if account is None:
+            log.warning("readiness: CAREFLOW_WORKER_ACCOUNT_ID is not set, so the model registry cannot be read")
+        else:
+            try:
+                rows = await load_registry(request.app.state.engine, account, origins=("live",))
+            except (RegistryError, SQLAlchemyError) as exc:
+                log.warning("readiness: the model registry could not be read (error=%s)", type(exc).__name__)
+    result = check_readiness(profile, rows, required, wired=request.app.state.wired_adapters)
+    if not result.ready:
+        log.warning("not ready (profile=%s missing_roles=%s reasons=%s)", result.profile, list(result.missing_roles), list(result.reasons))
+    return JSONResponse({"ready": result.ready}, status_code=200 if result.ready else 503)
+
+
 # ---- application -----------------------------------------------------------------------------------
 
 
@@ -885,6 +922,9 @@ def create_app(
         app.state.active_key_version = cfg.active_key_version
         app.state.step_up_max_age_seconds = cfg.step_up_max_age_seconds
         app.state.clock = clock
+        app.state.required_roles = cfg.required_roles
+        app.state.worker_account_id = cfg.worker_account_id
+        app.state.wired_adapters = frozenset()  # (provider, model_id) pairs with a wired adapter: none yet
         app.state.poker = Poker()  # routes that enqueue call `app.state.poker.poke()` after their transaction commits (7.4)
         worker: asyncio.Task | None = None
         if cfg.run_worker:
@@ -916,6 +956,7 @@ def create_app(
     app.include_router(staff_messages)
     app.include_router(staff_patients)
     app.include_router(staff_merges)
+    app.include_router(health)
     return app
 
 

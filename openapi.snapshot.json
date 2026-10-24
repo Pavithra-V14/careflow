@@ -927,6 +927,25 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/readyz": {
+      "get": {
+        "operationId": "readyz_readyz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Readyz",
+        "tags": [
+          "health"
+        ]
+      }
+    },
     "/v1/iam/me": {
       "get": {
         "description": "The caller's own active profile: account type, status, and live staff role grants.\n\nA valid token alone is not enough: the caller needs an ACTIVE row in iam.accounts. A person who signed\nup with Supabase Auth but has no account here (or whose account is invited, suspended or closed) gets\nthe same 403, and learns nothing about which case it was.",
