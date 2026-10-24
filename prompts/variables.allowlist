@@ -1,0 +1,4 @@
+# Variables a *.user.txt template may interpolate, one plain identifier per line.
+# An entry whose name looks like identifying data (name, dob, phone, email, address, id numbers) or like a time (now, date, timestamp) is itself
+# a scan failure: the allowlist cannot grant those. Each entry should say, after a #, what the variable is and why it is not identifying.
+# (empty: no template exists yet)
