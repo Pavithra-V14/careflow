@@ -47,10 +47,12 @@ class Texts:
 
 class Retriever:
     def __init__(self, log, abstain=False):
-        self.log, self.abstain = log, abstain
+        self.log, self.abstain, self.raises = log, abstain, None
 
     async def retrieve(self, query, *, scope):
         self.log.append("MODEL:retrieve")
+        if self.raises:
+            raise self.raises
         assert scope == {"domain": "demo"} and "SENTINEL-LETTER-91" in query
         if self.abstain:
             return Retrieval(True, "below_threshold")
@@ -107,6 +109,7 @@ def world(outcome="clear", *, answer=GOOD, abstain=False, engine_fail=None, extr
     )
     saver = InMemorySaver()
     graph = build_front_door(deps, saver, environ={})
+    graph.test_deps = deps  # type: ignore[attr-defined]
     return graph, log, saver, extractor, ingestor, proposer, recorder
 
 
@@ -318,3 +321,40 @@ async def test_resuming_with_no_value_at_all_is_not_a_decision_whatever_langgrap
     with contextlib.suppress(Exception):  # LangGraph 1.2 raises UnboundLocalError here; either way nothing may be recorded
         await graph.ainvoke(Command(resume=None), CONFIG)
     assert recorder.attempts == [] and (await graph.aget_state(CONFIG)).next == ("review",)
+
+
+async def test_a_resume_that_lands_in_the_retriever_screens_again_first_and_a_red_flag_found_now_stops_the_run():
+    graph, log, *_ , proposer, _ = world()
+    deps = graph.test_deps
+    deps.retriever.raises = RuntimeError("the process died inside the retriever")
+    with pytest.raises(RuntimeError):
+        await graph.ainvoke(START, CONFIG)
+    assert log.count("MODEL:retrieve") == 1
+    deps.engine.outcome = "red_flag"  # the rules now say red flag (a new rule version was approved meanwhile)
+    deps.retriever.raises = None
+    await graph.ainvoke(None, CONFIG)
+    state = await graph.aget_state(CONFIG)
+    assert state.values["status"] == "red_flag_escalated" and state.next == () and "escalate" in log
+    assert log.count("MODEL:retrieve") == 1 and proposer.attempts == []  # no second model call, no proposal
+    assert_rules_before_every_model_call(log)
+
+
+async def test_every_model_call_on_a_resume_into_the_retriever_is_preceded_by_the_rules_after_the_crash():
+    graph, log, *_ = world()
+    deps = graph.test_deps
+    deps.retriever.raises = RuntimeError("died")
+    with pytest.raises(RuntimeError):
+        await graph.ainvoke(START, CONFIG)
+    deps.retriever.raises = None
+    before = len(log)
+    await graph.ainvoke(None, CONFIG)
+    after = log[before:]
+    assert after.index("rules") < after.index("MODEL:retrieve")
+
+
+async def test_hosted_tracing_switched_on_after_the_graph_was_built_stops_the_run_before_any_node_works(monkeypatch):
+    graph, log, *_ = world()
+    monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    with pytest.raises(FrontDoorError):
+        await graph.ainvoke(START, CONFIG)
+    assert log == []  # nothing ran: no rules, no text, no model

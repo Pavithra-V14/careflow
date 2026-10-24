@@ -40,3 +40,14 @@ Recommendation: option 2 (it keeps rules 8 and 10 intact), unless you prefer to 
 
 ## Not here
 P2-9 (the real `TriageProposer`: proposal, review task, assisted-mode rules, priorities blocked on clinicians), P2-10 (end-to-end), the checkpointer table/migration, a route or worker that starts a run (and its role-matrix case), the `TextSource` over P2-4.
+
+## Review fixes (clinical-content-reviewer, BLOCKED then fixed)
+- The structural checker now FAILS CLOSED (`graph_structure.py`): `deps` may appear only as `deps.<name>` (no alias, `getattr`, `vars`, or passing `deps` to a helper); no closure variable but `deps`; `interrupt` is found through an import alias or a helper function; `Command`/`GraphInterrupt` are refused; a node that pauses may touch NO port at all (not even `session`); routers are checked by `router_violations` (state only). Each has a negative test.
+- `match_protocol` re-screens before the retriever (a resume after a crash lands there without passing `resolve_identity`); a red flag found at that point ends the run.
+- Tracing is refused at every node as well as at build, and `LANGSMITH_TRACING`/`LANGCHAIN_TRACING_V2` are pinned `false` when unset; `langsmith-tracing-disabled` is in the data-flow register as retired.
+- `abstain_reason` only takes a value from a fixed vocabulary.
+
+## HARD PREREQUISITES for the route/worker packages (recorded, not built)
+1. `held_unassessable`, `needs_front_desk`, `extraction_unavailable` end a run with a status only. Something must notice them (a review task, or a poller over thread state) before this graph is run for real; otherwise the loop closes silently (rule 3). Blocks P2-10 acceptance outside tests.
+2. `reviewer_id` in the resume value is caller-asserted. The route that resumes must authenticate the reviewer, check clinic membership and the nurse/doctor role (with its role-matrix case, rule 8), and the real `ReviewRecorder` must take the reviewer from `auth.uid()`, not from the resume value (migration 0018 enforces `decided_by = auth.uid()`). `edit` carries no edited content yet.
+3. The checkpointer decision above, before any non-test run.

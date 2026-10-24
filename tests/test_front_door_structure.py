@@ -8,7 +8,6 @@
 
 Offline: no database, no model. `InMemorySaver` stands in for the checkpointer."""
 
-import inspect
 import re
 from pathlib import Path
 
@@ -28,7 +27,7 @@ from careflow.front_door import (
     agents_to_build,
     build_front_door,
 )
-from careflow.graph_structure import violations
+from careflow.graph_structure import router_violations, violations
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -70,16 +69,15 @@ def test_the_compiled_topology_is_exactly_the_front_door():
     edges = {(e.source, e.target) for e in drawn.edges}
     assert edges == {
         ("__start__", "screen"), ("screen", "resolve_identity"), ("screen", "__end__"), ("resolve_identity", "match_protocol"),
-        ("resolve_identity", "__end__"), ("match_protocol", "propose_triage"), ("propose_triage", "review"), ("review", "apply_review"),
+        ("resolve_identity", "__end__"), ("match_protocol", "propose_triage"), ("match_protocol", "__end__"), ("propose_triage", "review"), ("review", "apply_review"),
         ("apply_review", "__end__"),
     }
 
 
 def test_no_model_chooses_the_path_routing_functions_read_only_the_state():
-    src = inspect.getsource(build_front_door)
-    for router in ("after_screen", "after_identity"):
-        body = src.split(f"def {router}")[1].split("\n\n")[0]
-        assert "deps." not in body and "await" not in body, router
+    routers = graph().router_functions
+    assert set(routers) == {"after_screen", "after_identity", "after_match"}
+    assert router_violations(routers) == []
 
 
 # ---- one agent, no fourth, no Care Journey while the flag is off -----------------------------------------------------------------------------
@@ -167,7 +165,7 @@ def test_the_checker_catches_a_pause_declared_with_an_effect_even_if_the_source_
 
 def test_the_checker_catches_an_undeclared_side_effect_an_undeclared_pause_an_unclassified_port_and_an_undeclared_model():
     assert any("touches ['identity']" in p for p in check({"n": _undeclared_effect}, {"n": NOTHING}))
-    assert any("calls interrupt" in p for p in check({"n": _hidden_pause}, {"n": NOTHING}))
+    assert any("reaches interrupt" in p for p in check({"n": _hidden_pause}, {"n": NOTHING}))
     assert any("unclassified port" in p for p in check({"n": _unclassified_port}, {"n": NOTHING}))
     assert any("touches a model port" in p for p in check({"n": _model_undeclared}, {"n": NOTHING}))
 
@@ -176,3 +174,111 @@ def test_the_checker_catches_a_node_without_a_declaration_and_a_declaration_with
     assert check({"n": _clean, "extra": _clean}, {"n": NOTHING}) != []
     assert check({"n": _clean}, {"n": NOTHING, "gone": NOTHING}) != []
     assert check({"n": _clean}, {"n": NOTHING}) == []
+
+
+# ---- the checker fails closed: the ways a node could hide a port or a pause ------------------------------------------------------------------
+
+
+def _alias(state):
+    d = deps
+    d.proposer.propose(state)
+    return {}
+
+
+def _getattr_port(state):
+    getattr(deps, "proposer").propose(state)  # noqa: B009
+    return {}
+
+
+def _pass_deps(state):
+    _helper_using(deps, state)
+    return {}
+
+
+def _helper_using(d, state):
+    d.proposer.propose(state)
+
+
+def _helper_asks(question):
+    from langgraph.types import interrupt
+
+    return interrupt(question)
+
+
+def _pause_through_helper(state):
+    return {"x": _helper_asks("approve?")}
+
+
+def _pause_through_alias(state):
+    from langgraph.types import interrupt as ask
+
+    return {"x": ask("approve?")}
+
+
+def _returns_command(state):
+    from langgraph.types import Command
+
+    return Command(goto="somewhere")
+
+
+def _pause_with_session(state):
+    interrupt("approve?")  # noqa: F821
+    deps.session()
+    return {}
+
+
+def _make_closure_node():
+    port = object()
+
+    def node(state):
+        port.propose(state)
+        return {}
+
+    return node
+
+
+PAUSES = NodeSpec("n", frozenset(), pauses=True, models=False)
+
+
+@pytest.mark.parametrize("node", [_alias, _getattr_port, _pass_deps])
+def test_a_port_reached_through_an_alias_getattr_or_a_helper_argument_is_a_violation(node):
+    assert any("bare reference to deps" in p or "cannot follow" in p for p in check({"n": node}, {"n": NOTHING}))
+
+
+def test_a_port_hidden_in_a_closure_variable_is_a_violation():
+    assert any("closure variable" in p for p in check({"n": _make_closure_node()}, {"n": NOTHING}))
+
+
+@pytest.mark.parametrize("node", [_pause_through_helper, _pause_through_alias])
+def test_a_pause_reached_through_a_helper_or_an_import_alias_is_still_a_pause(node):
+    assert any("does not reach" not in p and "reaches interrupt" in p for p in check({"n": node}, {"n": NOTHING}))
+    assert check({"n": node}, {"n": PAUSES}) == []  # declared honestly, it passes
+
+
+def test_returning_a_command_is_refused_and_a_pausing_node_may_not_touch_any_port_not_even_the_session():
+    assert any("cannot follow" in p and "Command" in p for p in check({"n": _returns_command}, {"n": NOTHING}))
+    found = check({"n": _pause_with_session}, {"n": PAUSES})
+    assert any("may not touch any port" in p for p in found)
+
+
+def _router_ok(state):
+    return "a" if state.get("status") == "x" else "b"
+
+
+def _router_with_deps(state):
+    return deps.retriever.pick(state)
+
+
+async def _router_awaits(state):
+    return await something(state)  # noqa: F821
+
+
+def _router_calls(state):
+    return str(state)
+
+
+def test_the_router_checker_accepts_a_state_only_router_and_refuses_ports_awaits_and_other_calls():
+    assert router_violations({"r": _router_ok}) == []
+    assert any("touches deps" in p for p in router_violations({"r": _router_with_deps}))
+    assert any("awaits" in p for p in router_violations({"r": _router_awaits}))
+    assert any("other than state.get" in p for p in router_violations({"r": _router_calls}))

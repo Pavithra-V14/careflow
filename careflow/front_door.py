@@ -10,7 +10,8 @@ A LangGraph graph whose every routing decision is deterministic code: no model c
                        resume after a crash), grounds the extracted facts, and calls mpi ingestion with verified facts only. Anything short of
                        `identity_resolved` ENDS the run for a human (front desk). The model call and the identity write are in one node on
                        purpose: the extracted name and date of birth never enter the checkpoint (see below).
-  * `match_protocol`   card retrieval (P2-6). Read-only. Abstention is a normal result and goes on to a human.
+  * `match_protocol`   card retrieval (P2-6). It screens AGAIN first (the retriever embeds the letter with a model, and a resume after a crash lands here
+                       without passing through `resolve_identity`); a red flag found now ends the run. Abstention is a normal result and goes on to a human.
   * `propose_triage`   writes the triage PROPOSAL and its review task (P2-9 supplies the real writer). A SIDE EFFECT, and the step immediately
                        before the pause, as §7.2 requires.
   * `review`           PAUSES (`interrupt`) for a human decision. NO side effect. It re-executes from its start on resume, which is harmless.
@@ -85,6 +86,8 @@ class FrontDoorState(TypedDict, total=False):
     proposal_id: str
     decision: dict[str, str]  # {"decision": ..., "reviewer_id": ...}
 
+
+ABSTAIN_REASONS: Final = ("no_calibrated_policy", "no_candidates", "dense_unavailable", "below_threshold", "all_stale")  # a fixed vocabulary only goes into state
 
 STATUSES: Final = (
     "started", "red_flag_escalated", "held_unassessable", "extraction_unavailable", "needs_front_desk", "identity_resolved", "matched",
@@ -161,7 +164,7 @@ class NodeSpec:
 NODE_SPECS: Final = {
     "screen": NodeSpec("screen", frozenset({"escalation"}), pauses=False, models=False),
     "resolve_identity": NodeSpec("resolve_identity", frozenset({"escalation", "identity"}), pauses=False, models=True),
-    "match_protocol": NodeSpec("match_protocol", frozenset(), pauses=False, models=True),
+    "match_protocol": NodeSpec("match_protocol", frozenset({"escalation"}), pauses=False, models=True),
     "propose_triage": NodeSpec("propose_triage", frozenset({"triage_proposal"}), pauses=False, models=False),
     "review": NodeSpec("review", frozenset(), pauses=True, models=False),
     "apply_review": NodeSpec("apply_review", frozenset({"review_decision"}), pauses=False, models=False),
@@ -188,8 +191,11 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
     assert_tracing_off(environ)
     if checkpointer is None:
         raise FrontDoorError("a checkpointer is required")
+    for variable in ("LANGSMITH_TRACING", "LANGCHAIN_TRACING_V2"):
+        os.environ.setdefault(variable, "false")  # pin it off when unset; an explicit "true" was refused above
 
     async def screen(state: FrontDoorState) -> FrontDoorState:
+        assert_tracing_off()  # also at run time: the environment can change after the graph was built
         document_id, _ = _ids(state)
         async with deps.session() as conn:
             text_ = await deps.texts.text_for(document_id)
@@ -199,6 +205,7 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
         return {"status": "started", "reasons": []}
 
     async def resolve_identity(state: FrontDoorState) -> FrontDoorState:
+        assert_tracing_off()  # also at run time: the environment can change after the graph was built
         document_id, _ = _ids(state)
         async with deps.session() as conn:
             text_ = await deps.texts.text_for(document_id)
@@ -209,17 +216,25 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
         return update
 
     async def match_protocol(state: FrontDoorState) -> FrontDoorState:
+        assert_tracing_off()  # also at run time: the environment can change after the graph was built
         document_id, _ = _ids(state)
-        text_ = await deps.texts.text_for(document_id)
+        # Rules first on EVERY path, including a resume that lands here after a crash: the retriever embeds the letter text with a model.
+        async with deps.session() as conn:
+            text_ = await deps.texts.text_for(document_id)
+            screened = await screen_referral(conn, deps.engine, document_id, text_, profile=deps.profile)  # type: ignore[arg-type]
+        if screened.clearance is None:
+            assert screened.result is not None
+            return {"status": screened.result.status, "reasons": list(screened.result.reasons)}
         found = await deps.retriever.retrieve(text_, scope=deps.retrieval_scope)
         return {
             "status": "matched",
             "abstained": found.abstained,
-            "abstain_reason": found.reason or "",
+            "abstain_reason": found.reason if found.reason in ABSTAIN_REASONS else "",
             "candidates": [{"card_id": c.card_id, "version": c.version} for c in found.candidates],
         }
 
     async def propose_triage(state: FrontDoorState) -> FrontDoorState:
+        assert_tracing_off()  # also at run time: the environment can change after the graph was built
         document_id, clinic_id = _ids(state)
         async with deps.session() as conn:
             proposal = await deps.proposer.propose(
@@ -230,6 +245,7 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
         return {"status": "triage_proposed", "proposal_id": str(proposal.proposal_id)}
 
     def review(state: FrontDoorState) -> FrontDoorState:
+        assert_tracing_off()
         # PAUSE. No side effect here: on resume this function runs again from its first line, and it only asks and validates.
         answer = interrupt({"proposal_id": state["proposal_id"], "document_id": state["document_id"], "decisions": list(REVIEW_DECISIONS)})
         if not isinstance(answer, dict) or answer.get("decision") not in REVIEW_DECISIONS or not isinstance(answer.get("reviewer_id"), str):
@@ -241,6 +257,7 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
         return {"decision": {"decision": answer["decision"], "reviewer_id": answer["reviewer_id"]}}
 
     async def apply_review(state: FrontDoorState) -> FrontDoorState:
+        assert_tracing_off()  # also at run time: the environment can change after the graph was built
         document_id, clinic_id = _ids(state)
         async with deps.session() as conn:
             await deps.recorder.record(
@@ -255,6 +272,9 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
     def after_identity(state: FrontDoorState) -> str:
         return "match_protocol" if state.get("status") == "identity_resolved" else END
 
+    def after_match(state: FrontDoorState) -> str:
+        return "propose_triage" if state.get("status") == "matched" else END
+
     functions = {"screen": screen, "resolve_identity": resolve_identity, "match_protocol": match_protocol, "propose_triage": propose_triage,
                  "review": review, "apply_review": apply_review}
     builder = StateGraph(FrontDoorState)
@@ -263,12 +283,13 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
     builder.add_edge(START, "screen")
     builder.add_conditional_edges("screen", after_screen, {"resolve_identity": "resolve_identity", END: END})
     builder.add_conditional_edges("resolve_identity", after_identity, {"match_protocol": "match_protocol", END: END})
-    builder.add_edge("match_protocol", "propose_triage")
+    builder.add_conditional_edges("match_protocol", after_match, {"propose_triage": "propose_triage", END: END})
     builder.add_edge("propose_triage", "review")
     builder.add_edge("review", "apply_review")
     builder.add_edge("apply_review", END)
     graph = builder.compile(checkpointer=checkpointer)
     graph.node_functions = functions  # type: ignore[attr-defined]  # for the structural test, which reads the node sources
+    graph.router_functions = {"after_screen": after_screen, "after_identity": after_identity, "after_match": after_match}  # type: ignore[attr-defined]
     return graph
 
 
