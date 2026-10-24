@@ -1,0 +1,148 @@
+"""The ports every external capability sits behind (BUILD-SPEC.md §3, §5, §10, §18, §21): DecisionPort, EmbeddingPort, RerankPort,
+TranslationPort, EmailPort and SmsPort. The queue has its own (`careflow.queue.QueuePort`).
+
+A port is a typed Protocol plus the small value types that cross it. Nothing here calls a network or imports an HTTP client; the real
+adapters arrive in the package that needs each one, after the owner approves the service (CLAUDE.md rule 13), and each adds its
+data-flow-register entry. Until then every port has a fake in `careflow.adapters.fake`, so the whole suite runs with no network (§21).
+
+Two rules the types themselves enforce:
+  * `DecisionRequest` refuses more than 20 options (§5.2: "never more than 20 options in one `choice` call"; accuracy collapses above it).
+  * Every model-role adapter reports `Usage`, because cost is computed from the registry's price and the tokens used (§5.1, §15). Voice is
+    priced by AUDIO tokens in its own unit, so `Usage` names its unit and the registry refuses a mismatch.
+
+Data class: a request is `SYNTHETIC` or `PHI`. The gateway (careflow.gateway) will only send a `PHI` request to a registry row whose
+`data_policy` is `phi_approved`; an adapter never decides that for itself.
+"""
+
+from dataclasses import dataclass, field
+from enum import StrEnum
+from typing import Final, Literal, Protocol
+
+MAX_DECISION_OPTIONS: Final = 20  # §5.2 hard rule
+ROLES: Final = ("llm_large", "llm_planner", "llm_fast", "vlm", "embed", "rerank", "llm_judge", "decision", "voice_live")
+Unit = Literal["text_tokens", "audio_tokens"]
+
+
+class TransientError(Exception):
+    """A failure worth retrying (a timeout, a 5xx, a rate limit). Adapters raise it; the gateway retries it with backoff."""
+
+
+class PermanentError(Exception):
+    """A failure that retrying cannot fix (a refused request, a bad key). The gateway goes straight to the next route."""
+
+
+class DataClass(StrEnum):
+    SYNTHETIC = "synthetic"
+    PHI = "phi"  # real patient text: only a phi_approved route may see it
+
+
+@dataclass(frozen=True)
+class Usage:
+    input_tokens: int = 0
+    output_tokens: int = 0
+    unit: Unit = "text_tokens"
+
+
+@dataclass(frozen=True)
+class AdapterResult[T]:
+    """What an adapter returns to the gateway: the typed value and what it used."""
+
+    value: T
+    usage: Usage = field(default_factory=Usage)
+
+
+# ---- decision ----------------------------------------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class DecisionRequest:
+    question_type: str  # calibration is stored per (engine, question_type), §5.2
+    text: str = field(repr=False)  # may be patient text: never in a repr
+    options: tuple[str, ...]
+    language: str = "en"
+
+    def __post_init__(self) -> None:
+        if not self.question_type.strip():
+            raise ValueError("a decision needs a question_type")
+        if len(self.options) < 2:
+            raise ValueError("a decision needs at least two options")
+        if len(self.options) > MAX_DECISION_OPTIONS:
+            raise ValueError(f"a decision call takes at most {MAX_DECISION_OPTIONS} options")
+        if len(set(self.options)) != len(self.options):
+            raise ValueError("decision options must be distinct")
+
+
+@dataclass(frozen=True)
+class DecisionResult:
+    choice: str
+    probabilities: dict[str, float]
+    confidence: float  # the probability of `choice`
+    engine: str  # which engine answered (§5.2: every call records it)
+
+
+class DecisionPort(Protocol):
+    async def decide(self, request: DecisionRequest) -> AdapterResult[DecisionResult]: ...
+
+
+# ---- embedding, rerank, translation ---------------------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class EmbeddingResult:
+    vectors: list[list[float]]
+    dimensions: int
+
+
+class EmbeddingPort(Protocol):
+    async def embed(self, texts: list[str]) -> AdapterResult[EmbeddingResult]: ...
+
+
+@dataclass(frozen=True)
+class RerankRequest:
+    query: str = field(repr=False)
+    candidates: tuple[str, ...] = field(repr=False)
+
+
+@dataclass(frozen=True)
+class RerankResult:
+    order: list[int]  # candidate indexes, best first
+    scores: list[float]  # aligned to the candidates as given
+
+
+class RerankPort(Protocol):
+    async def rerank(self, request: RerankRequest) -> AdapterResult[RerankResult]: ...
+
+
+@dataclass(frozen=True)
+class TranslationRequest:
+    text: str = field(repr=False)
+    source: str
+    target: str
+
+
+@dataclass(frozen=True)
+class TranslationResult:
+    text: str = field(repr=False)
+    source: str
+    target: str
+
+
+class TranslationPort(Protocol):
+    async def translate(self, request: TranslationRequest) -> AdapterResult[TranslationResult]: ...
+
+
+# ---- email and SMS (not model roles: no registry row, no token usage) ------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SendResult:
+    provider_id: str
+    replayed: bool = False
+
+
+class EmailPort(Protocol):
+    async def send(self, to: str, subject: str, body: str, *, idempotency_key: str) -> SendResult: ...
+
+
+class SmsPort(Protocol):
+    async def send(self, to: str, body: str, *, idempotency_key: str) -> SendResult: ...
