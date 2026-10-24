@@ -28,6 +28,7 @@ from careflow.crypto import DemographicVault
 from careflow.db import make_app_engine, set_request_claims
 from careflow.mpi import PatientIngestionPipeline
 from tests.bounds import bounded
+from tests.db_helpers import ensure_app_role_sa
 
 ROOT = Path(__file__).resolve().parent.parent
 _ENV = dotenv_values(ROOT / ".env")
@@ -78,7 +79,7 @@ async def _conn():
     conn = await engine.connect()
     outer = await conn.begin()
     try:
-        await conn.exec_driver_sql("grant careflow_app to current_user with set true")
+        await ensure_app_role_sa(conn)
         if (await conn.execute(text("select to_regclass('mpi.match_candidates') is null"))).scalar_one():
             await raw(conn, SQL_0003)
         # Matching now routes a merged subordinate to its master, so it reads mpi.merges (migration 0008).

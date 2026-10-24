@@ -18,6 +18,8 @@ import pytest
 import pytest_asyncio
 from dotenv import dotenv_values
 
+from tests.db_helpers import ensure_app_role
+
 ROOT = Path(__file__).resolve().parent.parent
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or dotenv_values(ROOT / ".env").get("DATABASE_URL_MIGRATOR")
 SQL_0001 = (ROOT / "db" / "migrations" / "0001_initial_schema.sql").read_text(encoding="utf-8")
@@ -44,7 +46,7 @@ async def db():
     try:
         # The migrator may not SET ROLE to careflow_app by default; grant that inside this
         # transaction only (rolled back with everything else) so queries can run as the real role.
-        await conn.execute("grant careflow_app to current_user with set true")
+        await ensure_app_role(conn)
         if await conn.fetchval("select to_regclass('iam.accounts') is null"):
             await conn.execute(SQL_0001)
         yield conn

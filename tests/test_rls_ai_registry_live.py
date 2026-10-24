@@ -20,6 +20,7 @@ import pytest_asyncio
 from dotenv import dotenv_values
 
 from careflow.gateway import ModelRow
+from tests.db_helpers import ensure_app_role
 
 ROOT = Path(__file__).resolve().parent.parent
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or dotenv_values(ROOT / ".env").get("DATABASE_URL_MIGRATOR")
@@ -42,7 +43,7 @@ async def db():
     tx = conn.transaction()
     await tx.start()
     try:
-        await conn.execute("grant careflow_app to current_user with set true")
+        await ensure_app_role(conn)
         if await conn.fetchval("select to_regclass('ai.model_registry') is null"):
             await conn.execute(SQL_0015)
         yield conn
@@ -53,16 +54,16 @@ async def db():
 
 INSERT = (
     "insert into ai.model_registry (role, provider, model_id, data_policy, priority, enabled, unit, price_in_per_1k, price_out_per_1k, "
-    "shadow_in_per_1k, shadow_out_per_1k, approved_by, approved_at, origin, idempotency_key) values "
-    "({role}, {provider}, {model}, {policy}, {priority}, {enabled}, {unit}, 0, 0, 0.003, 0.015, {approver}, {approved_at}, {origin}, {key})"
+    "shadow_in_per_1k, shadow_out_per_1k, created_by, approved_by, approved_at, origin, idempotency_key) values "
+    "({role}, {provider}, {model}, {policy}, {priority}, {enabled}, {unit}, 0, 0, 0.003, 0.015, {created_by}, {approver}, {approved_at}, {origin}, {key})"
 )
 
 
 def insert_sql(*, role="decision", provider="p", model="m-1", policy="synthetic_only", priority=1, enabled="false", unit="text_tokens",
-               approver="null", approved_at="null", origin="'test'", key=None):
+               approver="null", approved_at="null", origin="'test'", key=None, created_by="null"):
     q = lambda v: v if str(v).startswith("'") or str(v) in {"null", "true", "false"} or str(v).isdigit() else f"'{v}'"
     return INSERT.format(role=q(role), provider=q(provider), model=q(model), policy=q(policy), priority=priority, enabled=enabled,
-                         unit=q(unit), approver=approver, approved_at=approved_at, origin=origin, key=q(key or f"k-{_u()}"))
+                         unit=q(unit), created_by=created_by, approver=approver, approved_at=approved_at, origin=origin, key=q(key or f"k-{_u()}"))
 
 
 async def outcome(conn, sql):
@@ -174,7 +175,7 @@ async def test_the_registry_refuses_invalid_rows(db, label, kwargs, state):
 
 async def test_phi_approved_needs_a_named_approver_and_a_date(db):
     people = await seed_people(db)
-    ok = insert_sql(policy="phi_approved", approver=f"'{people['admin_a']}'", approved_at="now()", model="m-phi")
+    ok = insert_sql(policy="phi_approved", created_by=f"'{people['nurse_a']}'", approver=f"'{people['admin_a']}'", approved_at="now()", model="m-phi")
     assert await outcome(db, ok) is None
 
 
@@ -200,7 +201,7 @@ async def test_among_enabled_rows_of_a_role_the_priority_is_unique_but_disabled_
 
 async def test_operational_columns_may_change_but_identity_and_data_policy_may_not(db):
     people = await seed_people(db)
-    assert await outcome(db, insert_sql(policy="phi_approved", approver=f"'{people['admin_a']}'", approved_at="now()", model="m-imm")) is None
+    assert await outcome(db, insert_sql(policy="phi_approved", created_by=f"'{people['nurse_a']}'", approver=f"'{people['admin_a']}'", approved_at="now()", model="m-imm")) is None
     for column_change in (
         "enabled = true", "priority = 5", "price_in_per_1k = 0.5", "shadow_out_per_1k = 0.9", "timeout_seconds = 30",
     ):

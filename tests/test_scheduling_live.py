@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from careflow import scheduling as sch
 from careflow.db import set_request_claims
 from careflow.scheduling import SlotManager
+from tests.db_helpers import ensure_app_role_sa
 
 ROOT = Path(__file__).resolve().parent.parent
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or dotenv_values(ROOT / ".env").get("DATABASE_URL_MIGRATOR")
@@ -64,7 +65,7 @@ async def _conn():
     conn = await engine.connect()
     outer = await conn.begin()
     try:
-        await conn.exec_driver_sql("grant careflow_app to current_user with set true")
+        await ensure_app_role_sa(conn)
         if (await conn.execute(text("select to_regclass('sched.holds') is null"))).scalar_one():
             await raw(conn, SQL_0004)
         # 0005 narrows the app role's UPDATE on priority_levels; if it is not applied yet, apply it here too.

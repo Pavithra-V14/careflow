@@ -39,6 +39,7 @@ import pytest_asyncio
 from dotenv import dotenv_values
 
 from tests.bounds import bounded
+from tests.db_helpers import ensure_app_role
 
 ROOT = Path(__file__).resolve().parent.parent
 _ENV = dotenv_values(ROOT / ".env")
@@ -146,7 +147,7 @@ async def _conn():
     try:
         # The migrator may not SET ROLE to careflow_app by default; grant that inside this
         # transaction only (it is never committed).
-        await conn.execute("grant careflow_app to current_user with set true")
+        await ensure_app_role(conn)
         if await conn.fetchval("select to_regclass('mpi.patients') is null"):
             await conn.execute(SQL_0002)
         # The column privileges these tests describe are 0012's: load it inside this never-committed transaction if needed.

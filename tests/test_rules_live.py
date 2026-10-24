@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from careflow import rules
 from careflow.db import set_request_claims
 from careflow.rules import RedFlagEngine, evaluate_with
+from tests.db_helpers import ensure_app_role_sa
 
 ROOT = Path(__file__).resolve().parent.parent
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or dotenv_values(ROOT / ".env").get("DATABASE_URL_MIGRATOR")
@@ -65,7 +66,7 @@ async def _conn():
             ))).scalar_one()
             if n:  # read-only precondition; nothing is deleted
                 pytest.fail(f"This suite assumes the database holds NO committed approved origin='test' red-flag rule with criteria (it inserts its own inside a rolled-back transaction); found {n}. Such a rule changes what screenings and rule-set hashes the tests expect. Nothing was deleted: an engineer with the migrator credential must retire or remove those rules deliberately, then re-run.", pytrace=False)
-        await conn.exec_driver_sql("grant careflow_app to current_user with set true")
+        await ensure_app_role_sa(conn)
         if (await conn.execute(text("select to_regclass('kb.red_flag_rules') is null"))).scalar_one():
             await raw(conn, SQL_0007)
         # Message-sourced tasks and the screening function are 0013's (msg.* itself is 0011's, applied before this suite runs).

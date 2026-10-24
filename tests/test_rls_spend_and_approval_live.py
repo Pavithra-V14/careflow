@@ -15,6 +15,8 @@ import pytest
 import pytest_asyncio
 from dotenv import dotenv_values
 
+from tests.db_helpers import ensure_app_role
+
 ROOT = Path(__file__).resolve().parent.parent
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or dotenv_values(ROOT / ".env").get("DATABASE_URL_MIGRATOR")
 SQL_0015 = (ROOT / "db" / "migrations" / "0015_ai_model_registry.sql").read_text(encoding="utf-8")
@@ -34,7 +36,7 @@ async def db():
     tx = conn.transaction()
     await tx.start()
     try:
-        await conn.execute("grant careflow_app to current_user with set true")
+        await ensure_app_role(conn)
         if await conn.fetchval("select to_regclass('ai.model_registry') is null"):
             await conn.execute(SQL_0015)
         if await conn.fetchval("select to_regclass('ops.spend_ledger') is null"):
@@ -272,7 +274,7 @@ async def test_a_phi_approved_row_with_no_approver_or_no_date_is_refused_by_the_
 
 async def test_a_synthetic_only_row_needs_none_of_that(db):
     await world(db)
-    assert await outcome(db, model_sql(policy="synthetic_only")) is None
+    assert await outcome(db, model_sql(policy="synthetic_only", approved_at="null")) is None  # no approver, so no date either (the approval is whole or absent)
 
 
 async def test_created_by_is_immutable_like_the_rest_of_a_rows_identity(db):
