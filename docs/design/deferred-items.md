@@ -39,11 +39,15 @@ one, delete its line in the same change. Source of the first group: the msg / ia
   clinician-reviewed labels.
 - **Minute tick, immediate poke and the 12/25/40/40 s ceilings** (BUILD-SPEC 7.3, 7.4): moved to Phase 2 package P2-1 and built there
   (`careflow/budget.py`, `careflow/tick.py`). Still open: no route calls the poke after enqueueing, and no handler exists.
-- **Per-clinic daily spend ledger** (`careflow/gateway.py`) is in memory behind a port, so a restart forgets the day's spend. Build a durable
-  one before any paid route is wired. The daily ceiling itself has no default (the owner chooses it).
-- **Registry approver check**: `ai.model_registry` requires a named approver and a date for a `phi_approved` row but does not check that the
-  approver is an active staff account (a CHECK cannot). Only the migrator writes it; add a trigger or an approval tool before the first
-  `phi_approved` row. A registry write path from the console would also need audit rows.
+- **Per-clinic daily spend**: persisted in `ops.spend_ledger` (migration 0016) and read per origin by `careflow.spend.PostgresSpendLedger`;
+  the daily ceiling has no default and arrives by configuration (owner). Still open: a ledger cannot be corrected (append-only, no negative
+  amounts), so a mistaken entry needs the migrator; a reversal mechanism is a later change. The gateway is not yet constructed with the Postgres
+  ledger anywhere (no caller exists).
+- **Registry approver**: now enforced in the database (migration 0016). Still open: it proves the two accounts are eligible and different, NOT
+  that the approver consented; real attestation needs a signed-in approver action. A registry write path from the console would also need
+  audit rows.
+- **Uploads**: Supabase Storage behind an `UploadPort` instead of Uploadcare (accepted deviation, `docs/design/uploads-supabase-storage.md`);
+  no malware scanner exists, a pre-launch blocker, and real uploads stay disabled in `clinical` until one does.
 - **Prompt versioning**: `prompts/` and its scan exist; the version-and-content-hash loader and the "every model call records which prompt
   version answered" part of BUILD-SPEC 17.4 arrive with the first prompt.
 - **`aal2` database policy** (a restrictive policy requiring `aal = 'aal2'` for sensitive tables): deferred. Staff second-factor

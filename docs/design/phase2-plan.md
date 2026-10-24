@@ -19,7 +19,7 @@ needs it (CLAUDE.md rule 13).** Everything below is built against fake adapters.
 |---|---|---|---|---|
 | **P2-0** | Decisions, approvals, this plan | **Done** (this page) | n/a | none |
 | **P2-1** | The 7.3 ceilings and the safety class (`careflow/budget.py`); the worker tick, the poke and an off-by-default in-process worker (`careflow/tick.py`); the `ai.model_registry` migration 0015; the six ports with fakes (`careflow/ports.py`, `careflow/adapters/fake.py`); the gateway with routing, fallback, retries, breakers and spend ceilings (`careflow/gateway.py`); the readiness rule and `GET /readyz` (`careflow/readiness.py`); the prompt-template scan (`careflow/prompt_scan.py`, `prompts/`) | **Built** (offline tests pass; the 0015 live tests have not run in CI yet) | The 7.3 ceilings enforced and tested; the 7.4 tick and poke; section 2 "refuses to report ready"; section 6.2 prompt scan | none |
-| **P2-2** | `DecisionPort` and the Laya, Jev and LLM adapters; routing by data class; script detection before Laya; contract test | **Next**, fakes first | The three-engine contract test (hard gate) | Laya CPU latency; Jev request shape via OpenRouter |
+| **P2-2** | `DecisionPort` and the Laya, Jev and LLM adapters over injectable clients; routing by data class; script detection before Laya; contract test (design: `docs/design/p2-2-decision-tier.md`) | **In progress**, fakes only | The three-engine contract test (hard gate) | Laya CPU latency; Jev request shape via OpenRouter |
 | **P2-3** | `docs` schema, signed upload, server-side re-verification, registration | Not started | Section 17.3 steps | Uploadcare malware scanning (pre-launch blocker) |
 | **P2-4** | Extraction worker: pypdf, Unstructured (local), vision | Not started | Section 10.4 tiers with page provenance | none new |
 | **P2-5** | Tiered grounding as Guardrails custom validators | Not started | Hard gate: no unverified fact reaches a rule | Guardrails' bundled NLI validator (do not use as is) |
@@ -45,14 +45,18 @@ needs it (CLAUDE.md rule 13).** Everything below is built against fake adapters.
 
 ## Questions for the owner (batched; nothing below was assumed)
 
-1. **Which roles block a `clinical` launch?** `CAREFLOW_REQUIRED_ROLES` has no default, so a clinical deployment reports not ready until it is
-   set. BUILD-SPEC section 2 lists capabilities that degrade visibly without an approved route; which of them count as launch-blocking is your call.
-2. **Per-clinic daily spend ceiling** (`SpendLimits.clinic_daily_usd`): there is deliberately no default. What amount, and should the day's spend
-   be persisted in the database so a restart cannot reset it? The ledger is in memory today, which is harmless while no paid route exists.
-3. **Who may approve a `phi_approved` registry row?** The migration only requires a named approver and a date; it does not check that the approver
-   is an active staff member (the migrator is the only writer). Do you want that enforced by a trigger or an approval tool before the first
-   `phi_approved` row is written?
-4. **LLM provider choice** (still open from Phase 1) for the `llm_*` roles, and whether Supabase Storage may replace Uploadcare for uploads
-   (the spec names Uploadcare).
-5. **Queue worker HTTP auth** (`/internal`, a short-lived signed token per job, section 18.4): the in-process worker avoids it; confirm that is
-   acceptable until a separate worker process exists.
+Answered by the owner on 2026-10-24:
+
+1. **Required roles for a `clinical` launch**: recommended `decision,embed,llm_large`, documented commented-out in `.env.example`; **no code
+   default**; the owner sets the real `CAREFLOW_REQUIRED_ROLES` value.
+2. **Daily spend ceiling**: no code default; the number arrives by configuration. The day's spend is **persisted** (`ops.spend_ledger`,
+   migration 0016, append-only, forced RLS).
+3. **`phi_approved` approver**: enforced in the database (migration 0016): an active staff account holding an admin or doctor grant, different
+   from the account that added the row.
+4. **LLM provider**: NOT decided; no hosted provider is added. **Uploads**: Supabase Storage behind an `UploadPort`, an accepted deviation from
+   Uploadcare (`docs/design/uploads-supabase-storage.md`), with the missing malware scanner recorded as a pre-launch blocker.
+5. **In-process worker**: accepted until a separate worker process and `/internal` auth exist.
+
+Standing instruction (owner, 2026-10-24): the owner's machine has little memory. **Do not install, download or load any model weights or heavy
+runtime (Laya, Unstructured, the local embedding model, torch and similar) without asking first, and say each one's approximate disk and RAM.**
+Everything is built against fakes. The frontend is postponed; backend only.
