@@ -66,7 +66,7 @@ ATTACKER, _ = _key("matrix-key")  # same kid, different key material
 
 
 def mint(sub, *, key=SIGNING, kid="matrix-key", alg="ES256", **over):
-    claims = {"sub": str(sub), "iss": ISSUER, "aud": "authenticated", "role": "authenticated", "exp": int(time.time()) + 600, **over}
+    claims = {"sub": str(sub), "iss": ISSUER, "aud": "authenticated", "role": "authenticated", "exp": int(time.time()) + 3000, **over}
     claims = {k: v for k, v in claims.items() if v is not None}
     return jwt.encode(claims, key, algorithm=alg, headers={"kid": kid})
 
@@ -226,7 +226,9 @@ def ids():
 TEST_VAULT = DemographicVault.from_env({f"CAREFLOW_{k}_SECRET_V1": base64.b64encode(os.urandom(32)).decode() for k in ("ENC", "HMAC")})
 
 
-STEP_UP_WINDOW = 300  # seconds; the merge routes require a second factor verified within this window
+# seconds; the merge routes require a second factor verified within this window. Generous on purpose: tokens are minted when a route's cases are built and
+# the cases then run one after another against a shared hosted database; at 300 s the last cases of the approve route (278 s in CI) came back 401.
+STEP_UP_WINDOW = 1800
 
 
 @pytest.fixture(scope="module")
