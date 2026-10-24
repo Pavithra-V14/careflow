@@ -55,6 +55,8 @@ def test_exactly_the_expected_policies_exist_and_none_admits_front_desk_admin_ow
     assert "decided_by = auth.uid()" in decision_insert and "'nurse', 'doctor'" in decision_insert and "queue_worker" not in decision_insert
 
 
-def test_no_seed_rows_and_the_review_task_pin_is_added():
+def test_a_decision_pins_its_proposals_clinic_and_origin_and_no_seed_rows_exist():
     assert not re.search(r"insert\s+into\s+agents\.(triage_proposals|review_decisions)", CODE, flags=re.IGNORECASE)
-    assert "alter table agents.review_tasks add constraint review_tasks_id_clinic_key unique (id, clinic_id)" in CODE
+    assert "foreign key (proposal_id, clinic_id, origin) references agents.triage_proposals (id, clinic_id, origin)" in CODE
+    assert "triage_proposals_id_clinic_origin_key unique (id, clinic_id, origin)" in CODE
+    assert "alter table agents.review_tasks" not in CODE.lower()  # nothing existing is altered

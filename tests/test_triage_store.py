@@ -187,3 +187,12 @@ async def test_the_task_priority_has_no_default_and_must_be_one_the_table_allows
     conn = Conn()
     await proposer(priority="immediate").propose(conn, document_id=DOC, clinic_id=CLINIC, origin="test", patient_id=PATIENT, candidates=[], abstained=True, idempotency_key=KEY)
     assert next(c for c in conn.calls if "insert into agents.review_tasks" in c[0])[1]["pr"] == "immediate"
+
+
+async def test_resolving_a_task_another_reviewer_acknowledged_is_a_clean_refusal_and_the_caller_must_roll_back():
+    conn = Conn(fail_on="update agents.review_tasks")
+    conn.error_state = "42501"
+    with pytest.raises(NotPermitted):
+        await SqlReviewRecorder().record(
+            conn, proposal_id=proposal_id_for(CLINIC, KEY), clinic_id=CLINIC, decision="approve", reviewer_id=REVIEWER, idempotency_key="k"
+        )

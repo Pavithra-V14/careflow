@@ -141,10 +141,18 @@ class SqlReviewRecorder:
             if same is None:
                 raise DecisionConflict("this key was used for a different decision")
             return
-        await conn.execute(
-            text(
-                "update agents.review_tasks set status = 'resolved', acknowledged_by = coalesce(acknowledged_by, :u), acknowledged_at = coalesce(acknowledged_at, now()), "
-                "resolved_at = now() where id = :t and clinic_id = :c and status <> 'resolved'"
-            ),
-            {"u": reviewer_id, "t": origin_row.review_task_id, "c": clinic_id},
-        )
+        try:
+            async with conn.begin_nested():
+                await conn.execute(
+                    text(
+                        "update agents.review_tasks set status = 'resolved', acknowledged_by = coalesce(acknowledged_by, :u), "
+                        "acknowledged_at = coalesce(acknowledged_at, now()), resolved_at = now() where id = :t and clinic_id = :c and status <> 'resolved'"
+                    ),
+                    {"u": reviewer_id, "t": origin_row.review_task_id, "c": clinic_id},
+                )
+        except DBAPIError as exc:
+            if getattr(exc.orig, "sqlstate", None) == _INSUFFICIENT_PRIVILEGE:
+                # The task was acknowledged by another reviewer, so this reviewer may not resolve it (review_tasks_update). The decision above is in the same
+                # transaction: the caller must roll back rather than keep a decision on an unresolved task.
+                raise NotPermitted("this review task is acknowledged by another reviewer") from None
+            raise

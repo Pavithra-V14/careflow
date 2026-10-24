@@ -133,8 +133,9 @@ async def test_forced_rls_append_only_and_column_limited_inserts(db):
     for table in ("agents.triage_proposals", "agents.review_decisions"):
         row = await db.fetchrow("select relrowsecurity, relforcerowsecurity from pg_class where oid = $1::regclass", table)
         assert row["relrowsecurity"] and row["relforcerowsecurity"], table
-        for priv in ("UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"):
+        for priv in ("DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"):
             assert not await db.fetchval("select has_table_privilege('careflow_app', $1, $2)", table, priv), (table, priv)
+        assert not await db.fetchval("select has_any_column_privilege('careflow_app', $1, 'UPDATE')", table), table  # a column-level grant would not show above
         assert await db.fetchval("select has_table_privilege('careflow_app', $1, 'SELECT')", table)
         assert not await db.fetchval("select has_column_privilege('careflow_app', $1, 'created_at', 'INSERT')", table)
         for role in ("anon", "authenticated", "service_role"):
@@ -147,7 +148,7 @@ async def test_the_owner_cannot_edit_either_table_either(db):
     pid = await seed_proposal(db, w)
     await db.execute(decision_sql(w.a, pid, w.people["nurse_a"]))
     for stmt in (
-        "update agents.triage_proposals set abstained = false", "delete from agents.triage_proposals", "truncate agents.triage_proposals",
+        "update agents.triage_proposals set abstained = false", "delete from agents.triage_proposals", "truncate agents.triage_proposals cascade",
         "update agents.review_decisions set decision = 'reject'", "delete from agents.review_decisions", "truncate agents.review_decisions",
     ):
         assert await outcome(db, stmt) == "23001", stmt  # restrict_violation
@@ -242,5 +243,27 @@ async def test_only_nurse_doctor_and_worker_read_decisions(db):
         assert await as_app(db, p[who], "select 1 from agents.review_decisions", fetch=True) == [], who
 
 
-async def test_review_tasks_now_have_the_clinic_pin_the_new_tables_use(db):
-    assert await db.fetchval("select count(*) from pg_constraint where conname = 'review_tasks_id_clinic_key'") == 1
+async def test_a_decision_cannot_carry_a_different_origin_than_its_proposal(db):
+    w = await world(db)
+    pid = await seed_proposal(db, w)  # origin 'test'
+    sql = (
+        "insert into agents.review_decisions (clinic_id, origin, proposal_id, decision, decided_by, idempotency_key) values "
+        f"('{w.a}', 'live', '{pid}', 'approve', '{w.people['nurse_a']}', 'o-1')"
+    )
+    assert await outcome(db, sql) == "23503"
+
+
+async def test_a_patient_account_a_revoked_grant_and_a_suspended_account_get_nothing_and_a_doctor_is_a_valid_decider(db):
+    w = await world(db)
+    p = w.people
+    pid = await seed_proposal(db, w)
+    patient_like, revoked, suspended = _u(), _u(), _u()
+    for acct, status, kind in ((patient_like, "active", "patient"), (revoked, "active", "staff"), (suspended, "suspended", "staff")):
+        await db.execute("insert into iam.accounts (id, account_type, status, origin) values ($1, $2, $3, 'test')", acct, kind, status)
+        await db.execute("insert into iam.staff_roles (account_id, clinic_id, role, origin) values ($1, $2, 'nurse', 'test')", acct, w.a)
+    await db.execute("update iam.staff_roles set revoked_at = now() where account_id = $1", revoked)
+    for who in (patient_like, revoked, suspended):
+        assert await as_app(db, who, decision_sql(w.a, pid, who)) == "42501", who
+        assert await as_app(db, who, "select 1 from agents.triage_proposals", fetch=True) == [], who
+    assert await as_app(db, p["doctor_a"], decision_sql(w.a, pid, p["doctor_a"])) == "INSERT 0 1"
+    assert len(await as_app(db, p["doctor_a"], "select 1 from agents.triage_proposals", fetch=True)) == 1

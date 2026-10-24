@@ -15,11 +15,18 @@
 -- * Who: the proposal is inserted by the queue worker (the graph runner) or a nurse or doctor; read by nurse, doctor and queue worker (front desk and admin do
 --   not see case-level triage, as 0013 hides message-sourced review tasks from them). A decision is inserted by a nurse or doctor only, as themselves.
 --
--- Also: agents.review_tasks gets a unique (id, clinic_id) so these tables can pin the clinic with a composite key. (0013 already added (id, clinic_id, origin).)
+-- The composite foreign keys use keys that already exist: documents (id, clinic_id) from 0017, patients (id, clinic_id, origin) from 0011, review_tasks
+-- (id, clinic_id, origin) from 0013; this migration adds triage_proposals (id, clinic_id, origin) so a decision pins its proposal's clinic AND origin.
 --
 -- RESIDUAL RISKS, stated: (1) the database cannot check that a proposal's candidate ids name real cards (no card table exists yet); the retriever's
 -- version-checked join is the guard. (2) The decision insert and the review-task resolve are two statements in the caller's transaction; a nurse who
--- resolves a task by another path leaves a proposal with no decision (visible: the proposal has no review_decisions row). (3) No audit.log row is written here.
+-- resolves a task by another path leaves a proposal with no decision (visible: the proposal has no review_decisions row). (3) No audit.log row is written here,
+-- so a human clinical decision leaves nothing for the auditor role to review yet. (4) "Append-only for everyone" is a TRIGGER guarantee: the owner could still
+-- drop or disable the triggers or set session_replication_role (the same holds for 0017). (5) The proposal id is a global primary key supplied by the server
+-- (a uuid5): a unique-violation existence probe needs a 122-bit guess. The review-task key `triage-task:<document id>` is globally unique, so a caller who knows
+-- another clinic's document id could collide with it (a denial-of-service probe, not a disclosure). (6) No database link between a document and the patient attached
+-- to it (a worker can attach any in-clinic patient), no kind check on review_task_id (a proposal can point at a red_flag task), no origin pin from the proposal to its
+-- document, and no unique on review_task_id. (7) The queue worker can READ decisions (the graph needs to see them); a clinical reviewer should confirm that is wanted.
 
 create table agents.triage_proposals (
     id              uuid primary key,
@@ -34,15 +41,13 @@ create table agents.triage_proposals (
     created_at      timestamptz not null default clock_timestamp(),
     idempotency_key text not null check (length(idempotency_key) > 0),
     constraint triage_proposals_key_per_clinic unique (clinic_id, idempotency_key),
-    constraint triage_proposals_id_clinic_key unique (id, clinic_id),
+    constraint triage_proposals_id_clinic_origin_key unique (id, clinic_id, origin),
     constraint triage_proposals_one_per_document unique (clinic_id, document_id),
     constraint triage_proposals_abstained_has_no_candidates check (not abstained or jsonb_array_length(candidates) = 0),
     foreign key (document_id, clinic_id) references docs.documents (id, clinic_id),
     foreign key (patient_id, clinic_id, origin) references mpi.patients (id, clinic_id, origin),
     foreign key (review_task_id, clinic_id, origin) references agents.review_tasks (id, clinic_id, origin)
 );
-
-alter table agents.review_tasks add constraint review_tasks_id_clinic_key unique (id, clinic_id);
 
 create table agents.review_decisions (
     id              uuid primary key default gen_random_uuid(),
@@ -55,7 +60,7 @@ create table agents.review_decisions (
     idempotency_key text not null check (length(idempotency_key) > 0),
     constraint review_decisions_key_per_clinic unique (clinic_id, idempotency_key),
     constraint review_decisions_one_per_proposal unique (proposal_id),
-    foreign key (proposal_id, clinic_id) references agents.triage_proposals (id, clinic_id)
+    foreign key (proposal_id, clinic_id, origin) references agents.triage_proposals (id, clinic_id, origin)
 );
 
 create function agents.append_only() returns trigger
