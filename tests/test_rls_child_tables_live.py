@@ -2,20 +2,16 @@
 write another clinic's rows, including child tables with no direct clinic column"; CLAUDE.md rule 8). Live, read-only on the catalog; the
 data tests run in a transaction that is always rolled back (nothing is committed).
 
-THE FINDING THIS FILE IS BUILT AROUND. Today every table that holds clinic-scoped data carries `clinic_id` itself; the only tables without it
-are `iam.clinics` (the clinic row itself) and `iam.accounts` (a person, not a clinic's data); their cross-clinic behaviour is covered in
-tests/test_rls_iam_audit_live.py. So the spec's "child table with no clinic column" does not exist yet, and the realistic risk is different: a
-child row whose foreign key to its parent does NOT pin the clinic, so the child could point at another clinic's parent. The composite
-foreign keys (child_id, clinic_id) -> parent (id, clinic_id) close that; THREE single-column foreign keys do not:
+WHAT THIS FILE GUARDS. Every table that holds clinic-scoped data carries `clinic_id` itself; the only tables without it are `iam.clinics`
+(the clinic row itself) and `iam.accounts` (a person, not a clinic's data); their cross-clinic behaviour is covered in
+tests/test_rls_iam_audit_live.py. So the spec's "child table with no clinic column" does not exist, and the realistic risk is a child row
+whose foreign key to its parent does NOT pin the clinic, so the child could point at another clinic's parent. Composite foreign keys
+(child_id, clinic_id) -> parent (id, clinic_id) close that.
 
-    sched.bookings.hold_id   -> sched.holds(id)
-    mpi.merges.candidate_id  -> mpi.match_candidates(id)
-    ops.outbox.job_id        -> ops.queue(id)
-
-They are listed in KNOWN_GAPS, with their consequence, in docs/design/deferred-items.md. The structural test requires this list to be EXACTLY
-right, in both directions: a NEW unpinned foreign key fails the build until someone reviews it, and a gap that is fixed by a later migration
-fails the build until it is removed from the list (and the demonstration test below is flipped). Fixing them needs a migration (a unique
-(id, clinic_id) on each parent and a composite foreign key), which is a schema decision for the owner and a review by the RLS reviewer.
+History: until migration 0014 three single-column foreign keys left it open (sched.bookings.hold_id, mpi.merges.candidate_id,
+ops.outbox.job_id). 0014 replaced them, and KNOWN_GAPS is now EMPTY. The structural test requires it to stay exactly right: a NEW foreign
+key between clinic-scoped tables that does not carry clinic_id on both sides fails the build until someone reviews it (and either pins
+it or lists it in KNOWN_GAPS with the reason).
 """
 
 import os
@@ -37,12 +33,8 @@ pytestmark = [
 
 APP_SCHEMAS = ["iam", "mpi", "sched", "clinical", "docs", "msg", "kb", "agents", "ai", "ops", "audit"]  # not the migration ledger
 NO_CLINIC_COLUMN = {"iam.clinics", "iam.accounts"}
-# (child table, parent table): a foreign key between two clinic-scoped tables that does not carry clinic_id on both sides.
-KNOWN_GAPS = {
-    ("sched.bookings", "sched.holds"),
-    ("mpi.merges", "mpi.match_candidates"),
-    ("ops.outbox", "ops.queue"),
-}
+# (child table, parent table): a foreign key between two clinic-scoped tables that does not carry clinic_id on both sides. Empty since 0014.
+KNOWN_GAPS: set[tuple[str, str]] = set()
 
 
 def _u() -> uuid.UUID:
@@ -118,8 +110,8 @@ async def test_foreign_keys_between_clinic_scoped_tables_pin_the_clinic_except_t
         if r["child"] in scoped and r["parent"] in scoped and not ("clinic_id" in r["child_cols"] and "clinic_id" in r["parent_cols"])
     }
     assert gaps == KNOWN_GAPS, (
-        f"unreviewed unpinned foreign keys: {sorted(gaps - KNOWN_GAPS)}; fixed since the list was written (remove them, and flip the "
-        f"demonstration test): {sorted(KNOWN_GAPS - gaps)}"
+        f"unreviewed unpinned foreign keys: {sorted(gaps - KNOWN_GAPS)}; fixed since the list was written (remove them from "
+        f"KNOWN_GAPS): {sorted(KNOWN_GAPS - gaps)}"
     )
 
 
@@ -136,6 +128,7 @@ async def world(conn) -> World:
     w.patient_a, w.patient_b = _u(), _u()
     w.provider_a, w.provider_b, w.location_a, w.location_b, w.vt_a, w.vt_b = (_u() for _ in range(6))
     w.slot_a, w.slot_b, w.hold_a = _u(), _u(), _u()
+    w.patient_a2, w.patient_b2, w.candidate_a, w.candidate_b, w.acct, w.job_a = (_u() for _ in range(6))
     pat = lambda pid, c: f"('{pid}', '{c}', '\\x01'::bytea, 1, '\\x01'::bytea, 1, 'test', 'pat-{pid}')"
     slot = lambda sid, c, prov, loc, vt, hour: (
         f"('{sid}', '{c}', '{prov}', '{loc}', '{vt}', '2035-02-03 {hour}:00+00', '2035-02-03 {hour}:30+00', 'test', 'slot-{sid}')"
@@ -143,7 +136,13 @@ async def world(conn) -> World:
     await conn.execute(
         f"insert into iam.clinics (id, name, origin) values ('{w.a}', 'Clinic A', 'test'), ('{w.b}', 'Clinic B', 'test');\n"
         "insert into mpi.patients (id, clinic_id, name_ct, name_key_version, dob_ct, dob_key_version, origin, idempotency_key) values "
-        f"{pat(w.patient_a, w.a)}, {pat(w.patient_b, w.b)};\n"
+        f"{pat(w.patient_a, w.a)}, {pat(w.patient_b, w.b)}, {pat(w.patient_a2, w.a)}, {pat(w.patient_b2, w.b)};\n"
+        "insert into mpi.match_candidates (id, clinic_id, patient_id, candidate_patient_id, matched_kinds, reason, origin, idempotency_key) values "
+        f"('{w.candidate_a}', '{w.a}', '{w.patient_a2}', '{w.patient_a}', array['phone'], 'near_match', 'test', 'c-{w.candidate_a}'), "
+        f"('{w.candidate_b}', '{w.b}', '{w.patient_b2}', '{w.patient_b}', array['phone'], 'near_match', 'test', 'c-{w.candidate_b}');\n"
+        f"insert into iam.accounts (id, account_type, status, origin) values ('{w.acct}', 'staff', 'active', 'test');\n"
+        "insert into ops.queue (id, clinic_id, origin, task_type, payload, idempotency_key) values "
+        f"('{w.job_a}', '{w.a}', 'test', 'demo.task', '{{}}'::jsonb, 'q-{w.job_a}');\n"
         "insert into sched.providers (id, clinic_id, display_name, origin, idempotency_key) values "
         f"('{w.provider_a}', '{w.a}', 'Dr A', 'test', 'p-{w.provider_a}'), ('{w.provider_b}', '{w.b}', 'Dr B', 'test', 'p-{w.provider_b}');\n"
         "insert into sched.locations (id, clinic_id, name, origin, idempotency_key) values "
@@ -200,10 +199,34 @@ async def test_a_slot_cannot_use_another_clinics_provider_location_or_visit_type
     assert await fails(db, slot(w.provider_b, w.location_b, w.vt_a, "12")) == "23503"
 
 
-async def test_known_gap_a_booking_can_still_reference_another_clinics_hold(db):
-    """DOCUMENTS A GAP, it does not endorse it. sched.bookings.hold_id is a single-column foreign key, so the database accepts a clinic B
-    booking whose hold belongs to clinic A. The manager never does this (it takes the hold from the booking's own slot), and the caller
-    would need a clinic A hold id, but the database does not forbid it. When the fixing migration lands (a composite foreign key), this
-    assertion becomes "23503", the pair leaves KNOWN_GAPS, and docs/design/deferred-items.md is updated."""
+async def test_a_booking_cannot_point_at_another_clinics_hold(db):
+    """Was a documented gap until 0014 (bookings.hold_id was a single-column key). The control is B's own booking with no hold."""
     w = await world(db)
-    assert await fails(db, booking(w.b, w.slot_b, w.patient_b, hold=w.hold_a)) is None
+    assert await fails(db, booking(w.b, w.slot_b, w.patient_b)) is None
+    assert await fails(db, booking(w.b, w.slot_b, w.patient_b, hold=w.hold_a)) == "23503"
+
+
+def merge(w, clinic, master, subordinate, candidate):
+    return (
+        "insert into mpi.merges (clinic_id, master_patient_id, subordinate_patient_id, candidate_id, approved_by, origin, idempotency_key) "
+        f"values ('{clinic}', '{master}', '{subordinate}', '{candidate}', '{w.acct}', 'test', 'm-{_u()}')"
+    )
+
+
+async def test_a_merge_cannot_point_at_another_clinics_candidate(db):
+    w = await world(db)
+    assert await fails(db, merge(w, w.b, w.patient_b, w.patient_b2, w.candidate_a)) == "23503"  # B's merge, A's review row
+    assert await fails(db, merge(w, w.b, w.patient_b, w.patient_b2, w.candidate_b)) is None  # control: B's own review row
+
+
+def outbox(w, clinic, job):
+    return (
+        "insert into ops.outbox (clinic_id, origin, event_type, payload, dispatched_at, job_id, idempotency_key) "
+        f"values ('{clinic}', 'test', 'demo.event', '{{}}'::jsonb, now(), '{job}', 'o-{_u()}')"
+    )
+
+
+async def test_an_outbox_event_cannot_point_at_another_clinics_job(db):
+    w = await world(db)
+    assert await fails(db, outbox(w, w.b, w.job_a)) == "23503"  # B's event, A's job
+    assert await fails(db, outbox(w, w.a, w.job_a)) is None  # control: A's own job
