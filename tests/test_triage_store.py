@@ -196,3 +196,44 @@ async def test_resolving_a_task_another_reviewer_acknowledged_is_a_clean_refusal
         await SqlReviewRecorder().record(
             conn, proposal_id=proposal_id_for(CLINIC, KEY), clinic_id=CLINIC, decision="approve", reviewer_id=REVIEWER, idempotency_key="k"
         )
+
+
+# ---- hold tasks: no run ends silently (migration 0020) ----------------------------------------------------------------------------------------
+
+
+async def test_a_hold_task_is_written_idempotently_with_a_fixed_word_provenance_and_the_priority_is_an_input():
+    from careflow.triage_store import SqlHoldTaskWriter
+
+    conn = Conn()
+    writer = SqlHoldTaskWriter(priority="standard")  # a test input
+    task = await writer.raise_hold(
+        conn, document_id=DOC, clinic_id=CLINIC, origin="test", assigned_role="front_desk", status="needs_front_desk",
+        reasons=["dob_missing", "SENTINEL name with spaces", "x" * 100], idempotency_key=f"hold:{DOC}:needs_front_desk",
+    )
+    assert task == TASK
+    sql, params = next(c for c in conn.calls if "insert into agents.review_tasks" in c[0])
+    assert "'referral_hold'" in sql and "'standard'" not in sql and params["pr"] == "standard" and params["r"] == "front_desk"
+    assert params["s"] == f"document:{DOC}" and params["k"] == f"hold:{DOC}:needs_front_desk"
+    stored = json.loads(params["p"])
+    assert stored == {"status": "needs_front_desk", "reasons": ["dob_missing"]}  # free-form and over-long strings are dropped, not stored
+    assert "SENTINEL" not in json.dumps([c[1] for c in conn.calls], default=str)
+
+
+async def test_the_hold_priority_has_no_default_roles_are_limited_and_a_replay_finds_the_task():
+    from careflow.triage_store import SqlHoldTaskWriter
+
+    with pytest.raises(TypeError):
+        SqlHoldTaskWriter()  # type: ignore[call-arg]
+    for bad in ("urgent", "", None):
+        with pytest.raises(ValueError):
+            SqlHoldTaskWriter(priority=bad)  # type: ignore[arg-type]
+    writer = SqlHoldTaskWriter(priority="immediate")
+    for role in ("doctor", "admin", ""):
+        with pytest.raises(TriageStoreError):
+            await writer.raise_hold(Conn(), document_id=DOC, clinic_id=CLINIC, origin="test", assigned_role=role, status="s", reasons=[], idempotency_key="k")
+    replay = Conn(task_new=False)
+    assert await writer.raise_hold(replay, document_id=DOC, clinic_id=CLINIC, origin="test", assigned_role="nurse", status="held_unassessable", reasons=[], idempotency_key="k") == TASK
+    refused = Conn(fail_on="insert into agents.review_tasks")
+    refused.error_state = "42501"
+    with pytest.raises(NotPermitted):
+        await writer.raise_hold(refused, document_id=DOC, clinic_id=CLINIC, origin="test", assigned_role="nurse", status="s", reasons=[], idempotency_key="k")

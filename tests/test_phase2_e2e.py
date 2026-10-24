@@ -36,7 +36,7 @@ from careflow.retrieval import (
     CardRetriever,
     retrieval_text,
 )
-from tests.test_front_door import Proposer, Recorder, Texts
+from tests.test_front_door import Holds, Proposer, Recorder, Texts
 from tests.test_referral import (
     CLINIC,
     DOC,
@@ -100,7 +100,7 @@ async def build(*, policy, versions=None, outcome="clear", answer=GOOD):
     retriever = LoggedRetriever(log, embedder=Embedder(), store=store, truth=Truth(versions or {"intake": 1, "billing": 1}), bm25=bm25, policy=policy)
     deps = FrontDoorDeps(
         session=session, engine=Engine(log, outcome), texts=Texts(log), extractor=Extractor(log, answer), ingestor=Ingestor(log), retriever=retriever,  # type: ignore[arg-type]
-        proposer=Proposer(log, "proposal"), recorder=Recorder(log, "decision"), retrieval_scope=dict(SCOPE), profile="demo",
+        proposer=Proposer(log, "proposal"), recorder=Recorder(log, "decision"), holds=Holds(log, "hold"), retrieval_scope=dict(SCOPE), profile="demo",
     )
     saver = InMemorySaver()
     return build_front_door(deps, saver, environ={}), deps, saver, log

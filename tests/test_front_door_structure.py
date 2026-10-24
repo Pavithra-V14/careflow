@@ -33,7 +33,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def deps() -> FrontDoorDeps:
-    return FrontDoorDeps(None, None, None, None, None, None, None, None)  # type: ignore[arg-type]  # structure only: nothing is called
+    return FrontDoorDeps(None, None, None, None, None, None, None, None, None)  # type: ignore[arg-type]  # structure only: nothing is called
 
 
 def graph():
@@ -65,12 +65,13 @@ def test_the_review_node_is_the_only_pause_and_the_step_before_it_holds_the_side
 def test_the_compiled_topology_is_exactly_the_front_door():
     drawn = graph().get_graph()
     nodes = {n for n in drawn.nodes if not n.startswith("__")}
-    assert nodes == {"screen", "resolve_identity", "match_protocol", "propose_triage", "review", "apply_review"}
+    assert nodes == {"screen", "resolve_identity", "match_protocol", "hold_for_human", "propose_triage", "review", "apply_review"}
     edges = {(e.source, e.target) for e in drawn.edges}
     assert edges == {
         ("__start__", "screen"), ("screen", "resolve_identity"), ("screen", "__end__"), ("resolve_identity", "match_protocol"),
         ("resolve_identity", "__end__"), ("match_protocol", "propose_triage"), ("match_protocol", "__end__"), ("propose_triage", "review"), ("review", "apply_review"),
-        ("apply_review", "__end__"),
+        ("apply_review", "__end__"), ("screen", "hold_for_human"), ("resolve_identity", "hold_for_human"), ("match_protocol", "hold_for_human"),
+        ("hold_for_human", "__end__"),
     }
 
 

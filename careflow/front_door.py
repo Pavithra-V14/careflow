@@ -14,6 +14,10 @@ A LangGraph graph whose every routing decision is deterministic code: no model c
                        without passing through `resolve_identity`); a red flag found now ends the run. Abstention is a normal result and goes on to a human.
   * `propose_triage`   writes the triage PROPOSAL and its review task (P2-9 supplies the real writer). A SIDE EFFECT, and the step immediately
                        before the pause, as §7.2 requires.
+  * `hold_for_human`   NO RUN ENDS SILENTLY. Every outcome that is not a finished review and not a red-flag escalation (which has its own immediate nurse task) lands
+                       here: an unassessable screening, an unavailable extraction, facts that did not verify, and ANY status this graph does not know. It writes a
+                       review task (kind `referral_hold`): a letter with no usable date of birth or an unverified name goes to front desk (§17.2), everything
+                       else to a nurse (§16.2). The task's priority is a required argument of the writer, marked CLINICAL-PLACEHOLDER, never a default.
   * `review`           PAUSES (`interrupt`) for a human decision. NO side effect. It re-executes from its start on resume, which is harmless.
   * `apply_review`     records the human's decision. A side effect, after the pause. Nothing is approved by a timeout: with no resume value the
                        run simply stays paused.
@@ -84,14 +88,24 @@ class FrontDoorState(TypedDict, total=False):
     abstained: bool
     abstain_reason: str
     proposal_id: str
+    hold_task_id: str  # the review task that keeps a held run from being silent
     decision: dict[str, str]  # {"decision": ..., "reviewer_id": ...}
 
 
 ABSTAIN_REASONS: Final = ("no_calibrated_policy", "no_candidates", "dense_unavailable", "below_threshold", "all_stale")  # a fixed vocabulary only goes into state
 
+FRONT_DESK_HOLDS: Final = ("needs_front_desk",)  # §17.2: a letter that cannot supply a date of birth routes to the front desk, who supply the missing detail
+NO_HOLD_NEEDED: Final = ("red_flag_escalated",)  # the rules engine already raised its immediate nurse task
+
+
+def hold_role_for(status: str) -> str:
+    """front_desk for the statuses §17.2 sends to the front desk; a NURSE for everything else, including a status this graph does not know (§16.2: never silent)."""
+    return "front_desk" if status in FRONT_DESK_HOLDS else "nurse"
+
+
 STATUSES: Final = (
     "started", "red_flag_escalated", "held_unassessable", "extraction_unavailable", "needs_front_desk", "identity_resolved", "matched",
-    "triage_proposed", "reviewed",
+    "triage_proposed", "reviewed", "held_for_human",
 )
 
 
@@ -121,6 +135,15 @@ class TriageProposer(Protocol):
         ...
 
 
+class HoldTaskWriter(Protocol):
+    async def raise_hold(
+        self, conn: AsyncConnection, *, document_id: uuid.UUID, clinic_id: uuid.UUID, origin: str, assigned_role: str, status: str, reasons: list[str],
+        idempotency_key: str,
+    ) -> uuid.UUID:
+        """Write (idempotently) the review task that stops a held referral from being silent. `reasons` are fixed words, never text."""
+        ...
+
+
 class ReviewRecorder(Protocol):
     async def record(
         self, conn: AsyncConnection, *, proposal_id: uuid.UUID, clinic_id: uuid.UUID, decision: str, reviewer_id: uuid.UUID, idempotency_key: str
@@ -137,6 +160,7 @@ class FrontDoorDeps:
     retriever: CardRetriever
     proposer: TriageProposer
     recorder: ReviewRecorder
+    holds: HoldTaskWriter
     retrieval_scope: dict[str, str] = field(default_factory=dict)
     profile: str | None = None
 
@@ -148,6 +172,7 @@ SIDE_EFFECT_PORTS: Final = {
     "ingestor": "identity",
     "proposer": "triage_proposal",
     "recorder": "review_decision",
+    "holds": "hold_task",
 }
 MODEL_PORTS: Final = {"extractor": "model", "retriever": "model"}  # the retriever calls the embedding model
 NEUTRAL_PORTS: Final = {"session", "texts", "retrieval_scope", "profile"}
@@ -165,6 +190,7 @@ NODE_SPECS: Final = {
     "screen": NodeSpec("screen", frozenset({"escalation"}), pauses=False, models=False),
     "resolve_identity": NodeSpec("resolve_identity", frozenset({"escalation", "identity"}), pauses=False, models=True),
     "match_protocol": NodeSpec("match_protocol", frozenset({"escalation"}), pauses=False, models=True),
+    "hold_for_human": NodeSpec("hold_for_human", frozenset({"hold_task"}), pauses=False, models=False),
     "propose_triage": NodeSpec("propose_triage", frozenset({"triage_proposal"}), pauses=False, models=False),
     "review": NodeSpec("review", frozenset(), pauses=True, models=False),
     "apply_review": NodeSpec("apply_review", frozenset({"review_decision"}), pauses=False, models=False),
@@ -233,6 +259,17 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
             "candidates": [{"card_id": c.card_id, "version": c.version} for c in found.candidates],
         }
 
+    async def hold_for_human(state: FrontDoorState) -> FrontDoorState:
+        assert_tracing_off()  # also at run time: the environment can change after the graph was built
+        document_id, clinic_id = _ids(state)
+        status = state.get("status", "")
+        async with deps.session() as conn:
+            task_id = await deps.holds.raise_hold(
+                conn, document_id=document_id, clinic_id=clinic_id, origin=state["origin"], assigned_role=hold_role_for(status), status=status,
+                reasons=[r for r in state.get("reasons", []) if isinstance(r, str)][:20], idempotency_key=f"hold:{document_id}:{status}",
+            )
+        return {"hold_task_id": str(task_id)}  # the status stays what it was: the reason a person is needed
+
     async def propose_triage(state: FrontDoorState) -> FrontDoorState:
         assert_tracing_off()  # also at run time: the environment can change after the graph was built
         document_id, clinic_id = _ids(state)
@@ -267,23 +304,33 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
         return {"status": "reviewed"}
 
     def after_screen(state: FrontDoorState) -> str:
-        return "resolve_identity" if state.get("status") == "started" else END
+        status = state.get("status")
+        if status == "started":
+            return "resolve_identity"
+        return END if status == "red_flag_escalated" else "hold_for_human"  # anything else, known or not, is held for a person
 
     def after_identity(state: FrontDoorState) -> str:
-        return "match_protocol" if state.get("status") == "identity_resolved" else END
+        status = state.get("status")
+        if status == "identity_resolved":
+            return "match_protocol"
+        return END if status == "red_flag_escalated" else "hold_for_human"
 
     def after_match(state: FrontDoorState) -> str:
-        return "propose_triage" if state.get("status") == "matched" else END
+        status = state.get("status")
+        if status == "matched":
+            return "propose_triage"
+        return END if status == "red_flag_escalated" else "hold_for_human"
 
     functions = {"screen": screen, "resolve_identity": resolve_identity, "match_protocol": match_protocol, "propose_triage": propose_triage,
-                 "review": review, "apply_review": apply_review}
+                 "hold_for_human": hold_for_human, "review": review, "apply_review": apply_review}
     builder = StateGraph(FrontDoorState)
     for name, fn in functions.items():
         builder.add_node(name, fn)
     builder.add_edge(START, "screen")
-    builder.add_conditional_edges("screen", after_screen, {"resolve_identity": "resolve_identity", END: END})
-    builder.add_conditional_edges("resolve_identity", after_identity, {"match_protocol": "match_protocol", END: END})
-    builder.add_conditional_edges("match_protocol", after_match, {"propose_triage": "propose_triage", END: END})
+    builder.add_conditional_edges("screen", after_screen, {"resolve_identity": "resolve_identity", "hold_for_human": "hold_for_human", END: END})
+    builder.add_conditional_edges("resolve_identity", after_identity, {"match_protocol": "match_protocol", "hold_for_human": "hold_for_human", END: END})
+    builder.add_conditional_edges("match_protocol", after_match, {"propose_triage": "propose_triage", "hold_for_human": "hold_for_human", END: END})
+    builder.add_edge("hold_for_human", END)
     builder.add_edge("propose_triage", "review")
     builder.add_edge("review", "apply_review")
     builder.add_edge("apply_review", END)

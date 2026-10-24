@@ -156,3 +156,49 @@ class SqlReviewRecorder:
                 # transaction: the caller must roll back rather than keep a decision on an unresolved task.
                 raise NotPermitted("this review task is acknowledged by another reviewer") from None
             raise
+
+
+HOLD_ROLES: Final = ("nurse", "front_desk")
+
+
+class SqlHoldTaskWriter:
+    """Implements `HoldTaskWriter`: the review task that keeps a held referral from being silent (migration 0020). Kind `referral_hold`, assigned to front_desk
+    or a nurse. The task holds the document id and fixed-word reasons ONLY. Idempotent on the key."""
+
+    def __init__(self, *, priority: str) -> None:
+        # No default: how urgent a held referral's task is, is a clinical decision.   # CLINICAL-PLACEHOLDER: needs clinician sign-off
+        if priority not in ("immediate", "standard"):
+            raise ValueError("priority must be 'immediate' or 'standard'")
+        self._priority = priority
+
+    async def raise_hold(
+        self, conn: AsyncConnection, *, document_id: uuid.UUID, clinic_id: uuid.UUID, origin: str, assigned_role: str, status: str, reasons: list[str],
+        idempotency_key: str,
+    ) -> uuid.UUID:
+        if assigned_role not in HOLD_ROLES:
+            raise TriageStoreError("a held referral goes to front desk or a nurse")
+        if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+            raise TriageStoreError("an idempotency key is required on every write")
+        fixed = [r for r in reasons if isinstance(r, str) and r.replace("_", "").isalnum() and len(r) <= 64][:20]  # words only: nothing free-form is stored
+        try:
+            async with conn.begin_nested():
+                created = (
+                    await conn.execute(
+                        text(
+                            "insert into agents.review_tasks (clinic_id, origin, kind, priority, assigned_role, source_message_id, provenance, idempotency_key) "
+                            "values (:c, :o, 'referral_hold', :pr, :r, :s, cast(:p as jsonb), :k) on conflict (idempotency_key) do nothing returning id"
+                        ),
+                        {"c": clinic_id, "o": origin, "pr": self._priority, "r": assigned_role, "s": f"document:{document_id}",
+                         "p": json.dumps({"status": status if status.replace("_", "").isalnum() else "unknown", "reasons": fixed}), "k": idempotency_key},
+                    )
+                ).first()
+        except DBAPIError as exc:
+            if getattr(exc.orig, "sqlstate", None) == _INSUFFICIENT_PRIVILEGE:
+                raise NotPermitted("this role may not raise a hold task here") from None
+            raise
+        if created is not None:
+            return created.id
+        existing = (await conn.execute(text("select id from agents.review_tasks where idempotency_key = :k"), {"k": idempotency_key})).first()
+        if existing is None:
+            raise TriageStoreError("this hold key is used by another request")
+        return existing.id

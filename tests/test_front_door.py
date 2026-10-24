@@ -85,6 +85,19 @@ class Proposer(Effects):
         return TriageProposal(uuid.uuid5(uuid.NAMESPACE_URL, idempotency_key))
 
 
+class Holds(Effects):
+    """The hold-task writer: records every attempt with its role, status and reasons (fixed words), idempotent on the key."""
+
+    def __init__(self, log, name):
+        super().__init__(log, name)
+        self.tasks: list[dict] = []
+
+    async def raise_hold(self, conn, *, document_id, clinic_id, origin, assigned_role, status, reasons, idempotency_key):
+        self._do(idempotency_key)
+        self.tasks.append({"role": assigned_role, "status": status, "reasons": reasons, "key": idempotency_key})
+        return uuid.uuid5(uuid.NAMESPACE_URL, idempotency_key)
+
+
 class Recorder(Effects):
     async def record(self, conn, *, proposal_id, clinic_id, decision, reviewer_id, idempotency_key):
         self._do(idempotency_key)
@@ -105,7 +118,7 @@ def world(outcome="clear", *, answer=GOOD, abstain=False, engine_fail=None, extr
     proposer, recorder = Proposer(log, "proposal"), Recorder(log, "decision")
     deps = FrontDoorDeps(
         session=session, engine=engine, texts=Texts(log), extractor=extractor, ingestor=ingestor, retriever=Retriever(log, abstain),  # type: ignore[arg-type]
-        proposer=proposer, recorder=recorder, retrieval_scope={"domain": "demo"}, profile="demo",
+        proposer=proposer, recorder=recorder, holds=Holds(log, "hold"), retrieval_scope={"domain": "demo"}, profile="demo",
     )
     saver = InMemorySaver()
     graph = build_front_door(deps, saver, environ={})
@@ -358,3 +371,104 @@ async def test_hosted_tracing_switched_on_after_the_graph_was_built_stops_the_ru
     with pytest.raises(FrontDoorError):
         await graph.ainvoke(START, CONFIG)
     assert log == []  # nothing ran: no rules, no text, no model
+
+
+# ---- no run ends silently --------------------------------------------------------------------------------------------------------------------
+
+
+async def test_an_unassessable_screening_raises_a_nurse_hold_task_and_ends_with_the_reason_kept():
+    graph, *_ = world("unassessable")
+    await graph.ainvoke(START, CONFIG)
+    state = await graph.aget_state(CONFIG)
+    (task,) = graph.test_deps.holds.tasks
+    assert task["role"] == "nurse" and task["status"] == "held_unassessable" and task["key"] == f"hold:{DOC}:held_unassessable"
+    assert state.next == () and state.values["status"] == "held_unassessable" and state.values["hold_task_id"]
+
+
+async def test_an_unavailable_extraction_raises_a_nurse_hold_task():
+    from careflow.ports import TransientError
+
+    graph, *_ = world(extract_raises=TransientError("down"))
+    await graph.ainvoke(START, CONFIG)
+    (task,) = graph.test_deps.holds.tasks
+    assert task["role"] == "nurse" and task["status"] == "extraction_unavailable"
+
+
+async def test_a_letter_with_no_date_of_birth_goes_to_front_desk_and_so_does_an_unverified_name():
+    from careflow.referral import ExtractedReferral
+
+    for answer, reason in (
+        (ExtractedReferral(name="Asha Rao", name_quote="Asha Rao"), "dob_missing"),
+        (ExtractedReferral(name="Asha Rau", name_quote="Asha Rau", dob="1980-03-05", dob_quote="5 March 1980"), "name_quote_not_in_letter"),
+    ):
+        graph, *_ = world(answer=answer)
+        await graph.ainvoke(START, CONFIG)
+        (task,) = graph.test_deps.holds.tasks
+        assert task["role"] == "front_desk" and task["status"] == "needs_front_desk" and reason in task["reasons"]
+        assert (await graph.aget_state(CONFIG)).next == ()
+
+
+async def test_a_red_flag_needs_no_hold_task_because_the_rules_engine_raised_its_own_immediate_nurse_task():
+    graph, log, *_ = world("red_flag")
+    await graph.ainvoke(START, CONFIG)
+    assert graph.test_deps.holds.tasks == [] and "escalate" in log
+
+
+async def test_a_status_the_graph_does_not_know_is_held_for_a_nurse_never_dropped():
+    graph, *_ = world()
+    deps = graph.test_deps
+
+    async def odd_screen(*args, **kwargs):
+        from careflow.referral import ReferralResult, Screened
+        from tests.test_referral import evaluation
+
+        return Screened(evaluation("clear"), result=ReferralResult("some_future_status", DOC))
+
+    import careflow.front_door as module
+
+    original = module.screen_referral
+    module.screen_referral = odd_screen
+    try:
+        await graph.ainvoke(START, CONFIG)
+    finally:
+        module.screen_referral = original
+    (task,) = deps.holds.tasks
+    assert task["role"] == "nurse" and task["status"] == "some_future_status"
+
+
+async def test_a_crash_after_the_hold_task_was_written_repeats_nothing_on_resume():
+    graph, *_ = world("unassessable")
+    holds = graph.test_deps.holds
+    holds.crash_after_effect = 1
+    with pytest.raises(RuntimeError):
+        await graph.ainvoke(START, CONFIG)
+    await graph.ainvoke(None, CONFIG)
+    assert len(holds.performed) == 1 and len(holds.attempts) == 2 and set(holds.attempts) == {f"hold:{DOC}:held_unassessable"}
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    ["clear", "red_flag", "unassessable", "extraction_unavailable", "front_desk_dob", "front_desk_name", "abstain"],
+)
+async def test_every_way_a_run_can_end_leaves_a_person_something_to_act_on(scenario):
+    """The 'no run ends silently' gate: a run that stops (not paused at review) must have raised the rules engine's escalation or a hold task."""
+    from careflow.ports import TransientError
+    from careflow.referral import ExtractedReferral
+
+    kwargs = {
+        "clear": {}, "red_flag": {"outcome": "red_flag"}, "unassessable": {"outcome": "unassessable"},
+        "extraction_unavailable": {"extract_raises": TransientError("down")},
+        "front_desk_dob": {"answer": ExtractedReferral(name="Asha Rao", name_quote="Asha Rao")},
+        "front_desk_name": {"answer": ExtractedReferral(name="Asha Rau", name_quote="Asha Rau", dob="1980-03-05", dob_quote="5 March 1980")},
+        "abstain": {"abstain": True},
+    }[scenario]
+    graph, log, *_ = world(**kwargs)
+    await graph.ainvoke(START, CONFIG)
+    state = await graph.aget_state(CONFIG)
+    holds = graph.test_deps.holds
+    if state.next == ("review",):
+        assert holds.tasks == []  # a pause is not an ending: the proposal and its review task exist (propose_triage), and a person is asked
+        assert state.values["proposal_id"]
+    else:
+        assert state.next == ()
+        assert "escalate" in log or len(holds.tasks) == 1, f"{scenario}: the run ended and nobody was told"
