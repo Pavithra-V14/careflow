@@ -70,6 +70,6 @@ def test_anything_missing_or_malformed_is_not_stepped_up(label, c, reason):
 
 
 def test_the_reason_codes_never_contain_a_claim_value():
-    secret = "sentinel-claim-value-4471"
-    for c in (claims(aal=secret), claims(amr=[{"method": secret, "timestamp": int(NOW)}]), claims(amr=[secret]), claims(amr=secret)):
-        assert secret not in str(check(c))
+    sentinel_claim = "sentinel-claim-value-4471"
+    for c in (claims(aal=sentinel_claim), claims(amr=[{"method": sentinel_claim, "timestamp": int(NOW)}]), claims(amr=[sentinel_claim]), claims(amr=sentinel_claim)):
+        assert sentinel_claim not in str(check(c))

@@ -55,9 +55,9 @@ def test_the_representation_never_shows_the_ciphertext(vault):
 
 def test_the_length_cap_is_enforced_before_encryption_and_the_error_never_names_the_text(vault):
     assert encrypt_body(vault, "a" * MAX_BODY_CHARS, key_version=1, **IDS)
-    secret = "TOP-SECRET " + "a" * MAX_BODY_CHARS
+    sentinel_text = "TOP-SECRET " + "a" * MAX_BODY_CHARS
     with pytest.raises(MessageError) as exc:
-        encrypt_body(vault, secret, key_version=1, **IDS)
+        encrypt_body(vault, sentinel_text, key_version=1, **IDS)
     assert "TOP-SECRET" not in str(exc.value)
 
 
@@ -81,14 +81,14 @@ def test_the_largest_and_smallest_ciphertexts_fit_the_0011_column_check(vault):
 
 
 def test_plaintext_never_appears_in_logs_or_exceptions(vault, caplog):
-    secret = "my-unique-private-sentence-7431"
+    sentinel_text = "my-unique-private-sentence-7431"
     caplog.set_level(logging.DEBUG)
-    enc = encrypt_body(vault, secret, key_version=1, **IDS)
+    enc = encrypt_body(vault, sentinel_text, key_version=1, **IDS)
     decrypt_body(vault, enc.body_ct, message_id=enc.message_id, key_version=1, **IDS)
     with pytest.raises(DecryptionError) as exc:
         decrypt_body(vault, enc.body_ct, message_id=uuid.uuid4(), key_version=1, **IDS)
-    assert secret not in str(exc.value) and secret not in repr(exc.value)
-    assert secret not in caplog.text
+    assert sentinel_text not in str(exc.value) and sentinel_text not in repr(exc.value)
+    assert sentinel_text not in caplog.text
 
 
 def _calls_to(names: set[str]) -> dict[str, set[str]]:
@@ -277,15 +277,15 @@ def test_a_body_that_fails_authentication_is_recorded_unassessable_not_raised(va
 
 
 def test_the_decrypted_text_goes_to_the_rule_engine_only_and_never_into_the_result_or_the_logs(vault, caplog):
-    secret = "my-very-private-sentence-9981"
-    row = _stored(vault, secret)
+    sentinel_text = "my-very-private-sentence-9981"
+    row = _stored(vault, sentinel_text)
     engine = _ScreenEngine("red_flag")
     caplog.set_level(logging.DEBUG)
     out = _screen(_ScreenConn(row, reply="pending_clinician_template"), vault, engine, row.id, profile="clinical", idempotency_key="abc")
-    assert engine.calls == [("evaluate", secret, "clinical", "abc")]
+    assert engine.calls == [("evaluate", sentinel_text, "clinical", "abc")]
     assert (out.outcome, out.patient_reply, out.replayed, out.message_id) == ("red_flag", "pending_clinician_template", False, row.id)
     assert out.unreadable_reason is None
-    assert secret not in repr(out) and secret not in caplog.text
+    assert sentinel_text not in repr(out) and sentinel_text not in caplog.text
 
 
 def test_the_screening_result_has_only_ids_and_enums():
