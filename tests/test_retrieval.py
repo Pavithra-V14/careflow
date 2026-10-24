@@ -34,6 +34,7 @@ CARDS = {
     "parking": CardFields("parking", 1, "Parking", "Where to park a car", ("car park",), ("where can I park",), ("P1",)),
     "billing": CardFields("billing", 2, "Billing questions", "Invoices and payments", ("invoice",), ("my bill is wrong",), ("B1",)),
 }
+VERS = {cid: c.version for cid, c in CARDS.items()}
 # Orthogonal unit vectors per card: a query vector chosen per test decides the cosine.
 VECTORS = {"hours": (1.0, 0.0, 0.0), "parking": (0.0, 1.0, 0.0), "billing": (0.0, 0.0, 1.0)}
 
@@ -58,14 +59,14 @@ class Truth:
         return {c: v for c, v in self.versions.items() if c in card_ids}
 
 
-async def build(*, policy, vector=(1.0, 0.0, 0.0), embed_fail=False, truth=None, indexed_versions=None, store_fail=False):
+async def build(*, policy, vector=(1.0, 0.0, 0.0), embed_fail=False, truth=None, indexed_versions=None, store_fail=False, bm25_versions=None):
     store = FakeVectorStore()
     await store.upsert(
         [VectorPoint(cid, (indexed_versions or {}).get(cid, c.version), VECTORS[cid], dict(SCOPE)) for cid, c in CARDS.items()]
     )
     if store_fail:
         store.fail_next()
-    bm25 = Bm25Index({cid: retrieval_text(c) for cid, c in CARDS.items()}, {cid: dict(SCOPE) for cid in CARDS})
+    bm25 = Bm25Index({cid: retrieval_text(c) for cid, c in CARDS.items()}, {cid: dict(SCOPE) for cid in CARDS}, VERS)
     embedder = Embedder(vector, embed_fail)
     truth = truth or Truth({cid: c.version for cid, c in CARDS.items()})
     return CardRetriever(embedder, store, truth, bm25, policy), embedder, truth
@@ -93,7 +94,7 @@ def test_retrieval_text_is_built_from_the_structured_fields_only_and_never_from_
 
 
 def test_bm25_ranks_the_card_that_shares_the_query_words_first_and_ignores_cards_that_share_none():
-    index = Bm25Index({cid: retrieval_text(c) for cid, c in CARDS.items()}, {cid: dict(SCOPE) for cid in CARDS})
+    index = Bm25Index({cid: retrieval_text(c) for cid, c in CARDS.items()}, {cid: dict(SCOPE) for cid in CARDS}, VERS)
     ranked = index.search("when do you open", SCOPE)
     assert ranked[0][0] == "hours" and [c for c, _ in ranked].count("billing") == 0
     assert index.search("zzzz qqqq", SCOPE) == []
@@ -102,12 +103,12 @@ def test_bm25_ranks_the_card_that_shares_the_query_words_first_and_ignores_cards
 
 def test_bm25_applies_the_scope_before_ranking_and_refuses_an_empty_scope():
     scopes = {"hours": {"domain": "demo"}, "parking": {"domain": "other"}, "billing": {"domain": "demo"}}
-    index = Bm25Index({cid: retrieval_text(c) for cid, c in CARDS.items()}, scopes)
+    index = Bm25Index({cid: retrieval_text(c) for cid, c in CARDS.items()}, scopes, VERS)
     assert "parking" not in [c for c, _ in index.search("park car", {"domain": "demo"})]
     with pytest.raises(RetrievalError):
         index.search("park", {})
     with pytest.raises(RetrievalError):
-        Bm25Index({"a": "x"}, {})
+        Bm25Index({"a": "x"}, {}, {})
 
 
 def test_rrf_is_the_textbook_sum_of_reciprocal_ranks_and_ties_break_by_id():
@@ -137,7 +138,7 @@ async def test_there_is_no_default_threshold_and_no_policy_means_abstain_not_ret
     with pytest.raises(TypeError):
         AbstentionPolicy()  # type: ignore[call-arg]
     with pytest.raises(TypeError):
-        CardRetriever(Embedder(), FakeVectorStore(), Truth({}), Bm25Index({}, {}))  # type: ignore[call-arg]
+        CardRetriever(Embedder(), FakeVectorStore(), Truth({}), Bm25Index({}, {}, {}))  # type: ignore[call-arg]
     retriever, embedder, _ = await build(policy=None)
     result = await retriever.retrieve("when do you open", scope=SCOPE)
     assert (result.abstained, result.reason, result.candidates) == (True, "no_calibrated_policy", ())
@@ -225,7 +226,26 @@ async def test_the_vector_store_prefilters_by_scope():
 
 
 @pytest.mark.asyncio
-async def test_the_query_never_appears_in_a_repr_or_an_exception():
+async def test_the_query_never_appears_in_a_repr():
     retriever, *_ = await build(policy=OPEN_POLICY)
     result = await retriever.retrieve("SENTINEL-QUERY-31 when do you open", scope=SCOPE)
     assert "SENTINEL" not in repr(result) and "SENTINEL" not in repr(retriever)
+
+
+@pytest.mark.asyncio
+async def test_a_card_whose_bm25_text_is_stale_is_discarded_even_if_its_vector_is_current():
+    truth = Truth({"hours": 1, "parking": 1, "billing": 3})
+    retriever, *_ = await build(policy=AbstentionPolicy(-1.0, 0.0), truth=truth, bm25_versions={"hours": 1, "parking": 1, "billing": 2})
+    result = await retriever.retrieve("my bill is wrong invoice", scope=SCOPE)
+    assert "billing" not in [c.card_id for c in result.candidates] and result.stale_discarded >= 1
+
+
+@pytest.mark.asyncio
+async def test_a_nan_signal_is_unknown_and_abstains():
+    retriever, *_ = await build(policy=AbstentionPolicy(-1.0, 0.0), vector=(float("nan"), 0.0, 0.0))
+    result = await retriever.retrieve("when do you open", scope=SCOPE)
+    assert result.abstained and result.candidates == ()
+
+
+def test_a_message_never_carries_the_query():
+    assert "query" not in str(RetrievalError("a retrieval needs a scope (§10.7)"))

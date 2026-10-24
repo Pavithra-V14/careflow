@@ -70,10 +70,10 @@ def retrieval_text(card: CardFields) -> str:
 
 
 class Bm25Index:
-    def __init__(self, texts: Mapping[str, str], scopes: Mapping[str, Mapping[str, str]], *, k1: float = BM25_K1, b: float = BM25_B) -> None:
-        if set(scopes) != set(texts):
-            raise RetrievalError("every indexed card needs a scope")
-        self._k1, self._b, self._scopes = k1, b, scopes
+    def __init__(self, texts: Mapping[str, str], scopes: Mapping[str, Mapping[str, str]], versions: Mapping[str, int], *, k1: float = BM25_K1, b: float = BM25_B) -> None:
+        if set(scopes) != set(texts) or set(versions) != set(texts):
+            raise RetrievalError("every indexed card needs a scope and a version")
+        self._k1, self._b, self._scopes, self.versions = k1, b, scopes, dict(versions)
         self._tf = {cid: Counter(words(t)) for cid, t in texts.items()}
         self._len = {cid: sum(c.values()) for cid, c in self._tf.items()}
         self._n = len(texts)
@@ -161,7 +161,8 @@ class Candidate:
 
 @dataclass(frozen=True)
 class Retrieval:
-    """`candidates` is empty when `abstained`: a valid outcome that routes to a human. `stale_discarded` counts hits dropped at the join."""
+    """Only the TOP candidate is gated by the policy; ranks 2 and 3 are context for a human or a reranker, never confident matches (their signals may be None).
+    `candidates` is empty when `abstained`: a valid outcome that routes to a human. `stale_discarded` counts hits dropped at the join."""
 
     abstained: bool
     reason: AbstainReason | None
@@ -176,7 +177,7 @@ class CardRetriever:
     truth: CardTruth
     bm25: Bm25Index
     policy: AbstentionPolicy | None = field(repr=False)  # no default on purpose: None must be written down by the caller
-    top_k: int = 3
+    top_k: int = 3  # tuning values, not clinical: how many candidates go on to the next stage
 
     async def retrieve(self, query: str, *, scope: dict[str, str]) -> Retrieval:
         if not scope:
@@ -208,8 +209,9 @@ class CardRetriever:
         kept: list[Candidate] = []
         stale = 0
         for cid, score in fused:
-            indexed = versions.get(cid)
-            if cid not in current or (indexed is not None and indexed != current[cid]):
+            # Every version the index side knows (BM25 text and vector) must be the current one, or the hit is stale.
+            known = {v for v in (versions.get(cid), self.bm25.versions.get(cid)) if v is not None}
+            if cid not in current or any(v != current[cid] for v in known):
                 stale += 1  # the index is behind Postgres, or the card is no longer retrievable: discard, never return it
                 continue
             ratio = (bm25_scores[cid] / ceiling) if cid in bm25_scores and ceiling > 0 else None
@@ -218,11 +220,14 @@ class CardRetriever:
             return Retrieval(True, "all_stale", stale_discarded=stale)
         top = kept[0]
         # A signal that is missing for the top candidate is UNKNOWN, and an unknown signal cannot satisfy the policy.
+        # Written so that NaN (an unknown number) fails: `not (x >= threshold)`, never `x < threshold`.
         if (
             top.dense_similarity is None
             or top.bm25_ratio is None
-            or top.dense_similarity < self.policy.min_dense_similarity
-            or top.bm25_ratio < self.policy.min_bm25_ratio
+            or not math.isfinite(top.dense_similarity)
+            or not math.isfinite(top.bm25_ratio)
+            or not (top.dense_similarity >= self.policy.min_dense_similarity)
+            or not (top.bm25_ratio >= self.policy.min_bm25_ratio)
         ):
             return Retrieval(True, "below_threshold", stale_discarded=stale)
         return Retrieval(False, None, tuple(kept[: self.top_k]), stale)
