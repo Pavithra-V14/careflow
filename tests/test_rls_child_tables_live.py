@@ -128,6 +128,7 @@ async def world(conn) -> World:
     w.patient_a, w.patient_b = _u(), _u()
     w.provider_a, w.provider_b, w.location_a, w.location_b, w.vt_a, w.vt_b = (_u() for _ in range(6))
     w.slot_a, w.slot_b, w.hold_a = _u(), _u(), _u()
+    w.slot_a2, w.slot_b2 = _u(), _u()  # no hold on these: the cross-clinic probes must not trip the one-active-hold-per-slot unique index first
     w.patient_a2, w.patient_b2, w.candidate_a, w.candidate_b, w.acct, w.job_a = (_u() for _ in range(6))
     pat = lambda pid, c: f"('{pid}', '{c}', '\\x01'::bytea, 1, '\\x01'::bytea, 1, 'test', 'pat-{pid}')"
     slot = lambda sid, c, prov, loc, vt, hour: (
@@ -150,7 +151,8 @@ async def world(conn) -> World:
         "insert into sched.visit_types (id, clinic_id, name, duration_minutes, origin, idempotency_key) values "
         f"('{w.vt_a}', '{w.a}', 'Review', 30, 'test', 'v-{w.vt_a}'), ('{w.vt_b}', '{w.b}', 'Review', 30, 'test', 'v-{w.vt_b}');\n"
         "insert into sched.slots (id, clinic_id, provider_id, location_id, visit_type_id, starts_at, ends_at, origin, idempotency_key) values "
-        f"{slot(w.slot_a, w.a, w.provider_a, w.location_a, w.vt_a, '09')}, {slot(w.slot_b, w.b, w.provider_b, w.location_b, w.vt_b, '09')};\n"
+        f"{slot(w.slot_a, w.a, w.provider_a, w.location_a, w.vt_a, '09')}, {slot(w.slot_b, w.b, w.provider_b, w.location_b, w.vt_b, '09')}, "
+        f"{slot(w.slot_a2, w.a, w.provider_a, w.location_a, w.vt_a, '10')}, {slot(w.slot_b2, w.b, w.provider_b, w.location_b, w.vt_b, '10')};\n"
         "insert into sched.holds (id, clinic_id, slot_id, patient_id, expires_at, origin, idempotency_key) values "
         f"('{w.hold_a}', '{w.a}', '{w.slot_a}', '{w.patient_a}', now() + interval '1 hour', 'test', 'h-{w.hold_a}');"
     )
@@ -183,8 +185,10 @@ async def test_a_hold_cannot_point_at_another_clinics_slot_or_patient(db):
         f"values ('{w.b}', '{slot}', '{patient}', now() + interval '1 hour', 'test', 'h-{_u()}')"
     )
     assert await fails(db, hold(w.slot_b, w.patient_b)) is None  # control
-    assert await fails(db, hold(w.slot_a, w.patient_b)) == "23503"
-    assert await fails(db, hold(w.slot_b, w.patient_a)) == "23503"
+    # The probes use slots that have NO active hold. (An earlier version probed slot_a, which already carries hold_a, and slot_b, which the
+    # control above just took: the one-active-hold-per-slot unique index fires FIRST with 23505, so the test never reached the foreign key.)
+    assert await fails(db, hold(w.slot_a2, w.patient_b)) == "23503"  # clinic B's hold on clinic A's slot
+    assert await fails(db, hold(w.slot_b2, w.patient_a)) == "23503"  # clinic B's hold for clinic A's patient
 
 
 async def test_a_slot_cannot_use_another_clinics_provider_location_or_visit_type(db):

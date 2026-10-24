@@ -18,6 +18,7 @@ Latency: each attempt is a few round trips to the hosted project, serialised by 
 """
 
 import asyncio
+import contextlib
 import os
 import uuid
 from pathlib import Path
@@ -46,7 +47,11 @@ pytestmark = [
 
 ATTEMPTS = 200  # BUILD-SPEC.md §21
 IN_FLIGHT = 20  # pooled connections in use at once (see the module docstring)
-BOUND = 300.0  # seconds; generous, the slot lock serialises every attempt
+BOUND = 300.0  # seconds for the small tests
+BOUND_200 = 900.0  # the 200-attempt test: every attempt takes the SAME slot lock, so the whole chain is serial, and each attempt is several round
+#                    trips to a hosted database. One CI run exceeded 300 s here, so it is bounded generously and runs in its own CI shard.
+LOCK_TIMEOUT = "120s"  # a waiter queues behind at most IN_FLIGHT others, never behind all 200, so this is far more than it needs
+STATEMENT_TIMEOUT = "300s"
 
 
 def _u() -> uuid.UUID:
@@ -105,7 +110,8 @@ async def world():
     try:
         yield w
     finally:
-        await w.engine.dispose()
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(w.engine.dispose(), 30)  # never an unbounded wait on teardown
         async with admin.begin() as c:
             for table in ("sched.bookings", "sched.holds", "sched.waitlist", "sched.slots", "sched.visit_types", "sched.locations",
                           "sched.providers", "mpi.patients"):
@@ -135,6 +141,9 @@ async def new_slot(w) -> uuid.UUID:
 async def as_front_desk(w, fn, *args, **kwargs):
     """One request-shaped transaction on the real app engine (transaction-mode pooler), committed on exit."""
     async with w.engine.connect() as conn, conn.begin():
+        # SET LOCAL lives in this transaction only, so it is safe through the transaction-mode pooler: the DATABASE gives up on a stuck wait.
+        await conn.execute(text(f"set local lock_timeout = '{LOCK_TIMEOUT}'"))
+        await conn.execute(text(f"set local statement_timeout = '{STATEMENT_TIMEOUT}'"))
         await set_request_claims(conn, {"sub": str(w.fd), "role": "authenticated"})
         return await fn(conn, *args, **kwargs)
 
@@ -170,7 +179,7 @@ async def test_200_concurrent_bookings_of_one_slot_produce_exactly_one_booking(w
         async with gate:
             return await as_front_desk(w, mgr.book_appointment, slot, patient, _key())
 
-    outcomes = await bounded(asyncio.gather(*(attempt(p) for p in w.patients), return_exceptions=True), "the 200 concurrent bookings", BOUND)
+    outcomes = await bounded(asyncio.gather(*(attempt(p) for p in w.patients), return_exceptions=True), "the 200 concurrent bookings", BOUND_200)
     results = classify(outcomes)
     assert len(results) == ATTEMPTS
     assert results.count("won") == 1, results.count("won")
