@@ -16,15 +16,20 @@ against both and compares the results:
   * `adelete_thread`: REFUSED. The history is append-only (migration 0021); erasure is a separate, audited procedure that does not exist yet.
   * `get_next_version`: the same scheme as InMemorySaver.
 
-SCOPE. Every row carries a clinic and an origin, taken from `config["configurable"]` (`clinic_id`, `origin`): a write without them is refused (rule 8, no origin default). Reads
-need neither: row-level security decides which rows the caller's clinics let it see. The saver runs each operation in its own transaction on a connection from `session`, which must
-set the caller's verified claims (the same factory the graph nodes use).
+SCOPE. Every row carries a clinic and an origin, taken from `config["configurable"]` (`clinic_id`, `origin`): a write without them is refused (rule 8, no origin default). EVERY READ
+IS ALSO SCOPED to that clinic (`clinic_id = :c`), because a queue worker holds its role in each clinic it serves and so row-level security alone would let it see two clinics' rows under
+the same thread id; a read with no clinic is refused. Row-level security remains the enforcement; the clinic filter makes the saver correct for a multi-clinic caller. The saver runs each operation in its own transaction on a connection from `session`, which must
+set the caller's verified claims (the same factory the graph nodes use) and COMMIT on a clean exit; that factory is the production session, which is not wired yet, so commit-visibility
+is not proven here (the live test runs inside one rolled-back transaction).
 
-IDEMPOTENCY (rule 5). Every row has a key: `cp:`, `blob:`, `w:` plus the natural key. A replayed put is a no-op (`ON CONFLICT DO NOTHING`).
+IDEMPOTENCY (rule 5). Every row has a key: `cp:`, `blob:`, `w:` plus a SHA-256 of the natural key's parts (length-unambiguous: a thread id contains ':'). A replayed put is a no-op
+(`ON CONFLICT DO NOTHING`).
 
 The store behind it is a small protocol so the same semantics run offline over an in-memory store and live over Postgres.
 """
 
+import hashlib
+import json
 import random
 import uuid
 from collections import defaultdict
@@ -96,15 +101,15 @@ class CheckpointStore(Protocol):
 
     async def put_writes(self, scope: Scope, thread_id: str, ns: str, checkpoint_id: str, task_id: str, task_path: str, rows: Sequence[tuple[int, str, Typed]]) -> None: ...
 
-    async def get_checkpoint(self, thread_id: str, ns: str, checkpoint_id: str | None) -> StoredCheckpoint | None: ...
+    async def get_checkpoint(self, clinic_id: uuid.UUID, thread_id: str, ns: str, checkpoint_id: str | None) -> StoredCheckpoint | None: ...
 
     async def list_checkpoints(
-        self, thread_id: str | None, ns: str | None, checkpoint_id: str | None, before_id: str | None
+        self, clinic_id: uuid.UUID, thread_id: str | None, ns: str | None, checkpoint_id: str | None, before_id: str | None
     ) -> list[StoredCheckpoint]: ...
 
-    async def get_blobs(self, thread_id: str, ns: str, versions: dict[str, Any]) -> dict[str, Typed]: ...
+    async def get_blobs(self, clinic_id: uuid.UUID, thread_id: str, ns: str, versions: dict[str, Any]) -> dict[str, Typed]: ...
 
-    async def get_writes(self, thread_id: str, ns: str, checkpoint_id: str) -> list[StoredWrite]: ...
+    async def get_writes(self, clinic_id: uuid.UUID, thread_id: str, ns: str, checkpoint_id: str) -> list[StoredWrite]: ...
 
 
 def _scope(config: RunnableConfig) -> Scope:
@@ -116,6 +121,20 @@ def _scope(config: RunnableConfig) -> Scope:
         return Scope(uuid.UUID(str(clinic)), origin)
     except (ValueError, TypeError):
         raise CheckpointerError("a checkpoint write needs a clinic_id in the run config") from None
+
+
+def _read_clinic(config: RunnableConfig | None) -> uuid.UUID:
+    """The clinic a READ is for. A read without one is refused: unknown is not a value."""
+    clinic = (config or {}).get("configurable", {}).get("clinic_id")
+    try:
+        return uuid.UUID(str(clinic))
+    except (ValueError, TypeError):
+        raise CheckpointerError("a checkpoint read needs a clinic_id in the run config") from None
+
+
+def idempotency_key(prefix: str, *parts: object) -> str:
+    """`cp:`, `blob:` or `w:` plus a hash of the parts: unambiguous even though a thread id contains ':' (a plain join of 'a:b' + '' and 'a' + 'b:' would collide)."""
+    return f"{prefix}:{hashlib.sha256(json.dumps([str(p) for p in parts]).encode()).hexdigest()[:48]}"
 
 
 def _next_version(current: Any) -> str:
@@ -162,11 +181,11 @@ class PostgresCheckpointSaver(BaseCheckpointSaver[str]):
 
     # ---- reads -----------------------------------------------------------------------------------------------------------------------------
 
-    async def _tuple(self, stored: StoredCheckpoint, *, with_pending: bool = True) -> CheckpointTuple:
+    async def _tuple(self, clinic_id: uuid.UUID, stored: StoredCheckpoint) -> CheckpointTuple:
         checkpoint_: Checkpoint = self.serde.loads_typed(stored.checkpoint)
-        blobs = await self._store.get_blobs(stored.thread_id, stored.checkpoint_ns, checkpoint_["channel_versions"])
+        blobs = await self._store.get_blobs(clinic_id, stored.thread_id, stored.checkpoint_ns, checkpoint_["channel_versions"])
         values = {channel: self.serde.loads_typed(blob) for channel, blob in blobs.items() if blob[0] != EMPTY}
-        writes = await self._store.get_writes(stored.thread_id, stored.checkpoint_ns, stored.checkpoint_id)
+        writes = await self._store.get_writes(clinic_id, stored.thread_id, stored.checkpoint_ns, stored.checkpoint_id)
         ordered = sorted(writes, key=lambda w: writes_sort_key(w.task_path, w.task_id, w.idx))
         return CheckpointTuple(
             config={"configurable": {"thread_id": stored.thread_id, "checkpoint_ns": stored.checkpoint_ns, "checkpoint_id": stored.checkpoint_id}},
@@ -181,11 +200,12 @@ class PostgresCheckpointSaver(BaseCheckpointSaver[str]):
         )
 
     async def aget_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
+        clinic = _read_clinic(config)
         conf = config["configurable"]
-        stored = await self._store.get_checkpoint(conf["thread_id"], conf.get("checkpoint_ns", ""), get_checkpoint_id(config))
+        stored = await self._store.get_checkpoint(clinic, conf["thread_id"], conf.get("checkpoint_ns", ""), get_checkpoint_id(config))
         if stored is None:
             return None
-        found = await self._tuple(stored)
+        found = await self._tuple(clinic, stored)
         if get_checkpoint_id(config):  # InMemorySaver returns the caller's own config when it named the checkpoint
             return CheckpointTuple(config, found.checkpoint, found.metadata, found.parent_config, found.pending_writes)
         return found
@@ -193,10 +213,12 @@ class PostgresCheckpointSaver(BaseCheckpointSaver[str]):
     async def alist(
         self, config: RunnableConfig | None, *, filter: dict[str, Any] | None = None, before: RunnableConfig | None = None, limit: int | None = None
     ) -> AsyncIterator[CheckpointTuple]:
-        thread_id = config["configurable"]["thread_id"] if config else None
-        ns = config["configurable"].get("checkpoint_ns") if config else None
+        clinic = _read_clinic(config)  # listing across clinics is refused: a list is always for one clinic
+        assert config is not None
+        thread_id = config["configurable"].get("thread_id")
+        ns = config["configurable"].get("checkpoint_ns")
         before_id = get_checkpoint_id(before) if before else None
-        rows = await self._store.list_checkpoints(thread_id, ns, get_checkpoint_id(config) if config else None, before_id)
+        rows = await self._store.list_checkpoints(clinic, thread_id, ns, get_checkpoint_id(config), before_id)
         remaining = limit
         for stored in rows:  # newest first
             metadata = self.serde.loads_typed(stored.metadata)
@@ -206,7 +228,7 @@ class PostgresCheckpointSaver(BaseCheckpointSaver[str]):
                 break
             if remaining is not None:
                 remaining -= 1
-            yield await self._tuple(stored)
+            yield await self._tuple(clinic, stored)
 
     def get_next_version(self, current: str | None, channel: None) -> str:  # type: ignore[override]
         return _next_version(current)
@@ -217,11 +239,11 @@ class PostgresCheckpointSaver(BaseCheckpointSaver[str]):
 
 @dataclass
 class InMemoryCheckpointStore:
-    """The same contract over dicts, with the same append-only and replace-only-special-writes rules as migration 0021."""
+    """The same contract over dicts, with the same append-only and replace-only-special-writes rules as migration 0021. Keys include the clinic, as the primary keys do."""
 
-    checkpoints: dict[tuple[str, str, str], tuple[Scope, str | None, Typed, Typed]] = field(default_factory=dict)
-    blobs: dict[tuple[str, str, str, str], tuple[Scope, Typed]] = field(default_factory=dict)
-    writes: dict[tuple[str, str, str, str, int], tuple[Scope, str, Typed, str]] = field(default_factory=dict)
+    checkpoints: dict[tuple[str, str, str, str], tuple[Scope, str | None, Typed, Typed]] = field(default_factory=dict)
+    blobs: dict[tuple[str, str, str, str, str], tuple[Scope, Typed]] = field(default_factory=dict)
+    writes: dict[tuple[str, str, str, str, str, int], tuple[Scope, str, Typed, str]] = field(default_factory=dict)
     fail_next_put: int = 0
     keys: list[str] = field(default_factory=list)  # every idempotency key written, for tests
 
@@ -229,55 +251,58 @@ class InMemoryCheckpointStore:
         if self.fail_next_put:
             self.fail_next_put -= 1
             raise RuntimeError("the database went away mid-put")
-        new_blobs = {(thread_id, ns, channel, version): (scope, blob) for channel, version, blob in blobs}
-        # one atomic unit: either the blobs and the checkpoint land together, or nothing does
-        for key, value in new_blobs.items():
-            self.blobs.setdefault(key, value)
-            self.keys.append(f"blob:{key}")
-        self.checkpoints.setdefault((thread_id, ns, checkpoint_id), (scope, parent_id, checkpoint, metadata))
-        self.keys.append(f"cp:{thread_id}:{ns}:{checkpoint_id}")
+        c = str(scope.clinic_id)
+        for channel, version, blob in blobs:
+            self.blobs.setdefault((c, thread_id, ns, channel, version), (scope, blob))
+            self.keys.append(idempotency_key("blob", c, thread_id, ns, channel, version))
+        self.checkpoints.setdefault((c, thread_id, ns, checkpoint_id), (scope, parent_id, checkpoint, metadata))
+        self.keys.append(idempotency_key("cp", c, thread_id, ns, checkpoint_id))
 
     async def put_writes(self, scope, thread_id, ns, checkpoint_id, task_id, task_path, rows) -> None:
+        c = str(scope.clinic_id)
         for idx, channel, value in rows:
-            key = (thread_id, ns, checkpoint_id, task_id, idx)
+            key = (c, thread_id, ns, checkpoint_id, task_id, idx)
             if idx >= 0 and key in self.writes:
                 continue  # a replayed regular write is a no-op
             self.writes[key] = (scope, channel, value, task_path)  # a special write replaces the earlier one
-            self.keys.append(f"w:{key}")
+            self.keys.append(idempotency_key("w", *key))
 
-    def _stored(self, key: tuple[str, str, str]) -> StoredCheckpoint:
+    def _stored(self, key: tuple[str, str, str, str]) -> StoredCheckpoint:
         _, parent, checkpoint, metadata = self.checkpoints[key]
-        return StoredCheckpoint(key[0], key[1], key[2], parent, checkpoint, metadata)
+        return StoredCheckpoint(key[1], key[2], key[3], parent, checkpoint, metadata)
 
-    async def get_checkpoint(self, thread_id, ns, checkpoint_id) -> StoredCheckpoint | None:
+    async def get_checkpoint(self, clinic_id, thread_id, ns, checkpoint_id) -> StoredCheckpoint | None:
+        c = str(clinic_id)
         if checkpoint_id is not None:
-            key = (thread_id, ns, checkpoint_id)
+            key = (c, thread_id, ns, checkpoint_id)
             return self._stored(key) if key in self.checkpoints else None
-        ids = [k for k in self.checkpoints if k[0] == thread_id and k[1] == ns]
-        return self._stored(max(ids, key=lambda k: k[2])) if ids else None
+        ids = [k for k in self.checkpoints if k[:3] == (c, thread_id, ns)]
+        return self._stored(max(ids, key=lambda k: k[3])) if ids else None
 
-    async def list_checkpoints(self, thread_id, ns, checkpoint_id, before_id) -> list[StoredCheckpoint]:
-        keys = [k for k in self.checkpoints if (thread_id is None or k[0] == thread_id) and (ns is None or k[1] == ns)]
-        keys = [k for k in keys if (checkpoint_id is None or k[2] == checkpoint_id) and (before_id is None or k[2] < before_id)]
-        by_thread: dict[str, list[tuple[str, str, str]]] = defaultdict(list)
+    async def list_checkpoints(self, clinic_id, thread_id, ns, checkpoint_id, before_id) -> list[StoredCheckpoint]:
+        c = str(clinic_id)
+        keys = [k for k in self.checkpoints if k[0] == c and (thread_id is None or k[1] == thread_id) and (ns is None or k[2] == ns)]
+        keys = [k for k in keys if (checkpoint_id is None or k[3] == checkpoint_id) and (before_id is None or k[3] < before_id)]
+        by_thread: dict[str, list[tuple[str, str, str, str]]] = defaultdict(list)
         for k in keys:
-            by_thread[k[0]].append(k)
-        ordered = [k for t in by_thread for k in sorted(by_thread[t], key=lambda k: (k[1], k[2]), reverse=True)]
+            by_thread[k[1]].append(k)
+        ordered = [k for t in by_thread for k in sorted(by_thread[t], key=lambda k: (k[2], k[3]), reverse=True)]
         return [self._stored(k) for k in ordered]
 
-    async def get_blobs(self, thread_id, ns, versions) -> dict[str, Typed]:
+    async def get_blobs(self, clinic_id, thread_id, ns, versions) -> dict[str, Typed]:
         out = {}
         for channel, version in versions.items():
-            found = self.blobs.get((thread_id, ns, channel, str(version)))
+            found = self.blobs.get((str(clinic_id), thread_id, ns, channel, str(version)))
             if found is not None:
                 out[channel] = found[1]
         return out
 
-    async def get_writes(self, thread_id, ns, checkpoint_id) -> list[StoredWrite]:
+    async def get_writes(self, clinic_id, thread_id, ns, checkpoint_id) -> list[StoredWrite]:
+        c = str(clinic_id)
         return [
-            StoredWrite(k[3], k[4], channel, value, path)
+            StoredWrite(k[4], k[5], channel, value, path)
             for k, (_, channel, value, path) in self.writes.items()
-            if k[:3] == (thread_id, ns, checkpoint_id)
+            if k[:4] == (c, thread_id, ns, checkpoint_id)
         ]
 
 
@@ -300,7 +325,7 @@ class SqlCheckpointStore:
                         "values (:c, :o, :t, :ns, :ch, :v, :bt, :b, :k) on conflict (clinic_id, thread_id, checkpoint_ns, channel, version) do nothing"
                     ),
                     {"c": scope.clinic_id, "o": scope.origin, "t": thread_id, "ns": ns, "ch": channel, "v": version, "bt": blob_type, "b": blob,
-                     "k": f"blob:{thread_id}:{ns}:{channel}:{version}"},
+                     "k": idempotency_key("blob", scope.clinic_id, thread_id, ns, channel, version)},
                 )
             await conn.execute(
                 text(
@@ -309,7 +334,7 @@ class SqlCheckpointStore:
                     "on conflict (clinic_id, thread_id, checkpoint_ns, checkpoint_id) do nothing"
                 ),
                 {"c": scope.clinic_id, "o": scope.origin, "t": thread_id, "ns": ns, "id": checkpoint_id, "pid": parent_id, "ct": checkpoint[0], "cp": checkpoint[1],
-                 "mt": metadata[0], "m": metadata[1], "k": f"cp:{thread_id}:{ns}:{checkpoint_id}"},
+                 "mt": metadata[0], "m": metadata[1], "k": idempotency_key("cp", scope.clinic_id, thread_id, ns, checkpoint_id)},
             )
 
     async def put_writes(self, scope, thread_id, ns, checkpoint_id, task_id, task_path, rows) -> None:
@@ -327,7 +352,7 @@ class SqlCheckpointStore:
                         f"on conflict (clinic_id, thread_id, checkpoint_ns, checkpoint_id, task_id, idx) {tail}"
                     ),
                     {"c": scope.clinic_id, "o": scope.origin, "t": thread_id, "ns": ns, "id": checkpoint_id, "task": task_id, "idx": idx, "ch": channel, "wt": write_type,
-                     "wb": blob, "tp": task_path, "k": f"w:{thread_id}:{ns}:{checkpoint_id}:{task_id}:{idx}"},
+                     "wb": blob, "tp": task_path, "k": idempotency_key("w", scope.clinic_id, thread_id, ns, checkpoint_id, task_id, idx)},
                 )
 
     @staticmethod
@@ -336,8 +361,8 @@ class SqlCheckpointStore:
             r.thread_id, r.checkpoint_ns, r.checkpoint_id, r.parent_checkpoint_id, (r.checkpoint_type, bytes(r.checkpoint)), (r.metadata_type, bytes(r.metadata_blob))
         )
 
-    async def get_checkpoint(self, thread_id, ns, checkpoint_id) -> StoredCheckpoint | None:
-        where = "thread_id = :t and checkpoint_ns = :ns" + (" and checkpoint_id = :id" if checkpoint_id is not None else "")
+    async def get_checkpoint(self, clinic_id, thread_id, ns, checkpoint_id) -> StoredCheckpoint | None:
+        where = "clinic_id = :c and thread_id = :t and checkpoint_ns = :ns" + (" and checkpoint_id = :id" if checkpoint_id is not None else "")
         async with self._session() as conn:
             row = (
                 await conn.execute(
@@ -345,13 +370,13 @@ class SqlCheckpointStore:
                         "select thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint_type, checkpoint, metadata_type, metadata as metadata_blob "
                         f"from agents.graph_checkpoints where {where} order by checkpoint_id desc limit 1"
                     ),
-                    {"t": thread_id, "ns": ns, "id": checkpoint_id},
+                    {"c": clinic_id, "t": thread_id, "ns": ns, "id": checkpoint_id},
                 )
             ).first()
         return None if row is None else self._row(row)
 
-    async def list_checkpoints(self, thread_id, ns, checkpoint_id, before_id) -> list[StoredCheckpoint]:
-        clauses, params = ["true"], {}
+    async def list_checkpoints(self, clinic_id, thread_id, ns, checkpoint_id, before_id) -> list[StoredCheckpoint]:
+        clauses, params = ["clinic_id = :c"], {"c": clinic_id}
         for column, name, value in (("thread_id", "t", thread_id), ("checkpoint_ns", "ns", ns), ("checkpoint_id", "id", checkpoint_id)):
             if value is not None:
                 clauses.append(f"{column} = :{name}")
@@ -371,31 +396,31 @@ class SqlCheckpointStore:
             ).all()
         return [self._row(r) for r in rows]
 
-    async def get_blobs(self, thread_id, ns, versions) -> dict[str, Typed]:
+    async def get_blobs(self, clinic_id, thread_id, ns, versions) -> dict[str, Typed]:
         if not versions:
             return {}
         async with self._session() as conn:
             rows = (
                 await conn.execute(
                     text(
-                        "select channel, version, blob_type, blob from agents.graph_checkpoint_blobs where thread_id = :t and checkpoint_ns = :ns "
+                        "select channel, version, blob_type, blob from agents.graph_checkpoint_blobs where clinic_id = :c and thread_id = :t and checkpoint_ns = :ns "
                         "and channel = any(cast(:chs as text[])) and version = any(cast(:vs as text[]))"
                     ),
-                    {"t": thread_id, "ns": ns, "chs": [c for c in versions], "vs": [str(v) for v in versions.values()]},
+                    {"c": clinic_id, "t": thread_id, "ns": ns, "chs": list(versions), "vs": [str(v) for v in versions.values()]},
                 )
             ).all()
         wanted = {(channel, str(version)) for channel, version in versions.items()}
         return {r.channel: (r.blob_type, bytes(r.blob)) for r in rows if (r.channel, r.version) in wanted}
 
-    async def get_writes(self, thread_id, ns, checkpoint_id) -> list[StoredWrite]:
+    async def get_writes(self, clinic_id, thread_id, ns, checkpoint_id) -> list[StoredWrite]:
         async with self._session() as conn:
             rows = (
                 await conn.execute(
                     text(
                         "select task_id, idx, channel, write_type, write_blob, task_path from agents.graph_checkpoint_writes "
-                        "where thread_id = :t and checkpoint_ns = :ns and checkpoint_id = :id"
+                        "where clinic_id = :c and thread_id = :t and checkpoint_ns = :ns and checkpoint_id = :id"
                     ),
-                    {"t": thread_id, "ns": ns, "id": checkpoint_id},
+                    {"c": clinic_id, "t": thread_id, "ns": ns, "id": checkpoint_id},
                 )
             ).all()
         return [StoredWrite(r.task_id, r.idx, r.channel, (r.write_type, bytes(r.write_blob)), r.task_path) for r in rows]

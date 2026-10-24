@@ -188,6 +188,7 @@ async def test_the_owner_cannot_edit_the_history_and_nobody_can_delete_a_write(d
         "update agents.graph_checkpoints set origin = 'live'", "delete from agents.graph_checkpoints", "truncate agents.graph_checkpoints cascade",
         "update agents.graph_checkpoint_blobs set blob = '\\x03'::bytea", "delete from agents.graph_checkpoint_blobs", "truncate agents.graph_checkpoint_blobs",
         "delete from agents.graph_checkpoint_writes", "truncate agents.graph_checkpoint_writes",
+        "update agents.graph_checkpoint_writes set write_blob = '\\x03'::bytea where idx >= 0",  # a regular write is final even for the owner
     ):
         assert await owner(db, stmt) == "23001", stmt  # restrict_violation from agents.append_only()
 
@@ -281,3 +282,46 @@ async def test_another_clinics_worker_sees_nothing_and_cannot_write_into_this_cl
     desk = PostgresCheckpointSaver(SqlCheckpointStore(make_session(db, w.people["fd_a"])))
     with pytest.raises(DBAPIError):
         await desk.aput(cfg(w, f"desk-{_u()}"), c, {"step": 0}, c["channel_versions"])
+
+
+async def test_the_saver_s_upsert_replaces_a_special_write_and_keeps_a_regular_one_under_row_level_security(db):
+    from careflow.checkpointer import Scope
+
+    w = await world(db)
+    store = SqlCheckpointStore(make_session(db, w.people["worker_a"]))
+    scope, thread = Scope(w.a, "test"), f"upsert-{_u()}"
+    await store.put_writes(scope, thread, "", "cp-1", "task", "", [(-3, "__interrupt__", ("msgpack", b"first")), (0, "a", ("msgpack", b"first"))])
+    await store.put_writes(scope, thread, "", "cp-1", "task", "", [(-3, "__interrupt__", ("msgpack", b"second")), (0, "a", ("msgpack", b"second"))])
+    got = {x.idx: x.value[1] for x in await store.get_writes(w.a, thread, "", "cp-1")}
+    assert got == {-3: b"second", 0: b"first"}
+
+
+async def test_a_put_is_one_transaction_a_failing_checkpoint_row_leaves_no_blob_behind(db):
+    from careflow.checkpointer import Scope
+
+    w = await world(db)
+    store = SqlCheckpointStore(make_session(db, w.people["worker_a"]))
+    thread = f"atomic-{_u()}"
+    with pytest.raises(DBAPIError):  # a parent id longer than 100 characters violates the checkpoint row's CHECK, AFTER the blob insert succeeded
+        await store.put_checkpoint(Scope(w.a, "test"), thread, "", "cp-1", "p" * 101, ("msgpack", b"c"), ("json", b"m"), [("x", "v1", ("msgpack", b"blob"))])
+    assert (await db.execute(text("select count(*) from agents.graph_checkpoint_blobs where thread_id = :t"), {"t": thread})).scalar_one() == 0
+    assert (await db.execute(text("select count(*) from agents.graph_checkpoints where thread_id = :t"), {"t": thread})).scalar_one() == 0
+
+
+async def test_a_worker_serving_two_clinics_gets_each_clinics_own_rows_for_the_same_thread_id(db):
+    w = await world(db)
+    both = _u()
+    await raw(db, f"insert into iam.accounts (id, account_type, status, origin) values ('{both}', 'staff', 'active', 'test');\n"
+              f"insert into iam.staff_roles (account_id, clinic_id, role, origin) values ('{both}', '{w.a}', 'queue_worker', 'test'), ('{both}', '{w.b}', 'queue_worker', 'test');")
+    saver = PostgresCheckpointSaver(SqlCheckpointStore(make_session(db, both)))
+    thread, c_a, c_b = f"shared-{_u()}", checkpoint({"x": "A"}), checkpoint({"x": "B"})
+    await saver.aput(cfg(w, thread), c_a, {"step": 0}, c_a["channel_versions"])
+    await saver.aput(cfg(w, thread, clinic_id=str(w.b)), c_b, {"step": 0}, c_b["channel_versions"])
+    late = checkpoint({"x": "poison"})
+    late["id"] = "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    await saver.aput(cfg(w, thread, clinic_id=str(w.b)), late, {"step": 1}, late["channel_versions"])
+    got_a = await saver.aget_tuple(cfg(w, thread))
+    got_b = await saver.aget_tuple(cfg(w, thread, clinic_id=str(w.b)))
+    assert got_a.checkpoint["channel_values"] == {"x": "A"} and got_a.config["configurable"]["checkpoint_id"] == c_a["id"]
+    assert got_b.checkpoint["channel_values"] == {"x": "poison"}  # B's own latest; A never sees it
+    assert [t.config["configurable"]["checkpoint_id"] async for t in saver.alist(cfg(w, thread))] == [c_a["id"]]

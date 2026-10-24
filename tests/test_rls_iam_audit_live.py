@@ -120,7 +120,7 @@ async def test_all_eleven_schemas_exist_and_nine_have_no_tables(db):
         "sched": {"locations", "providers", "visit_types", "slots", "priority_levels", "holds", "bookings", "waitlist"},
         "ops": {"queue", "outbox", "key_rotation_batches", "spend_ledger"},  # spend_ledger: migration 0016
         "kb": {"red_flag_rules"},
-        "agents": {"review_tasks", "triage_proposals", "review_decisions"},  # migration 0018
+        "agents": {"review_tasks", "triage_proposals", "review_decisions", "graph_checkpoints", "graph_checkpoint_blobs", "graph_checkpoint_writes"},  # 0018, 0021
         "ai": {"model_registry"},  # migration 0015
         "docs": {"documents"},  # migration 0017
         "msg": {"threads", "messages", "message_rotation_batches", "screenings"},  # migrations 0011 and 0013

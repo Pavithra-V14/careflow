@@ -20,7 +20,7 @@ def test_all_three_tables_have_forced_rls_clinic_origin_and_an_idempotency_key_i
 
 def test_history_and_blobs_are_append_only_and_writes_cannot_be_deleted():
     for name in ("graph_checkpoints_no_update_delete", "graph_checkpoints_no_truncate", "graph_checkpoint_blobs_no_update_delete", "graph_checkpoint_blobs_no_truncate",
-                 "graph_checkpoint_writes_no_delete", "graph_checkpoint_writes_no_truncate"):
+                 "graph_checkpoint_writes_no_delete", "graph_checkpoint_writes_no_truncate", "graph_checkpoint_writes_regular_are_final"):
         assert name in LOW
     assert "before update or delete on agents.graph_checkpoints" in LOW and "before update or delete on agents.graph_checkpoint_blobs" in LOW
     assert "before delete on agents.graph_checkpoint_writes" in LOW
@@ -51,3 +51,8 @@ def test_exactly_seven_policies_all_limited_to_worker_nurse_doctor_and_the_only_
 def test_nothing_else_is_created_no_function_no_definer_no_seed_rows_and_checkpoint_ids_sort_with_the_c_collation():
     assert "create function" not in LOW and "security definer" not in LOW and not re.search(r"insert\s+into\s+agents\.graph", LOW)
     assert 'checkpoint_id        text collate "c" not null' in LOW or 'checkpoint_id text collate "c" not null' in re.sub(r"\s+", " ", LOW)
+
+
+def test_a_regular_write_can_never_be_updated_by_anyone_and_the_header_states_the_owner_caveat():
+    assert "before update on agents.graph_checkpoint_writes" in LOW and "when (old.idx >= 0)" in LOW
+    assert "disable the triggers" in SQL.lower() and "cross-clinic" in SQL.lower()

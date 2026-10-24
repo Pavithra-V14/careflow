@@ -46,6 +46,11 @@ def cfg(thread=THREAD, **over) -> RunnableConfig:
     return {"configurable": {"thread_id": thread, "checkpoint_ns": "", "clinic_id": str(CLINIC), "origin": "test", **over}}
 
 
+def scoped(out, clinic=None):
+    """A config returned by aput carries no clinic; reads need one."""
+    return {"configurable": {**out["configurable"], "clinic_id": str(clinic or CLINIC), "origin": "test"}}
+
+
 def saver():
     store = InMemoryCheckpointStore()
     return PostgresCheckpointSaver(store), store
@@ -132,7 +137,7 @@ async def test_put_and_get_round_trip_channel_values_empty_channels_and_the_pare
     cfg1 = await s.aput(cfg(), first, {"step": 0, "source": "input"}, first["channel_versions"])
     second = checkpoint({"x": [3]}, {"x": "v2", "z": "v1"})
     cfg2 = await s.aput({**cfg1, "configurable": {**cfg1["configurable"], "clinic_id": str(CLINIC), "origin": "test"}}, second, {"step": 1, "source": "loop"}, second["channel_versions"])
-    got = await s.aget_tuple(cfg2)
+    got = await s.aget_tuple(scoped(cfg2))
     assert got is not None and got.checkpoint["channel_values"] == {"x": [3]}  # z has a version but no value: "empty", not returned
     assert got.parent_config["configurable"]["checkpoint_id"] == first["id"] and got.metadata["step"] == 1
     latest = await s.aget_tuple(cfg())  # no checkpoint_id: the latest
@@ -160,7 +165,7 @@ async def test_regular_writes_are_stored_once_special_writes_are_replaced_and_pe
     await s.aput_writes(wc, [("a", 5)], "task-0", "path-a")
     await s.aput_writes(wc, [("__interrupt__", "first")], "task-1", "path-b")
     await s.aput_writes(wc, [("__interrupt__", "second")], "task-1", "path-b")  # special: replaced
-    got = (await s.aget_tuple(config)).pending_writes
+    got = (await s.aget_tuple(scoped(config))).pending_writes
     assert got == [("task-0", "a", 5), ("task-1", "__interrupt__", "second"), ("task-1", "a", 1), ("task-1", "b", 2)] or sorted(got) == sorted(
         [("task-0", "a", 5), ("task-1", "__interrupt__", "second"), ("task-1", "a", 1), ("task-1", "b", 2)]
     )
@@ -182,7 +187,8 @@ async def test_list_is_newest_first_and_honours_before_limit_and_metadata_filter
     assert [t.config["configurable"]["checkpoint_id"] async for t in s.alist(cfg(), before=before)] == sorted(ids, reverse=True)[2:]
     assert len([t async for t in s.alist(cfg(), filter={"source": "input"})]) == 1
     assert [t async for t in s.alist(cfg("nobody"))] == []
-    assert len([t async for t in s.alist(None)]) == 4  # across threads (row-level security limits it in the database)
+    with pytest.raises(CheckpointerError):
+        [t async for t in s.alist(None)]  # a list is always for one clinic: listing across clinics is refused
 
 
 async def test_deleting_a_thread_is_refused_because_the_history_is_append_only():
@@ -373,10 +379,76 @@ async def test_every_insert_carries_the_clinic_the_origin_and_an_idempotency_key
 async def test_the_statements_never_delete_update_a_checkpoint_or_truncate():
     store, conn = sql_store()
     await store.put_checkpoint(Scope(CLINIC, "test"), "t", "", "cp-1", None, ("a", b"c"), ("a", b"m"), [])
-    await store.get_checkpoint("t", "", None)
-    await store.list_checkpoints("t", "", None, "cp-9")
-    await store.get_blobs("t", "", {"x": "v1"})
-    await store.get_writes("t", "", "cp-1")
+    await store.get_checkpoint(CLINIC, "t", "", None)
+    await store.list_checkpoints(CLINIC, "t", "", None, "cp-9")
+    await store.get_blobs(CLINIC, "t", "", {"x": "v1"})
+    await store.get_writes(CLINIC, "t", "", "cp-1")
     text_ = " ".join(c[0].lower() for c in conn.calls)
     assert "delete " not in text_ and "truncate" not in text_ and "update agents.graph_checkpoints" not in text_ and "update agents.graph_checkpoint_blobs" not in text_
     assert json.dumps([c[1] for c in conn.calls], default=str)  # parameters are plain values
+
+
+# ---- every read is scoped to the clinic in the config (reviewer H1) -----------------------------------------------------------------------------
+
+
+OTHER = uuid.uuid4()
+
+
+def cfg_for(clinic, thread=THREAD, **over):
+    config = cfg(thread, **over)
+    config["configurable"]["clinic_id"] = str(clinic)
+    return config
+
+
+async def test_two_clinics_with_the_same_thread_id_never_see_each_others_checkpoints_blobs_or_writes():
+    s, _ = saver()
+    a, b = checkpoint({"x": "clinic A value"}), checkpoint({"x": "clinic B value"})
+    out_a = await s.aput(cfg_for(CLINIC), a, {"step": 0}, a["channel_versions"])
+    out_b = await s.aput(cfg_for(OTHER), b, {"step": 0}, b["channel_versions"])
+    await s.aput_writes({"configurable": {**cfg_for(CLINIC)["configurable"], "checkpoint_id": a["id"]}}, [("w", "A")], "task", "")
+    await s.aput_writes({"configurable": {**cfg_for(OTHER)["configurable"], "checkpoint_id": b["id"]}}, [("w", "B")], "task", "")
+    got_a, got_b = await s.aget_tuple(cfg_for(CLINIC)), await s.aget_tuple(cfg_for(OTHER))
+    assert got_a.checkpoint["channel_values"] == {"x": "clinic A value"} and got_b.checkpoint["channel_values"] == {"x": "clinic B value"}
+    assert got_a.pending_writes == [("task", "w", "A")] and got_b.pending_writes == [("task", "w", "B")]
+    assert [t.checkpoint["channel_values"] async for t in s.alist(cfg_for(CLINIC))] == [{"x": "clinic A value"}]
+    # a later-sorting checkpoint written in clinic B under the same thread must not displace clinic A's latest
+    later = checkpoint({"x": "poison"})
+    later["id"] = "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    await s.aput(cfg_for(OTHER), later, {"step": 9}, later["channel_versions"])
+    assert (await s.aget_tuple(cfg_for(CLINIC))).config["configurable"]["checkpoint_id"] == a["id"]
+    assert out_a["configurable"]["checkpoint_id"] != out_b["configurable"]["checkpoint_id"]
+
+
+async def test_a_read_without_a_clinic_is_refused_not_answered_from_whatever_exists():
+    s, _ = saver()
+    c = checkpoint({"x": 1})
+    await s.aput(cfg(), c, {"step": 0}, c["channel_versions"])
+    for conf in ({"clinic_id": None}, {"clinic_id": "not-a-uuid"}):
+        config = cfg()
+        config["configurable"].update(conf)
+        with pytest.raises(CheckpointerError):
+            await s.aget_tuple(config)
+        with pytest.raises(CheckpointerError):
+            [t async for t in s.alist(config)]
+    bare = {"configurable": {"thread_id": THREAD, "checkpoint_ns": ""}}
+    with pytest.raises(CheckpointerError):
+        await s.aget_tuple(bare)
+
+
+async def test_the_idempotency_keys_cannot_collide_across_a_thread_id_that_contains_the_delimiter():
+    from careflow.checkpointer import idempotency_key
+
+    assert idempotency_key("w", "c", "a:b", "", "cp", "t", 0) != idempotency_key("w", "c", "a", "b:", "cp", "t", 0)
+    assert idempotency_key("cp", "c", "t", "", "id") == idempotency_key("cp", "c", "t", "", "id")  # deterministic: a replay finds the same key
+    assert idempotency_key("cp", "x").startswith("cp:") and idempotency_key("blob", "x").startswith("blob:") and idempotency_key("w", "x").startswith("w:")
+
+
+async def test_a_special_write_put_twice_is_replaced_a_regular_one_stays_through_the_store_directly():
+    s, _ = saver()
+    c = checkpoint({"x": 1})
+    config = await s.aput(cfg(), c, {"step": 0}, c["channel_versions"])
+    wc = {"configurable": {**config["configurable"], "clinic_id": str(CLINIC), "origin": "test"}}
+    for value in ("one", "two"):
+        await s.aput_writes(wc, [("__interrupt__", value), ("a", value)], "task", "")
+    pending = {(w[1]): w[2] for w in (await s.aget_tuple(wc)).pending_writes}
+    assert pending == {"__interrupt__": "two", "a": "one"}

@@ -23,10 +23,14 @@
 -- extracted value, and a test greps the stored bytes. The saver itself is GENERIC: a future graph whose state held patient text would put it here in the clear, so such a graph
 -- must pass an encrypting serializer (langgraph's EncryptedSerializer) to the saver BEFORE it runs. This migration cannot enforce that.
 --
+-- "Append-only for everyone, the owner included" is a TRIGGER guarantee: the owner or a superuser could still DISABLE the triggers or set session_replication_role.
 -- RESIDUAL RISKS, stated: (1) the checkpoint bytes are msgpack, not inspected by the database: it cannot verify they hold no patient text. (2) A queue worker, nurse or doctor of
 -- the clinic can write any thread_id of that clinic, including another run's: the thread id is not tied to a document or run by a foreign key (it is `front_door:<document id>`
 -- by convention), so a compromised worker could poison a thread. (3) `checkpoint_id` orders by `collate "C"` (LangGraph ids are time-ordered uuid6 strings, compared as text).
--- (4) No audit.log row is written. (5) Rows accumulate: there is no pruning (deletion is blocked); a retention procedure is a later, audited package.
+-- (4) No audit.log row is written. (5) Rows accumulate: there is no pruning (deletion is blocked); a retention procedure is a later, audited package. (6) CROSS-CLINIC: a queue worker holds its role in each clinic it serves, so row-level security alone would let it see two clinics' rows under the
+-- same thread id; the saver therefore filters EVERY read by the clinic in the run config, but a nurse of clinic A who knew clinic B's thread id could still WRITE a row under it in clinic A
+-- (harmless to B's reads, which are clinic-scoped). (7) LangGraph copies every string in the run config's `configurable` into the stored metadata, in the clear: put nothing sensitive there.
+(8) Atomicity of a put rests on the saver doing both inserts in one transaction; it is exercised against the real tables inside one rolled-back transaction, not across a commit.
 
 create table agents.graph_checkpoints (
     clinic_id            uuid not null references iam.clinics (id),
@@ -88,6 +92,9 @@ create trigger graph_checkpoint_blobs_no_update_delete before update or delete o
     for each row execute function agents.append_only();
 create trigger graph_checkpoint_blobs_no_truncate before truncate on agents.graph_checkpoint_blobs
     for each statement execute function agents.append_only();
+-- A REGULAR write (idx >= 0) is never changed by anyone, the owner included; only the special entries (idx < 0) can be replaced.
+create trigger graph_checkpoint_writes_regular_are_final before update on agents.graph_checkpoint_writes
+    for each row when (old.idx >= 0) execute function agents.append_only();
 create trigger graph_checkpoint_writes_no_delete before delete on agents.graph_checkpoint_writes
     for each row execute function agents.append_only();
 create trigger graph_checkpoint_writes_no_truncate before truncate on agents.graph_checkpoint_writes
