@@ -54,7 +54,13 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from careflow.referral import ReferralExtractor, process_referral, screen_referral
+from careflow.referral import (
+    ReferralDocumentNotFound,
+    ReferralError,
+    ReferralExtractor,
+    process_referral,
+    screen_referral,
+)
 from careflow.retrieval import CardRetriever
 
 RECURSION_LIMIT: Final = 40  # §7.3: 40 steps per run
@@ -105,7 +111,7 @@ def hold_role_for(status: str) -> str:
 
 STATUSES: Final = (
     "started", "red_flag_escalated", "held_unassessable", "extraction_unavailable", "needs_front_desk", "identity_resolved", "matched",
-    "triage_proposed", "reviewed", "held_for_human",
+    "triage_proposed", "reviewed", "letter_unreadable", "identity_conflict",
 )
 
 
@@ -225,7 +231,13 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
         document_id, _ = _ids(state)
         async with deps.session() as conn:
             text_ = await deps.texts.text_for(document_id)
-            screened = await screen_referral(conn, deps.engine, document_id, text_, profile=deps.profile)  # type: ignore[arg-type]
+            try:
+                screened = await screen_referral(conn, deps.engine, document_id, text_, profile=deps.profile)  # type: ignore[arg-type]
+            except ReferralDocumentNotFound:
+                raise  # a document that is not there (or not a referral) is a caller or deployment fault: loud
+            except ReferralError:
+                # An EMPTY letter (a scan that produced no text): nothing can be screened, so unknown is not clear. A nurse is told; no model has been called.
+                return {"status": "letter_unreadable", "reasons": ["empty_letter"]}
         if screened.result is not None:
             return {"status": screened.result.status, "reasons": list(screened.result.reasons)}
         return {"status": "started", "reasons": []}

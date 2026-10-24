@@ -17,7 +17,7 @@
 -- screening tasks and every other kind stay hidden from front desk and admin. A nurse-assigned hold stays invisible to front desk.
 --
 -- RESIDUAL RISKS: (1) a front-desk user can read the reasons of front-desk holds only: fixed words and a document id. (2) Nothing here makes the task appear
--- anywhere: the review console is a later package; until it exists a person must query the table. (3) No audit.log row is written.
+-- anywhere: the review console is a later package; until it exists a person must query the table. (3) No audit.log row is written. (4) Like the nurse/doctor rule it extends (0007), the update policy lets the actor set a resolved hold back to open or take over a hold another front-desk user acknowledged: there is no status-transition trigger and no audit row. (5) An identity key conflict (identity_key_conflict) and an empty letter (empty_letter) are held for a NURSE; data-entry refusals from the identity module (identity_refused) go to front desk.
 
 drop policy review_tasks_select on agents.review_tasks;
 drop policy review_tasks_update on agents.review_tasks;

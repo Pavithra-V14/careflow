@@ -140,6 +140,14 @@ async def test_front_desk_can_resolve_its_own_hold_only_as_themselves_and_not_a_
     assert await as_app(db, p["admin_a"], resolve(w.tasks["hold_fd"], p["admin_a"])) == "UPDATE 0"
 
 
+async def test_front_desk_cannot_reassign_or_re_kind_its_own_hold_the_column_grant_forbids_it(db):
+    w = await world(db)
+    p = w.people
+    for column, value in (("assigned_role", "nurse"), ("kind", "red_flag"), ("priority", "immediate"), ("clinic_id", str(w.b))):
+        sql = f"update agents.review_tasks set {column} = '{value}' where id = '{w.tasks['hold_fd']}'"
+        assert await as_app(db, p["fd_a"], sql) == "42501", column
+
+
 async def test_nurse_and_doctor_can_still_resolve_any_task_as_themselves(db):
     w = await world(db)
     p = w.people

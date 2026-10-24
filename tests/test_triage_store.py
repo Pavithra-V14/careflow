@@ -208,14 +208,14 @@ async def test_a_hold_task_is_written_idempotently_with_a_fixed_word_provenance_
     writer = SqlHoldTaskWriter(priority="standard")  # a test input
     task = await writer.raise_hold(
         conn, document_id=DOC, clinic_id=CLINIC, origin="test", assigned_role="front_desk", status="needs_front_desk",
-        reasons=["dob_missing", "SENTINEL name with spaces", "x" * 100], idempotency_key=f"hold:{DOC}:needs_front_desk",
+        reasons=["dob_missing", "SENTINEL name with spaces", "x" * 100, "Venkatesh", "98765", "name_not_a_known_reason"], idempotency_key=f"hold:{DOC}:needs_front_desk",
     )
     assert task == TASK
     sql, params = next(c for c in conn.calls if "insert into agents.review_tasks" in c[0])
     assert "'referral_hold'" in sql and "'standard'" not in sql and params["pr"] == "standard" and params["r"] == "front_desk"
     assert params["s"] == f"document:{DOC}" and params["k"] == f"hold:{DOC}:needs_front_desk"
     stored = json.loads(params["p"])
-    assert stored == {"status": "needs_front_desk", "reasons": ["dob_missing"]}  # free-form and over-long strings are dropped, not stored
+    assert stored == {"status": "needs_front_desk", "reasons": ["dob_missing"]}  # single-token names, numbers and invented words are dropped too: a closed vocabulary
     assert "SENTINEL" not in json.dumps([c[1] for c in conn.calls], default=str)
 
 

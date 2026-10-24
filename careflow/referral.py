@@ -37,7 +37,9 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from careflow.gateway import AllRoutesFailed, NoApprovedRoute, SpendCeilingReached
 from careflow.grounding import StructuredKind, canonical_date, verify_structured, words
+from careflow.mpi import IdempotencyConflict as IdentityKeyConflict
 from careflow.mpi import IngestionError, IngestResult
+from careflow.mpi import NotPermitted as IdentityNotPermitted
 from careflow.ports import PermanentError, TransientError
 from careflow.rules import Evaluation, Origin, Profile, RedFlagEngine
 
@@ -176,6 +178,12 @@ async def process_referral(
         identity = await ingestor.ingest(
             conn, clinic_id=row.clinic_id, origin=row.origin, name=name, dob=dob.isoformat(), phone=phone, idempotency_key=f"referral:{document_id}"
         )
+    except IdentityNotPermitted:
+        raise  # a deployment fault (the identity running this may not register patients): loud, never a quiet hold
+    except IdentityKeyConflict:
+        # This document's key was already used for a DIFFERENT person (a re-extraction disagrees with an earlier one): an identity conflict that needs a person
+        # with more authority than data entry, so it is a nurse's hold, not the front desk's.
+        return ReferralResult("identity_conflict", document_id, reasons=(*reasons, "identity_key_conflict"))
     except IngestionError:
         return ReferralResult("needs_front_desk", document_id, reasons=(*reasons, "identity_refused"))
     return ReferralResult("identity_resolved", document_id, reasons=tuple(reasons), identity=identity)
@@ -201,3 +209,17 @@ def _grounded(
         reasons.append(f"{field_name}_{fact.reason}" if not optional else f"{field_name}_dropped_{fact.reason}")
         return None
     return value
+
+
+# The ONLY reason words a run may carry into a review task (careflow/triage_store.py filters against this). Built from constants, never from text.
+_FIELDS = ("name", "dob", "phone")
+_FIELD_REASONS = ("missing", "empty", "not_found", "ambiguous", "unparseable_value", "unreadable", "quote_not_in_letter")
+FIXED_REASONS: Final = frozenset(
+    {"screening_unassessable", "demo_profile_on_live_origin", "extraction_unavailable", "identity_refused", "identity_key_conflict", "empty_letter", "dob_unreadable"}
+    | {f"{f}_{r}" for f in _FIELDS for r in _FIELD_REASONS}
+    | {f"{f}_dropped_{r}" for f in _FIELDS for r in _FIELD_REASONS}
+)
+
+
+def is_fixed_reason(word: object) -> bool:
+    return isinstance(word, str) and word in FIXED_REASONS

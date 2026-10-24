@@ -472,3 +472,67 @@ async def test_every_way_a_run_can_end_leaves_a_person_something_to_act_on(scena
     else:
         assert state.next == ()
         assert "escalate" in log or len(holds.tasks) == 1, f"{scenario}: the run ended and nobody was told"
+
+
+async def test_an_empty_letter_is_held_for_a_nurse_not_thrown_away_and_no_model_is_called():
+    graph, log, *_ = world()
+    graph.test_deps.texts.text_for = lambda document_id: _empty()  # a scan that produced no text
+    await graph.ainvoke(START, CONFIG)
+    state = await graph.aget_state(CONFIG)
+    (task,) = graph.test_deps.holds.tasks
+    assert state.values["status"] == "letter_unreadable" and task["role"] == "nurse" and task["reasons"] == ["empty_letter"]
+    assert not any(e.startswith("MODEL") for e in log) and state.next == ()
+
+
+async def _empty():
+    return "   "
+
+
+async def test_a_key_conflict_in_identity_is_a_nurse_hold_and_a_data_entry_refusal_is_the_front_desks():
+    from careflow.mpi import IdempotencyConflict, InvalidPhone
+
+    for error, role, status in ((IdempotencyConflict("x"), "nurse", "identity_conflict"), (InvalidPhone("x"), "front_desk", "needs_front_desk")):
+        graph, _, _, _, ingestor, *_ = world()
+        ingestor.raises = error
+        await graph.ainvoke(START, CONFIG)
+        (task,) = graph.test_deps.holds.tasks
+        assert task["role"] == role and task["status"] == status, (error, task)
+
+
+async def test_a_permission_fault_in_identity_is_loud_not_a_quiet_hold():
+    from careflow.mpi import NotPermitted
+
+    graph, _, _, _, ingestor, *_ = world()
+    ingestor.raises = NotPermitted("this role may not register patients in this clinic")
+    with pytest.raises(NotPermitted):
+        await graph.ainvoke(START, CONFIG)
+
+
+@pytest.mark.parametrize("router", ["after_screen", "after_identity", "after_match"])
+async def test_every_router_sends_an_unknown_or_missing_status_to_a_hold_never_to_the_end(router):
+    from langgraph.graph import END
+
+    fn = world()[0].router_functions[router]
+    for status in ("some_future_status", "", None, "needs_front_desk", "held_unassessable", "extraction_unavailable", "letter_unreadable"):
+        assert fn({"status": status} if status is not None else {}) == "hold_for_human", status
+    assert fn({"status": "red_flag_escalated"}) == END  # the rules engine's own immediate nurse task already exists
+
+
+async def test_every_status_a_node_can_produce_is_known_and_has_a_destination():
+    """Derived, not hand-listed: every status in STATUSES is either a go-on status, red_flag_escalated, or is held for a person by every router."""
+    from langgraph.graph import END
+
+    from careflow.front_door import STATUSES
+
+    graph = world()[0]
+    go_on = {"after_screen": "started", "after_identity": "identity_resolved", "after_match": "matched"}
+    for router, forward in go_on.items():
+        fn = graph.router_functions[router]
+        for status in STATUSES:
+            target = fn({"status": status})
+            if status == forward:
+                assert target not in ("hold_for_human", END), (router, status)
+            elif status == "red_flag_escalated":
+                assert target == END
+            else:
+                assert target == "hold_for_human", (router, status)

@@ -19,7 +19,9 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from careflow.front_door import STATUSES as KNOWN_STATUSES
 from careflow.front_door import TriageProposal
+from careflow.referral import is_fixed_reason
 from careflow.triage import ApprovalMode
 
 _NAMESPACE: Final = uuid.UUID("0b6c2f9e-3a47-4c5d-8d41-7a3c2f1e9b55")
@@ -179,7 +181,7 @@ class SqlHoldTaskWriter:
             raise TriageStoreError("a held referral goes to front desk or a nurse")
         if not isinstance(idempotency_key, str) or not idempotency_key.strip():
             raise TriageStoreError("an idempotency key is required on every write")
-        fixed = [r for r in reasons if isinstance(r, str) and r.replace("_", "").isalnum() and len(r) <= 64][:20]  # words only: nothing free-form is stored
+        fixed = [r for r in reasons if is_fixed_reason(r)][:20]  # ONLY words from the closed vocabulary in careflow.referral: nothing else is stored
         try:
             async with conn.begin_nested():
                 created = (
@@ -189,7 +191,7 @@ class SqlHoldTaskWriter:
                             "values (:c, :o, 'referral_hold', :pr, :r, :s, cast(:p as jsonb), :k) on conflict (idempotency_key) do nothing returning id"
                         ),
                         {"c": clinic_id, "o": origin, "pr": self._priority, "r": assigned_role, "s": f"document:{document_id}",
-                         "p": json.dumps({"status": status if status.replace("_", "").isalnum() else "unknown", "reasons": fixed}), "k": idempotency_key},
+                         "p": json.dumps({"status": status if status in KNOWN_STATUSES else "unknown", "reasons": fixed}), "k": idempotency_key},
                     )
                 ).first()
         except DBAPIError as exc:
