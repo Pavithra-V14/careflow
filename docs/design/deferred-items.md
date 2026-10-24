@@ -146,3 +146,7 @@ the **thread** row, not the message row, so key rotation can never stall an esca
   carry no real data, but they appear in any dev query that does not filter on origin.
 - `audit.log` is append-only for every role (including the table owner), so any `audit.log` rows written by tests or
   scripts against a database can never be cleaned up; keep audit-writing tests inside rolled-back transactions.
+
+## P2-7 referral to identity (added with careflow/referral.py)
+- Role split for escalate vs identity insert, and a review-task path for an unassessable document screening: see docs/design/p2-7-referral-identity.md.
+- No route yet (and so no role-matrix case yet); add both in the same change when the route is built.

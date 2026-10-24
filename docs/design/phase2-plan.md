@@ -24,7 +24,7 @@ needs it (CLAUDE.md rule 13).** Everything below is built against fake adapters.
 | **P2-4** | Extraction worker: pypdf, Unstructured (local), vision | Not started | Section 10.4 tiers with page provenance | none new |
 | **P2-5** | Tiered grounding (plain code; Guardrails AI not needed, see p2-5-grounding.md) | Built: `careflow/grounding.py`, offline tests; not wired (needs P2-4/P2-8) | Hard gate: no unverified fact reaches a rule | Guardrails' bundled NLI validator (do not use as is) |
 | **P2-6** | Card schema and loading, Qdrant card index, BM25 and RRF, embeddings, abstention (no hosted reranker) | Not started; **content blocked on clinicians** | Retrieval gate: top-1, recall@3 >= 0.80, correct-abstention >= 0.90, false-routing | Qdrant access control (cards only); embedding availability |
-| **P2-7** | Referral to identity (reuse `mpi`), red-flag screen before any model call | Not started | Rule 2: rules run first on every path | none |
+| **P2-7** | Referral to identity (reuse `mpi`), red-flag screen before any model call | Built as a service (`careflow/referral.py`), offline tests; role split and unassessable-task path await owner decisions | Rule 2: rules run first on every path | none |
 | **P2-8** | Front Door LangGraph graph with a Postgres checkpointer | Not started | The structural no-side-effect-across-a-pause test (hard CI gate); topology matches the inventory; crash-resume repeats no side effect | checkpointer driver vs asyncpg |
 | **P2-9** | Triage proposal and review tasks | Not started; **priorities blocked on clinicians** | Nothing clinical approved by timeout | none |
 | **P2-10** | End-to-end referral to triage with stand-ins at one seam | Not started | The Phase 2 gates pass together | none |
