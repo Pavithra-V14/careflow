@@ -1,0 +1,108 @@
+"""The Front Door job handler (careflow/front_door_runner.py), offline: a fake session and a fake graph. Whether it is safe to run twice, to resume after a crash and to leave a
+paused or finished thread alone. The real run against the real tables is tests/test_api_referrals_live.py."""
+
+import uuid
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+from types import SimpleNamespace
+
+import pytest
+
+import careflow.front_door_runner as runner
+from careflow.budget import RunBudget, TickClock
+from careflow.front_door_runner import RunnerError, front_door_handler
+from careflow.queue import Job
+from careflow.tick import JobContext
+
+pytestmark = pytest.mark.asyncio
+CLINIC, DOC, WORKER = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+
+
+class Conn:
+    def __init__(self, clinic):
+        self.clinic = clinic
+
+    async def execute(self, statement, params=None):
+        assert "from docs.documents" in str(statement)
+        return SimpleNamespace(first=lambda: None if self.clinic is None else SimpleNamespace(clinic_id=self.clinic))
+
+
+class Graph:
+    def __init__(self, values=None, next_=()):
+        self.state = SimpleNamespace(values=values or {}, next=next_)
+        self.invoked = []
+
+    async def aget_state(self, config):
+        return self.state
+
+    async def ainvoke(self, payload, config):
+        self.invoked.append((payload, config))
+
+
+def ctx(payload=None, clinic=CLINIC):
+    job = Job(uuid.uuid4(), clinic, "test", "front_door_run", {"document_id": str(DOC)} if payload is None else payload, 1, "w", datetime.now(UTC), "k")
+    return JobContext(job=job, budget=RunBudget(TickClock()), engine=object(), worker_account_id=WORKER)  # type: ignore[arg-type]
+
+
+def handler(graph, doc_clinic=CLINIC, monkeypatch=None):
+    seen = {}
+
+    def session_for(engine, account):
+        seen["account"] = account
+
+        @asynccontextmanager
+        async def session():
+            yield Conn(doc_clinic)
+
+        return session
+
+    monkeypatch.setattr(runner, "graph_for", lambda components, session: graph)
+    return front_door_handler(object(), session_for=session_for), seen  # type: ignore[arg-type]
+
+
+async def test_a_new_run_starts_the_graph_from_the_initial_state_as_the_worker(monkeypatch):
+    graph = Graph()
+    h, seen = handler(graph, monkeypatch=monkeypatch)
+    await h(ctx())
+    ((payload, config),) = graph.invoked
+    assert payload == {"document_id": str(DOC), "clinic_id": str(CLINIC), "origin": "test", "status": "started", "reasons": []}
+    assert config["configurable"]["thread_id"] == f"front_door:{DOC}" and config["configurable"]["clinic_id"] == str(CLINIC) and seen["account"] == WORKER
+    assert config["recursion_limit"] == 40
+
+
+async def test_a_crashed_run_is_continued_from_its_checkpoint_not_started_again(monkeypatch):
+    graph = Graph({"status": "matched"}, ("propose_triage",))
+    h, _ = handler(graph, monkeypatch=monkeypatch)
+    await h(ctx())
+    ((payload, _),) = graph.invoked
+    assert payload is None  # resume from the last completed step
+
+
+@pytest.mark.parametrize("state", [({"status": "triage_proposed"}, ("review",)), ({"status": "reviewed"}, ()), ({"status": "red_flag_escalated"}, ())])
+async def test_a_thread_paused_for_a_person_or_already_finished_is_left_alone_and_the_job_completes(monkeypatch, state):
+    graph = Graph(*state)
+    h, _ = handler(graph, monkeypatch=monkeypatch)
+    await h(ctx())
+    assert graph.invoked == []
+
+
+async def test_a_job_that_does_not_name_a_document_or_names_one_of_another_clinic_is_refused_before_anything_runs(monkeypatch):
+    graph = Graph()
+    h, _ = handler(graph, monkeypatch=monkeypatch)
+    for payload in ({}, {"document_id": "not-a-uuid"}, {"document_id": 7}):
+        with pytest.raises(RunnerError):
+            await h(ctx(payload))
+    h2, _ = handler(graph, doc_clinic=uuid.uuid4(), monkeypatch=monkeypatch)
+    with pytest.raises(RunnerError):
+        await h2(ctx())
+    h3, _ = handler(graph, doc_clinic=None, monkeypatch=monkeypatch)  # a document the worker cannot see
+    with pytest.raises(RunnerError):
+        await h3(ctx())
+    assert graph.invoked == []
+
+
+async def test_the_error_text_never_carries_the_payload(monkeypatch):
+    h, _ = handler(Graph(), monkeypatch=monkeypatch)
+    with pytest.raises(RunnerError) as exc:
+        await h(ctx({"document_id": "SENTINEL-NOT-A-UUID"}))
+    assert "SENTINEL" not in str(exc.value)

@@ -73,6 +73,15 @@ exactly those roles, and the audit, refusal, erased and authentication tests to 
 
 Both halves must run in CI with zero skips.
 
+## POST /v1/staff/referrals/{document_id}/run and /review (Front Door runs)
+
+Both routes are registered in `SEPARATE_HARNESS` and tested in `tests/test_api_referrals_live.py`. Why: a run writes append-only rows (`docs.documents`, `ops.queue`
+claims, `agents.graph_checkpoints`, `agents.triage_proposals`, `agents.review_decisions`) that the committed-fixture matrix could never delete. The dedicated module drives the
+real app over HTTP with real signed tokens, and the real worker handler (claimed from the real queue and run as the worker account), inside one never-committed transaction.
+It covers every required role on BOTH routes (start: front desk, nurse, doctor; review: nurse, doctor; the worker gets 403; everyone else the fixed 404), authentication before
+validation, the key and path and body validation (the reviewer is never accepted from the body), replay, and the whole run end to end on stand-ins for the external engines.
+Not covered, same list as the screening route: the real pooler engine, commit-before-response, a process restart across a commit.
+
 ## Rule for future routes
 
 A route uses the normal committed matrix unless every row it writes can be deleted by the owner. A route that writes to an append-only table

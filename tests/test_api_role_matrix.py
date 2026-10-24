@@ -843,6 +843,9 @@ MATRIX: dict[tuple[str, str], Callable] = {
 # must cover the route (see test_separately_tested_routes_have_a_dedicated_matrix_that_covers_them).
 SEPARATE_HARNESS: dict[tuple[str, str], str] = {
     ("POST", "/v1/staff/messages/{message_id}/screen"): "test_api_screen_message_live.py",
+    # Both Front Door run routes: the rows are append-only (documents, checkpoints, proposals, decisions) and the worker is part of the flow.
+    ("POST", "/v1/staff/referrals/{document_id}/run"): "test_api_referrals_live.py",
+    ("POST", "/v1/staff/referrals/{document_id}/review"): "test_api_referrals_live.py",
 }
 
 

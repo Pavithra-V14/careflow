@@ -37,6 +37,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import (
     APIRouter,
+    BackgroundTasks,
     Depends,
     FastAPI,
     Header,
@@ -48,6 +49,7 @@ from fastapi import (
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from langgraph.types import Command
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import text
@@ -64,6 +66,15 @@ from careflow.auth import (
 )
 from careflow.crypto import CryptoError, DemographicVault
 from careflow.db import make_app_engine, set_request_claims
+from careflow.front_door import FrontDoorError, run_config
+from careflow.front_door_runner import TASK_TYPE as FRONT_DOOR_TASK
+from careflow.front_door_runner import (
+    FrontDoorComponents,
+    front_door_handler,
+    graph_for,
+    request_session,
+    worker_session,
+)
 from careflow.messages import (
     MessageErased,
     MessageNotFound,
@@ -72,6 +83,7 @@ from careflow.messages import (
     screen_stored_message,
 )
 from careflow.mpi import PatientIngestionPipeline
+from careflow.queue import NotPermitted as QueueNotPermitted
 from careflow.queue import PostgresQueue
 from careflow.readiness import check_readiness, parse_required_roles
 from careflow.registry import RegistryError, load_registry
@@ -89,6 +101,8 @@ from careflow.scheduling import (
     UnknownReference,
 )
 from careflow.tick import Poker, worker_loop
+from careflow.triage_store import DecisionConflict
+from careflow.triage_store import NotPermitted as TriageNotPermitted
 
 log = logging.getLogger("careflow.app")
 _bearer = HTTPBearer(auto_error=False)
@@ -895,6 +909,117 @@ async def readyz(request: Request) -> JSONResponse:
     return JSONResponse({"ready": result.ready}, status_code=200 if result.ready else 503)
 
 
+
+# ---- Front Door runs: POST /v1/staff/referrals/{document_id}/run and /review (BUILD-SPEC.md 7.2, 12.1; CLAUDE.md rules 2, 4, 5, 8) -----------------------------
+#
+# /run ENQUEUES a `front_door_run` job for a registered referral document (ids only in the payload) and pokes the worker AFTER the transaction has committed. Front desk, nurse
+# and doctor of the clinic may start a run; the document must be visible to the caller (row-level security on docs.documents), so another clinic's staff, admin, business owner,
+# auditor, patients and inactive accounts get the fixed 404; a visible caller who may not start a run (the queue worker) gets 403. The WORKER (careflow.front_door_runner) runs the
+# graph as the queue_worker system identity and pauses at review.
+# /review RESUMES the paused thread as the REVIEWER: nurse or doctor of the clinic. The reviewer is the signed-in account (claims["sub"]), never a body field; the decision row
+# is written with decided_by = auth.uid() (migration 0018). Nothing is ever approved by this route's absence or by a timeout: no decision, no resume.
+# Both need `X-Idempotency-Key` (rule 5). /run uses it (scoped to the document) as the job's key, so a replay returns the same job; /review is idempotent on the document (one
+# decision per proposal): the same decision by the same reviewer again is a `replayed: true`, a different one is 409.
+# Both answer a visible 503 when no Front Door components are configured (this package only ever runs on stand-ins for the external engines).
+
+staff_referrals = APIRouter(prefix="/v1/staff/referrals", tags=["staff referrals"])
+
+
+class RunOut(_Out):
+    job_id: uuid.UUID
+    replayed: bool
+
+
+class ReviewIn(_Body):
+    decision: Literal["approve", "edit", "reject"]
+
+
+class ReviewOut(_Out):
+    document_id: uuid.UUID
+    decision: Literal["approve", "edit", "reject"]
+    replayed: bool
+
+
+async def _referral_document(conn: AsyncConnection, document_id: uuid.UUID):
+    """(clinic_id, origin) of a REFERRAL document the caller can see under RLS; invisible, missing and non-referral are one 404."""
+    row = (await conn.execute(text("select clinic_id, origin, kind from docs.documents where id = :d"), {"d": document_id})).first()
+    if row is None or row.kind != "referral":
+        raise HTTPException(status_code=404, detail="not found")
+    return row
+
+
+async def _holds_role(conn: AsyncConnection, claims: dict[str, Any], clinic_id: uuid.UUID, roles: tuple[str, ...]) -> bool:
+    return (
+        await conn.execute(
+            text(
+                "select 1 from iam.staff_roles sr join iam.accounts a on a.id = sr.account_id "
+                "where sr.account_id = :u and sr.clinic_id = :c and sr.role = any(cast(:r as text[])) and sr.revoked_at is null "
+                "and a.status = 'active' and a.account_type = 'staff'"
+            ),
+            {"u": uuid.UUID(claims["sub"]), "c": clinic_id, "r": list(roles)},
+        )
+    ).first() is not None
+
+
+def _front_door(request: Request) -> FrontDoorComponents:
+    components: FrontDoorComponents | None = request.app.state.front_door
+    if components is None:
+        log.error("front door runs are unavailable: no components are configured (nothing is run; nothing is lost)")
+        raise HTTPException(status_code=503, detail="referral runs are unavailable: not configured")
+    return components
+
+
+@staff_referrals.post("/{document_id}/run", response_model=RunOut)
+async def start_referral_run(
+    document_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, request: Request, background: BackgroundTasks,
+    claims: dict[str, Any] = Depends(verified_claims),
+) -> RunOut:
+    """Enqueue a Front Door run for a referral document. 404 if you cannot see it, 403 if you may not start a run, 503 if not configured."""
+    _front_door(request)
+    doc = await _referral_document(conn, document_id)
+    if not await _holds_role(conn, claims, doc.clinic_id, ("front_desk", "nurse", "doctor")):
+        raise HTTPException(status_code=403, detail="your role may not start a referral run")
+    try:
+        queued = await PostgresQueue().enqueue(
+            conn, doc.clinic_id, doc.origin, FRONT_DOOR_TASK, {"document_id": str(document_id)}, f"front-door-run:{document_id}:{idempotency_key}"
+        )
+    except QueueNotPermitted:
+        raise HTTPException(status_code=403, detail="your role may not start a referral run") from None
+    background.add_task(request.app.state.poker.poke)  # after the response, so after the commit (TxConn commits before the response goes out)
+    return RunOut(job_id=queued.job_id, replayed=queued.replayed)
+
+
+@staff_referrals.post("/{document_id}/review", response_model=ReviewOut)
+async def review_referral(
+    document_id: uuid.UUID, body: ReviewIn, idempotency_key: IdempotencyKey, conn: TxConn, request: Request,
+    claims: dict[str, Any] = Depends(verified_claims),
+) -> ReviewOut:
+    """Record the reviewer's decision on a paused run and finish it. 404 if you cannot see the document, 403 unless nurse or doctor there, 404 if the document has no
+    run, 409 if the run is not waiting for a decision or already has a different one, 503 if not configured."""
+    components = _front_door(request)
+    doc = await _referral_document(conn, document_id)
+    if not await _holds_role(conn, claims, doc.clinic_id, ("nurse", "doctor")):
+        raise HTTPException(status_code=403, detail="your role may not review a referral")
+    reviewer = claims["sub"]
+    graph = graph_for(components, request_session(conn))
+    config = run_config(document_id, doc.clinic_id, doc.origin)
+    state = await graph.aget_state(config)
+    if not state.values:
+        raise HTTPException(status_code=404, detail="not found")
+    if state.next != ("review",):
+        decided = state.values.get("decision") if state.values.get("status") == "reviewed" else None
+        if decided and decided["decision"] == body.decision and decided["reviewer_id"] == reviewer:
+            return ReviewOut(document_id=document_id, decision=body.decision, replayed=True)
+        raise HTTPException(status_code=409, detail="this referral is not waiting for a decision")
+    try:
+        await graph.ainvoke(Command(resume={"decision": body.decision, "reviewer_id": reviewer}), config)
+    except DecisionConflict:
+        raise HTTPException(status_code=409, detail="this referral is not waiting for a decision") from None
+    except (TriageNotPermitted, FrontDoorError):
+        raise HTTPException(status_code=403, detail="your role may not review a referral") from None
+    return ReviewOut(document_id=document_id, decision=body.decision, replayed=False)
+
+
 # ---- application -----------------------------------------------------------------------------------
 
 
@@ -909,10 +1034,11 @@ def _load_vault() -> DemographicVault | None:
 
 def create_app(
     settings: Settings | None = None, *, jwks: JWKSClient | None = None, engine: AsyncEngine | None = None,
-    vault: DemographicVault | None = None, clock: Callable[[], float] = time.time,
+    vault: DemographicVault | None = None, clock: Callable[[], float] = time.time, front_door: FrontDoorComponents | None = None,
+    front_door_session_for: Callable[..., Any] = worker_session,
 ) -> FastAPI:
     """Build the app. `jwks`, `engine`, `vault` and `clock` (for the step-up window) can be injected (tests do); otherwise they come from
-    settings / the environment."""
+    settings / the environment. `front_door` holds the Front Door's stand-in components; with None the run and review routes answer 503 and no handler is registered."""
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -928,14 +1054,16 @@ def create_app(
         app.state.worker_account_id = cfg.worker_account_id
         app.state.wired_adapters = frozenset()  # (provider, model_id) pairs with a wired adapter: none yet
         app.state.malware_scanner_configured = False  # nothing sets it: no scanner exists (BUILD-SPEC.md 11.5); clinical stays not ready
+        app.state.front_door = front_door
         app.state.poker = Poker()  # routes that enqueue call `app.state.poker.poke()` after their transaction commits (7.4)
+        handlers = {FRONT_DOOR_TASK: front_door_handler(front_door, session_for=front_door_session_for)} if front_door is not None else {}
         worker: asyncio.Task | None = None
         if cfg.run_worker:
             if cfg.worker_account_id is None:
                 log.error("CAREFLOW_RUN_WORKER is on but CAREFLOW_WORKER_ACCOUNT_ID is not set: the worker is NOT started (queued jobs wait)")
             else:
                 worker = asyncio.create_task(
-                    worker_loop(app.state.engine, PostgresQueue(), {}, app.state.poker,
+                    worker_loop(app.state.engine, PostgresQueue(), handlers, app.state.poker,
                                 worker_account_id=cfg.worker_account_id, worker_id=f"api-{uuid.uuid4().hex[:8]}"),
                     name="careflow-worker",
                 )
@@ -959,6 +1087,7 @@ def create_app(
     app.include_router(staff_messages)
     app.include_router(staff_patients)
     app.include_router(staff_merges)
+    app.include_router(staff_referrals)
     app.include_router(health)
     return app
 

@@ -184,6 +184,7 @@ jobs:
               tests/test_scheduling_live.py
               tests/test_rls_mpi_scheduling_live.py
               tests/test_scheduling_concurrency_live.py
+              tests/test_api_referrals_live.py
     env:
       CAREFLOW_ENV: ci
       CAREFLOW_PROFILE: demo
