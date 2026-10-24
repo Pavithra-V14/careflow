@@ -25,6 +25,8 @@ Every route added to this application must add its own case to the role-matrix t
 missing.
 """
 
+import asyncio
+import contextlib
 import logging
 import time
 import uuid
@@ -69,6 +71,7 @@ from careflow.messages import (
     screen_stored_message,
 )
 from careflow.mpi import PatientIngestionPipeline
+from careflow.queue import PostgresQueue
 from careflow.rules import NotPermitted as ScreeningNotPermitted
 from careflow.rules import RedFlagEngine
 from careflow.scheduling import (
@@ -82,6 +85,7 @@ from careflow.scheduling import (
     SlotUnavailable,
     UnknownReference,
 )
+from careflow.tick import Poker, worker_loop
 
 log = logging.getLogger("careflow.app")
 _bearer = HTTPBearer(auto_error=False)
@@ -110,6 +114,11 @@ class Settings(BaseSettings):
     step_up_max_age_seconds: int | None = Field(
         default=None, validation_alias=AliasChoices("CAREFLOW_STEP_UP_MAX_AGE_SECONDS", "step_up_max_age_seconds")
     )
+
+    # The in-process worker (BUILD-SPEC 7.4): off unless asked for, so tests and tools that start the app never drain the queue. It needs the
+    # id of a `queue_worker` account (row-level security decides which clinics' jobs it can see). Both are plain deployment settings.
+    run_worker: bool = Field(default=False, validation_alias=AliasChoices("CAREFLOW_RUN_WORKER", "run_worker"))
+    worker_account_id: uuid.UUID | None = Field(default=None, validation_alias=AliasChoices("CAREFLOW_WORKER_ACCOUNT_ID", "worker_account_id"))
 
     @property
     def issuer(self) -> str:
@@ -876,9 +885,25 @@ def create_app(
         app.state.active_key_version = cfg.active_key_version
         app.state.step_up_max_age_seconds = cfg.step_up_max_age_seconds
         app.state.clock = clock
+        app.state.poker = Poker()  # routes that enqueue call `app.state.poker.poke()` after their transaction commits (7.4)
+        worker: asyncio.Task | None = None
+        if cfg.run_worker:
+            if cfg.worker_account_id is None:
+                log.error("CAREFLOW_RUN_WORKER is on but CAREFLOW_WORKER_ACCOUNT_ID is not set: the worker is NOT started (queued jobs wait)")
+            else:
+                worker = asyncio.create_task(
+                    worker_loop(app.state.engine, PostgresQueue(), {}, app.state.poker,
+                                worker_account_id=cfg.worker_account_id, worker_id=f"api-{uuid.uuid4().hex[:8]}"),
+                    name="careflow-worker",
+                )
+        app.state.worker = worker
         try:
             yield
         finally:
+            if worker is not None:
+                worker.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await worker
             if engine is None:
                 await app.state.engine.dispose()
             if jwks is None:
