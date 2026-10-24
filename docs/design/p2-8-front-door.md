@@ -51,3 +51,8 @@ P2-9 (the real `TriageProposer`: proposal, review task, assisted-mode rules, pri
 1. `held_unassessable`, `needs_front_desk`, `extraction_unavailable` end a run with a status only. Something must notice them (a review task, or a poller over thread state) before this graph is run for real; otherwise the loop closes silently (rule 3). Blocks P2-10 acceptance outside tests.
 2. `reviewer_id` in the resume value is caller-asserted. The route that resumes must authenticate the reviewer, check clinic membership and the nurse/doctor role (with its role-matrix case, rule 8), and the real `ReviewRecorder` must take the reviewer from `auth.uid()`, not from the resume value (migration 0018 enforces `decided_by = auth.uid()`). `edit` carries no edited content yet.
 3. The checkpointer decision above, before any non-test run.
+
+## Update 2026-10-24 (owner decisions)
+- The checkpointer is BUILT: our own asyncpg saver on migration 0021 (careflow/checkpointer.py), following BaseCheckpointSaver / InMemorySaver semantics (checked against the installed langgraph-checkpoint source and pinned by a conformance test). No psycopg. History is append-only; `delete_thread` is refused. Runs use durability "sync" (LangGraph defaults to "async") and carry clinic_id and origin in the config. Prerequisite 3 above is met; the graph still needs a worker/route to run it.
+- Prerequisite 1 (silent endings) is met: `hold_for_human` raises a review task for every ending that is not a red-flag escalation or a finished review (0020).
+- The graph now runs as the queue_worker system identity (0019).
