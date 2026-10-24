@@ -106,7 +106,7 @@ async def build(*, policy, versions=None, outcome="clear", answer=GOOD):
     return build_front_door(deps, saver, environ={}), deps, saver, log
 
 
-CONFIG, START = run_config(DOC), initial_state(DOC, CLINIC, "test")
+CONFIG, START = run_config(DOC, CLINIC, "test"), initial_state(DOC, CLINIC, "test")
 CALIBRATED = AbstentionPolicy(min_dense_similarity=0.5, min_bm25_ratio=0.05)  # TEST INPUTS, not recommendations
 
 

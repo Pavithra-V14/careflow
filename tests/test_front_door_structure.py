@@ -8,6 +8,7 @@
 
 Offline: no database, no model. `InMemorySaver` stands in for the checkpointer."""
 
+import inspect
 import re
 from pathlib import Path
 
@@ -283,3 +284,34 @@ def test_the_router_checker_accepts_a_state_only_router_and_refuses_ports_awaits
     assert any("touches deps" in p for p in router_violations({"r": _router_with_deps}))
     assert any("awaits" in p for p in router_violations({"r": _router_awaits}))
     assert any("other than state.get" in p for p in router_violations({"r": _router_calls}))
+
+
+# ---- the gate holds against our own Postgres checkpointer too (owner decision of 2026-10-24) ---------------------------------------------------------
+
+
+def graph_on_our_saver():
+    from careflow.checkpointer import InMemoryCheckpointStore, PostgresCheckpointSaver
+
+    return build_front_door(deps(), PostgresCheckpointSaver(InMemoryCheckpointStore()), environ={})
+
+
+def test_the_structural_gate_passes_on_the_graph_compiled_with_our_postgres_checkpointer():
+    g = graph_on_our_saver()
+    assert check(g.node_functions, NODE_SPECS) == [] and router_violations(g.router_functions) == []
+    assert {n for n in g.get_graph().nodes if not n.startswith("__")} == set(NODE_SPECS)
+    assert {(e.source, e.target) for e in g.get_graph().edges} == {(e.source, e.target) for e in graph().get_graph().edges}  # the same topology as on InMemorySaver
+
+
+def test_only_the_review_node_pauses_and_it_touches_no_port_with_our_saver_compiled_in():
+    g = graph_on_our_saver()
+    assert [n for n, spec in NODE_SPECS.items() if spec.pauses] == ["review"]
+    assert violations({"review": g.node_functions["review"]}, {"review": NODE_SPECS["review"]}, SIDE_EFFECT_PORTS, MODEL_PORTS, NEUTRAL_PORTS) == []
+    assert type(g.checkpointer).__name__ == "PostgresCheckpointSaver"
+
+
+def test_the_checkpointer_module_itself_cannot_pause_or_reach_a_port():
+    """The saver is infrastructure, not a node: it must never import or call interrupt, the engine, or a port."""
+    import careflow.checkpointer as module
+
+    source = inspect.getsource(module)
+    assert "interrupt(" not in source and "deps." not in source and "FrontDoorDeps" not in source

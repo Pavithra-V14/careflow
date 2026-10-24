@@ -177,6 +177,7 @@ jobs:
               tests/test_rls_triage_live.py
               tests/test_rls_mpi_worker_live.py
               tests/test_rls_referral_hold_live.py
+              tests/test_rls_checkpoints_live.py
           - shard: 3  # about 25 min (the 200-booking test alone may take 6 to 15)
             files: >-
               tests/test_scheduling_live.py

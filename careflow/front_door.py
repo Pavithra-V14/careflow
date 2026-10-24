@@ -50,6 +50,7 @@ from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, field
 from typing import Any, Final, Protocol, TypedDict
 
+from langgraph._internal._constants import CONFIG_KEY_DURABILITY
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 from sqlalchemy.ext.asyncio import AsyncConnection
@@ -352,8 +353,13 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
     return graph
 
 
-def run_config(document_id: uuid.UUID) -> dict[str, Any]:
-    return {"configurable": {"thread_id": thread_id_for(document_id)}, "recursion_limit": RECURSION_LIMIT}
+def run_config(document_id: uuid.UUID, clinic_id: uuid.UUID, origin: str) -> dict[str, Any]:
+    """The config of one run. `clinic_id` and `origin` are what the Postgres checkpointer scopes every row by (rule 8; no origin default). Durability is `sync`: every
+    checkpoint is written BEFORE the next step starts (LangGraph's own default is `async`, which can lose a step in a crash; BUILD-SPEC.md 7.2)."""
+    return {
+        "configurable": {"thread_id": thread_id_for(document_id), "clinic_id": str(clinic_id), "origin": origin, CONFIG_KEY_DURABILITY: "sync"},
+        "recursion_limit": RECURSION_LIMIT,
+    }
 
 
 def initial_state(document_id: uuid.UUID, clinic_id: uuid.UUID, origin: str) -> FrontDoorState:

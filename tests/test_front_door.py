@@ -126,7 +126,7 @@ def world(outcome="clear", *, answer=GOOD, abstain=False, engine_fail=None, extr
     return graph, log, saver, extractor, ingestor, proposer, recorder
 
 
-CONFIG = run_config(DOC)
+CONFIG = run_config(DOC, CLINIC, "test")
 START = initial_state(DOC, CLINIC, "test")
 
 
@@ -325,7 +325,7 @@ def _walk(obj):
 async def test_every_run_is_capped_at_40_steps_and_keyed_by_a_stable_thread_per_document():
     assert RECURSION_LIMIT == 40 and CONFIG["recursion_limit"] == 40
     assert CONFIG["configurable"]["thread_id"] == f"front_door:{DOC}"
-    assert run_config(DOC) == run_config(DOC)
+    assert run_config(DOC, CLINIC, "test") == run_config(DOC, CLINIC, "test")
 
 
 async def test_resuming_with_no_value_at_all_is_not_a_decision_whatever_langgraph_does_with_it():
