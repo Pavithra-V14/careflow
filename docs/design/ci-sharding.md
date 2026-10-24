@@ -27,6 +27,16 @@ queues behind it, so the unwind never completed and the job sat silent for 23 mi
 4. The semaphore (20 in flight) keeps any waiter behind at most 20 others, never behind all 200.
 5. `faulthandler_timeout = 300` (pyproject.toml) still dumps all stacks if any test runs over five minutes, and each shard has a 60-minute limit.
 
+## Known gap, accepted: a migrate job from another run can change the schema under running shards
+
+The `migrate` job has its own concurrency group, separate from the shard groups. So a `migrate` job from run Y (another branch, or a newer run
+of the same branch that did not cancel the older one) can apply NEW migrations to the shared CI database while run X's shards are still
+executing against the old schema. A group cannot cover it without serialising the whole gate again. It is not covered by any group.
+Accepted by the owner (2026-10-24) while one person pushes. If it ever bites, the symptom is a shard failing on a column or table that "does
+not exist" or "already exists" in the middle of a run; re-running the shard after the other run finishes is the remedy. Two branches whose
+migration sets differ (for example PR #1's branch has no 0014 to 0016) make it worse, not better: the ledger check in the later run would see
+migrations its checkout does not have.
+
 ## The proposal as originally written (kept for the record; it is what was implemented)
 
 
