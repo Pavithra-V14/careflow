@@ -117,8 +117,11 @@ def needs_review(facts: Iterable[GroundedFact], fields_read_by_matched_rules: It
     raises no review (that is what keeps the queue from flooding); a fact a rule reads that has no grounded entry at all is reported too,
     because a missing fact is unknown and a rule that needs it cannot be satisfied."""
     read = set(fields_read_by_matched_rules)
-    by_name = {f.field_name: f for f in facts}
-    return tuple(sorted(n for n in read if n not in by_name or not by_name[n].usable_by_rules))
+    by_name: dict[str, list[GroundedFact]] = {}
+    for f in facts:
+        by_name.setdefault(f.field_name, []).append(f)
+    # Two entries for one field (conflicting extractions) are usable only if EVERY one is: order must never hide an unverified entry.
+    return tuple(sorted(n for n in read if n not in by_name or not all(f.usable_by_rules for f in by_name[n])))
 
 
 # ---- tier 3 ----------------------------------------------------------------------------------------------------------------------------
@@ -239,6 +242,11 @@ _NUMBER_UNIT: Final = re.compile(r"(?<![0-9.])([0-9]+(?:\.[0-9]+)?)(?![0-9.]*[0-
 _RANGE: Final = re.compile(r"[0-9]\s*(?:-|–|—|\bto\b)\s*[0-9]", re.IGNORECASE)
 _FRACTION: Final = re.compile(r"[0-9]\s*/\s*[0-9]")
 _DECIMAL_COMMA: Final = re.compile(r"[0-9],[0-9]")
+# A bound, an approximation or a negative changes what the number means, so a quote carrying one is not read at all.
+_QUALIFIER: Final = re.compile(
+    r"[<>~\u2264\u2265\u2248\u00b1]|(?:^|\s)-\s*[0-9]|\b(?:about|approx|approximately|around|over|under|above|below|up to|less than|more than|at least|at most|nearly)\b",
+    re.IGNORECASE,
+)
 
 
 def _quantity(raw: str):
@@ -257,8 +265,8 @@ def _check_quantity(value: str, quote: str) -> str:
     if wanted is None:
         return UNPARSEABLE_VALUE
     scrubbed = _blank_dates(quote)
-    # A range ("5-10 mg"), a fraction ("1/2 tab") or a decimal comma ("5,5") makes the numbers around it unreadable: ambiguous, never guessed.
-    if _RANGE.search(scrubbed) or _FRACTION.search(scrubbed) or _DECIMAL_COMMA.search(scrubbed):
+    # A range ("5-10 mg"), a fraction ("1/2 tab"), a decimal comma ("5,5"), a bound ("<35%", "up to 5 mg") or a negative makes the numbers around it unreadable: ambiguous, never guessed.
+    if _RANGE.search(scrubbed) or _FRACTION.search(scrubbed) or _DECIMAL_COMMA.search(scrubbed) or _QUALIFIER.search(scrubbed):
         return AMBIGUOUS
     candidates = [(Decimal(m[1]), m[2].casefold() if m[2] else None) for m in _NUMBER_UNIT.finditer(scrubbed)]
     # Only candidates in the value's own unit compete: "EF 35% (was 55%)" holds two percentages and so is ambiguous for either.

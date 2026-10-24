@@ -121,6 +121,25 @@ def test_a_quote_that_could_mean_more_than_one_number_is_ambiguous():
     refused(Q, "5 mg", "5,5 mg", "ambiguous")
 
 
+def test_a_bound_an_approximation_or_a_negative_in_the_quote_is_ambiguous():
+    for quote in ("EF <35%", "EF >= 35%", "EF ≤ 35%", "EF about 35%", "EF approx. 35%", "up to 35%", "at least 35%", "-35%", "EF ~35%"):
+        refused(Q, "35%", quote, "ambiguous")
+
+
+def test_a_duplicate_field_name_is_usable_only_if_every_entry_is_and_order_does_not_matter():
+    good = g.GroundedFact("ef", FactTier.STRUCTURED, Grounding.VERIFIED, "match", "55%")
+    bad = g.GroundedFact("ef", FactTier.STRUCTURED, Grounding.UNVERIFIED, "ambiguous", "35%")
+    assert needs_review([good, bad], ["ef"]) == ("ef",) == needs_review([bad, good], ["ef"])
+    assert needs_review([good, good], ["ef"]) == ()
+
+
+def test_only_the_verify_functions_produce_verified_in_this_module():
+    import inspect
+
+    # Exactly three places mention VERIFIED: the rule gate, tier 1 and tier 2. A new producer must update this test (and be reviewed).
+    assert inspect.getsource(g).count("Grounding.VERIFIED") == 3
+
+
 def test_a_quantity_in_the_quote_is_not_confused_with_the_digits_of_a_date():
     ok(Q, "55%", "On 05/03/2024 EF 55%")
     ok(Q, "5 mg", "2024-01-05: 5 mg")

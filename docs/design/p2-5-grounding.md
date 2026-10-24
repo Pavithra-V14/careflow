@@ -27,6 +27,7 @@ A failed check is `unverified` with a fixed-word reason. There is no false/rejec
 - **Gateway failures are unverified; `BudgetExceeded` is not swallowed** (it stops the run).
 - Tier 2 residual risk: the passage is quoted data to the adapter's fixed prompt (11.1), but a hostile passage could still sway an engine
   into "supported". The injection classifier (11.1) and human review where a rule reads the fact are the other layers.
+- Quantity match is numeric (Decimal), so "5.0 mg" equals "5 mg"; trailing-zero precision is not preserved. A bound, approximation or negative in the quote (<, >=, about, up to, -5) makes it ambiguous. Duplicate field names are usable only if every entry is.
 - DOB range checks (not in the future, not before 1900) stay in `mpi.parse_date_of_birth`; tier 1 only proves the value is in the quote.
 
 ## Not here
