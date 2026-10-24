@@ -150,3 +150,11 @@ the **thread** row, not the message row, so key rotation can never stall an esca
 ## P2-7 referral to identity (added with careflow/referral.py)
 - Role split for escalate vs identity insert, and a review-task path for an unassessable document screening: see docs/design/p2-7-referral-identity.md.
 - No route yet (and so no role-matrix case yet); add both in the same change when the route is built.
+
+## From the P2-3/5/6/7 spec-compliance review (2026-10-24)
+- P2-3 TOCTOU: a signed upload URL stays valid up to 600 s after `begin()`. If Supabase signed uploads can OVERWRITE an existing object, bytes could change after the verified sha256 was recorded. Unspiked (not in Appendix B yet; the owner owns BUILD-SPEC.md, so it is listed here): spike the overwrite behaviour with a real call before the adapter exists; consider single-use paths, and a re-hash in P2-4 before extraction.
+- P2-3 readiness: the design said a clinical deployment without a scanner should report not-ready. Not built (the block is inside `DocumentIntake`, fail-closed, `scanner_configured` is set by nothing). Add the readiness check when the scanner or the route lands.
+- P2-3 route design: force `registered_by` to the caller's `auth.uid()`; otherwise `register()` could delete the object at the clinic-derived path on a 42501.
+- P2-5: the wiring package (P2-8) must read facts only through `rule_value()`/`usable_by_rules` (`GroundedFact.value` is readable directly); add an end-to-end gate then. Tier 2 offers two options (`supported`/`not_supported`), not accept/verify/reject.
+- P2-6: scope keys (clinic/status) are not enforced beyond non-empty; define them with the card schema. Re-verify scope at the join (Postgres truth does not take it yet). The BM25-only version check is fixed (16782ae).
+- P2-7: extractor data-flow entry and gateway data class when the extractor is wired.
