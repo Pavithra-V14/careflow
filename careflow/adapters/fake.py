@@ -143,3 +143,43 @@ class FakeSms(_FakeSink):
 
     async def send(self, to: str, body: str, *, idempotency_key: str) -> SendResult:
         return await self._record({"to": to, "body": body}, idempotency_key)
+
+
+class FakeUpload(_Fake):
+    """An in-memory object store behind `UploadPort`. `client_put` plays the BROWSER: it stores whatever it is given, at any path, with whatever
+    type it claims and no limit enforced (a hostile client), because the server must re-verify and never rely on a signature's limits."""
+
+    def __init__(self, name: str = "fake-upload", *, now=None) -> None:
+        super().__init__(name)
+        import datetime as dt
+
+        self._now = now or (lambda: dt.datetime.now(dt.UTC))
+        self.objects: dict[str, tuple[bytes, str]] = {}
+        self.deleted: list[str] = []
+        self.signed: list[dict] = []
+
+    def client_put(self, path: str, content: bytes, content_type: str) -> None:
+        self.objects[path] = (content, content_type)
+
+    async def create_signed_upload(self, *, path: str, content_type: str, max_bytes: int, expires_in_seconds: int):
+        import datetime as dt
+
+        from careflow.ports import SignedUpload
+
+        await self._enter()
+        self.signed.append({"path": path, "content_type": content_type, "max_bytes": max_bytes, "expires_in_seconds": expires_in_seconds})
+        return SignedUpload(f"fake://upload/{path}", path, self._now() + dt.timedelta(seconds=expires_in_seconds))
+
+    async def describe(self, path: str):
+        from careflow.ports import StoredObject
+
+        await self._enter()
+        if path not in self.objects:
+            return None
+        content, ctype = self.objects[path]
+        return StoredObject(path, len(content), ctype, content[:16], hashlib.sha256(content).hexdigest())
+
+    async def delete(self, path: str) -> None:
+        await self._enter()
+        self.objects.pop(path, None)
+        self.deleted.append(path)

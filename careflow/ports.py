@@ -15,6 +15,7 @@ Data class: a request is `SYNTHETIC` or `PHI`. The gateway (careflow.gateway) wi
 """
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import StrEnum
 from typing import Final, Literal, Protocol
 
@@ -157,3 +158,39 @@ class EmailPort(Protocol):
 
 class SmsPort(Protocol):
     async def send(self, to: str, body: str, *, idempotency_key: str) -> SendResult: ...
+
+
+# ---- uploads (BUILD-SPEC.md §17.3; docs/design/uploads-supabase-storage.md) ------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SignedUpload:
+    """What the browser is handed: a short-lived URL it can PUT one object to, at a path the SERVER chose. The signature may carry a size and
+    type limit, but the server never relies on that: it re-verifies the stored object itself (careflow.documents)."""
+
+    url: str
+    path: str
+    expires_at: datetime
+
+
+@dataclass(frozen=True)
+class StoredObject:
+    """What the storage actually holds at a path, as observed by the server side of the adapter, not as claimed by any client."""
+
+    path: str
+    size: int
+    content_type: str  # as stored (may be whatever the uploader said; verified against `head` by the caller)
+    head: bytes = field(repr=False)  # the first bytes of the content, for a magic-number check
+    sha256: str  # lowercase hex of the whole content
+
+
+class UploadPort(Protocol):
+    async def create_signed_upload(self, *, path: str, content_type: str, max_bytes: int, expires_in_seconds: int) -> SignedUpload: ...
+
+    async def describe(self, path: str) -> StoredObject | None:
+        """The object at `path`, or None if nothing is there. Reads the stored bytes; never trusts a client-supplied size or type."""
+        ...
+
+    async def delete(self, path: str) -> None:
+        """Remove the object at `path` (a no-op if it is already gone)."""
+        ...

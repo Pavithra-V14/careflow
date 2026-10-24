@@ -39,6 +39,12 @@ one, delete its line in the same change. Source of the first group: the msg / ia
   clinician-reviewed labels.
 - **Minute tick, immediate poke and the 12/25/40/40 s ceilings** (BUILD-SPEC 7.3, 7.4): moved to Phase 2 package P2-1 and built there
   (`careflow/budget.py`, `careflow/tick.py`). Still open: no route calls the poke after enqueueing, and no handler exists.
+- **Documents (P2-3)**: no HTTP routes yet (the signed-upload hand-out and the register call need `/v1/staff/documents/...` routes, each with its own
+  role-matrix case in the same change, when a console or the extraction worker consumes them); a periodic reconciliation of storage against
+  `docs.documents` (an object can be orphaned only if the caller's own transaction fails to commit after a successful insert); erasure of a
+  document (DPDP) is not designed; no `audit.log` row is written on registration; the real Supabase Storage adapter, its bucket policies on
+  `storage.objects`, and a malware scanner (a pre-launch blocker, `docs/design/uploads-supabase-storage.md`). Privacy decisions flagged to the owner:
+  front desk can read every document of its clinic (it keys referral facts in by hand without a model route), and a doctor can read but not register.
 - **Per-clinic daily spend**: persisted in `ops.spend_ledger` (migration 0016) and read per origin by `careflow.spend.PostgresSpendLedger`;
   the daily ceiling has no default and arrives by configuration (owner). Still open: a ledger cannot be corrected (append-only, no negative
   amounts), so a mistaken entry needs the migrator; a reversal mechanism is a later change. The gateway is not yet constructed with the Postgres
