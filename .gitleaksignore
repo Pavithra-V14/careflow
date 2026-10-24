@@ -4,3 +4,8 @@
 #   * tests/test_rotation_live.py: a table-name -> migration-filename mapping
 be0532a4b81a1f981e8ba1dc2a69f81f84f709bf:careflow/app.py:generic-api-key:263
 23f88b76a920b6b1158b20e7be39b82defee5d8e:tests/test_rotation_live.py:generic-api-key:39
+# Reviewed 2026-10-23 (CI run on 53465eb): two more false positives, both in tests/test_messages.py. Each is a local variable named
+# `secret` holding a hyphenated English sentinel phrase ("my-...-private-sentence-<digits>") that the test feeds through the message
+# encryption to prove the text never reaches a log or exception. Not credentials; there is no key material in either line.
+9602949b968d9d4f05b495d8944599b33e6e01f7:tests/test_messages.py:generic-api-key:84
+53465ebb20cab9b98c207b4bf1fca077416ed045:tests/test_messages.py:generic-api-key:281

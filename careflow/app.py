@@ -25,34 +25,58 @@ Every route added to this application must add its own case to the role-matrix t
 missing.
 """
 
+import asyncio
+import contextlib
 import logging
+import time
 import uuid
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+)
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from careflow import mpi
-from careflow.auth import AuthError, AuthUnavailable, JWKSClient, verify_token
+from careflow import identity, mpi
+from careflow.auth import (
+    AuthError,
+    AuthUnavailable,
+    JWKSClient,
+    step_up_failure,
+    verify_token,
+)
 from careflow.crypto import CryptoError, DemographicVault
 from careflow.db import make_app_engine, set_request_claims
 from careflow.messages import (
     MessageErased,
     MessageNotFound,
+    MessageUnreadable,
+    read_stored_message,
     screen_stored_message,
 )
 from careflow.mpi import PatientIngestionPipeline
+from careflow.queue import PostgresQueue
+from careflow.readiness import check_readiness, parse_required_roles
+from careflow.registry import RegistryError, load_registry
 from careflow.rules import NotPermitted as ScreeningNotPermitted
-from careflow.rules import RedFlagEngine
+from careflow.rules import RedFlagEngine, resolve_profile
 from careflow.scheduling import (
     BookingNotFound,
     IdempotencyConflict,
@@ -64,6 +88,7 @@ from careflow.scheduling import (
     SlotUnavailable,
     UnknownReference,
 )
+from careflow.tick import Poker, worker_loop
 
 log = logging.getLogger("careflow.app")
 _bearer = HTTPBearer(auto_error=False)
@@ -86,6 +111,21 @@ class Settings(BaseSettings):
     # version is loaded; REQUIRED once several are (rotation), so a new key is never adopted by accident: the registration route answers
     # a visible 503 until it is set.
     active_key_version: int | None = Field(default=None, validation_alias=AliasChoices("CAREFLOW_ACTIVE_KEY_VERSION", "active_key_version"))
+
+    # How recently a second factor must have been verified for a sensitive action (BUILD-SPEC 18.1 step-up). REQUIRED, no code default:
+    # until it is set the merge routes answer a visible 503 (and log an error) instead of guessing a window.
+    step_up_max_age_seconds: int | None = Field(
+        default=None, validation_alias=AliasChoices("CAREFLOW_STEP_UP_MAX_AGE_SECONDS", "step_up_max_age_seconds")
+    )
+
+    # The in-process worker (BUILD-SPEC 7.4): off unless asked for, so tests and tools that start the app never drain the queue. It needs the
+    # id of a `queue_worker` account (row-level security decides which clinics' jobs it can see). Both are plain deployment settings.
+    run_worker: bool = Field(default=False, validation_alias=AliasChoices("CAREFLOW_RUN_WORKER", "run_worker"))
+    worker_account_id: uuid.UUID | None = Field(default=None, validation_alias=AliasChoices("CAREFLOW_WORKER_ACCOUNT_ID", "worker_account_id"))
+
+    # Roles whose absence of a phi_approved route makes a `clinical` deployment report NOT ready (BUILD-SPEC 2). A comma list with no default in
+    # code: which roles are launch-blocking is a deployment decision. Unset means "not configured", and a clinical deployment is then not ready.
+    required_roles: str | None = Field(default=None, validation_alias=AliasChoices("CAREFLOW_REQUIRED_ROLES", "required_roles"))
 
     @property
     def issuer(self) -> str:
@@ -123,6 +163,21 @@ async def db_conn(request: Request, claims: dict[str, Any] = Depends(verified_cl
 
 # Commit before the response goes out (see the lifecycle note above).
 TxConn = Annotated[AsyncConnection, Depends(db_conn, scope="function")]
+
+
+async def require_step_up(request: Request, claims: dict[str, Any] = Depends(verified_claims)) -> None:
+    """Step-up re-authentication (BUILD-SPEC 18.1): a second factor verified within CAREFLOW_STEP_UP_MAX_AGE_SECONDS. The decision is the pure
+    careflow.auth.step_up_failure; this wrapper supplies the configured window and the clock. A refusal is ONE fixed 401 with
+    `WWW-Authenticate: step-up` and no reason; the reason code goes to the log, never a claim value. It runs before any database work.
+    Authentication still comes first (verified_claims). The claim shape is UNVERIFIED against a real token (docs/design/step-up-spike.md)."""
+    max_age = request.app.state.step_up_max_age_seconds
+    if not isinstance(max_age, int) or isinstance(max_age, bool) or max_age <= 0:
+        log.error("step-up is unavailable: CAREFLOW_STEP_UP_MAX_AGE_SECONDS is not set to a positive number of seconds")
+        raise HTTPException(status_code=503, detail="step-up re-authentication is not configured")
+    reason = step_up_failure(claims, max_age_seconds=max_age, now=request.app.state.clock())
+    if reason is not None:
+        log.info("step-up refused: %s", reason)
+        raise HTTPException(status_code=401, detail="step-up required", headers={"WWW-Authenticate": "step-up"})
 
 # ---- routes ----------------------------------------------------------------------------------------
 
@@ -519,6 +574,61 @@ async def screen_message(message_id: uuid.UUID, idempotency_key: IdempotencyKey,
     return ScreenOut(message_id=r.message_id, screening_id=r.screening_id, outcome=r.outcome, replayed=r.replayed, patient_reply=r.patient_reply)  # type: ignore[arg-type]
 
 
+# ---- staff message read: GET /v1/staff/messages/{message_id} (BUILD-SPEC.md 9.4 audit principle; CLAUDE.md rules 5, 6, 8) -------------------
+#
+# Reading a decrypted message is a patient-data access. Who may read is decided by row-level security on msg.messages: nurse and doctor read
+# every topic, front desk reads appointments and safety, and every other role, every inactive account and every other clinic get the SAME
+# fixed 404 as a message that does not exist. Admin, business owner and auditor get no read access to message bodies.
+# The body is decrypted ONLY inside careflow.messages.read_stored_message, which also writes the `audit.log` row (ids only, key
+# `message-read:<uuid4>`) in this request's transaction BEFORE anything is returned: a body is never handed out without its audit row, and
+# commit-before-response (TxConn) makes a 200 mean the row is durable. Refused reads write no audit row; they log one line with ids only
+# (denied-access monitoring is a deferred Phase 4 watchdog item). The response is `Cache-Control: no-store`; the body is never logged and
+# never in an error. An erased message is 410 for a caller who can see it. A GET carries no X-Idempotency-Key: the audit key is server-made.
+
+
+class MessageReadOut(_Out):
+    """The only response in the API that carries message text: authorised staff only, never cached."""
+
+    message_id: uuid.UUID
+    thread_id: uuid.UUID
+    topic: Literal["care", "appointments", "safety"]
+    sender_kind: str
+    body: str
+
+
+@staff_messages.get("/{message_id}", response_model=MessageReadOut)
+async def read_message(
+    message_id: uuid.UUID, conn: TxConn, request: Request, response: Response, claims: dict[str, Any] = Depends(verified_claims)
+) -> MessageReadOut:
+    """Read one message (and audit the read). 404 if you cannot see it, 410 if its body was erased, 503/500 (fixed bodies) if it cannot be
+    decrypted. The body goes only to an authorised staff caller and is never cached."""
+    vault: DemographicVault | None = request.app.state.vault
+    if vault is None:
+        log.error("message reading is unavailable: no encryption keys are configured (deployment fault)")
+        raise HTTPException(status_code=503, detail="message reading is unavailable: encryption keys are not configured")
+    actor = uuid.UUID(claims["sub"])
+    try:
+        m = await read_stored_message(conn, vault, message_id, actor_id=actor)
+    except MessageNotFound:
+        log.warning("message read refused (message=%s actor=%s status=404)", message_id, actor)
+        raise HTTPException(status_code=404, detail="not found") from None
+    except MessageErased:
+        log.info("message read refused (message=%s actor=%s status=410)", message_id, actor)
+        raise HTTPException(status_code=410, detail="the message body was erased") from None
+    except MessageUnreadable as exc:
+        missing_key = exc.reason == "UnknownKeyVersionError"
+        log.log(
+            logging.ERROR if missing_key else logging.WARNING,
+            "stored message body could not be read (message=%s clinic=%s actor=%s error=%s)", exc.message_id, exc.clinic_id, actor, exc.reason,
+        )
+        if missing_key:
+            raise HTTPException(status_code=503, detail="this message cannot be read right now") from None
+        raise HTTPException(status_code=500, detail="this message cannot be read") from None
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    return MessageReadOut(message_id=m.message_id, thread_id=m.thread_id, topic=m.topic, sender_kind=m.sender_kind, body=m.body)  # type: ignore[arg-type]
+
+
 # ---- staff patients: registration / identity resolution (BUILD-SPEC.md §17.2, §12.1; CLAUDE.md rules 5, 6, 7, 8) ----------------------------
 #
 # `POST /v1/staff/patients` takes a person's name, date of birth and (optionally) phone, and either links to an existing record, creates
@@ -616,6 +726,173 @@ async def _validation_error_handler(request: Request, exc: RequestValidationErro
     return JSONResponse(status_code=422, content={"detail": errors})
 
 
+# ---- staff merges: propose, approve, unmerge (BUILD-SPEC.md §17.2, §18.1; CLAUDE.md rules 3, 5, 8) ------------------------------------------
+#
+# STEP-UP IMPLEMENTED, CLAIM SHAPE PENDING LIVE VERIFICATION. Every route here needs a recently verified second factor
+# (`require_step_up`). The `amr` entry shape it reads is documented but NOT yet confirmed against a real token (Appendix B spike,
+# docs/design/step-up-spike.md): do not treat the step-up check as verified until that is recorded.
+#
+# STRONG_IDENTIFIERS (careflow/mpi.py) decides which matches are strong enough to avoid a review row, and it is reachable over HTTP through
+# POST /v1/staff/patients. It is PENDING SIGN-OFF by Priya (Health-information lead): no real patient data until that is recorded.
+#
+# A merge is a ledger row, never destructive (careflow.identity). Propose = front desk person 1; approve = a DIFFERENT front desk person 2;
+# unmerge = one person, and it raises the nurse review task when the link had been active (none for a never-confirmed proposal).
+# Responses are ids and statuses only. The origin is read from the clinic row, never the client. A patient or merge you cannot see
+# (including one in another clinic) is the same 404 as one that does not exist. Every refusal from the identity module is one FIXED body.
+
+staff_merges = APIRouter(prefix="/v1/staff/merges", tags=["staff merges"], dependencies=[Depends(require_step_up)])
+
+
+class ProposeMergeIn(_Body):
+    clinic_id: uuid.UUID
+    master_patient_id: uuid.UUID
+    subordinate_patient_id: uuid.UUID
+
+
+class MergeOut(_Out):
+    """Ids and a status only."""
+
+    merge_id: uuid.UUID
+    status: Literal["awaiting_second_approval", "active", "unmerged"]
+    master_patient_id: uuid.UUID
+    subordinate_patient_id: uuid.UUID
+    replayed: bool
+
+
+class UnmergeOut(_Out):
+    merge_id: uuid.UUID
+    status: Literal["unmerged"]
+    review_task_id: uuid.UUID | None  # None when a never-confirmed proposal was cancelled
+    decisions_flagged: int
+    replayed: bool
+
+
+@contextmanager
+def _identity_errors() -> Iterator[None]:
+    """Every refusal is a fixed body: nothing says which record, or whether one exists elsewhere."""
+    try:
+        yield
+    except (identity.PatientNotFound, identity.MergeNotFound):
+        raise HTTPException(status_code=404, detail="not found") from None
+    except identity.NotPermitted:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    except identity.IdempotencyConflict:
+        raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request") from None
+    except identity.InvalidTransition:
+        raise HTTPException(status_code=409, detail="this merge is not in a state that allows that") from None
+    except identity.MergeNotAllowed:
+        # One body for every rule (same person approving, already linked, no review row, erased...): the reason stays out of the response.
+        raise HTTPException(status_code=409, detail="this merge cannot be carried out") from None
+
+
+async def _front_desk_gate(conn: AsyncConnection, claims: dict[str, Any], clinic_id: uuid.UUID) -> str:
+    """The clinic's origin, after checking the caller is active front desk there. 404 if the clinic is invisible, 403 if visible but not front desk."""
+    clinic = (await conn.execute(text("select origin from iam.clinics where id = :c"), {"c": clinic_id})).first()
+    if clinic is None:
+        raise HTTPException(status_code=404, detail="not found")
+    is_front_desk = (
+        await conn.execute(
+            text(
+                "select 1 from iam.staff_roles sr join iam.accounts a on a.id = sr.account_id "
+                "where sr.account_id = :u and sr.clinic_id = :c and sr.role = 'front_desk' and sr.revoked_at is null "
+                "and a.status = 'active' and a.account_type = 'staff'"
+            ),
+            {"u": uuid.UUID(claims["sub"]), "c": clinic_id},
+        )
+    ).first()
+    if is_front_desk is None:
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    return clinic[0]
+
+
+async def _merge_clinic(conn: AsyncConnection, merge_id: uuid.UUID) -> uuid.UUID:
+    """The clinic of a merge the caller can see under RLS; invisible and nonexistent are the same 404."""
+    row = (await conn.execute(text("select clinic_id from mpi.merges where id = :i"), {"i": merge_id})).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return row[0]
+
+
+def _merge_out(r: identity.MergeResult) -> MergeOut:
+    return MergeOut(
+        merge_id=r.merge_id, status=r.status, master_patient_id=r.master_id, subordinate_patient_id=r.subordinate_id, replayed=r.replayed  # type: ignore[arg-type]
+    )
+
+
+@staff_merges.post("", response_model=MergeOut)
+async def propose_merge(
+    body: ProposeMergeIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)
+) -> MergeOut:
+    """Step 1: propose linking the subordinate to the master (the caller signs). Not effective until a different front desk person approves.
+    STEP-UP IMPLEMENTED, CLAIM SHAPE PENDING LIVE VERIFICATION (docs/design/step-up-spike.md).
+    401 step-up required, 404 unknown clinic/patient, 403 not front desk there, 409 refused (one fixed body), 422 invalid input."""
+    origin = await _front_desk_gate(conn, claims, body.clinic_id)
+    with _identity_errors():
+        result = await identity.IdentityManager().execute_merge(
+            conn, body.clinic_id, origin, body.master_patient_id, body.subordinate_patient_id, uuid.UUID(claims["sub"]), idempotency_key
+        )
+    return _merge_out(result)
+
+
+@staff_merges.post("/{merge_id}/approve", response_model=MergeOut)
+async def approve_merge(
+    merge_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)
+) -> MergeOut:
+    """Step 2: a DIFFERENT front desk person confirms. The same person approving is refused with the one generic 409.
+    STEP-UP IMPLEMENTED, CLAIM SHAPE PENDING LIVE VERIFICATION (docs/design/step-up-spike.md)."""
+    clinic_id = await _merge_clinic(conn, merge_id)
+    origin = await _front_desk_gate(conn, claims, clinic_id)
+    with _identity_errors():
+        result = await identity.IdentityManager().approve_merge(conn, clinic_id, origin, merge_id, uuid.UUID(claims["sub"]), idempotency_key)  # type: ignore[arg-type]
+    return _merge_out(result)
+
+
+@staff_merges.post("/{merge_id}/unmerge", response_model=UnmergeOut)
+async def unmerge(
+    merge_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)
+) -> UnmergeOut:
+    """Break the link (one person). For a link that had been active this raises the nurse review task; cancelling a never-confirmed proposal raises none.
+    STEP-UP IMPLEMENTED, CLAIM SHAPE PENDING LIVE VERIFICATION (docs/design/step-up-spike.md)."""
+    clinic_id = await _merge_clinic(conn, merge_id)
+    origin = await _front_desk_gate(conn, claims, clinic_id)
+    with _identity_errors():
+        result = await identity.IdentityManager().execute_unmerge(conn, clinic_id, origin, merge_id, uuid.UUID(claims["sub"]), idempotency_key)  # type: ignore[arg-type]
+    return UnmergeOut(
+        merge_id=result.merge_id, status="unmerged", review_task_id=result.review_task_id, decisions_flagged=result.decisions_flagged,
+        replayed=result.replayed,
+    )
+
+
+# ---- readiness (BUILD-SPEC.md 2) ---------------------------------------------------------------------------------------------------
+#
+# `GET /readyz` is unauthenticated and outside /v1 (a platform probe, like a load balancer's health check). It answers ONLY {"ready": bool}
+# (200 or 503): which role is missing is logged by name for the operator, never returned. In the `demo` profile it is ready. In `clinical`
+# (or any unrecognised profile) it is ready only if every required role has an enabled phi_approved route that has an adapter wired
+# (careflow.readiness); nothing is wired yet, so a clinical deployment that requires a model role reports not ready, by design.
+
+health = APIRouter(tags=["health"])
+
+
+@health.get("/readyz")
+async def readyz(request: Request) -> JSONResponse:
+    profile = resolve_profile()
+    required = parse_required_roles(request.app.state.required_roles)
+    rows = None
+    if profile != "demo" and required:
+        account = request.app.state.worker_account_id
+        if account is None:
+            log.warning("readiness: CAREFLOW_WORKER_ACCOUNT_ID is not set, so the model registry cannot be read")
+        else:
+            try:
+                rows = await load_registry(request.app.state.engine, account, origins=("live",))
+            except (RegistryError, SQLAlchemyError) as exc:
+                log.warning("readiness: the model registry could not be read (error=%s)", type(exc).__name__)
+    result = check_readiness(profile, rows, required, wired=request.app.state.wired_adapters)
+    if not result.ready:
+        log.warning("not ready (profile=%s missing_roles=%s reasons=%s)", result.profile, list(result.missing_roles), list(result.reasons))
+    return JSONResponse({"ready": result.ready}, status_code=200 if result.ready else 503)
+
+
 # ---- application -----------------------------------------------------------------------------------
 
 
@@ -630,9 +907,10 @@ def _load_vault() -> DemographicVault | None:
 
 def create_app(
     settings: Settings | None = None, *, jwks: JWKSClient | None = None, engine: AsyncEngine | None = None,
-    vault: DemographicVault | None = None,
+    vault: DemographicVault | None = None, clock: Callable[[], float] = time.time,
 ) -> FastAPI:
-    """Build the app. `jwks`, `engine` and `vault` can be injected (tests do); otherwise they come from settings / the environment."""
+    """Build the app. `jwks`, `engine`, `vault` and `clock` (for the step-up window) can be injected (tests do); otherwise they come from
+    settings / the environment."""
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -642,9 +920,30 @@ def create_app(
         app.state.engine = engine or make_app_engine(cfg.database_url_app, pool_size=5, max_overflow=5, pool_pre_ping=True)
         app.state.vault = vault if vault is not None else _load_vault()
         app.state.active_key_version = cfg.active_key_version
+        app.state.step_up_max_age_seconds = cfg.step_up_max_age_seconds
+        app.state.clock = clock
+        app.state.required_roles = cfg.required_roles
+        app.state.worker_account_id = cfg.worker_account_id
+        app.state.wired_adapters = frozenset()  # (provider, model_id) pairs with a wired adapter: none yet
+        app.state.poker = Poker()  # routes that enqueue call `app.state.poker.poke()` after their transaction commits (7.4)
+        worker: asyncio.Task | None = None
+        if cfg.run_worker:
+            if cfg.worker_account_id is None:
+                log.error("CAREFLOW_RUN_WORKER is on but CAREFLOW_WORKER_ACCOUNT_ID is not set: the worker is NOT started (queued jobs wait)")
+            else:
+                worker = asyncio.create_task(
+                    worker_loop(app.state.engine, PostgresQueue(), {}, app.state.poker,
+                                worker_account_id=cfg.worker_account_id, worker_id=f"api-{uuid.uuid4().hex[:8]}"),
+                    name="careflow-worker",
+                )
+        app.state.worker = worker
         try:
             yield
         finally:
+            if worker is not None:
+                worker.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await worker
             if engine is None:
                 await app.state.engine.dispose()
             if jwks is None:
@@ -656,6 +955,8 @@ def create_app(
     app.include_router(scheduling)
     app.include_router(staff_messages)
     app.include_router(staff_patients)
+    app.include_router(staff_merges)
+    app.include_router(health)
     return app
 
 

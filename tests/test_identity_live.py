@@ -27,6 +27,8 @@ from careflow.crypto import DemographicVault
 from careflow.db import make_app_engine, set_request_claims
 from careflow.identity import IdentityManager
 from careflow.mpi import PatientIngestionPipeline
+from tests.bounds import bounded
+from tests.db_helpers import ensure_app_role_sa
 
 ROOT = Path(__file__).resolve().parent.parent
 _ENV = dotenv_values(ROOT / ".env")
@@ -76,7 +78,7 @@ async def _conn():
     conn = await eng.connect()
     outer = await conn.begin()
     try:
-        await conn.exec_driver_sql("grant careflow_app to current_user with set true")
+        await ensure_app_role_sa(conn)
         for table, name in (("mpi.match_candidates", "0003"), ("sched.holds", "0004"), ("agents.review_tasks", "0007"), ("mpi.merges", "0008")):
             if (await conn.execute(text("select to_regclass(:t) is null"), {"t": table})).scalar_one():
                 await raw(conn, MIGRATIONS[name])
@@ -224,7 +226,7 @@ async def test_nobody_can_sign_as_somebody_else(db, mgr, pipeline):
     merge = await propose(db, mgr, w)
     with pytest.raises(ident.NotPermitted):  # fd2 confirms but names the doctor as the second approver
         await act(db, w.fd2, mgr.approve_merge, w.a, "test", merge.merge_id, w.doctor, _key())
-    assert await one(db, "select count(*) from mpi.merges where status = 'active'") == 0
+    assert await one(db, "select count(*) from mpi.merges where status = 'active' and clinic_id = :c", c=w.a) == 0
 
 
 @pytest.mark.parametrize("who", ["admin", "auditor", "owner", "nurse", "doctor", "fd_b", None])
@@ -317,7 +319,7 @@ async def test_replaying_a_step_returns_the_original_and_an_altered_one_conflict
     assert (replay.replayed, replay.merge_id, done.status) == (True, first.merge_id, "active")
     with pytest.raises(ident.InvalidTransition):
         await confirm(db, mgr, w, first.merge_id, key=_key())  # a different key for an already-active merge
-    assert await one(db, "select count(*) from mpi.merges") == 1
+    assert await one(db, "select count(*) from mpi.merges where clinic_id = :c", c=w.a) == 1
 
 
 @pytest.mark.parametrize("bad", ["", "  ", None])
@@ -407,7 +409,7 @@ async def test_unmerge_is_idempotent_one_person_and_cannot_be_repeated_under_a_n
     assert (again.replayed, again.review_task_id) == (True, first.review_task_id)
     with pytest.raises(ident.InvalidTransition):
         await act(db, w.fd2, mgr.execute_unmerge, w.a, "test", merge_id, w.fd2, _key())
-    assert await one(db, "select count(*) from agents.review_tasks where kind = 'unmerge_review'") == 1
+    assert await one(db, "select count(*) from agents.review_tasks where kind = 'unmerge_review' and clinic_id = :c", c=w.a) == 1
 
 
 async def test_cancelling_an_unconfirmed_proposal_raises_no_review_task(db, mgr, pipeline):
@@ -416,7 +418,7 @@ async def test_cancelling_an_unconfirmed_proposal_raises_no_review_task(db, mgr,
     result = await act(db, w.fd1, mgr.execute_unmerge, w.a, "test", merge.merge_id, w.fd1, _key())
     assert (result.review_task_id, result.decisions_flagged) == (None, 0)
     assert await one(db, "select status from mpi.merges where id = :i", i=merge.merge_id) == "unmerged"
-    assert await one(db, "select count(*) from agents.review_tasks") == 0
+    assert await one(db, "select count(*) from agents.review_tasks where clinic_id = :c", c=w.a) == 0
     assert await one(db, "select status from mpi.match_candidates where candidate_patient_id = :m", m=w.master) == "pending"  # still awaiting a decision
 
 
@@ -550,7 +552,10 @@ async def test_competing_proposals_for_one_subordinate_produce_exactly_one_live_
             except ident.MergeNotAllowed:
                 return "refused"
 
-    results = await asyncio.gather(*(attempt(who, master) for who, master in ((fd1, master1), (fd2, master2), (fd1, master2), (fd2, master1))))
+    results = await bounded(
+        asyncio.gather(*(attempt(who, master) for who, master in ((fd1, master1), (fd2, master2), (fd1, master2), (fd2, master1)))),
+        "the concurrent merge attempts",
+    )
     assert results.count("won") == 1 and results.count("refused") == 3, results
     async with admin.connect() as c:
         live = (await c.execute(text("select count(*) from mpi.merges where clinic_id = :c and status in ('awaiting_second_approval', 'active')"), {"c": clinic})).scalar_one()

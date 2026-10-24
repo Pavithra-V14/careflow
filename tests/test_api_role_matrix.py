@@ -38,6 +38,7 @@ from starlette.testclient import TestClient
 from careflow.app import Settings, create_app
 from careflow.auth import JWKSClient
 from careflow.crypto import DemographicVault
+from tests.bounds import bounded
 
 ENV = dotenv_values(Path(__file__).resolve().parent.parent / ".env")
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or ENV.get("DATABASE_URL_MIGRATOR")
@@ -65,7 +66,7 @@ ATTACKER, _ = _key("matrix-key")  # same kid, different key material
 
 
 def mint(sub, *, key=SIGNING, kid="matrix-key", alg="ES256", **over):
-    claims = {"sub": str(sub), "iss": ISSUER, "aud": "authenticated", "role": "authenticated", "exp": int(time.time()) + 600, **over}
+    claims = {"sub": str(sub), "iss": ISSUER, "aud": "authenticated", "role": "authenticated", "exp": int(time.time()) + 3000, **over}
     claims = {k: v for k, v in claims.items() if v is not None}
     return jwt.encode(claims, key, algorithm=alg, headers={"kid": kid})
 
@@ -108,6 +109,7 @@ async def _seed() -> Identities:
     for key, kind, status, grants in spec:
         ids.people[key] = (uuid.uuid4(), kind, status, grants)
     ids.no_account = uuid.uuid4()  # a valid Auth user with no iam.accounts row
+    ids.fd2 = uuid.uuid4()  # a SECOND active front desk person of clinic A, for the two-person merge rule (not in ids.people on purpose)
     conn = await asyncpg.connect((MIGRATOR or "").replace("+asyncpg", ""), statement_cache_size=0)
     try:
         await conn.execute("insert into iam.clinics (id, name, origin) values ($1, 'Matrix A', 'test'), ($2, 'Matrix B', 'test')", ids.clinic_a, ids.clinic_b)
@@ -119,6 +121,8 @@ async def _seed() -> Identities:
             "insert into iam.staff_roles (account_id, clinic_id, role, origin) values ($1, $2, $3, 'test')",
             [(a, c, r) for a, _, _, grants in ids.people.values() for c, r in grants],
         )
+        await conn.execute("insert into iam.accounts (id, account_type, status, origin) values ($1, 'staff', 'active', 'test')", ids.fd2)
+        await conn.execute("insert into iam.staff_roles (account_id, clinic_id, role, origin) values ($1, $2, 'front_desk', 'test')", ids.fd2, ids.clinic_a)
         await _seed_scheduling(ids, conn)
     except Exception:
         await _cleanup(ids, conn)
@@ -197,10 +201,10 @@ async def _cleanup(ids, conn=None):
     own = conn is None
     conn = conn or await asyncpg.connect((MIGRATOR or "").replace("+asyncpg", ""), statement_cache_size=0)
     try:
-        accounts = [a for a, *_ in ids.people.values()]
+        accounts = [a for a, *_ in ids.people.values()] + ([ids.fd2] if hasattr(ids, "fd2") else [])
         clinics = [ids.clinic_a, ids.clinic_b]
         for table in ("sched.bookings", "sched.holds", "sched.waitlist", "sched.slots", "sched.priority_levels",
-                      "mpi.match_candidates", "mpi.identity_tokens", "mpi.patients", "sched.visit_types", "sched.providers",
+                      "mpi.merges", "agents.review_tasks", "mpi.match_candidates", "mpi.identity_tokens", "mpi.patients", "sched.visit_types", "sched.providers",
                       "sched.locations"):
             await conn.execute(f"delete from {table} where clinic_id = any($1)", clinics)
         await conn.execute("delete from iam.staff_roles where clinic_id = any($1)", [ids.clinic_a, ids.clinic_b])
@@ -222,9 +226,14 @@ def ids():
 TEST_VAULT = DemographicVault.from_env({f"CAREFLOW_{k}_SECRET_V1": base64.b64encode(os.urandom(32)).decode() for k in ("ENC", "HMAC")})
 
 
+# seconds; the merge routes require a second factor verified within this window. Generous on purpose: tokens are minted when a route's cases are built and
+# the cases then run one after another against a shared hosted database; at 300 s the last cases of the approve route (278 s in CI) came back 401.
+STEP_UP_WINDOW = 1800
+
+
 @pytest.fixture(scope="module")
 def app() -> FastAPI:
-    settings = Settings(supabase_url=PROJECT, database_url_app=APP_URL or "")
+    settings = Settings(supabase_url=PROJECT, database_url_app=APP_URL or "", step_up_max_age_seconds=STEP_UP_WINDOW)
     return create_app(settings, jwks=fake_jwks_client(), vault=TEST_VAULT)
 
 
@@ -552,6 +561,261 @@ def ingest_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, INGEST, fresh())
 
 
+# ---- POST /v1/staff/merges, .../{id}/approve, .../{id}/unmerge: merge propose / approve / unmerge (D3) -------------------------------------
+#
+# STEP-UP IMPLEMENTED, CLAIM SHAPE PENDING LIVE VERIFICATION: the tokens below carry the DOCUMENTED shape (aal2 plus an amr list of
+# {"method": "totp", "timestamp": unix-seconds}); a real Supabase token has not been inspected yet (docs/design/step-up-spike.md).
+#
+# Every identity is tried twice: with a stepped-up token (the answer its role earns) and with a token that is not stepped up (always 401,
+# before any role or database check). Front desk proposes, a DIFFERENT front desk person approves, one front desk person unmerges.
+# Responses carry ids and statuses only; every refusal is a fixed body.
+
+MERGES = "/v1/staff/merges"
+APPROVE, UNMERGE = MERGES + "/{merge_id}/approve", MERGES + "/{merge_id}/unmerge"
+MERGE_KEYS = {"merge_id", "status", "master_patient_id", "subordinate_patient_id", "replayed"}
+
+
+def _totp(seconds_ago: int = 30) -> list:
+    return [{"method": "totp", "timestamp": int(time.time()) - seconds_ago}]
+
+
+def stepped(sub, **over):
+    """Headers for a staff token that has just verified a second factor (the documented, unverified claim shape)."""
+    claims = {"aal": "aal2", "amr": _totp(), **over}
+    return bearer(mint(sub, **claims))
+
+
+def not_stepped_variants(sub) -> list[tuple[str, dict]]:
+    return [
+        ("a password-only session (no aal, no amr)", bearer(mint(sub))),
+        ("aal1 even with a totp entry", bearer(mint(sub, aal="aal1", amr=_totp()))),
+        ("aal2 with a totp entry older than the window", bearer(mint(sub, aal="aal2", amr=_totp(STEP_UP_WINDOW + 600)))),
+        ("aal2 with a totp entry in the future", bearer(mint(sub, aal="aal2", amr=_totp(-3600)))),
+        ("aal2 with only a password entry", bearer(mint(sub, aal="aal2", amr=[{"method": "password", "timestamp": int(time.time())}]))),
+        ("aal2 with a legacy string amr", bearer(mint(sub, aal="aal2", amr=["totp"]))),
+    ]
+
+
+async def _owner(fn):
+    conn = await asyncpg.connect((MIGRATOR or "").replace("+asyncpg", ""), statement_cache_size=0)
+    try:
+        return await fn(conn)
+    finally:
+        await conn.close()
+
+
+async def _new_pair(conn, clinic, *, candidate=True):
+    """Two fresh synthetic patients and (unless candidate=False) the pending possible-duplicate row a merge starts from."""
+    tag = uuid.uuid4().hex
+    master, subordinate = uuid.uuid4(), uuid.uuid4()
+    await conn.executemany(
+        "insert into mpi.patients (id, clinic_id, name_ct, name_key_version, dob_ct, dob_key_version, origin, idempotency_key) "
+        "values ($1, $2, $3, 1, $3, 1, 'test', $4)",
+        [(master, clinic, b"x" * 40, f"matrix-m-{tag}-a"), (subordinate, clinic, b"x" * 40, f"matrix-m-{tag}-b")],
+    )
+    cand = None
+    if candidate:
+        cand = await conn.fetchval(
+            "insert into mpi.match_candidates (clinic_id, patient_id, candidate_patient_id, matched_kinds, reason, origin, idempotency_key) "
+            "values ($1, $2, $3, array['phone'], 'near_match', 'test', $4) returning id", clinic, subordinate, master, f"matrix-m-{tag}-c",
+        )
+    return master, subordinate, cand
+
+
+def new_pair(ids, *, clinic=None, candidate=True):
+    return _run(_owner(lambda conn: _new_pair(conn, clinic or ids.clinic_a, candidate=candidate)))
+
+
+def new_merge(ids, state="awaiting"):
+    """A merge proposed by front_desk_a (and, if state='active', confirmed by the second front desk person), written by the owner."""
+
+    async def make(conn):
+        master, subordinate, cand = await _new_pair(conn, ids.clinic_a)
+        key = f"matrix-merge-{uuid.uuid4().hex}"
+        if state == "active":
+            await conn.execute("update mpi.match_candidates set status = 'resolved', resolved_at = now(), resolved_by = $2 where id = $1", cand, ids.fd2)
+            row = await conn.fetchrow(
+                "insert into mpi.merges (clinic_id, master_patient_id, subordinate_patient_id, candidate_id, approved_by, second_approved_by, "
+                "status, activated_at, origin, idempotency_key) values ($1, $2, $3, $4, $5, $6, 'active', now(), 'test', $7) returning id",
+                ids.clinic_a, master, subordinate, cand, ids.people["front_desk_a"][0], ids.fd2, key,
+            )
+        else:
+            row = await conn.fetchrow(
+                "insert into mpi.merges (clinic_id, master_patient_id, subordinate_patient_id, candidate_id, approved_by, origin, idempotency_key) "
+                "values ($1, $2, $3, $4, $5, 'test', $6) returning id", ids.clinic_a, master, subordinate, cand, ids.people["front_desk_a"][0], key,
+            )
+        return row["id"], master, subordinate
+
+    return _run(_owner(make))
+
+
+FIXED_BODY = {
+    401: {"detail": "step-up required"}, 403: {"detail": "your role may not do this"}, 404: {"detail": "not found"},
+}
+
+
+def _fixed(status):
+    """The exact fixed refusal body for a status; a 422 is the app-wide handler's list of {type, loc, msg} with no echoed input."""
+    if status == 422:
+        return lambda b: (isinstance(b.get("detail"), list) and set(b) == {"detail"}
+                          and all(set(e) == {"type", "loc", "msg"} for e in b["detail"]))
+    return lambda b: b == FIXED_BODY[status]
+
+
+def _merge_body(merge_id=None, status=None, **expect):
+    def check(b):
+        return (set(b) == MERGE_KEYS and (merge_id is None or b["merge_id"] == str(merge_id)) and (status is None or b["status"] == status)
+                and all(b[k] == v for k, v in expect.items()))
+    return check
+
+
+def _everyone_at_the_gate(ids, make_path, make_json, status_for, default):
+    """Every identity but front_desk_a, stepped up (the answer its role earns) and not stepped up (always 401). Nothing here may succeed."""
+    people = [*ids.people, "no account"]
+    cases = []
+    for p in people:
+        sub = ids.no_account if p == "no account" else ids.people[p][0]
+        if p != "front_desk_a":
+            status = status_for.get(p, default)
+            cases.append(_case(ids, f"{p} with a second factor is refused", stepped(sub), status, make_path(), json=make_json(), body=_fixed(status)))
+        for label, headers in not_stepped_variants(sub):
+            cases.append(_case(ids, f"{p} with {label} is told to step up", headers, 401, make_path(), json=make_json(), body=_fixed(401)))
+    return cases
+
+
+def _not_stepped_cases(ids, make_path, make_json, who="front_desk_a"):
+    sub = ids.people[who][0]
+    return [_case(ids, f"{who} with {label} is told to step up", headers, 401, make_path(), json=make_json(), body=_fixed(401))
+            for label, headers in not_stepped_variants(sub)]
+
+
+def merge_propose_cases(ids) -> list[tuple]:
+    fd, fd2 = stepped(ids.people["front_desk_a"][0]), stepped(ids.fd2)
+    m1, s1, _ = new_pair(ids)
+    m2, s2, _ = new_pair(ids)
+    m3, s3, _ = new_pair(ids)
+    m4, s4, _ = new_pair(ids)
+    m5, s5, _ = new_pair(ids, candidate=False)
+    mr, sr, _ = new_pair(ids)  # a valid pair every refused identity aims at; it is never proposed
+    key = _new_key()
+    body = lambda m, s_, **o: {"clinic_id": str(ids.clinic_a), "master_patient_id": str(m), "subordinate_patient_id": str(s_), **o}
+    visible_but_not_front_desk = {r: 403 for r in ("nurse_a", "doctor_a", "admin_a", "business_owner_a", "auditor_a", "multi")}
+    cases = [
+        _case(ids, "front desk proposes a merge for a pending possible-duplicate", fd, 200, MERGES, json=body(m1, s1), key=key,
+              body=_merge_body(status="awaiting_second_approval", replayed=False, master_patient_id=str(m1), subordinate_patient_id=str(s1))),
+        _case(ids, "replaying the same key and the same pair is a replay", fd, 200, MERGES, json=body(m1, s1), key=key,
+              body=_merge_body(status="awaiting_second_approval", replayed=True)),
+        _case(ids, "the same key for a different pair is a conflict", fd, 409, MERGES, json=body(m2, s2), key=key,
+              body=lambda b: b == {"detail": "this idempotency key was already used by a different request"}),
+        _case(ids, "a second front desk person can also propose", fd2, 200, MERGES, json=body(m3, s3), body=_merge_body(status="awaiting_second_approval")),
+        _case(ids, "a pair that is not a pending possible-duplicate is refused with the one generic body", fd, 409, MERGES, json=body(m5, s5),
+              body=lambda b: b == {"detail": "this merge cannot be carried out"}),
+        _case(ids, "a record cannot be merged into itself", fd, 409, MERGES, json=body(m4, m4), body=lambda b: b == {"detail": "this merge cannot be carried out"}),
+        _case(ids, "a patient of another clinic is simply not found", fd, 404, MERGES, json=body(m4, ids.patient_b), body=lambda b: b == {"detail": "not found"}),
+        _case(ids, "a patient that does not exist gives the identical answer", fd, 404, MERGES, json=body(m4, uuid.uuid4()), body=lambda b: b == {"detail": "not found"}),
+        _case(ids, "an unknown clinic is not found", fd, 404, MERGES, json=body(m4, s4, clinic_id=str(uuid.uuid4())), body=_fixed(404)),
+        _case(ids, "front desk of ANOTHER clinic cannot propose here", stepped(ids.people["front_desk_b"][0]), 404, MERGES, json=body(m4, s4),
+              body=_fixed(404)),
+        _case(ids, "missing X-Idempotency-Key is rejected", fd, 422, MERGES, json=body(m4, s4), key=None, body=_fixed(422)),
+        _case(ids, "blank X-Idempotency-Key is rejected", fd, 422, MERGES, json=body(m4, s4), key="   ", body=_fixed(422)),
+        _case(ids, "a patient id that is not a uuid is rejected", fd, 422, MERGES, json=body(m4, "nope"), body=_fixed(422)),
+        _case(ids, "a client-supplied origin is an unknown field", fd, 422, MERGES, json=body(m4, s4, origin="live"), body=_fixed(422)),
+        _case(ids, "an empty body is rejected", fd, 422, MERGES, json={}, body=_fixed(422)),
+    ]
+    cases += _everyone_at_the_gate(ids, lambda: MERGES, lambda: body(mr, sr), visible_but_not_front_desk, 404)
+    cases += _not_stepped_cases(ids, lambda: MERGES, lambda: body(mr, sr))
+    return cases + _unauthenticated(ids, MERGES, body(mr, sr))
+
+
+def merge_approve_cases(ids) -> list[tuple]:
+    fd, fd2 = stepped(ids.people["front_desk_a"][0]), stepped(ids.fd2)
+    ok, ok_m, ok_s = new_merge(ids)
+    own, _, _ = new_merge(ids)
+    refused, _, _ = new_merge(ids)
+    path = lambda mid: APPROVE.format(merge_id=mid)
+    key = _new_key()
+    not_found = lambda b: b == {"detail": "not found"}
+    visible_but_not_front_desk = {r: 403 for r in ("nurse_a", "doctor_a", "multi")}  # front desk, nurse and doctor can SEE merges; the rest cannot
+    cases = [
+        _case(ids, "a DIFFERENT front desk person approves", fd2, 200, path(ok), key=key,
+              body=_merge_body(ok, "active", replayed=False, master_patient_id=str(ok_m), subordinate_patient_id=str(ok_s))),
+        _case(ids, "replaying the same key by the same approver is a replay", fd2, 200, path(ok), key=key, body=_merge_body(ok, "active", replayed=True)),
+        _case(ids, "approving an already active merge under a new key is refused", fd2, 409, path(ok),
+              body=lambda b: b == {"detail": "this merge is not in a state that allows that"}),
+        _case(ids, "the SAME person who proposed cannot approve: one generic refusal", fd, 409, path(own),
+              body=lambda b: b == {"detail": "this merge cannot be carried out"}),
+        _case(ids, "an unknown merge is not found", fd2, 404, path(uuid.uuid4()), body=not_found),
+        _case(ids, "front desk of ANOTHER clinic cannot even see the merge", stepped(ids.people["front_desk_b"][0]), 404, path(own), body=not_found),
+        _case(ids, "missing X-Idempotency-Key is rejected", fd2, 422, path(own), key=None, body=_fixed(422)),
+        _case(ids, "blank X-Idempotency-Key is rejected", fd2, 422, path(own), key="   ", body=_fixed(422)),
+        _case(ids, "a merge id that is not a uuid is rejected", fd2, 422, path("nope"), body=_fixed(422)),
+    ]
+    cases += _everyone_at_the_gate(ids, lambda: path(refused), lambda: None, visible_but_not_front_desk, 404)
+    cases += _not_stepped_cases(ids, lambda: path(refused), lambda: None)
+    return cases + _unauthenticated(ids, path(refused), None)
+
+
+def merge_unmerge_cases(ids) -> list[tuple]:
+    fd, fd2 = stepped(ids.people["front_desk_a"][0]), stepped(ids.fd2)
+    active, _, _ = new_merge(ids, "active")
+    awaiting, _, _ = new_merge(ids)
+    refused, _, _ = new_merge(ids, "active")
+    path = lambda mid: UNMERGE.format(merge_id=mid)
+    key = _new_key()
+    task_ids = []
+    visible_but_not_front_desk = {r: 403 for r in ("nurse_a", "doctor_a", "multi")}
+
+    def unmerged(replayed, with_task):
+        def check(b):
+            if set(b) != {"merge_id", "status", "review_task_id", "decisions_flagged", "replayed"} or b["status"] != "unmerged" or b["replayed"] is not replayed:
+                return False
+            if not with_task:
+                return b["review_task_id"] is None
+            if b["review_task_id"] is None:
+                return False
+            task_ids.append(b["review_task_id"])
+            return len(set(task_ids)) == 1  # the replay returns the SAME task
+        return check
+
+    cases = [
+        _case(ids, "front desk unmerges an active link: the nurse review task is raised", fd, 200, path(active), key=key, body=unmerged(False, True)),
+        _case(ids, "replaying the same key returns the same task", fd, 200, path(active), key=key, body=unmerged(True, True)),
+        _case(ids, "unmerging again under a new key is refused", fd, 409, path(active), body=lambda b: b == {"detail": "this merge is not in a state that allows that"}),
+        _case(ids, "cancelling a never-confirmed proposal raises no task", fd2, 200, path(awaiting), body=unmerged(False, False)),
+        _case(ids, "an unknown merge is not found", fd, 404, path(uuid.uuid4()), body=lambda b: b == {"detail": "not found"}),
+        _case(ids, "front desk of ANOTHER clinic cannot even see the merge", stepped(ids.people["front_desk_b"][0]), 404, path(refused),
+              body=_fixed(404)),
+        _case(ids, "missing X-Idempotency-Key is rejected", fd, 422, path(refused), key=None, body=_fixed(422)),
+        _case(ids, "blank X-Idempotency-Key is rejected", fd, 422, path(refused), key="   ", body=_fixed(422)),
+        _case(ids, "a merge id that is not a uuid is rejected", fd, 422, path("nope"), body=_fixed(422)),
+    ]
+    cases += _everyone_at_the_gate(ids, lambda: path(refused), lambda: None, visible_but_not_front_desk, 404)
+    cases += _not_stepped_cases(ids, lambda: path(refused), lambda: None)
+    return cases + _unauthenticated(ids, path(refused), None)
+
+
+# ---- GET /v1/staff/messages/{message_id}: staff message read (D4), the COMMITTED half of a split matrix ----------------------------------
+#
+# Reading needs stored messages, and msg.messages / msg.threads are append-only for every role, so a committed fixture could never be cleaned
+# up. This route is therefore tested in TWO halves (SPLIT_HARNESS below): THIS half runs on the real pooler role with real commits and covers
+# everything that needs no stored message: every identity asking for a message that does not exist, authentication failures, a malformed id,
+# and that a refused read writes NO audit row. The topic-dependent paths (who may read which topic, the audit row of each 200, an erased,
+# tampered or unreadable body) are in tests/test_api_read_message_live.py. Documented in docs/design/role-matrix-exceptions.md.
+
+READ = "/v1/staff/messages/{message_id}"
+
+
+def message_read_cases(ids) -> list[tuple]:
+    path = lambda: READ.format(message_id=uuid.uuid4())
+    cases = []
+    for p in [*ids.people, "no account"]:
+        sub_ = ids.no_account if p == "no account" else ids.people[p][0]
+        cases.append(_case(ids, f"{p} asking for a message that does not exist gets the one fixed 404", bearer(mint(sub_)), 404, path(), key=None,
+                           body=_fixed(404)))
+    cases.append(_case(ids, "a message id that is not a uuid is rejected", "front_desk_a", 422, READ.format(message_id="nope"), key=None, body=_fixed(422)))
+    return cases + _unauthenticated(ids, path(), None)
+
+
 # One entry per route: add the new route's cases here in the same change that adds the route.
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
@@ -563,6 +827,10 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", PREFIX + "/bookings"): lambda ids: read_cases(ids, "bookings"),
     ("GET", PREFIX + "/waitlist"): lambda ids: read_cases(ids, "waitlist"),
     ("POST", INGEST): ingest_cases,
+    ("POST", MERGES): merge_propose_cases,
+    ("POST", APPROVE): merge_approve_cases,
+    ("POST", UNMERGE): merge_unmerge_cases,
+    ("GET", READ): message_read_cases,
 }
 
 
@@ -578,6 +846,14 @@ SEPARATE_HARNESS: dict[tuple[str, str], str] = {
 }
 
 
+# Routes tested in TWO halves: their refusal paths that need no stored message are in MATRIX above (committed, real pooler role), and their
+# topic-dependent paths are in a dedicated never-committed module because they read append-only msg rows. Unlike SEPARATE_HARNESS, a split
+# route MUST also be in MATRIX, and the dedicated half must cover every required role on every topic.
+SPLIT_HARNESS: dict[tuple[str, str], str] = {
+    ("GET", READ): "test_api_read_message_live.py",
+}
+
+
 def test_every_route_is_in_the_matrix(app):
     """Rule 8: a route with no role-matrix case is not done."""
     # The generated OpenAPI document lists every served operation, including routers added by include_router.
@@ -585,6 +861,8 @@ def test_every_route_is_in_the_matrix(app):
     covered = set(MATRIX) | set(SEPARATE_HARNESS)
     assert served == covered, f"routes without a matrix case: {served - covered}; stale cases: {covered - served}"
     assert not set(MATRIX) & set(SEPARATE_HARNESS), "a route is either in MATRIX or in SEPARATE_HARNESS, not both"
+    assert set(SPLIT_HARNESS) <= set(MATRIX), "a split route needs its committed half in MATRIX"
+    assert not set(SPLIT_HARNESS) & set(SEPARATE_HARNESS), "a route is split or separately tested, not both"
 
 
 # Every kind of identity the main matrix covers must also be exercised by a separately tested route: each staff role, a nurse here who is a
@@ -609,6 +887,27 @@ def test_separately_tested_routes_have_a_dedicated_matrix_that_covers_them():
         assert parametrized and list(parametrized[0].args[1]) == list(roles), "the driving test must be parametrized over every covered role"
         for needed in ("test_authentication_comes_first_for_every_kind_of_bad_credential", "test_the_idempotency_key_and_the_path_are_validated",
                        "test_a_replay_with_the_same_key_returns_the_original_and_a_new_key_is_a_no_op_not_a_second_task"):
+            assert callable(getattr(module, needed, None)), f"{filename} no longer defines {needed}"
+
+
+def test_split_routes_have_both_halves_and_the_dedicated_half_covers_every_role_on_every_topic():
+    """Imports the dedicated module: it must export the grid it covers (every required role tried on all three topics), and the test that
+    drives the grid must be a real parametrized function over exactly those roles, so emptying or commenting out either half fails here."""
+    import importlib
+
+    for (method, path), filename in SPLIT_HARNESS.items():
+        assert (method, path) in MATRIX and callable(MATRIX[(method, path)]), "the committed half is missing"
+        module = importlib.import_module(f"tests.{filename.removesuffix('.py')}")
+        grid = module.COVERED_GRID[(method, path)]
+        assert REQUIRED_SEPARATE_ROLES <= set(grid), f"{filename} is missing roles: {REQUIRED_SEPARATE_ROLES - set(grid)}"
+        assert set(module.TOPICS) == {"care", "appointments", "safety"}
+        assert all(set(topics) == set(module.TOPICS) for topics in grid.values()), "every role must be tried on every topic"
+        driver = module.test_who_can_read_which_topic
+        parametrized = [m for m in getattr(driver, "pytestmark", []) if m.name == "parametrize"]
+        assert parametrized and list(parametrized[0].args[1]) == list(grid), "the driving test must be parametrized over every covered role"
+        for needed in ("test_every_successful_read_writes_exactly_one_audit_row_with_ids_only", "test_refused_reads_write_no_audit_row",
+                       "test_an_erased_message_is_410_for_those_who_can_see_it_and_404_for_those_who_cannot",
+                       "test_authentication_comes_first_for_every_kind_of_bad_credential"):
             assert callable(getattr(module, needed, None)), f"{filename} no longer defines {needed}"
 
 
@@ -666,7 +965,7 @@ def test_identity_never_leaks_between_pooled_requests(app, ids):
                     r = await http.get("/v1/iam/me", headers=bearer(mint(ids.people[key][0])))
                     return key, r.status_code, r.json()
 
-                return await asyncio.gather(*(call(i) for i in range(40)))
+                return await bounded(asyncio.gather(*(call(i) for i in range(40))), "the forty concurrent requests")
 
     for key, status, body in _run(run()):
         assert status == 200, key
@@ -760,7 +1059,9 @@ def test_concurrent_writes_from_two_clinics_neither_leak_identity_nor_connection
                     )
                     return who, r.status_code
 
-                results = await asyncio.gather(*(hold(w, s) for s in slots for w in ("front_desk_a", "front_desk_b")))
+                results = await bounded(
+                    asyncio.gather(*(hold(w, s) for s in slots for w in ("front_desk_a", "front_desk_b"))), "the concurrent holds"
+                )
                 return results, app.state.engine.pool.checkedout()
 
     results, checked_out = _run(run())
@@ -833,7 +1134,7 @@ def test_concurrent_reads_from_different_identities_neither_mix_rows_nor_leak_co
                     r = await http.get(f"{PREFIX}/{route}?limit=5", headers=bearer(mint(ids.people[who][0])))
                     return who, r.status_code, (r.json()["items"] if r.status_code == 200 else None)
 
-                return await asyncio.gather(*(read(i) for i in range(40))), app.state.engine.pool.checkedout()
+                return await bounded(asyncio.gather(*(read(i) for i in range(40))), "the forty concurrent reads"), app.state.engine.pool.checkedout()
 
     results, checked_out = _run(run())
     assert checked_out == 0
@@ -921,10 +1222,106 @@ def test_concurrent_registrations_of_the_same_person_converge_on_one_record(app,
                     )
                     return r.status_code, r.json()
 
-                return await asyncio.gather(*(register(i) for i in range(8)))
+                return await bounded(asyncio.gather(*(register(i) for i in range(8))), "the concurrent registrations")
 
     results = _run(run())
     assert {status for status, _ in results} == {200}
     outcomes = sorted(body["outcome"] for _, body in results)
     assert outcomes == ["created"] + ["matched"] * 7  # the token locks serialise them: exactly one creates
     assert len({body["patient_id"] for _, body in results}) == 1
+
+
+# ---- merges: behaviour beyond allow/deny --------------------------------------------------------------------------------------------------
+
+
+def _merge_post(client, headers, path, json=None, key="new"):
+    h = {**headers}
+    if key is not None:
+        h["X-Idempotency-Key"] = _new_key() if key == "new" else key
+    return client.post(path, headers=h, json=json)
+
+
+def _propose_as_fd(client, ids, master, sub):
+    return _merge_post(client, stepped(ids.people["front_desk_a"][0]), MERGES,
+                       {"clinic_id": str(ids.clinic_a), "master_patient_id": str(master), "subordinate_patient_id": str(sub)})
+
+
+def test_the_two_person_rule_end_to_end(client, ids):
+    master, sub, _ = new_pair(ids)
+    proposed = _propose_as_fd(client, ids, master, sub)
+    assert proposed.status_code == 200
+    merge_id = proposed.json()["merge_id"]
+    same = _merge_post(client, stepped(ids.people["front_desk_a"][0]), APPROVE.format(merge_id=merge_id))
+    nurse = _merge_post(client, stepped(ids.people["nurse_a"][0]), APPROVE.format(merge_id=merge_id))
+    assert (same.status_code, same.json()) == (409, {"detail": "this merge cannot be carried out"})
+    assert nurse.status_code == 403
+    (row,) = _run(_fetch("select status, second_approved_by from mpi.merges where id = $1", uuid.UUID(merge_id)))
+    assert (row["status"], row["second_approved_by"]) == ("awaiting_second_approval", None)  # neither refusal changed anything
+    second = _merge_post(client, stepped(ids.fd2), APPROVE.format(merge_id=merge_id))
+    assert (second.status_code, second.json()["status"]) == (200, "active")
+    (row,) = _run(_fetch("select status, approved_by, second_approved_by from mpi.merges where id = $1", uuid.UUID(merge_id)))
+    assert row["status"] == "active" and row["approved_by"] == ids.people["front_desk_a"][0] and row["second_approved_by"] == ids.fd2
+
+
+def test_unmerge_raises_one_nurse_task_for_an_active_link_and_none_for_a_cancelled_proposal(client, ids):
+    active, _, _ = new_merge(ids, "active")
+    awaiting, _, _ = new_merge(ids)
+    fd = stepped(ids.people["front_desk_a"][0])
+    out = _merge_post(client, fd, UNMERGE.format(merge_id=active)).json()
+    cancelled = _merge_post(client, fd, UNMERGE.format(merge_id=awaiting)).json()
+    assert out["review_task_id"] is not None and cancelled["review_task_id"] is None
+    tasks = _run(_fetch("select kind, assigned_role, priority from agents.review_tasks where idempotency_key = any($1)",
+                        [f"unmerge-review:{active}", f"unmerge-review:{awaiting}"]))
+    assert [(t["kind"], t["assigned_role"], t["priority"]) for t in tasks] == [("unmerge_review", "nurse", "immediate")]
+
+
+def test_a_request_that_is_not_stepped_up_writes_nothing(client, ids):
+    master, sub, _ = new_pair(ids)
+    awaiting, _, _ = new_merge(ids)
+    for label, headers in not_stepped_variants(ids.people["front_desk_a"][0]):
+        r1 = _merge_post(client, headers, MERGES, {"clinic_id": str(ids.clinic_a), "master_patient_id": str(master), "subordinate_patient_id": str(sub)})
+        r2 = _merge_post(client, headers, APPROVE.format(merge_id=awaiting))
+        r3 = _merge_post(client, headers, UNMERGE.format(merge_id=awaiting))
+        assert [r.status_code for r in (r1, r2, r3)] == [401, 401, 401], label
+        assert all(r.headers["www-authenticate"] == "step-up" for r in (r1, r2, r3)), label
+    assert _run(_fetch("select count(*) as n from mpi.merges where master_patient_id = $1", master))[0]["n"] == 0
+    (row,) = _run(_fetch("select status from mpi.merges where id = $1", awaiting))
+    assert row["status"] == "awaiting_second_approval"
+
+
+def test_a_patient_in_another_clinic_looks_exactly_like_one_that_does_not_exist(client, ids):
+    master, _, _ = new_pair(ids)
+    other = _propose_as_fd(client, ids, master, ids.patient_b)
+    absent = _propose_as_fd(client, ids, master, uuid.uuid4())
+    assert (other.status_code, other.json(), other.headers.get("content-length")) == (absent.status_code, absent.json(), absent.headers.get("content-length"))
+    assert other.status_code == 404
+
+
+def test_merge_responses_carry_ids_and_statuses_only(client, ids):
+    master, sub, _ = new_pair(ids)
+    r = _propose_as_fd(client, ids, master, sub)
+    assert set(r.json()) == MERGE_KEYS and all(isinstance(v, (str, bool)) for v in r.json().values())
+
+
+def test_the_step_up_check_is_off_the_database_path_when_the_window_is_unset(ids):
+    """With no window configured the routes answer a visible 503 before touching the database, even for a stepped-up front desk token."""
+    settings = Settings(supabase_url=PROJECT, database_url_app=APP_URL or "", step_up_max_age_seconds=None)
+    unconfigured = create_app(settings, jwks=fake_jwks_client(), vault=TEST_VAULT)
+    master, sub, _ = new_pair(ids)
+    with TestClient(unconfigured, raise_server_exceptions=False) as c:
+        r = _merge_post(c, stepped(ids.people["front_desk_a"][0]), MERGES,
+                        {"clinic_id": str(ids.clinic_a), "master_patient_id": str(master), "subordinate_patient_id": str(sub)})
+    assert (r.status_code, r.json()) == (503, {"detail": "step-up re-authentication is not configured"})
+
+
+# ---- message reads: the committed half's behaviour -----------------------------------------------------------------------------------------
+
+
+def test_refused_message_reads_write_no_audit_row(client, ids):
+    actors = [ids.people[p][0] for p in ("nurse_a", "doctor_a", "front_desk_a", "admin_a")] + [ids.no_account]
+    for who in ("nurse_a", "doctor_a", "front_desk_a", "admin_a"):
+        r = client.get(READ.format(message_id=uuid.uuid4()), headers=bearer(mint(ids.people[who][0])))
+        assert (r.status_code, r.json()) == (404, {"detail": "not found"}), who
+        assert "cache-control" not in r.headers
+    rows = _run(_fetch("select count(*) as n from audit.log where action = 'message.read' and actor_id = any($1)", actors))
+    assert rows[0]["n"] == 0

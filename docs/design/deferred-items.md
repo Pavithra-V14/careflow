@@ -32,7 +32,47 @@ one, delete its line in the same change. Source of the first group: the msg / ia
   counsel.
 
 ## Waiting for a later phase or feature
-- **Staff message read route**: decrypts through `careflow/messages.py` only; adds its own role-matrix case in the same change.
+- **Unpinned single-column foreign keys**: found at the Phase 1 close-out and FIXED by migration 0014 (see `docs/design/phase1-status.md`).
+  Remaining small item from its review: a cross-clinic idempotency-key collision inside `queue.relay_outbox` (only a worker holding
+  `queue_worker` in two clinics can hit it) now surfaces as an untranslated `23503` database error instead of a clear queue error.
+- **Labeled-pair merge gate** (BUILD-SPEC 14.3, "no wrong patient merge on the labeled identity-matching pairs"): moved to Phase 5, needs
+  clinician-reviewed labels.
+- **Minute tick, immediate poke and the 12/25/40/40 s ceilings** (BUILD-SPEC 7.3, 7.4): moved to Phase 2 package P2-1 and built there
+  (`careflow/budget.py`, `careflow/tick.py`). Still open: no route calls the poke after enqueueing, and no handler exists.
+- **Per-clinic daily spend**: persisted in `ops.spend_ledger` (migration 0016) and read per origin by `careflow.spend.PostgresSpendLedger`;
+  the daily ceiling has no default and arrives by configuration (owner). Still open: a ledger cannot be corrected (append-only, no negative
+  amounts), so a mistaken entry needs the migrator; a reversal mechanism is a later change. The gateway is not yet constructed with the Postgres
+  ledger anywhere (no caller exists).
+- **Registry approver**: now enforced in the database (migration 0016). Still open: it proves the two accounts are eligible and different, NOT
+  that the approver consented; real attestation needs a signed-in approver action. A registry write path from the console would also need
+  audit rows.
+- **Uploads**: Supabase Storage behind an `UploadPort` instead of Uploadcare (accepted deviation, `docs/design/uploads-supabase-storage.md`);
+  no malware scanner exists, a pre-launch blocker, and real uploads stay disabled in `clinical` until one does.
+- **Prompt versioning**: `prompts/` and its scan exist; the version-and-content-hash loader and the "every model call records which prompt
+  version answered" part of BUILD-SPEC 17.4 arrive with the first prompt.
+- **`aal2` database policy** (a restrictive policy requiring `aal = 'aal2'` for sensitive tables): deferred. Staff second-factor
+  enrolment at login is enforced in frontend F2, not in the database.
+- **Key store**: environment variables stay (accepted); revisit when hosting is decided and the hosting provider's secret manager is known.
+- **Redis/SQS adapter stub** (BUILD-SPEC 7.4): accepted deviation, see `docs/design/phase1-status.md`.
+- **Step-up claim shape: required spike (Appendix B).** The merge routes read `aal` and `amr` entries of the form
+  `{"method": "totp", "timestamp": <int seconds>}`; that shape comes from documentation, not a real token. The owner enrols TOTP on
+  a dev staff account and pastes the `aal`/`amr`/`iat` claims; until then the step-up check is not verified.
+  See `docs/design/step-up-spike.md`.
+- **Around step-up**: enforcing MFA enrolment at first staff login; an `aal2` restrictive policy in the database; a clock-skew
+  allowance for a fresh timestamp (zero today); reuse of `require_step_up` for publish card/rule, autonomy-mode change, erasure and
+  role change when those routes exist.
+- **`STRONG_IDENTIFIERS` is reachable over HTTP** (`POST /v1/staff/patients`) and is pending Priya's sign-off; no real patient data
+  until it is recorded.
+- **The merge-propose idempotency key is global, not per clinic** (`mpi.merges.idempotency_key` is unique across the table). A client
+  in clinic B that reuses a key clinic A used gets a 409, which is a small existence oracle for client-chosen keys across clinics.
+  Revisit with the portal design (per-clinic key scope or a server-derived prefix). `identity.py` is unchanged.
+- **An unmerge replay reports `decisions_flagged` as 0** instead of the original count (`identity.py` returns 0 on the replay path; the
+  review task itself is returned correctly). Revisit when `identity.py` is next changed.
+- **Denied-access monitoring** (Phase 4 watchdog): repeated refused message reads by one actor. Refused reads (404/410) write no
+  audit row by decision; the route logs one line of ids only (message, actor, status), which is what the watchdog would count.
+- **Message read route, still open**: messages on the subordinate of an active merge are read by their own id (no routing to the
+  master yet); no list endpoint; no step-up (not listed in BUILD-SPEC 18.1). Admin, business owner and auditor have no read access to
+  message bodies by decision (the spec's "admin-only, every view audited" is about LLM prompt/response bodies).
 - **Application-level get-or-create for threads and messages** (`ON CONFLICT (idempotency_key) DO NOTHING`, then a keyed
   SELECT that compares thread, sender and clinic; a different key for the same patient and topic returns the existing
   thread; a message-id collision is an error): arrives with the route that writes them. The database half is tested.

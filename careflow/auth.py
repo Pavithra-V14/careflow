@@ -154,3 +154,49 @@ async def verify_token(token: str, keys: JWKSClient, *, issuer: str, leeway: flo
     if claims.get("role") != "authenticated":
         raise AuthError("token role is not 'authenticated'")
     return claims
+
+
+# ---- step-up re-authentication (BUILD-SPEC.md §18.1) ---------------------------------------------------------------------------------
+#
+# Sensitive actions (merge, ...) need a SECOND factor verified RECENTLY, even inside an active session. Supabase Auth records a verified
+# TOTP factor in the token as `aal: "aal2"` plus an `amr` entry stamped with the verification time, and a refresh keeps that stamp.
+#
+# APPENDIX B, UNVERIFIED: the shape below (`amr` = list of {"method": str, "timestamp": int-seconds}) comes from documentation, not from a
+# real token. It must be confirmed against a real dev staff token before any non-test code depends on it (docs/design/step-up-spike.md).
+# `_totp_verified_at` is the ONE place that knows the shape, so a correction is a one-place change. Anything else fails closed.
+
+STEP_UP_METHOD: Final = "totp"
+STEP_UP_AAL: Final = "aal2"
+
+
+def _totp_verified_at(claims: dict[str, Any]) -> int | str:
+    """The newest TOTP verification time (unix seconds) in the claims, or a failure reason code (a str) if the shape is not exactly the
+    documented one. Reason codes name the problem, never a claim value."""
+    amr = claims.get("amr")
+    if not isinstance(amr, list) or not amr:
+        return "amr_missing"
+    times: list[int] = []
+    for entry in amr:
+        if not isinstance(entry, dict) or set(entry) != {"method", "timestamp"}:
+            return "amr_malformed"
+        method, stamp = entry["method"], entry["timestamp"]
+        if not isinstance(method, str) or isinstance(stamp, bool) or not isinstance(stamp, int):
+            return "amr_malformed"
+        if method == STEP_UP_METHOD:
+            times.append(stamp)
+    return max(times) if times else "no_totp_entry"
+
+
+def step_up_failure(claims: dict[str, Any], *, max_age_seconds: int, now: float) -> str | None:
+    """None if the claims show a second factor verified within `max_age_seconds`; otherwise a reason code (for the log, never the client).
+    Pure: the clock is a parameter. A future timestamp is refused (no skew allowance). Missing or malformed anything is NOT stepped up."""
+    if claims.get("aal") != STEP_UP_AAL:
+        return "aal_not_aal2"
+    verified_at = _totp_verified_at(claims)
+    if isinstance(verified_at, str):
+        return verified_at
+    if verified_at > now:
+        return "timestamp_future"
+    if now - verified_at > max_age_seconds:
+        return "timestamp_expired"
+    return None

@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from careflow import rules
 from careflow.db import set_request_claims
 from careflow.rules import RedFlagEngine, evaluate_with
+from tests.db_helpers import ensure_app_role_sa
 
 ROOT = Path(__file__).resolve().parent.parent
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or dotenv_values(ROOT / ".env").get("DATABASE_URL_MIGRATOR")
@@ -65,7 +66,7 @@ async def _conn():
             ))).scalar_one()
             if n:  # read-only precondition; nothing is deleted
                 pytest.fail(f"This suite assumes the database holds NO committed approved origin='test' red-flag rule with criteria (it inserts its own inside a rolled-back transaction); found {n}. Such a rule changes what screenings and rule-set hashes the tests expect. Nothing was deleted: an engineer with the migrator credential must retire or remove those rules deliberately, then re-run.", pytrace=False)
-        await conn.exec_driver_sql("grant careflow_app to current_user with set true")
+        await ensure_app_role_sa(conn)
         if (await conn.execute(text("select to_regclass('kb.red_flag_rules') is null"))).scalar_one():
             await raw(conn, SQL_0007)
         # Message-sourced tasks and the screening function are 0013's (msg.* itself is 0011's, applied before this suite runs).
@@ -431,7 +432,7 @@ async def test_escalation_is_idempotent_and_distinct_per_message(db, engine):
     again = await act(db, w.worker, engine.escalate_red_flag, w.a, "test", result, "msg-1")
     other = await act(db, w.worker, engine.escalate_red_flag, w.a, "test", result, "msg-2")
     assert (again.replayed, again.task_id) == (True, first.task_id) and other.task_id != first.task_id
-    assert await one(db, "select count(*) from agents.review_tasks") == 2
+    assert await one(db, "select count(*) from agents.review_tasks where clinic_id = :c", c=w.a) == 2
 
 
 async def test_evaluate_and_escalate_records_a_screening_and_raises_a_task_only_for_a_red_flag(db, engine):
@@ -444,9 +445,9 @@ async def test_evaluate_and_escalate_records_a_screening_and_raises_a_task_only_
     assert evaluation.outcome == "red_flag" and result.outcome == "red_flag" and not result.replayed
     quiet, recorded = await act(db, w.worker, engine.evaluate_and_escalate, w.a, "test", "a quiet message", quiet_message, profile="clinical")
     assert quiet.outcome == "clear" and recorded.outcome == "clear"
-    assert await one(db, "select count(*) from agents.review_tasks") == 1
-    assert await one(db, "select kind from agents.review_tasks") == "red_flag"
-    assert await one(db, "select count(*) from msg.screenings") == 2
+    assert await one(db, "select count(*) from agents.review_tasks where clinic_id = :c", c=w.a) == 1
+    assert await one(db, "select kind from agents.review_tasks where clinic_id = :c", c=w.a) == "red_flag"
+    assert await one(db, "select count(*) from msg.screenings where clinic_id = :c", c=w.a) == 2
 
 
 async def test_evaluate_and_escalate_with_no_usable_rule_records_unassessable_and_raises_a_nurse_task(db, engine):
@@ -476,7 +477,7 @@ async def test_front_desk_cannot_screen_a_care_message(db, engine):
     message = await stored_message(db, w, topic="care")
     with pytest.raises(rules.NotPermitted):
         await act(db, w.fd, engine.evaluate_and_escalate, w.a, "test", TEXT, message, profile="clinical")
-    assert await one(db, "select count(*) from msg.screenings") == 0
+    assert await one(db, "select count(*) from msg.screenings where clinic_id = :c", c=w.a) == 0
 
 
 @pytest.mark.parametrize("who", ["worker", "nurse", "doctor"])  # not front desk since 0013: it screens through msg.record_screening
@@ -493,7 +494,7 @@ async def test_everyone_else_is_refused(db, engine, who):
     result = await flagged_evaluation(db, engine, w)
     with pytest.raises(rules.NotPermitted):
         await act(db, getattr(w, who) if who else None, engine.escalate_red_flag, w.a, "test", result, "msg-x")
-    assert await one(db, "select count(*) from agents.review_tasks") == 0
+    assert await one(db, "select count(*) from agents.review_tasks where clinic_id = :c", c=w.a) == 0
 
 
 async def test_the_database_makes_a_quiet_red_flag_task_impossible(db):

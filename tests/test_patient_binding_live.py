@@ -20,6 +20,8 @@ import pytest
 import pytest_asyncio
 from dotenv import dotenv_values
 
+from tests.db_helpers import ensure_app_role
+
 ROOT = Path(__file__).resolve().parent.parent
 _ENV = dotenv_values(ROOT / ".env")
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or _ENV.get("DATABASE_URL_MIGRATOR")
@@ -112,7 +114,7 @@ async def _conn():
     tx = conn.transaction()
     await tx.start()
     try:
-        await conn.execute("grant careflow_app to current_user with set true")
+        await ensure_app_role(conn)
         if await conn.fetchval("select to_regprocedure('mpi.guard_patient_account()') is null"):
             await conn.execute(SQL_0012)
         await conn.execute(HELPERS)

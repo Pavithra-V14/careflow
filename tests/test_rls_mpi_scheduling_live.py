@@ -38,6 +38,9 @@ import pytest
 import pytest_asyncio
 from dotenv import dotenv_values
 
+from tests.bounds import bounded
+from tests.db_helpers import ensure_app_role
+
 ROOT = Path(__file__).resolve().parent.parent
 _ENV = dotenv_values(ROOT / ".env")
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or _ENV.get("DATABASE_URL_MIGRATOR")
@@ -144,7 +147,7 @@ async def _conn():
     try:
         # The migrator may not SET ROLE to careflow_app by default; grant that inside this
         # transaction only (it is never committed).
-        await conn.execute("grant careflow_app to current_user with set true")
+        await ensure_app_role(conn)
         if await conn.fetchval("select to_regclass('mpi.patients') is null"):
             await conn.execute(SQL_0002)
         # The column privileges these tests describe are 0012's: load it inside this never-committed transaction if needed.
@@ -289,7 +292,7 @@ async def test_every_other_identity_cannot_insert_a_patient(db):
     a, _, p = await seed(db)
     res = await try_each(db, [p[w] for w in OTHERS] + [None], new_patient_sql(a))  # None = unauthenticated
     assert set(res.values()) == {RLS_DENIED}, res  # new row violates row-level security policy
-    assert await db.fetchval("select count(*) from mpi.patients") == 0
+    assert await db.fetchval("select count(*) from mpi.patients where clinic_id = $1", a) == 0
 
 
 async def test_only_front_desk_of_the_clinic_can_update_a_patient(db):
@@ -632,7 +635,7 @@ async def test_many_simultaneous_writers_for_one_window_produce_exactly_one_slot
         finally:
             await conn.close()
 
-    results = await asyncio.gather(*(attempt(i) for i in range(8)))
+    results = await bounded(asyncio.gather(*(attempt(i) for i in range(8))), "the concurrent overlapping slot writes")
     assert results.count("won") == 1
     assert results.count("blocked") == 7
     assert await _slot_count(clinic) == 1

@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from careflow import scheduling as sch
 from careflow.db import set_request_claims
 from careflow.scheduling import SlotManager
+from tests.db_helpers import ensure_app_role_sa
 
 ROOT = Path(__file__).resolve().parent.parent
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or dotenv_values(ROOT / ".env").get("DATABASE_URL_MIGRATOR")
@@ -64,7 +65,7 @@ async def _conn():
     conn = await engine.connect()
     outer = await conn.begin()
     try:
-        await conn.exec_driver_sql("grant careflow_app to current_user with set true")
+        await ensure_app_role_sa(conn)
         if (await conn.execute(text("select to_regclass('sched.holds') is null"))).scalar_one():
             await raw(conn, SQL_0004)
         # 0005 narrows the app role's UPDATE on priority_levels; if it is not applied yet, apply it here too.
@@ -231,7 +232,7 @@ async def test_hold_replay_and_conflict(db, mgr):
     first = await act(db, w.fd, mgr.hold_slot, w.slots[0], 15, idempotency_key=key)
     again = await act(db, w.fd, mgr.hold_slot, w.slots[0], 15, idempotency_key=key)
     assert (again.replayed, again.hold_id) == (True, first.hold_id)
-    assert await one(db, "select count(*) from sched.holds") == 1
+    assert await one(db, "select count(*) from sched.holds where clinic_id = :c", c=w.a) == 1
     with pytest.raises(sch.IdempotencyConflict):
         await act(db, w.fd, mgr.hold_slot, w.slots[1], 15, idempotency_key=key)  # same key, different slot
     with pytest.raises(sch.IdempotencyConflict):
@@ -308,7 +309,7 @@ async def test_a_slot_held_for_one_patient_cannot_be_booked_for_another(db, mgr)
     await act(db, w.fd, mgr.hold_slot, w.slots[0], 15, idempotency_key=_key(), patient_id=w.patients[0])
     with pytest.raises(sch.SlotUnavailable):
         await act(db, w.fd, mgr.book_appointment, w.slots[0], w.patients[1], _key())
-    assert await one(db, "select count(*) from sched.bookings") == 0
+    assert await one(db, "select count(*) from sched.bookings where clinic_id = :c", c=w.a) == 0
 
 
 async def test_an_expired_hold_for_someone_else_no_longer_blocks_booking(db, mgr):
@@ -326,12 +327,12 @@ async def test_booking_replay_returns_the_original_and_an_altered_request_confli
     first = await act(db, w.fd, mgr.book_appointment, w.slots[0], w.patients[0], key)
     again = await act(db, w.fd, mgr.book_appointment, w.slots[0], w.patients[0], key)
     assert (again.replayed, again.booking_id, again.status) == (True, first.booking_id, "confirmed")
-    assert await one(db, "select count(*) from sched.bookings") == 1
+    assert await one(db, "select count(*) from sched.bookings where clinic_id = :c", c=w.a) == 1
     with pytest.raises(sch.IdempotencyConflict):
         await act(db, w.fd, mgr.book_appointment, w.slots[0], w.patients[1], key)  # altered patient
     with pytest.raises(sch.IdempotencyConflict):
         await act(db, w.fd, mgr.book_appointment, w.slots[1], w.patients[0], key)  # altered slot
-    assert await one(db, "select count(*) from sched.bookings") == 1
+    assert await one(db, "select count(*) from sched.bookings where clinic_id = :c", c=w.a) == 1
 
 
 async def test_a_booked_slot_cannot_be_booked_again_by_the_engine_or_the_database(db, mgr):
@@ -405,9 +406,9 @@ async def test_clinical_priority_overrides_waiting_time_when_a_slot_frees_up(db,
     # Within one priority level the longer wait goes first.
     assert result.candidates[0].joined_at < result.candidates[1].joined_at
     # Ranking only: nobody was held, booked or changed by the cancellation.
-    assert await one(db, "select count(*) from sched.holds") == 0
-    assert await one(db, "select count(*) from sched.bookings where status = 'confirmed'") == 0
-    assert await one(db, "select count(*) from sched.waitlist where status = 'waiting'") == 4
+    assert await one(db, "select count(*) from sched.holds where clinic_id = :c", c=w.a) == 0
+    assert await one(db, "select count(*) from sched.bookings where status = 'confirmed' and clinic_id = :c", c=w.a) == 0
+    assert await one(db, "select count(*) from sched.waitlist where status = 'waiting' and clinic_id = :c", c=w.a) == 4
     assert await one(db, "select status from sched.slots where id = :s", s=w.slots[0]) == "open"
 
 
@@ -446,7 +447,7 @@ async def test_waitlist_requires_a_defined_priority_and_has_no_default(db, mgr):
         await act(db, w.fd, mgr.join_waitlist, w.patients[1], w.vt, "made_up", idempotency_key=_key())
     with pytest.raises(sch.SchedulingError):
         await act(db, w.fd, mgr.join_waitlist, w.patients[1], w.vt, "", idempotency_key=_key())
-    assert await one(db, "select count(*) from sched.waitlist") == 0
+    assert await one(db, "select count(*) from sched.waitlist where clinic_id = :c", c=w.a) == 0
 
 
 async def test_waitlist_idempotency_and_single_waiting_entry(db, mgr):
@@ -579,7 +580,7 @@ async def test_a_doctor_can_only_sign_off_as_themselves(db, mgr):
     for forged in (other_doctor, w.admin, w.fd):
         with pytest.raises(DBAPIError, match="row-level security"):
             await act(db, w.doctor, _insert_level, w.a, "tier_forged", 7, forged)
-    assert [r.code for r in await q(db, "select code from sched.priority_levels")] == ["tier_a"]
+    assert [r.code for r in await q(db, "select code from sched.priority_levels where clinic_id = :c", c=w.a)] == ["tier_a"]
 
 
 async def test_the_approver_and_the_ranking_cannot_be_changed_by_the_app_role(db, mgr):
@@ -588,7 +589,7 @@ async def test_the_approver_and_the_ranking_cannot_be_changed_by_the_app_role(db
     for column, value in (("approved_by", w.admin), ("approved_at", None), ("rank", 5), ("code", "tier_z"), ("clinic_id", w.b)):
         with pytest.raises(DBAPIError, match="permission denied"):
             await act(db, w.doctor, _set_level_column, column, value)
-    row = (await q(db, "select approved_by, rank, code from sched.priority_levels"))[0]
+    row = (await q(db, "select approved_by, rank, code from sched.priority_levels where clinic_id = :c", c=w.a))[0]
     assert (row.approved_by, row.rank, row.code) == (w.doctor, 1, "tier_a")
 
 
@@ -603,7 +604,7 @@ async def test_a_doctor_can_still_relabel_or_retire_a_level(db, mgr):
     w = await world(db)
     await act(db, w.doctor, _insert_level, w.a, "tier_a", 1, w.doctor)
     await act(db, w.doctor, _relabel)
-    row = (await q(db, "select label, active, approved_by from sched.priority_levels"))[0]
+    row = (await q(db, "select label, active, approved_by from sched.priority_levels where clinic_id = :c", c=w.a))[0]
     assert (row.label, row.active, row.approved_by) == ("renamed", False, w.doctor)
     for who in (w.fd, w.nurse, w.admin):  # still doctor-only
         assert await act(db, who, _relabel) == 0

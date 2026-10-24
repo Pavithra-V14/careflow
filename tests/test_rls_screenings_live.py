@@ -25,6 +25,7 @@ import pytest_asyncio
 from dotenv import dotenv_values
 
 from careflow import rules
+from tests.db_helpers import ensure_app_role
 
 ROOT = Path(__file__).resolve().parent.parent
 _ENV = dotenv_values(ROOT / ".env")
@@ -151,7 +152,7 @@ async def _conn():
         )
         if n:  # read-only precondition; nothing is deleted
             pytest.fail(f"This suite assumes the database holds NO committed approved origin='test' red-flag rule with criteria (it inserts its own inside a rolled-back transaction); found {n}. Such a rule changes what screenings and rule-set hashes the tests expect. Nothing was deleted: an engineer with the migrator credential must retire or remove those rules deliberately, then re-run.", pytrace=False)
-        await conn.execute("grant careflow_app to current_user with set true")
+        await ensure_app_role(conn)
         if await conn.fetchval("select to_regclass('msg.screenings') is null"):
             await conn.execute(SQL_0013)
         await conn.execute(HELPERS)

@@ -4,8 +4,8 @@
 `msg.messages.body_ct` holds ciphertext only (migration 0011). This module is the ONLY one, besides
 `careflow/crypto.py` (which defines the primitive) and `careflow/rotation.py` (which re-encrypts under a new key
 version), that may call `DemographicVault.decrypt_message_body`; `tests/test_messages.py` enforces that with an AST
-scan. There is deliberately no read route yet: when a staff read route is added it calls `decrypt_body` here, and it
-adds its own case to the role-matrix test in the same change.
+scan. The staff read route (GET /v1/staff/messages/{id}) goes through `read_stored_message` below, which decrypts and writes the
+audit row in one call.
 
 What this module never does: log a body, put a body in an exception message, return a body from anything but
 `decrypt_body`, or keep one after the call. Errors name the problem ("too long", "blank"), never the text.
@@ -15,6 +15,7 @@ The length cap is a technical guard (it bounds the ciphertext column and the wor
 `octet_length(body_ct) <= 40100` CHECK in 0011.
 """
 
+import json
 import uuid
 from dataclasses import dataclass, field
 from typing import Final
@@ -166,3 +167,89 @@ async def screen_stored_message(
         await conn.execute(text("select patient_reply from msg.screenings where id = :s"), {"s": result.screening_id})
     ).scalar_one_or_none()
     return ScreenedMessage(message_id, result.screening_id, result.outcome, result.replayed, reply, row.clinic_id, unreadable)
+
+
+# ---- reading a stored message: decrypt, audit, return (staff read route D4) -------------------------------------------------------------
+
+
+class MessageUnreadable(MessageError):
+    """The body exists and the caller may see it, but it cannot be decrypted. Carries ids and an error CLASS NAME only, for the route's
+    log line; `reason` is 'UnknownKeyVersionError' (a key version this process does not have) or 'DecryptionError' (tampered or mis-bound)."""
+
+    def __init__(self, message_id: uuid.UUID, clinic_id: uuid.UUID, reason: str) -> None:
+        super().__init__("the message body could not be read")
+        self.message_id, self.clinic_id, self.reason = message_id, clinic_id, reason
+
+
+@dataclass(frozen=True)
+class ReadMessage:
+    """A decrypted message for an authorised staff caller. `repr` hides the body so it cannot reach a log line by accident."""
+
+    message_id: uuid.UUID
+    thread_id: uuid.UUID
+    clinic_id: uuid.UUID
+    topic: str
+    sender_kind: str
+    body: str = field(repr=False)
+
+
+# Who may read which topic is decided by row-level security on msg.messages (0011), not here. This only NAMES the role that let the caller
+# in, for the audit row, and fails closed (as "not found") if none of the caller's active grants qualifies.
+_READER_PRIORITY: Final = ("nurse", "doctor", "front_desk")
+
+
+async def read_stored_message(conn: AsyncConnection, vault: DemographicVault, message_id: uuid.UUID, *, actor_id: uuid.UUID) -> ReadMessage:
+    """Return a stored message's text to an authorised staff caller and record that they read it (BUILD-SPEC.md 9.4 audit principle).
+
+    Order, all in the caller's one transaction: find the row under RLS (an invisible and a missing message are both MessageNotFound), refuse
+    an erased one (MessageErased), name the role that authorised the read, DECRYPT, then insert the `audit.log` row (ids only, never text,
+    key `message-read:<uuid4>`: one row per successful read, so a repeated read is logged again). If the decrypt or the audit insert fails
+    nothing is returned and the transaction rolls back, so a body is never handed out without its audit row. Refusals write no audit row.
+    """
+    row = (
+        await conn.execute(
+            text(
+                "select id, clinic_id, origin, topic, thread_id, sender_kind, body_ct, body_key_version, erased_at "
+                "from msg.messages where id = :i"
+            ),
+            {"i": message_id},
+        )
+    ).first()
+    if row is None:
+        raise MessageNotFound("message not found")
+    if row.erased_at is not None or row.body_ct is None:
+        raise MessageErased("the message body was erased")
+    roles = {
+        r[0]
+        for r in (
+            await conn.execute(
+                text(
+                    "select sr.role from iam.staff_roles sr join iam.accounts a on a.id = sr.account_id "
+                    "where sr.account_id = :u and sr.clinic_id = :c and sr.revoked_at is null "
+                    "and a.status = 'active' and a.account_type = 'staff' "
+                    "and (sr.role in ('nurse', 'doctor') or (sr.role = 'front_desk' and cast(:t as text) in ('appointments', 'safety')))"
+                ),
+                {"u": actor_id, "c": row.clinic_id, "t": row.topic},
+            )
+        ).all()
+    }
+    role = next((r for r in _READER_PRIORITY if r in roles), None)
+    if role is None:
+        raise MessageNotFound("message not found")
+    try:
+        plaintext = decrypt_body(
+            vault, row.body_ct, clinic_id=row.clinic_id, thread_id=row.thread_id, message_id=row.id, key_version=row.body_key_version
+        )
+    except (UnknownKeyVersionError, DecryptionError) as exc:
+        raise MessageUnreadable(row.id, row.clinic_id, type(exc).__name__) from None  # the class only: never the exception text
+    await conn.execute(
+        text(
+            "insert into audit.log (origin, clinic_id, actor_id, actor_role, action, resource_type, resource_id, details, idempotency_key) "
+            "values (:o, :c, :a, :r, 'message.read', 'msg.messages', :m, cast(:d as jsonb), :k)"
+        ),
+        {
+            "o": row.origin, "c": row.clinic_id, "a": actor_id, "r": role, "m": str(row.id),
+            "d": json.dumps({"thread_id": str(row.thread_id), "topic": row.topic}), "k": f"message-read:{uuid.uuid4()}",
+        },
+    )
+    return ReadMessage(row.id, row.thread_id, row.clinic_id, row.topic, row.sender_kind, plaintext)

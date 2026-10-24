@@ -27,6 +27,8 @@ import pytest
 import pytest_asyncio
 from dotenv import dotenv_values
 
+from tests.db_helpers import ensure_app_role
+
 ROOT = Path(__file__).resolve().parent.parent
 _ENV = dotenv_values(ROOT / ".env")
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or _ENV.get("DATABASE_URL_MIGRATOR")
@@ -154,7 +156,7 @@ async def _conn():
     tx = conn.transaction()
     await tx.start()
     try:
-        await conn.execute("grant careflow_app to current_user with set true")
+        await ensure_app_role(conn)
         if await conn.fetchval("select to_regclass('msg.threads') is null"):
             await conn.execute(SQL_0011)
         # 0013 widens the message INSERT policy to sender_kind 'patient' and adds msg.screenings: these tests describe that state.
@@ -569,6 +571,8 @@ async def test_thread_insert_blocks_while_a_patient_erasure_holds_the_row_lock()
     setup = await asyncpg.connect(url, statement_cache_size=0, timeout=20)
     erasure = await asyncpg.connect(url, statement_cache_size=0, timeout=20)
     writer = await asyncpg.connect(url, statement_cache_size=0, timeout=20)
+    for session in (setup, erasure, writer):  # no statement here may wait longer than this, whatever another session holds
+        await session.execute("set statement_timeout = '20s'; set lock_timeout = '10s'")
     clinic, nurse, patient = _u(), _u(), _u()
     try:
         await setup.execute(
@@ -591,6 +595,7 @@ async def test_thread_insert_blocks_while_a_patient_erasure_holds_the_row_lock()
         await erasure.execute("rollback")
         await writer.execute("begin")
         await writer.execute("select set_config('request.jwt.claims', $1, true)", json.dumps({"sub": str(nurse), "role": "authenticated"}))
+        await writer.execute("set local lock_timeout = '5s'")
         await writer.execute(insert)
         await writer.execute("rollback")
     finally:
@@ -638,7 +643,12 @@ async def test_append_only_trigger_blocks_edits_even_for_the_owner(db):
     assert await fails(db, f"update msg.messages set recorded_by = '{w.people['doctor_a']}' where id = '{mid}'") == "23001"
     assert await fails(db, f"update msg.messages set created_at = now() where id = '{mid}'") == "23001"
     assert await fails(db, f"delete from msg.messages where id = '{mid}'") == "23001"
-    assert await fails(db, "truncate msg.messages") == "23001"
+    # A plain TRUNCATE of msg.messages is refused by the foreign key from msg.screenings (0013) BEFORE any BEFORE TRUNCATE trigger runs:
+    # SQLSTATE 0A000, observed on the dev project. It is still refused; the trigger is just not the thing that stops it.
+    assert await fails(db, "truncate msg.messages") == "0A000"
+    # Naming the referencing table too gets past the foreign-key check and reaches the append-only triggers, which refuse it with
+    # restrict_violation (both msg.messages and msg.screenings raise it). This keeps the trigger itself under test.
+    assert await fails(db, "truncate msg.messages, msg.screenings") == "23001"
 
 
 async def test_erasure_transition_is_the_only_edit_and_changes_nothing_else(db):

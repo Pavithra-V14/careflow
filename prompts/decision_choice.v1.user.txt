@@ -1,0 +1,5 @@
+Question type: {question_type}
+Options:
+{options_block}
+Input text:
+{input_text}
