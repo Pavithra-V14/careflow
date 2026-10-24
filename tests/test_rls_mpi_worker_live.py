@@ -111,14 +111,14 @@ async def count(conn, table, clinic):
 
 
 async def attempt(conn, uid, sql, **params):
-    """Run one statement as `uid` in a savepoint; return (rowcount) or the SQLSTATE of the failure."""
+    """Run one statement as `uid` in a savepoint; return its rowcount, or the SQLSTATE of the failure. No `reset role` after an error: rolling the savepoint back
+    undoes `set local role`, and a RESET inside an aborted transaction would replace the real error with 25P02."""
     try:
         async with conn.begin_nested():
             await as_user(conn, uid)
-            try:
-                return (await conn.execute(text(sql), params)).rowcount
-            finally:
-                await conn.exec_driver_sql("reset role")
+            rowcount = (await conn.execute(text(sql), params)).rowcount
+            await conn.exec_driver_sql("reset role")
+            return rowcount
     except DBAPIError as exc:
         return getattr(exc.orig, "sqlstate", None)
 
@@ -169,23 +169,56 @@ async def test_the_worker_of_another_clinic_cannot_register_into_this_one_and_se
             await db.exec_driver_sql("reset role")
 
 
-async def test_the_worker_cannot_update_or_delete_anything_in_mpi_and_cannot_write_merges(db, pipeline):
-    a, _, p = await seed(db)
-    r = await ingest(db, pipeline, p["worker_a"], a)
-    w = p["worker_a"]
-    assert await attempt(db, w, "update mpi.patients set name_key_version = 2 where id = :i", i=r.patient_id) == 0  # RLS filters the row: nothing updated
-    assert await attempt(db, w, "update mpi.patients set erased_at = now() where id = :i", i=r.patient_id) == 0
-    assert await attempt(db, w, "update mpi.identity_tokens set key_version = 2 where patient_id = :i", i=r.patient_id) == 0
-    assert await attempt(db, w, "update mpi.match_candidates set status = 'rejected' where clinic_id = :c", c=a) == 0
-    for table in ("mpi.patients", "mpi.identity_tokens", "mpi.match_candidates", "mpi.merges"):
-        assert await attempt(db, w, f"delete from {table}") == "42501", table  # there is no DELETE privilege at all
+async def test_the_worker_cannot_update_or_delete_anything_in_mpi_and_cannot_write_merges_and_the_probes_act_on_real_rows(db, pipeline):
+    a, b, p = await seed(db)
+    first = await ingest(db, pipeline, p["worker_a"], a)
+    near = await ingest(db, pipeline, p["worker_a"], a, phone="+91 91234 56789")  # a real possible-duplicate row exists
+    assert near.candidate_ids == (first.patient_id,)
+    fd, w = p["fd_a"], p["worker_a"]
     merge = (
         "insert into mpi.merges (clinic_id, master_patient_id, subordinate_patient_id, approved_by, origin, idempotency_key, status) "
-        "values (:c, :m, :s, :u, 'test', 'm-1', 'awaiting_second_approval')"
+        "values (:c, :m, :s, :u, 'test', :k, 'awaiting_second_approval')"
     )
-    assert await attempt(db, w, merge, c=a, m=r.patient_id, s=r.patient_id, u=w) == "42501"
-    assert await attempt(db, w, "update mpi.merges set status = 'active'") == 0
-    assert await attempt(db, w, "update mpi.patients set account_id = :u where id = :i", u=w, i=r.patient_id) == "42501"  # 0012 keeps account_id out of reach
+    assert await attempt(db, fd, merge, c=a, m=first.patient_id, s=near.patient_id, u=fd, k="m-fd") == 1  # a real pending merge, proposed by a person
+    # positive controls: the same statements, as front desk, DO change rows, so a 0 for the worker means the policy filtered them
+    assert await attempt(db, fd, "update mpi.patients set name_key_version = name_key_version where id = :i", i=first.patient_id) == 1
+    assert await attempt(db, fd, "update mpi.match_candidates set status = status where clinic_id = :c", c=a) == 1
+    # the worker: nothing is updatable (RLS filters the rows; there is no error)
+    assert await attempt(db, w, "update mpi.patients set name_key_version = 2 where id = :i", i=first.patient_id) == 0
+    assert await attempt(db, w, "update mpi.patients set erased_at = now() where id = :i", i=first.patient_id) == 0
+    assert await attempt(db, w, "update mpi.identity_tokens set key_version = 2 where patient_id = :i", i=first.patient_id) == 0
+    assert await attempt(db, w, "update mpi.match_candidates set status = 'resolved', resolved_at = now() where clinic_id = :c", c=a) == 0
+    assert await attempt(db, w, "update mpi.merges set status = 'active' where clinic_id = :c", c=a) == 0
+    # no DELETE privilege exists on any of them
+    for table in ("mpi.patients", "mpi.identity_tokens", "mpi.match_candidates", "mpi.merges"):
+        assert await attempt(db, w, f"delete from {table}") == "42501", table
+    # merges stay human: the worker cannot propose one between two real, distinct patients
+    assert await attempt(db, w, merge, c=a, m=near.patient_id, s=first.patient_id, u=w, k="m-worker") == "42501"
+    # the worker cannot write an already-resolved possible duplicate (that would close a human review)
+    cand = (
+        "insert into mpi.match_candidates (clinic_id, patient_id, candidate_patient_id, matched_kinds, reason, status, resolved_at, origin, idempotency_key) "
+        "values (:c, :p, :o, array['phone'], 'near_match', 'resolved', now(), 'test', 'cand-resolved')"
+    )
+    assert await attempt(db, w, cand, c=a, p=first.patient_id, o=near.patient_id) == "42501"
+    # account_id stays out of reach of INSERT and UPDATE (0012)
+    assert await attempt(db, w, "update mpi.patients set account_id = :u where id = :i", u=w, i=first.patient_id) == "42501"
+    insert_bound = (
+        "insert into mpi.patients (clinic_id, name_ct, name_key_version, dob_ct, dob_key_version, origin, idempotency_key, account_id) "
+        "values (:c, '\\x01'::bytea, 1, '\\x01'::bytea, 1, 'test', 'bound-1', :u)"
+    )
+    assert await attempt(db, w, insert_bound, c=a, u=w) == "42501"
+    # another clinic: a row with clinic B's id from clinic A's worker
+    insert_b = (
+        "insert into mpi.patients (clinic_id, name_ct, name_key_version, dob_ct, dob_key_version, origin, idempotency_key) "
+        "values (:c, '\\x01'::bytea, 1, '\\x01'::bytea, 1, 'test', 'cross-1')"
+    )
+    assert await attempt(db, w, insert_b, c=b) == "42501"
+    # no conflict-driven overwrite either: ON CONFLICT DO UPDATE needs an UPDATE policy the worker lacks
+    upsert = (
+        "insert into mpi.patients (id, clinic_id, name_ct, name_key_version, dob_ct, dob_key_version, origin, idempotency_key) "
+        "values (:i, :c, '\\x01'::bytea, 1, '\\x01'::bytea, 1, 'test', 'upsert-1') on conflict (id) do update set name_key_version = 9"
+    )
+    assert await attempt(db, w, upsert, i=first.patient_id, c=a) == "42501"
 
 
 async def test_the_other_roles_are_unchanged_nurse_cannot_register_front_desk_still_can(db, pipeline):

@@ -25,3 +25,14 @@ def test_there_is_no_update_or_delete_policy_no_policy_on_merges_for_writing_and
     low = CODE.lower()
     assert "grant " not in low and "revoke " not in low and "alter table" not in low and "drop " not in low and "disable row level security" not in low
     assert not re.search(r"insert\s+into|update\s+mpi|delete\s+from", low)
+
+
+def test_nothing_unparsed_slipped_in_exactly_seven_create_policy_statements_and_no_function_trigger_or_definer():
+    low = CODE.lower()
+    assert len(re.findall(r"create\s+policy", low)) == 7 and len(POLICIES) == 7
+    assert "create function" not in low and "create trigger" not in low and "security definer" not in low and "as restrictive" not in low
+
+
+def test_the_worker_cannot_insert_a_resolved_possible_duplicate():
+    body = next(b for n, _, _, _, b in POLICIES if n == "match_candidates_insert_worker")
+    assert "status = 'pending'" in body and "resolved_at is null" in body and "resolved_by is null" in body
