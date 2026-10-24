@@ -158,3 +158,10 @@ the **thread** row, not the message row, so key rotation can never stall an esca
 - P2-5: the wiring package (P2-8) must read facts only through `rule_value()`/`usable_by_rules` (`GroundedFact.value` is readable directly); add an end-to-end gate then. Tier 2 offers two options (`supported`/`not_supported`), not accept/verify/reject.
 - P2-6: scope keys (clinic/status) are not enforced beyond non-empty; define them with the card schema. Re-verify scope at the join (Postgres truth does not take it yet). The BM25-only version check is fixed (16782ae).
 - P2-7: extractor data-flow entry and gateway data class when the extractor is wired.
+
+## Owner decisions of 2026-10-24 on those items
+- DONE: `DocumentIntake.read_verified` re-hashes (size and sha256) before any worker gets the bytes and refuses `ContentChanged` (covers the overwrite window). Every future reader of a document MUST go through it.
+- DONE: `check_readiness(..., malware_scanner_configured=False)`: clinical (and any unrecognised profile) is not ready without a scanner; `/readyz` passes `app.state.malware_scanner_configured`, which nothing sets.
+- STAYS on the future-route list: force `registered_by` to the caller's `auth.uid()`.
+- Appendix B now lists the signed-upload overwrite/validity spike (appended, no existing text changed).
+- Retrieval scope keys: wait for the card schema.
