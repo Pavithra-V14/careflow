@@ -141,9 +141,9 @@ async def q(conn, sql, **params):
     return (await conn.execute(text(sql), params)).all()
 
 
-async def count(conn, table, clinic=None):
-    sql = f"select count(*) from {table}" + (" where clinic_id = :c" if clinic else "")
-    return (await q(conn, sql, **({"c": clinic} if clinic else {})))[0][0]
+async def count(conn, table, clinic):
+    """Rows of `table` for ONE clinic. Never a whole-table count: other sessions may have committed rows for other clinics (CI runs shards in parallel)."""
+    return (await q(conn, f"select count(*) from {table} where clinic_id = :c", c=clinic))[0][0]
 
 
 # ---- no match -> create ----------------------------------------------------------------------------
@@ -192,10 +192,10 @@ async def test_absent_phone_is_a_database_null_not_an_empty_value(db, pipeline):
 async def test_duplicate_submission_returns_the_existing_record_and_writes_nothing(db, pipeline):
     a, _, p = await seed(db)
     first = await ingest(db, pipeline, p["fd_a"], **person(a))
-    before = (await count(db, "mpi.patients"), await count(db, "mpi.identity_tokens"), await count(db, "mpi.match_candidates"))
+    before = (await count(db, "mpi.patients", a), await count(db, "mpi.identity_tokens", a), await count(db, "mpi.match_candidates", a))
     again = await ingest(db, pipeline, p["fd_a"], **person(a, name="  asha   VENKATESH ", phone="098765-43210"))
     assert (again.outcome, again.patient_id, again.candidate_ids) == ("matched", first.patient_id, ())
-    assert (await count(db, "mpi.patients"), await count(db, "mpi.identity_tokens"), await count(db, "mpi.match_candidates")) == before
+    assert (await count(db, "mpi.patients", a), await count(db, "mpi.identity_tokens", a), await count(db, "mpi.match_candidates", a)) == before
 
 
 # ---- near match -> new record + human review, never a merge ----------------------------------------
@@ -213,7 +213,7 @@ async def test_same_phone_different_person_creates_a_new_record_and_queues_revie
     assert (m["candidate_patient_id"], m["matched_kinds"], m["reason"], m["status"]) == (
         first.patient_id, ["phone"], "near_match", "pending",
     )
-    assert await count(db, "mpi.patients") == 2  # nothing merged
+    assert await count(db, "mpi.patients", a) == 2  # nothing merged
     assert await q(db, "select name_ct, dob_ct, phone_ct from mpi.patients where id = :i", i=first.patient_id) == snapshot
 
 
@@ -276,7 +276,7 @@ async def test_retry_with_the_same_key_replays_the_original_result(db, pipeline)
     assert created.outcome == "review"
     replay = await ingest(db, pipeline, p["fd_a"], idempotency_key=key, **person(a, name="Ravi Kumar", dob="1990-01-15"))
     assert (replay.outcome, replay.patient_id, replay.candidate_ids) == ("replayed", created.patient_id, (first.patient_id,))
-    assert await count(db, "mpi.patients") == 2 and await count(db, "mpi.match_candidates") == 1
+    assert await count(db, "mpi.patients", a) == 2 and await count(db, "mpi.match_candidates", a) == 1
 
 
 async def test_reusing_a_key_for_a_different_person_is_a_conflict_not_a_replay(db, pipeline):
@@ -304,7 +304,7 @@ async def test_the_same_person_in_another_clinic_is_a_separate_record_with_no_cr
     in_b = await ingest(db, pipeline, p["fd_b"], **person(b))
     assert (in_b.outcome, in_b.candidate_ids) == ("created", ())
     assert in_a.patient_id != in_b.patient_id
-    assert await count(db, "mpi.match_candidates") == 0
+    assert await count(db, "mpi.match_candidates", a) == 0 and await count(db, "mpi.match_candidates", b) == 0
     # tokens are keyed per clinic row, and a clinic-B front desk cannot see clinic A's records at all
     async with db.begin_nested():
         await db.exec_driver_sql("set local role careflow_app")
@@ -318,7 +318,7 @@ async def test_front_desk_cannot_register_into_another_clinic(db, pipeline):
     _, b, p = await seed(db)
     with pytest.raises(mpi.NotPermitted):
         await ingest(db, pipeline, p["fd_a"], **person(b))
-    assert await count(db, "mpi.patients") == 0
+    assert await count(db, "mpi.patients", b) == 0
 
 
 @pytest.mark.parametrize("who", ["nurse_a", "auditor_a", None])
@@ -326,7 +326,7 @@ async def test_only_front_desk_can_register_patients(db, pipeline, who):
     a, _, p = await seed(db)
     with pytest.raises(mpi.NotPermitted):
         await ingest(db, pipeline, p[who] if who else None, **person(a))
-    assert await count(db, "mpi.patients") == 0
+    assert await count(db, "mpi.patients", a) == 0
 
 
 async def test_a_record_from_another_origin_never_matches(db, pipeline):

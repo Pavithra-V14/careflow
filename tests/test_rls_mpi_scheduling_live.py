@@ -291,7 +291,7 @@ async def test_every_other_identity_cannot_insert_a_patient(db):
     a, _, p = await seed(db)
     res = await try_each(db, [p[w] for w in OTHERS] + [None], new_patient_sql(a))  # None = unauthenticated
     assert set(res.values()) == {RLS_DENIED}, res  # new row violates row-level security policy
-    assert await db.fetchval("select count(*) from mpi.patients") == 0
+    assert await db.fetchval("select count(*) from mpi.patients where clinic_id = $1", a) == 0
 
 
 async def test_only_front_desk_of_the_clinic_can_update_a_patient(db):

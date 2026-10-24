@@ -431,7 +431,7 @@ async def test_escalation_is_idempotent_and_distinct_per_message(db, engine):
     again = await act(db, w.worker, engine.escalate_red_flag, w.a, "test", result, "msg-1")
     other = await act(db, w.worker, engine.escalate_red_flag, w.a, "test", result, "msg-2")
     assert (again.replayed, again.task_id) == (True, first.task_id) and other.task_id != first.task_id
-    assert await one(db, "select count(*) from agents.review_tasks") == 2
+    assert await one(db, "select count(*) from agents.review_tasks where clinic_id = :c", c=w.a) == 2
 
 
 async def test_evaluate_and_escalate_records_a_screening_and_raises_a_task_only_for_a_red_flag(db, engine):
@@ -444,9 +444,9 @@ async def test_evaluate_and_escalate_records_a_screening_and_raises_a_task_only_
     assert evaluation.outcome == "red_flag" and result.outcome == "red_flag" and not result.replayed
     quiet, recorded = await act(db, w.worker, engine.evaluate_and_escalate, w.a, "test", "a quiet message", quiet_message, profile="clinical")
     assert quiet.outcome == "clear" and recorded.outcome == "clear"
-    assert await one(db, "select count(*) from agents.review_tasks") == 1
-    assert await one(db, "select kind from agents.review_tasks") == "red_flag"
-    assert await one(db, "select count(*) from msg.screenings") == 2
+    assert await one(db, "select count(*) from agents.review_tasks where clinic_id = :c", c=w.a) == 1
+    assert await one(db, "select kind from agents.review_tasks where clinic_id = :c", c=w.a) == "red_flag"
+    assert await one(db, "select count(*) from msg.screenings where clinic_id = :c", c=w.a) == 2
 
 
 async def test_evaluate_and_escalate_with_no_usable_rule_records_unassessable_and_raises_a_nurse_task(db, engine):
@@ -476,7 +476,7 @@ async def test_front_desk_cannot_screen_a_care_message(db, engine):
     message = await stored_message(db, w, topic="care")
     with pytest.raises(rules.NotPermitted):
         await act(db, w.fd, engine.evaluate_and_escalate, w.a, "test", TEXT, message, profile="clinical")
-    assert await one(db, "select count(*) from msg.screenings") == 0
+    assert await one(db, "select count(*) from msg.screenings where clinic_id = :c", c=w.a) == 0
 
 
 @pytest.mark.parametrize("who", ["worker", "nurse", "doctor"])  # not front desk since 0013: it screens through msg.record_screening
@@ -493,7 +493,7 @@ async def test_everyone_else_is_refused(db, engine, who):
     result = await flagged_evaluation(db, engine, w)
     with pytest.raises(rules.NotPermitted):
         await act(db, getattr(w, who) if who else None, engine.escalate_red_flag, w.a, "test", result, "msg-x")
-    assert await one(db, "select count(*) from agents.review_tasks") == 0
+    assert await one(db, "select count(*) from agents.review_tasks where clinic_id = :c", c=w.a) == 0
 
 
 async def test_the_database_makes_a_quiet_red_flag_task_impossible(db):
