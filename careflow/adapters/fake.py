@@ -181,6 +181,10 @@ class FakeUpload(_Fake):
         content, ctype = self.objects[path]
         return StoredObject(path, len(content), ctype, content[:16], hashlib.sha256(content).hexdigest())
 
+    async def read(self, path: str):
+        await self._enter()
+        return self.objects[path][0] if path in self.objects else None
+
     async def delete(self, path: str) -> None:
         await self._enter()
         self.objects.pop(path, None)

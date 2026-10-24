@@ -23,8 +23,10 @@ counts as clinical) refuses both steps with `UploadsDisabled`.
 Nothing here logs. Error codes are short fixed words; no file name, content, path, hash or size ever appears in an exception message.
 """
 
+import hashlib
+import hmac
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Final
 
 from sqlalchemy import text
@@ -73,6 +75,14 @@ class NotPermitted(DocumentError):
     """The caller may not register documents in this clinic (only front desk and nurse may)."""
 
 
+class DocumentNotFound(DocumentError):
+    """No registered document with this id is visible to the caller, or its object is gone from storage."""
+
+
+class ContentChanged(DocumentError):
+    """The stored bytes no longer match the size and sha256 recorded at registration. The bytes are NOT returned."""
+
+
 class IdempotencyConflict(DocumentError):
     """This idempotency key was already used for a different document request."""
 
@@ -92,6 +102,14 @@ class RegisteredDocument:
     size_bytes: int
     sha256: str
     replayed: bool = False
+
+
+@dataclass(frozen=True)
+class VerifiedDocument:
+    document_id: uuid.UUID
+    clinic_id: uuid.UUID
+    content_type: str
+    content: bytes = field(repr=False)  # patient data: never in a repr
 
 
 def document_id_for(clinic_id: uuid.UUID, idempotency_key: str) -> uuid.UUID:
@@ -236,6 +254,31 @@ class DocumentIntake:
                 exc.add_note("the stored object could not be removed")  # no content in the note; the caller's error handling sees the DB error
             raise
         return RegisteredDocument(document_id, kind, stored.content_type, stored.size, stored.sha256)
+
+    # ---- step 3: any worker that is about to USE the document ----------------------------------------------------------------------------
+
+    async def read_verified(self, conn: AsyncConnection, document_id: uuid.UUID) -> VerifiedDocument:
+        """The bytes of a registered document, but only if they still hash to what was recorded at registration. Covers the window in which a
+        signed upload URL might still overwrite the object (BUILD-SPEC.md Appendix B): bytes that changed are refused (`ContentChanged`) and
+        never returned. `conn` carries the caller's claims, so row-level security decides whether the document is visible; a missing,
+        invisible or vanished document is one answer."""
+        self._require_enabled()
+        row = (
+            await conn.execute(
+                text("select id, clinic_id, storage_path, content_type, size_bytes, sha256 from docs.documents where id = :i"), {"i": document_id}
+            )
+        ).first()
+        if row is None:
+            raise DocumentNotFound("no such document")
+        try:
+            content = await self._uploads.read(row.storage_path)
+        except TransientError:
+            raise UploadUnavailable("storage is unavailable") from None
+        if content is None:
+            raise DocumentNotFound("no such document")
+        if len(content) != row.size_bytes or not hmac.compare_digest(hashlib.sha256(content).hexdigest(), row.sha256):
+            raise ContentChanged("the stored content no longer matches what was registered")
+        return VerifiedDocument(row.id, row.clinic_id, row.content_type, content)
 
     # ---- helpers -----------------------------------------------------------------------------------------------------------------------------
 

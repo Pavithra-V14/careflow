@@ -219,6 +219,10 @@ class UploadPort(Protocol):
         """The object at `path`, or None if nothing is there. Reads the stored bytes; never trusts a client-supplied size or type."""
         ...
 
+    async def read(self, path: str) -> bytes | None:
+        """The full bytes at `path`, or None if nothing is there. For a worker that is about to use the document: the caller re-hashes them."""
+        ...
+
     async def delete(self, path: str) -> None:
         """Remove the object at `path` (a no-op if it is already gone)."""
         ...

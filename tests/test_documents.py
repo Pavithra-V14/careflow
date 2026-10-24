@@ -319,3 +319,68 @@ async def test_no_error_or_representation_carries_content_a_path_or_a_hash():
     text_ = repr(exc.value) + str(exc.value)
     assert SENTINEL not in text_ and ticket.path not in text_ and str(CLINIC) not in text_
     assert SENTINEL not in repr(stored(head=SENTINEL.encode()))  # the head bytes are hidden from the representation
+
+
+# ---- reading: re-hash against what was registered (covers the signed-URL overwrite window, BUILD-SPEC.md Appendix B) ----------------------------
+
+
+class ReadConn:
+    def __init__(self, row):
+        self.row = row
+
+    async def execute(self, statement, params=None):
+        assert "from docs.documents" in str(statement)
+        return _Result(self.row)
+
+
+async def _registered(uploads, content=PDF, key="rd-1"):
+    import hashlib
+
+    ticket = await upload(uploads, key, content, "application/pdf")
+    row = Row(
+        id=ticket.document_id, clinic_id=CLINIC, storage_path=ticket.path, content_type="application/pdf", size_bytes=len(content),
+        sha256=hashlib.sha256(content).hexdigest(),
+    )
+    return ticket, row
+
+
+async def test_unchanged_bytes_are_returned_after_the_rehash():
+    uploads = FakeUpload()
+    ticket, row = await _registered(uploads)
+    doc = await intake(uploads).read_verified(ReadConn(row), ticket.document_id)
+    assert doc.content == PDF and doc.clinic_id == CLINIC and SENTINEL not in repr(doc) and "%PDF" not in repr(doc)
+
+
+async def test_bytes_overwritten_after_registration_are_refused_and_never_returned():
+    from careflow.documents import ContentChanged
+
+    uploads = FakeUpload()
+    ticket, row = await _registered(uploads)
+    uploads.client_put(ticket.path, PDF.replace(b"x", b"y"), "application/pdf")  # same size, different bytes: the overwrite window
+    with pytest.raises(ContentChanged):
+        await intake(uploads).read_verified(ReadConn(row), ticket.document_id)
+    uploads.client_put(ticket.path, PDF + b"more", "application/pdf")  # a different size
+    with pytest.raises(ContentChanged):
+        await intake(uploads).read_verified(ReadConn(row), ticket.document_id)
+
+
+async def test_a_missing_row_or_a_vanished_object_is_one_answer_and_a_disabled_profile_reads_nothing():
+    from careflow.documents import DocumentNotFound
+
+    uploads = FakeUpload()
+    ticket, row = await _registered(uploads)
+    with pytest.raises(DocumentNotFound):
+        await intake(uploads).read_verified(ReadConn(None), ticket.document_id)
+    uploads.objects.clear()
+    with pytest.raises(DocumentNotFound):
+        await intake(uploads).read_verified(ReadConn(row), ticket.document_id)
+    with pytest.raises(UploadsDisabled):
+        await DocumentIntake(uploads, profile="clinical").read_verified(ReadConn(row), ticket.document_id)
+
+
+async def test_a_storage_outage_while_reading_is_unavailable_not_changed():
+    uploads = FakeUpload()
+    ticket, row = await _registered(uploads)
+    uploads.fail_next()
+    with pytest.raises(UploadUnavailable):
+        await intake(uploads).read_verified(ReadConn(row), ticket.document_id)
