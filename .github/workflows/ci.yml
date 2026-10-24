@@ -223,15 +223,17 @@ jobs:
   # The single required check. It is named `test`, as before, so branch protection does not change: it passes only if EVERY shard passed.
   test:
     if: always()
-    needs: [migrate, live]
+    needs: [secret-scan, offline, migrate, live]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Every shard must have succeeded (a cancelled or skipped shard is a failure)
+      - name: Every job must have succeeded (a cancelled or skipped job is a failure)
         run: |
+          echo "secret-scan: ${{ needs.secret-scan.result }}"
+          echo "offline (lint, structural gate, offline tests): ${{ needs.offline.result }}"
           echo "migrate: ${{ needs.migrate.result }}"
           echo "live shards: ${{ needs.live.result }}"
-          if [ "${{ needs.migrate.result }}" != "success" ] || [ "${{ needs.live.result }}" != "success" ]; then
-            echo "::error::the live gate did not fully succeed"
+          if [ "${{ needs.secret-scan.result }}" != "success" ] || [ "${{ needs.offline.result }}" != "success" ] || [ "${{ needs.migrate.result }}" != "success" ] || [ "${{ needs.live.result }}" != "success" ]; then
+            echo "::error::a required job did not succeed"
             exit 1
           fi

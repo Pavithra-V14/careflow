@@ -20,3 +20,9 @@ with the structural gate (P2-8), triage tables/policy/writers (P2-9), this offli
 NOT done, and gating real use: P2-4 extraction (Unstructured; parked), the Postgres checkpointer (driver decision), card schema and content (clinicians), calibrated
 thresholds, the real extractor/embedder/Qdrant adapters and their data-flow entries, a route/worker to start and resume a run (with role-matrix cases), the role split,
 the unassessable-document task path, real-engine contract tests (the three-engine hard gate stays open), and the retrieval gold-set gate.
+
+## Compliance review (spec-compliance-checker)
+- Fixed: the aggregate `test` job now needs `secret-scan` and `offline` too, so the structural gate and lint block a merge. It is a change to the workflow that PR #2 (next-backend) also carries: pick it into next-backend if you want PR #2 gated the same way.
+- Renamed the end-to-end test: it shows safety properties on stand-ins, NOT Phase 2 acceptance (contract test, extraction, retrieval gold set, durable checkpointer and a real database run are missing).
+- Before merge: confirm the dev and CI ledgers hold no 0018 row with the pre-daf31c8 checksum (nothing here applied it).
+- When a durable saver lands, run with durability "sync" and test it.

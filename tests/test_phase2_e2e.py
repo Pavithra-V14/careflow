@@ -5,7 +5,7 @@ abstention) and the REAL triage writers' shapes, to a human decision. The stand-
 embedder: scripted), the vector store (in-memory), the database connection (a recording fake), and the checkpointer (InMemorySaver). Cards are SYNTHETIC
 non-clinical stand-ins; every threshold is a test input.
 
-The gates of the phase, asserted TOGETHER on one run: rules before any model call; no unverified fact reaches identity; nothing approved without a human;
+Safety properties of the phase (NOT the whole of Phase 2 acceptance: the contract test, extraction, the gold-set gate and a real database run are missing), asserted TOGETHER on one run: rules before any model call; no unverified fact reaches identity; nothing approved without a human;
 crash and resume repeat no effect; abstention goes to a human; no patient text in the checkpoint; the structural checker passes on this very graph.
 The live (real database) variant is NOT here: under the present policies no single role can run the clean path (docs/design/p2-10-end-to-end.md)."""
 
@@ -114,7 +114,7 @@ def first_model_index(log):
     return next(i for i, e in enumerate(log) if e.startswith("MODEL"))
 
 
-async def test_a_referral_goes_from_letter_to_a_human_decision_and_every_phase_2_gate_holds_together():
+async def test_an_offline_referral_goes_from_letter_to_a_human_decision_with_the_safety_properties_holding_together():
     graph, deps, saver, log = await build(policy=CALIBRATED)
     await graph.ainvoke(START, CONFIG)
     state = await graph.aget_state(CONFIG)
