@@ -11,8 +11,12 @@ This repository is built to a written specification. **Read these first, in orde
 
 ## Status
 
-Phase order is `BUILD-SPEC.md` Appendix D. **Phase 0 is complete; Phase 1 (deterministic core) is in progress.**
-A phase is not started until the previous phase's gates pass.
+Phase order is `BUILD-SPEC.md` Appendix D. **Phase 0 is complete; Phase 1 (deterministic core) is in progress and is NOT complete.**
+A phase is not started until the previous phase's gates pass. Every Phase 1 item is recorded as built, accepted, moved or blocked in
+[`docs/design/phase1-status.md`](docs/design/phase1-status.md). In short: the deterministic backend is built and tested; the staff console
+and patient portal do not exist (frontend F0 to F5 approved in principle, nothing installed); the red-flag gold set is blocked on
+clinician-authored rules; the 12/25/40/40 s ceilings, the minute tick and the immediate poke moved to Phase 2 package P2-1; the Redis/SQS
+stub is an accepted deviation; the labeled-pair merge gate moved to Phase 5; the key store stays environment variables for now.
 
 **Phase 0 (foundations): done.** Checksummed migration runner, 11 schemas, forced RLS keyed on `auth.uid()`,
 restricted `careflow_app` role, ES256 JWT verification via JWKS, per-request `set_config('request.jwt.claims')`,
@@ -37,8 +41,12 @@ suite against the CI Supabase project as `careflow_app`, with zero skips allowed
   a real token: see [`docs/design/step-up-spike.md`](docs/design/step-up-spike.md) for the spike the owner must run.
 - **`STRONG_IDENTIFIERS` is reachable over HTTP** through `POST /v1/staff/patients`, and it is still **pending sign-off by Priya**
   (Health-information lead). **Do not use real patient data until that sign-off is recorded.**
-- Not built yet: the `iam` consent, activation and grievance tables; the minimal patient portal
-  (no frontend exists).
+- Concurrency and isolation tests added at the Phase 1 close-out (written, not yet run in CI): 200 concurrent bookings of one slot
+  (exactly one wins), concurrent duplicate hold and booking retries, and child-table isolation. The last found three single-column foreign
+  keys that do not pin the clinic (`bookings.hold_id`, `merges.candidate_id`, `outbox.job_id`); fixing them needs a migration the owner has
+  not yet decided (`docs/design/phase1-status.md`).
+- Not built yet: the `iam` consent, activation and grievance tables; the staff console and the minimal patient portal (no frontend
+  exists); the minute tick and the immediate poke.
 - Queue and outbox stay in-process: no HTTP routes for claim, acknowledge or dead-letter, and no `/internal` auth
   until the Phase 2 worker proposal (short-lived signed token per job, §18.4) is decided.
 

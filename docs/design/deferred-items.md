@@ -32,6 +32,19 @@ one, delete its line in the same change. Source of the first group: the msg / ia
   counsel.
 
 ## Waiting for a later phase or feature
+- **Unpinned single-column foreign keys (found at the Phase 1 close-out).** `sched.bookings.hold_id` references `sched.holds(id)`,
+  `mpi.merges.candidate_id` references `mpi.match_candidates(id)` and `ops.outbox.job_id` references `ops.queue(id)`, so the database accepts
+  a child row that points at another clinic's parent. Integrity only: the managers never do it and RLS still hides the other clinic's
+  rows. The fix is a migration (unique `(id, clinic_id)` on each parent plus a composite foreign key), needing the owner's decision and the RLS
+  reviewer. `tests/test_rls_child_tables_live.py` lists them exactly (`KNOWN_GAPS`) and has a test that documents the `hold_id` case.
+- **Labeled-pair merge gate** (BUILD-SPEC 14.3, "no wrong patient merge on the labeled identity-matching pairs"): moved to Phase 5, needs
+  clinician-reviewed labels.
+- **Minute tick, immediate poke and the 12/25/40/40 s ceilings** (BUILD-SPEC 7.3, 7.4): moved to Phase 2 package P2-1; they bound a runner
+  that does not exist yet.
+- **`aal2` database policy** (a restrictive policy requiring `aal = 'aal2'` for sensitive tables): deferred. Staff second-factor
+  enrolment at login is enforced in frontend F2, not in the database.
+- **Key store**: environment variables stay (accepted); revisit when hosting is decided and the hosting provider's secret manager is known.
+- **Redis/SQS adapter stub** (BUILD-SPEC 7.4): accepted deviation, see `docs/design/phase1-status.md`.
 - **Step-up claim shape: required spike (Appendix B).** The merge routes read `aal` and `amr` entries of the form
   `{"method": "totp", "timestamp": <int seconds>}`; that shape comes from documentation, not a real token. The owner enrols TOTP on
   a dev staff account and pastes the `aal`/`amr`/`iat` claims; until then the step-up check is not verified.
