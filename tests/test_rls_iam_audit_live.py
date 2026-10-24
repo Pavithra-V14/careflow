@@ -116,7 +116,7 @@ async def test_all_eleven_schemas_exist_and_nine_have_no_tables(db):
     assert found == {
         "mpi": {"patients", "identity_tokens", "match_candidates", "merges"},
         "sched": {"locations", "providers", "visit_types", "slots", "priority_levels", "holds", "bookings", "waitlist"},
-        "ops": {"queue", "outbox", "key_rotation_batches"},
+        "ops": {"queue", "outbox", "key_rotation_batches", "spend_ledger"},  # spend_ledger: migration 0016
         "kb": {"red_flag_rules"},
         "agents": {"review_tasks"},
         "ai": {"model_registry"},  # migration 0015
