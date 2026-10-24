@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from careflow import queue as q
 from careflow.db import make_app_engine, set_request_claims
 from careflow.queue import PostgresQueue
+from tests.bounds import bounded
 
 ROOT = Path(__file__).resolve().parent.parent
 _ENV = dotenv_values(ROOT / ".env")
@@ -509,7 +510,7 @@ async def test_parallel_workers_each_job_is_delivered_to_exactly_one_worker(comm
                 return got
             got.append(job.id)
 
-    results = await asyncio.gather(*(run_worker(f"worker-{n}") for n in range(8)))
+    results = await bounded(asyncio.gather(*(run_worker(f"worker-{n}") for n in range(8))), "the eight concurrent workers")
     every = [jid for got in results for jid in got]
     assert len(every) == total and len(set(every)) == total, "a job was delivered twice or not at all"
     assert sum(1 for got in results if got) >= 2, "no parallelism: a single worker took everything"
@@ -560,7 +561,10 @@ async def test_five_timeouts_through_the_real_pooler_reach_the_dead_letter_state
 async def test_simultaneous_identical_enqueues_make_exactly_one_job(committed, queue):
     clinic, fd, _, engine, admin = committed
     key = _key()
-    results = await asyncio.gather(*(_as(engine, fd, queue.enqueue, clinic, "test", "demo.task", {"same": True}, key) for _ in range(6)))
+    results = await bounded(
+        asyncio.gather(*(_as(engine, fd, queue.enqueue, clinic, "test", "demo.task", {"same": True}, key) for _ in range(6))),
+        "the concurrent enqueues",
+    )
     assert len({r.job_id for r in results}) == 1
     assert sum(1 for r in results if not r.replayed) == 1
     async with admin.connect() as c:
@@ -571,7 +575,7 @@ async def test_two_relays_racing_turn_each_event_into_exactly_one_job(committed,
     clinic, fd, worker, engine, admin = committed
     for i in range(10):
         await _as(engine, fd, queue.record_event, clinic, "test", "booking.confirmed", {"i": i}, _key())
-    counts = await asyncio.gather(*(_as(engine, worker, queue.relay_outbox, 10) for _ in range(3)))
+    counts = await bounded(asyncio.gather(*(_as(engine, worker, queue.relay_outbox, 10) for _ in range(3))), "the concurrent relays")
     assert sum(counts) == 10, counts  # SKIP LOCKED: no event dispatched twice, none left behind
     async with admin.connect() as c:
         jobs = (await c.execute(text("select count(*) from ops.queue where clinic_id = :c and task_type = 'booking.confirmed'"), {"c": clinic})).scalar_one()

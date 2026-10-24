@@ -27,6 +27,7 @@ from careflow.crypto import DemographicVault
 from careflow.db import make_app_engine, set_request_claims
 from careflow.identity import IdentityManager
 from careflow.mpi import PatientIngestionPipeline
+from tests.bounds import bounded
 
 ROOT = Path(__file__).resolve().parent.parent
 _ENV = dotenv_values(ROOT / ".env")
@@ -550,7 +551,10 @@ async def test_competing_proposals_for_one_subordinate_produce_exactly_one_live_
             except ident.MergeNotAllowed:
                 return "refused"
 
-    results = await asyncio.gather(*(attempt(who, master) for who, master in ((fd1, master1), (fd2, master2), (fd1, master2), (fd2, master1))))
+    results = await bounded(
+        asyncio.gather(*(attempt(who, master) for who, master in ((fd1, master1), (fd2, master2), (fd1, master2), (fd2, master1)))),
+        "the concurrent merge attempts",
+    )
     assert results.count("won") == 1 and results.count("refused") == 3, results
     async with admin.connect() as c:
         live = (await c.execute(text("select count(*) from mpi.merges where clinic_id = :c and status in ('awaiting_second_approval', 'active')"), {"c": clinic})).scalar_one()

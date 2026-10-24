@@ -27,6 +27,7 @@ from careflow import mpi
 from careflow.crypto import DemographicVault
 from careflow.db import make_app_engine, set_request_claims
 from careflow.mpi import PatientIngestionPipeline
+from tests.bounds import bounded
 
 ROOT = Path(__file__).resolve().parent.parent
 _ENV = dotenv_values(ROOT / ".env")
@@ -392,11 +393,14 @@ async def test_pooler_end_to_end_and_concurrent_identical_requests_make_exactly_
     clinic, acct = committed
     engine = make_app_engine(APP or "", pool_size=6, max_overflow=0)
     try:
-        results = await asyncio.gather(
-            *(
-                _pooled_ingest(engine, pipeline, acct, origin="test", idempotency_key=_key(), **person(clinic))
-                for _ in range(6)
-            )
+        results = await bounded(
+            asyncio.gather(
+                *(
+                    _pooled_ingest(engine, pipeline, acct, origin="test", idempotency_key=_key(), **person(clinic))
+                    for _ in range(6)
+                )
+            ),
+            "the concurrent identical ingests",
         )
     finally:
         await engine.dispose()

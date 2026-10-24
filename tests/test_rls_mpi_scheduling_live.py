@@ -38,6 +38,8 @@ import pytest
 import pytest_asyncio
 from dotenv import dotenv_values
 
+from tests.bounds import bounded
+
 ROOT = Path(__file__).resolve().parent.parent
 _ENV = dotenv_values(ROOT / ".env")
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or _ENV.get("DATABASE_URL_MIGRATOR")
@@ -632,7 +634,7 @@ async def test_many_simultaneous_writers_for_one_window_produce_exactly_one_slot
         finally:
             await conn.close()
 
-    results = await asyncio.gather(*(attempt(i) for i in range(8)))
+    results = await bounded(asyncio.gather(*(attempt(i) for i in range(8))), "the concurrent overlapping slot writes")
     assert results.count("won") == 1
     assert results.count("blocked") == 7
     assert await _slot_count(clinic) == 1

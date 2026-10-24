@@ -38,6 +38,7 @@ from starlette.testclient import TestClient
 from careflow.app import Settings, create_app
 from careflow.auth import JWKSClient
 from careflow.crypto import DemographicVault
+from tests.bounds import bounded
 
 ENV = dotenv_values(Path(__file__).resolve().parent.parent / ".env")
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or ENV.get("DATABASE_URL_MIGRATOR")
@@ -962,7 +963,7 @@ def test_identity_never_leaks_between_pooled_requests(app, ids):
                     r = await http.get("/v1/iam/me", headers=bearer(mint(ids.people[key][0])))
                     return key, r.status_code, r.json()
 
-                return await asyncio.gather(*(call(i) for i in range(40)))
+                return await bounded(asyncio.gather(*(call(i) for i in range(40))), "the forty concurrent requests")
 
     for key, status, body in _run(run()):
         assert status == 200, key
@@ -1056,7 +1057,9 @@ def test_concurrent_writes_from_two_clinics_neither_leak_identity_nor_connection
                     )
                     return who, r.status_code
 
-                results = await asyncio.gather(*(hold(w, s) for s in slots for w in ("front_desk_a", "front_desk_b")))
+                results = await bounded(
+                    asyncio.gather(*(hold(w, s) for s in slots for w in ("front_desk_a", "front_desk_b"))), "the concurrent holds"
+                )
                 return results, app.state.engine.pool.checkedout()
 
     results, checked_out = _run(run())
@@ -1129,7 +1132,7 @@ def test_concurrent_reads_from_different_identities_neither_mix_rows_nor_leak_co
                     r = await http.get(f"{PREFIX}/{route}?limit=5", headers=bearer(mint(ids.people[who][0])))
                     return who, r.status_code, (r.json()["items"] if r.status_code == 200 else None)
 
-                return await asyncio.gather(*(read(i) for i in range(40))), app.state.engine.pool.checkedout()
+                return await bounded(asyncio.gather(*(read(i) for i in range(40))), "the forty concurrent reads"), app.state.engine.pool.checkedout()
 
     results, checked_out = _run(run())
     assert checked_out == 0
@@ -1217,7 +1220,7 @@ def test_concurrent_registrations_of_the_same_person_converge_on_one_record(app,
                     )
                     return r.status_code, r.json()
 
-                return await asyncio.gather(*(register(i) for i in range(8)))
+                return await bounded(asyncio.gather(*(register(i) for i in range(8))), "the concurrent registrations")
 
     results = _run(run())
     assert {status for status, _ in results} == {200}
