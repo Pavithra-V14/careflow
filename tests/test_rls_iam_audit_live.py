@@ -122,6 +122,7 @@ async def test_all_eleven_schemas_exist_and_nine_have_no_tables(db):
         "kb": {"red_flag_rules"},
         "agents": {"review_tasks"},
         "ai": {"model_registry"},  # migration 0015
+        "docs": {"documents"},  # migration 0017
         "msg": {"threads", "messages", "message_rotation_batches", "screenings"},  # migrations 0011 and 0013
     }
 
