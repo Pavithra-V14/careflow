@@ -24,6 +24,7 @@ exception message contains them.
 """
 
 import re
+import unicodedata
 import uuid
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
@@ -60,6 +61,7 @@ class StructuredKind(StrEnum):
     PHONE = "phone"
     BLOOD_PRESSURE = "blood_pressure"
     QUANTITY = "quantity"  # a number with an optional unit: EF 55%, a dose, a weight
+    NAME = "name"  # a person's name: the same words in the same order, nothing fuzzy, no transliteration
 
 
 # Fixed words. These are the only reasons a fact can carry.
@@ -275,7 +277,34 @@ def _check_quantity(value: str, quote: str) -> str:
     return _compare(same_unit, wanted)
 
 
+_WORD: Final = re.compile(r"(?:[^\W_]|[\u0300-\u036f\u0b80-\u0bff])+")  # letters/digits plus combining marks and Tamil signs, which are not \w
+
+
+def _words(raw: str) -> tuple[str, ...]:
+    return tuple(w.casefold() for w in _WORD.findall(unicodedata.normalize("NFKC", raw)))
+
+
+def _check_name(value: str, quote: str) -> str:
+    """The value's words must appear, in order and adjacent, in the quote (case and punctuation ignored). No nicknames, no
+    transliteration, no initials, no edit distance: a near-miss is unverified, because a wrong name creates the wrong person."""
+    wanted = _words(value)
+    if not wanted:
+        return UNPARSEABLE_VALUE
+    have = _words(quote)
+    n = len(wanted)
+    return MATCH if any(have[i : i + n] == wanted for i in range(len(have) - n + 1)) else NOT_FOUND
+
+
+def canonical_date(value: str) -> date | None:
+    """The calendar date a tier 1 date value stands for, or None if it is not exactly one unambiguous date."""
+    spans = _date_candidates(value.strip()) if isinstance(value, str) else []
+    if len(spans) == 1 and spans[0][0] == 0 and spans[0][1] == len(value.strip()) and spans[0][2] is not _AMBIG:
+        return spans[0][2]  # type: ignore[return-value]
+    return None
+
+
 _STRUCTURED_CHECKS: Final = {
+    StructuredKind.NAME: _check_name,
     StructuredKind.DATE: _check_date,
     StructuredKind.PHONE: _check_phone,
     StructuredKind.BLOOD_PRESSURE: _check_bp,

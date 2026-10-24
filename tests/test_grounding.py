@@ -30,6 +30,7 @@ from careflow.ports import DataClass, DecisionResult, Usage
 
 CLINIC = uuid.uuid4()
 D, P, BP, Q = StructuredKind.DATE, StructuredKind.PHONE, StructuredKind.BLOOD_PRESSURE, StructuredKind.QUANTITY
+N = StructuredKind.NAME
 
 
 def check(kind, value, quote):
@@ -259,3 +260,22 @@ async def test_an_empty_claim_or_passage_asks_no_engine():
 async def test_an_unexpected_error_is_not_swallowed_into_unverified():
     with pytest.raises(RuntimeError):
         await verify_interpretive(StubDecider(raises=RuntimeError("bug")), "f", "c", "p", clinic_id=CLINIC, data_class=DataClass.PHI)
+
+
+def test_a_name_must_appear_as_the_same_words_in_order_and_a_near_miss_does_not_verify():
+    ok(N, "Asha Rao", "Patient: ASHA  RAO, 42 years")
+    ok(N, "Asha Rao", "Rao, Asha Rao referred")  # appears (contiguously) once or more
+    refused(N, "Asha Rao", "Patient: Asha Rau", "not_found")
+    refused(N, "Asha Rao", "Patient: A. Rao", "not_found")
+    refused(N, "Asha Rao", "Asha K Rao", "not_found")
+    refused(N, "Asha Rao", "Rao Asha", "not_found")
+    refused(N, "Asha", "Ashana Rao", "not_found")  # a word, not a prefix of one
+    refused(N, "...", "Asha Rao", "unparseable_value")
+    ok(N, "அஸ்வின்", "அஸ்வின் குமார்")
+
+
+def test_canonical_date_is_none_unless_exactly_one_unambiguous_date():
+    from datetime import date
+
+    assert g.canonical_date("5 March 1980") == date(1980, 3, 5) and g.canonical_date("1980-03-05") == date(1980, 3, 5)
+    assert g.canonical_date("05/03/1980") is None and g.canonical_date("1980-02-30") is None and g.canonical_date("x") is None
