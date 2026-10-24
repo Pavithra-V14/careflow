@@ -7,7 +7,8 @@ THE ORDER IS THE POINT. For a referral letter, on every path and with no excepti
   3. ONLY IF the rules returned `clear` is the extractor (a model) asked anything. `ReferralExtractor.extract` takes a `Clearance`, which only
      `screen_referral` can mint, so there is no call site that reaches a model without having been through the rules; and an extractor that
      is handed no clearance is a TypeError in the tests;
-  4. every identity fact the extractor returns is checked against the letter's own words (tier 1 grounding, careflow/grounding.py);
+  4. every identity fact the extractor returns must come with a quote that really occurs in the letter, and the value is then checked against that
+     quote (tier 1 grounding, careflow/grounding.py). LIMIT, stated: that the quoted name belongs to the PATIENT (not the referrer) is not verified;
   5. only verified facts reach `PatientIngestionPipeline.ingest` (the existing mpi module: it canonicalises, tokenises, matches and queues
      near-matches for human review; this module adds nothing to identity resolution).
 
@@ -26,6 +27,7 @@ an exception message. The idempotency key of the identity write is derived from 
 second patient.
 """
 
+import hashlib
 import uuid
 from dataclasses import dataclass, field
 from typing import Final, Literal, Protocol
@@ -34,7 +36,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from careflow.gateway import AllRoutesFailed, NoApprovedRoute, SpendCeilingReached
-from careflow.grounding import StructuredKind, canonical_date, verify_structured
+from careflow.grounding import StructuredKind, canonical_date, verify_structured, words
 from careflow.mpi import IngestionError, IngestResult
 from careflow.ports import PermanentError, TransientError
 from careflow.rules import Evaluation, Origin, Profile, RedFlagEngine
@@ -60,6 +62,7 @@ class Clearance:
     document_id: uuid.UUID
     rule_set_hash: str
     profile: str
+    text_digest: str  # sha256 of the screened text: the clearance is for THIS text, not for whatever is passed to the model later
     _mint: object = field(repr=False, compare=False, default=None)
 
     def __post_init__(self) -> None:
@@ -109,6 +112,10 @@ class _Ingestor(Protocol):
     ) -> IngestResult: ...
 
 
+def text_digest(letter_text: str) -> str:
+    return hashlib.sha256(letter_text.encode("utf-8")).hexdigest()
+
+
 async def _load_referral(conn: AsyncConnection, document_id: uuid.UUID):
     row = (await conn.execute(text("select id, clinic_id, origin, kind from docs.documents where id = :i"), {"i": document_id})).first()
     if row is None or row.kind != "referral":
@@ -129,11 +136,14 @@ async def screen_referral(
     if evaluation.outcome == "red_flag":
         escalation = await engine.escalate_red_flag(conn, row.clinic_id, row.origin, evaluation, f"document:{document_id}")
         return Screened(evaluation, result=ReferralResult("red_flag_escalated", document_id, task_id=escalation.task_id))
+    if evaluation.outcome == "clear" and evaluation.profile == "demo" and row.origin == "live":
+        # Same guard as RedFlagEngine.record_screening: a demo-profile (drafts allowed) clear on live data vouches for nothing.
+        return Screened(evaluation, result=ReferralResult("held_unassessable", document_id, reasons=("demo_profile_on_live_origin",)))
     if evaluation.outcome != "clear":
         # unassessable: not clear. There is NO nurse-task path for a non-message source yet (open item, docs/design/deferred-items.md), so the
         # result itself is the signal and the caller must not drop it.
         return Screened(evaluation, result=ReferralResult("held_unassessable", document_id, reasons=("screening_unassessable",)))
-    return Screened(evaluation, clearance=Clearance(document_id, evaluation.rule_set_hash, evaluation.profile, _MINT))
+    return Screened(evaluation, clearance=Clearance(document_id, evaluation.rule_set_hash, evaluation.profile, text_digest(letter_text), _MINT))
 
 
 async def process_referral(
@@ -145,18 +155,21 @@ async def process_referral(
         assert screened.result is not None
         return screened.result
     row = await _load_referral(conn, document_id)
+    if screened.clearance.text_digest != text_digest(letter_text):
+        raise ReferralError("the clearance is for different text")
     try:
         extracted = await extractor.extract(letter_text, screened.clearance, clinic_id=row.clinic_id)
     except (NoApprovedRoute, SpendCeilingReached, AllRoutesFailed, TransientError, PermanentError):
         return ReferralResult("extraction_unavailable", document_id, reasons=("extraction_unavailable",))
 
     reasons: list[str] = []
-    name = _grounded("name", StructuredKind.NAME, extracted.name, extracted.name_quote, reasons)
-    dob_value = _grounded("dob", StructuredKind.DATE, extracted.dob, extracted.dob_quote, reasons)
+    letter_words = words(letter_text)
+    name = _grounded("name", StructuredKind.NAME, extracted.name, extracted.name_quote, reasons, letter_words)
+    dob_value = _grounded("dob", StructuredKind.DATE, extracted.dob, extracted.dob_quote, reasons, letter_words)
     dob = canonical_date(dob_value) if dob_value is not None else None
     if dob_value is not None and dob is None:
         reasons.append("dob_unreadable")
-    phone = _grounded("phone", StructuredKind.PHONE, extracted.phone, extracted.phone_quote, reasons, optional=True)
+    phone = _grounded("phone", StructuredKind.PHONE, extracted.phone, extracted.phone_quote, reasons, letter_words, optional=True)
     if name is None or dob is None:
         return ReferralResult("needs_front_desk", document_id, reasons=tuple(reasons))
     try:
@@ -169,12 +182,19 @@ async def process_referral(
 
 
 def _grounded(
-    field_name: str, kind: StructuredKind, value: str | None, quote: str | None, reasons: list[str], *, optional: bool = False
+    field_name: str, kind: StructuredKind, value: str | None, quote: str | None, reasons: list[str], letter_words: tuple[str, ...],
+    *, optional: bool = False
 ) -> str | None:
     """The value if it is verified against its quote; otherwise None and a reason. Never returns an unverified value."""
     if value is None or quote is None:
         if not optional or value is not None:
             reasons.append(f"{field_name}_missing")
+        return None
+    # The quote must be the letter's own words, or a model that invents a name AND a matching quote would verify itself.
+    quote_words = words(quote)
+    n = len(quote_words)
+    if n == 0 or not any(letter_words[i : i + n] == quote_words for i in range(len(letter_words) - n + 1)):
+        reasons.append(f"{field_name}_quote_not_in_letter" if not optional else f"{field_name}_dropped_quote_not_in_letter")
         return None
     fact = verify_structured(field_name, kind, value, quote)
     if not fact.usable_by_rules:

@@ -20,7 +20,7 @@ from careflow.rules import EscalationResult, Evaluation
 
 pytestmark = pytest.mark.asyncio
 CLINIC, DOC, PATIENT, TASK = uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
-LETTER = "SENTINEL-LETTER-91 Patient: Asha Rao, DOB 5 March 1980, Mobile 98765 43210. Please see."
+LETTER = "SENTINEL-LETTER-91 Patient: Asha Rao, DOB 5 March 1980, Mobile 98765 43210. Please see. Alt note: DOB 05/03/1980."
 
 
 class Row:
@@ -182,9 +182,9 @@ async def test_every_path_that_reaches_the_model_has_the_rules_before_it():
 
 async def test_a_clearance_cannot_be_forged():
     with pytest.raises(ReferralError):
-        Clearance(DOC, "h", "clinical")
+        Clearance(DOC, "h", "clinical", "d")
     with pytest.raises(ReferralError):
-        Clearance(DOC, "h", "clinical", object())
+        Clearance(DOC, "h", "clinical", "d", object())
 
 
 async def test_the_extractor_only_ever_receives_a_clearance_that_screen_referral_minted_for_this_document():
@@ -258,3 +258,41 @@ async def test_structurally_the_rules_step_precedes_the_only_model_call_in_the_s
     body = inspect.getsource(module.process_referral)
     assert body.count("extractor.extract(") == 1 and body.index("screen_referral(") < body.index("extractor.extract(")
     assert "Clearance(" not in body  # process_referral cannot mint one itself
+
+
+async def test_a_quote_that_is_not_in_the_letter_verifies_nothing_even_if_it_matches_the_value():
+    answer = ExtractedReferral(name="Ravi Menon", name_quote="Patient: Ravi Menon", dob="1980-03-05", dob_quote="DOB 5 March 1980")
+    parts = build(answer=answer)
+    result = await run(parts)
+    assert result.status == "needs_front_desk" and "name_quote_not_in_letter" in result.reasons and parts[4].calls == []
+    phone = ExtractedReferral(name="Asha Rao", name_quote="Asha Rao", dob="1980-03-05", dob_quote="5 March 1980", phone="9123456789", phone_quote="Mobile 91234 56789")
+    parts = build(answer=phone)
+    result = await run(parts)
+    assert result.status == "identity_resolved" and parts[4].calls[0]["phone"] is None and result.reasons == ("phone_dropped_quote_not_in_letter",)
+
+
+async def test_a_demo_profile_clear_on_a_live_origin_is_not_a_clearance_and_no_model_is_called():
+    log = []
+
+    class LiveConn(Conn):
+        async def execute(self, statement, params=None):
+            self.log.append("db:document")
+            return Result(Row(id=DOC, clinic_id=CLINIC, origin="live", kind="referral"))
+
+    class DemoEngine(Engine):
+        async def evaluate_text(self, *a, **k):
+            self.log.append("rules")
+            return Evaluation("clear", (), "demo", 1, 0, (), "h" * 64)
+
+    extractor, ingestor = Extractor(log), Ingestor(log)
+    result = await process_referral(LiveConn(log=log), DemoEngine(log), extractor, ingestor, DOC, LETTER)
+    assert (result.status, result.reasons) == ("held_unassessable", ("demo_profile_on_live_origin",))
+    assert model_calls(log) == [] and ingestor.calls == []
+
+
+async def test_the_clearance_is_for_the_screened_text_only():
+    _, conn, engine, *_ = build()
+    screened = await screen_referral(conn, engine, DOC, LETTER)
+    from careflow.referral import text_digest
+
+    assert screened.clearance.text_digest == text_digest(LETTER) != text_digest(LETTER + " ")

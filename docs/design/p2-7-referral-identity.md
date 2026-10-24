@@ -12,6 +12,11 @@ with the error. The extractor takes a `Clearance`, which only `screen_referral` 
 - Idempotency key of the identity write: `referral:<document id>`.
 - Failure to extract degrades visibly (`extraction_unavailable`); the front desk keys the letter by hand.
 
+## Review fixes (clinical-content-reviewer)
+- Each quote must occur in the letter (word-sequence containment) before the value is checked against it; otherwise a model could invent a name and a matching quote.
+- A demo-profile `clear` on a live origin is `held_unassessable` (same guard as `record_screening`). The Clearance carries a digest of the screened text and `process_referral` refuses a mismatch.
+- LIMIT, stated: that a quoted name is the PATIENT's (not the referrer's) is not verified; identity resolution's human review of near-matches is the backstop.
+
 ## QUESTIONS FOR THE OWNER (not decided here)
 1. **Which role runs this?** `escalate_red_flag` is allowed for nurse/doctor/queue_worker only; `mpi.patients` insert is front desk only (0002). One
    actor cannot do both under the present policies. Options: (a) split the stages (the worker screens/extracts, the front desk resolves identity
