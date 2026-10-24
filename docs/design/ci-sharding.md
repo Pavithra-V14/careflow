@@ -1,6 +1,34 @@
 # CI: the live job outgrew one job (evidence, safety check, proposal)
 
-Written 2026-10-24 after run `40087935071` (PR #1, commit `3e1c4ff`) hit the 90-minute limit. **Proposal only: the workflow is not changed.**
+Written 2026-10-24 after run `40087935071` (PR #1, commit `3e1c4ff`) hit the 90-minute limit.
+
+**Status (owner approved Steps A, B and C on 2026-10-24): implemented on branch `next-backend`.**
+- Step A: every whole-table count in the live tests is scoped to the test's own clinic (commit message lists each test; no assertion weakened).
+- Step B: `.github/workflows/ci.yml` now has a `migrate` job, then a `live` matrix of three shards (60-minute limit each, a concurrency group
+  per shard number, never cancel-in-progress), then an aggregate job named `test` (the required check keeps its name).
+- Step C: `tests/test_ci_shards.py` fails if a live file is in no shard or two, if the workflow loses the properties below, or if an unscoped
+  whole-table count of a table another file commits appears.
+- `scripts/ci_peak_connections.py` samples the database's backend connections while each shard runs and prints one `PEAK-CONNECTIONS` line;
+  the first sharded run is the measurement and its numbers go in the report to the owner.
+- PR #1 (`ci-fixes-d3-d4`) is deliberately untouched.
+
+## Note: the 200-booking test hung in cancellation through the transaction pooler (and what bounds it now)
+
+On 2026-10-24 `test_200_concurrent_bookings_of_one_slot_produce_exactly_one_booking` exceeded its own 300-second bound at 12:04:13. Its bound
+used `asyncio.wait_for`, which on a timeout cancels the work and then WAITS for the cancellation to finish. The work was stuck on statements
+queued behind one row lock, through Supabase's transaction-mode pooler. A cancel does not reach a statement waiting on a lock, and the rollback
+queues behind it, so the unwind never completed and the job sat silent for 23 minutes until the 90-minute limit cancelled it. Now:
+
+1. `tests/bounds.py` `bounded()` cancels, allows `CANCEL_GRACE_SECONDS` (20) to unwind, and raises regardless. It cannot itself hang
+   (`tests/test_bounds.py` proves it against work that swallows cancellation).
+2. Every transaction in that file runs `SET LOCAL lock_timeout = '120s'` and `SET LOCAL statement_timeout = '300s'` first, so the DATABASE gives up
+   on a stuck wait (SET LOCAL lasts for the transaction only, so it is safe through the transaction pooler).
+3. The test has its own 900-second bound (the 200 attempts are serial on one lock) and disposes its engine with a 30-second limit.
+4. The semaphore (20 in flight) keeps any waiter behind at most 20 others, never behind all 200.
+5. `faulthandler_timeout = 300` (pyproject.toml) still dumps all stacks if any test runs over five minutes, and each shard has a 60-minute limit.
+
+## The proposal as originally written (kept for the record; it is what was implemented)
+
 
 ## What the log shows
 

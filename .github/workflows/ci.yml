@@ -25,8 +25,8 @@ on:
     branches: [main]
 
 # A newer push to the same branch supersedes an older run of it, so superseded runs stop instead of piling up. Runs of DIFFERENT
-# branches still share ONE hosted CI database: the `test` (live) job below has its own, job-level group so two live jobs never overlap
-# (concurrent migrations/fixtures would race). NOTE: cancelling a live job mid-run skips its fixture teardown, which can leave committed
+# branches still share ONE hosted CI database: each live shard below has its own, job-level group so two runs never overlap on the same shard
+# (and the shards themselves are safe to run in parallel, see docs/design/ci-sharding.md). NOTE: cancelling a live job mid-run skips its fixture teardown, which can leave committed
 # origin='test' rows behind in the CI project (they are tagged and harmless, and never deleted automatically).
 concurrency:
   group: ci-${{ github.ref }}
@@ -97,14 +97,82 @@ jobs:
             exit 1
           fi
 
-  # The live gate: migrations on the CI project, then the WHOLE suite (offline tests included, they take seconds) against it as the restricted careflow_app role.
-  # Serialised across branches by its own concurrency group (never cancelled mid-run by another branch's job).
-  test:
+  # ---- the live gate, in parallel shards (docs/design/ci-sharding.md) ---------------------------------------------------------------------------
+  #
+  # Migrations are applied ONCE, by their own job, before any shard starts. The shards then run the live test files in parallel against the shared
+  # CI database. That is safe only because no live test counts a table that another file commits: every whole-table count is scoped to the test's
+  # own clinic, and tests/test_ci_shards.py fails the build if a file is in no shard or in two, or if an unscoped whole-table count appears.
+  #
+  # CONCURRENCY. Each shard has its OWN group (shard number in the name), never cancel-in-progress, so shard N of one run queues behind shard N of
+  # another run instead of cancelling it. GitHub keeps ONE pending job per group: a third waiting run displaces the second, which then shows as
+  # CANCELLED (never as green), so a displaced gate is re-run, not skipped. Runs of the SAME branch cancel each other through the workflow-level
+  # group above (a newer commit supersedes an older run).
+  migrate:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 15
     concurrency:
-      group: careflow-ci-database
+      group: careflow-ci-database-migrate
       cancel-in-progress: false
+    env:
+      CAREFLOW_ENV: ci
+      CAREFLOW_PROFILE: demo
+      DATABASE_URL_MIGRATOR: ${{ secrets.DATABASE_URL_MIGRATOR }}
+      DATABASE_URL_APP: ${{ secrets.DATABASE_URL_APP }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Install dependencies from the lockfile
+        run: |
+          python -m pip install --upgrade pip uv
+          uv sync --frozen
+
+      - name: Apply migrations to the CI project
+        run: uv run python -m careflow.migrate
+
+  live:
+    needs: migrate
+    name: live shard ${{ matrix.shard }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    concurrency:
+      group: careflow-ci-database-shard-${{ matrix.shard }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Estimated minutes at the pace of the 2026-10-24 runs. tests/test_ci_shards.py requires every live test file to appear in exactly one shard.
+          - shard: 1  # about 32 min
+            files: >-
+              tests/test_api_role_matrix.py
+              tests/test_identity_live.py
+              tests/test_rules_live.py
+              tests/test_api_screen_message_live.py
+              tests/test_api_read_message_live.py
+              tests/test_patient_binding_live.py
+          - shard: 2  # about 31 min
+            files: >-
+              tests/test_rls_screenings_live.py
+              tests/test_queue_live.py
+              tests/test_rotation_live.py
+              tests/test_rls_msg_live.py
+              tests/test_mpi_live.py
+              tests/test_rls_iam_audit_live.py
+              tests/test_migrate_live.py
+              tests/test_api_real_token_live.py
+              tests/test_rls_child_tables_live.py
+              tests/test_rls_ai_registry_live.py
+              tests/test_rls_spend_and_approval_live.py
+          - shard: 3  # about 25 min (the 200-booking test alone may take 6 to 15)
+            files: >-
+              tests/test_scheduling_live.py
+              tests/test_rls_mpi_scheduling_live.py
+              tests/test_scheduling_concurrency_live.py
     env:
       CAREFLOW_ENV: ci
       CAREFLOW_PROFILE: demo
@@ -126,16 +194,37 @@ jobs:
           python -m pip install --upgrade pip uv
           uv sync --frozen
 
-      - name: Apply migrations to the CI project
-        run: uv run python -m careflow.migrate
-
       # -v names every test as it starts (the last line of a stuck run is the stuck test); --durations=25 lists the slowest at the end;
       # faulthandler_timeout (pyproject.toml) dumps all stacks if one test runs over 300 s. A skipped test is a failure here.
-      - name: "Live tests (a skipped test is a failure - it means a credential or migration is missing)"
+      # scripts/ci_peak_connections.py samples the database's backend connections in the background and prints one PEAK-CONNECTIONS line.
+      - name: "Live tests, shard ${{ matrix.shard }} (a skipped test is a failure - it means a credential or migration is missing)"
         run: |
           set -o pipefail
-          uv run pytest -v -rs --durations=25 -p no:cacheprovider 2>&1 | tee pytest.out
+          uv run python scripts/ci_peak_connections.py --label "shard-${{ matrix.shard }}" > peak.out 2>&1 &
+          sampler=$!
+          status=0
+          uv run pytest -v -rs --durations=25 -p no:cacheprovider ${{ matrix.files }} 2>&1 | tee pytest.out || status=$?
+          kill -TERM "$sampler" 2>/dev/null || true
+          wait "$sampler" 2>/dev/null || true
+          cat peak.out
+          if [ "$status" -ne 0 ]; then exit "$status"; fi
           if grep -qE "(^| )SKIPPED" pytest.out; then
             echo "::error::tests were skipped; CI requires zero skips"
+            exit 1
+          fi
+
+  # The single required check. It is named `test`, as before, so branch protection does not change: it passes only if EVERY shard passed.
+  test:
+    if: always()
+    needs: [migrate, live]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every shard must have succeeded (a cancelled or skipped shard is a failure)
+        run: |
+          echo "migrate: ${{ needs.migrate.result }}"
+          echo "live shards: ${{ needs.live.result }}"
+          if [ "${{ needs.migrate.result }}" != "success" ] || [ "${{ needs.live.result }}" != "success" ]; then
+            echo "::error::the live gate did not fully succeed"
             exit 1
           fi
