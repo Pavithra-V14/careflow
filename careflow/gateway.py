@@ -107,6 +107,8 @@ class ModelRow:
             raise ValueError(f"data_policy must be one of {DATA_POLICIES}")
         if not self.provider.strip() or not self.model_id.strip():
             raise ValueError("a registry row needs a provider and a model id")
+        if self.model_id != self.model_id.strip(" ") or any(ord(ch) < 32 or ord(ch) == 127 for ch in self.model_id):
+            raise ValueError("a model id carries no leading or trailing space and no control character")
         if _UNPINNED.search(self.model_id):
             raise ValueError("a model id must be pinned, not 'latest' or similar (§5.1)")
         if isinstance(self.priority, bool) or not isinstance(self.priority, int) or self.priority < 1:

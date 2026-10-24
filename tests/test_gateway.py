@@ -98,7 +98,7 @@ def test_patient_text_never_appears_in_a_request_repr():
         assert secret not in repr(obj)
 
 
-@pytest.mark.parametrize("model", ["latest", "gpt-x-latest", "vendor/model@latest", "m:stable", "default"])
+@pytest.mark.parametrize("model", ["latest", "gpt-x-latest", "vendor/model@latest", "m:stable", "default", "m-1 ", " m-1", "m-latest\n", "m\x01-1"])
 def test_an_unpinned_model_id_is_refused(model):
     with pytest.raises(ValueError):
         row(model=model)
