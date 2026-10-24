@@ -280,17 +280,17 @@ def _check_quantity(value: str, quote: str) -> str:
 _WORD: Final = re.compile(r"(?:[^\W_]|[\u0300-\u036f\u0b80-\u0bff])+")  # letters/digits plus combining marks and Tamil signs, which are not \w
 
 
-def _words(raw: str) -> tuple[str, ...]:
+def words(raw: str) -> tuple[str, ...]:
     return tuple(w.casefold() for w in _WORD.findall(unicodedata.normalize("NFKC", raw)))
 
 
 def _check_name(value: str, quote: str) -> str:
     """The value's words must appear, in order and adjacent, in the quote (case and punctuation ignored). No nicknames, no
     transliteration, no initials, no edit distance: a near-miss is unverified, because a wrong name creates the wrong person."""
-    wanted = _words(value)
+    wanted = words(value)
     if not wanted:
         return UNPARSEABLE_VALUE
-    have = _words(quote)
+    have = words(quote)
     n = len(wanted)
     return MATCH if any(have[i : i + n] == wanted for i in range(len(have) - n + 1)) else NOT_FOUND
 
