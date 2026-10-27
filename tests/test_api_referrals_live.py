@@ -477,7 +477,7 @@ async def test_a_worker_job_for_a_document_of_another_clinic_is_refused_before_a
     )
     with pytest.raises(Exception, match="not in the job's clinic"):
         await run_worker(w)
-    assert w.extractor.calls == [] and await rows(w, "select id from agents.graph_checkpoints where thread_id = :t", t=f"front_door:{doc}") == []
+    assert w.extractor.calls == [] and await rows(w, "select thread_id from agents.graph_checkpoints where thread_id = :t", t=f"front_door:{doc}") == []
 
 
 async def test_a_review_task_another_reviewer_already_acknowledged_refuses_the_decision_and_the_run_stays_paused(w):
