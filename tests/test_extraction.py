@@ -351,3 +351,34 @@ async def test_a_vision_registry_row_cannot_be_built_without_an_explicit_timeout
         vlm_row(**base)  # type: ignore[call-arg]
     row = vlm_row(**base, timeout_seconds=45.0)  # a test input, not a recommendation
     assert row.role == "vlm" and row.timeout_seconds == 45.0
+
+
+# ---- the second review: images the page does not list itself, and a cropped page -----------------------------------------------------------------
+
+
+async def test_an_image_inside_a_form_xobject_is_not_invisible_the_page_holds_for_a_person():
+    # A scanned body wrapped in a form is the shape many scanners produce: the page lists only the form. It must never be called complete on its header alone.
+    vision = FakeVision()
+    result = await run(make(vision), pdf([(HEADER, "in_form")]))
+    assert vision.calls == 0 and not result.complete and result.manual_pages == (1,) and R_IMAGE_UNREADABLE in result.reasons
+    assert R_PAGES_NEED_VISION in result.reasons
+
+
+async def test_coverage_is_measured_against_the_cropbox_when_it_is_smaller():
+    side = 250  # 12.9% of the 612x792 media box
+    uncropped, cropped = FakeVision(), FakeVision()
+    await run(make(uncropped), pdf([(TEXT_LONG, side)]))
+    await run(make(cropped), pdf([(TEXT_LONG, side)], cropbox="0 0 306 396"))  # the visible page is a quarter: 51.6%
+    assert uncropped.calls == 0 and cropped.calls == 1
+
+
+async def test_the_measured_coverage_is_the_drawn_share_of_the_page_area():
+    import io
+
+    from pypdf import PdfReader
+
+    from careflow.adapters.pdf import _coverage
+
+    reader = PdfReader(io.BytesIO(pdf([(TEXT_LONG, 306)])))
+    drawn, inline = _coverage(reader.pages[0])
+    assert inline == 0 and abs(drawn["/Im1"] - (306 * 306) / (612 * 792)) < 1e-9

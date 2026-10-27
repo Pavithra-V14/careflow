@@ -15,9 +15,10 @@ def _stream(body: bytes, extra: str = "") -> bytes:
     )
 
 
-def pdf(pages: list[tuple[str, bool | float | str]]) -> bytes:
+def pdf(pages: list[tuple[str, bool | float | str]], *, cropbox: str | None = None) -> bytes:
     """pages: (text, image) per page. Empty text means no text layer. image: False (none), True (a 100-point square), a number (that many points square), or "unmeasured"
-    (listed in the page resources but never drawn directly: its size cannot be determined)."""
+    (listed in the page resources but never drawn directly: its size cannot be determined), or "in_form" (an image drawn inside a form XObject that the page draws).
+    cropbox: e.g. "0 0 306 396", applied to every page."""
     objs: dict[int, bytes] = {}
     font = 3
     objs[font] = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
@@ -38,12 +39,23 @@ def pdf(pages: list[tuple[str, bool | float | str]]) -> bytes:
                 "/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode ",
             )
             side = 100 if image is True else image
-            if image != "unmeasured":
-                ops += f"q {side} 0 0 {side} 50 50 cm /Im1 Do Q\n"
-            xobj = f"/XObject << /Im1 {image_id} 0 R >>"
+            if image == "in_form":
+                form_id = nxt
+                nxt += 1
+                objs[form_id] = _stream(
+                    b"q 400 0 0 400 0 0 cm /Im1 Do Q\n",
+                    f"/Type /XObject /Subtype /Form /BBox [0 0 612 792] /Resources << /XObject << /Im1 {image_id} 0 R >> >> ",
+                )
+                ops += "/Fm1 Do\n"
+                xobj = f"/XObject << /Fm1 {form_id} 0 R >>"  # the page lists only the form, never the image
+            else:
+                if image != "unmeasured":
+                    ops += f"q {side} 0 0 {side} 50 50 cm /Im1 Do Q\n"
+                xobj = f"/XObject << /Im1 {image_id} 0 R >>"
         objs[content_id] = _stream(ops.encode())
+        crop = f"/CropBox [{cropbox}]" if cropbox else ""
         objs[page_id] = (
-            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents {content_id} 0 R /Resources << /Font << /F1 {font} 0 R >> {xobj} >> >>".encode()
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] {crop} /Contents {content_id} 0 R /Resources << /Font << /F1 {font} 0 R >> {xobj} >> >>".encode()
         )
         kids.append(page_id)
     objs[2] = (

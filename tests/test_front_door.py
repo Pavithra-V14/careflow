@@ -655,3 +655,14 @@ async def test_a_failed_or_empty_transcription_calls_no_other_model_and_holds_fo
     assert state.values["status"] == "extraction_unavailable" and state.next == () and len(deps.holds.tasks) == 1
     assert [e for e in log if e.startswith("MODEL") and e != "MODEL:vision"] == []  # no decision, extraction, retrieval or triage model was called
     assert deps.ingestor.calls == [] and deps.proposer.attempts == []
+
+
+async def test_a_typed_header_with_a_large_scanned_body_is_transcribed_then_screened_before_any_other_model():
+    from careflow.extraction import worker_context
+    from tests.pdf_factory import pdf
+
+    graph, log, _ = _with_pipeline_texts(None, pdf([("Memorial Clinic Referral Letter Header", 600)]), vision_for=_logging_vision(init={"script": {1: LETTER}}))
+    with worker_context():
+        await graph.ainvoke(START, CONFIG)
+    assert log.index("MODEL:vision") < log.index("rules") < log.index("MODEL:retrieve")
+    assert (await graph.aget_state(CONFIG)).next == ("review",)
