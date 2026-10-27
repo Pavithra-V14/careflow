@@ -93,8 +93,9 @@ async def world(conn) -> World:
             "insert into mpi.patients (id, clinic_id, name_ct, name_key_version, dob_ct, dob_key_version, origin, idempotency_key) "
             "values ($1, $2, '\\x01'::bytea, 1, '\\x01'::bytea, 1, 'test', $3)", pid, cid, f"pat-{pid}",
         )
-    w.doc_a, w.doc_b = _u(), _u()
-    for did, cid, by in ((w.doc_a, w.a, w.people["front_desk_a"]), (w.doc_b, w.b, w.people["front_desk_b"])):
+    w.doc_a, w.doc_b, w.doc_a2, w.doc_a3, w.doc_a4 = _u(), _u(), _u(), _u(), _u()  # the extra clinic-A documents give each probe its own document (one proposal per document)
+    for did, cid, by in ((w.doc_a, w.a, w.people["front_desk_a"]), (w.doc_b, w.b, w.people["front_desk_b"]), (w.doc_a2, w.a, w.people["front_desk_a"]),
+                         (w.doc_a3, w.a, w.people["front_desk_a"]), (w.doc_a4, w.a, w.people["front_desk_a"])):
         await conn.execute(
             "insert into docs.documents (id, clinic_id, origin, kind, storage_path, content_type, size_bytes, sha256, registered_by, idempotency_key) "
             "values ($1, $2, 'test', 'referral', $3, 'application/pdf', 1000, $4, $5, $6)", did, cid, f"clinic/{cid}/doc/{did}", SHA, by, f"d-{did}",
@@ -168,9 +169,10 @@ async def test_a_proposal_cannot_point_at_another_clinics_document_patient_or_ta
     w = await world(db)
     assert await outcome(db, proposal_sql(w)) is None  # control
     assert await outcome(db, proposal_sql(w, doc=w.doc_b)) == "23503"
-    assert await outcome(db, proposal_sql(w, patient=w.patient_b)) == "23503"
-    assert await outcome(db, proposal_sql(w, task=w.task_b)) == "23503"
-    assert await outcome(db, proposal_sql(w, origin="'live'")) == "23503"  # patient and task are origin 'test'
+    # each probe uses its own clinic-A document: the unique (clinic, document) key would otherwise fire before the foreign key (the control above used doc_a)
+    assert await outcome(db, proposal_sql(w, doc=w.doc_a2, patient=w.patient_b)) == "23503"
+    assert await outcome(db, proposal_sql(w, doc=w.doc_a3, task=w.task_b)) == "23503"
+    assert await outcome(db, proposal_sql(w, doc=w.doc_a4, origin="'live'")) == "23503"  # patient and task are origin 'test'
     assert await outcome(db, proposal_sql(w, origin="null")) == "23502"
 
 
@@ -182,7 +184,10 @@ async def test_proposal_constraints_one_per_document_key_per_clinic_abstained_me
     assert await outcome(db, proposal_sql(w, abstained="true", candidates="'[{\"card_id\": \"c\", \"version\": 1}]'", doc=w.doc_a)) == "23514"  # CHECK constraints are evaluated before any unique key
     w2 = await world(db)
     assert await outcome(db, proposal_sql(w2, abstained="false", candidates="'[{\"card_id\": \"c\", \"version\": 1}]'")) is None
-    assert await outcome(db, proposal_sql(w2, candidates="'{}'", doc=w2.doc_a, task=w2.task_a)) == "23514"
+    # A JSON OBJECT instead of an array is refused too. Which error says so depends on the order Postgres evaluates the CHECK constraints in: the length check may run
+    # first and raise 22023 (invalid parameter value) before the type check can raise 23514. Both are refusals; the row never exists.
+    assert await outcome(db, proposal_sql(w2, candidates="'{}'", doc=w2.doc_a2, task=w2.task_a)) in ("23514", "22023")
+    assert await db.fetchval("select count(*) from agents.triage_proposals where candidates = '{}'::jsonb") == 0
     assert await outcome(db, proposal_sql(w2, mode="fully_automatic")) == "23514"
 
 
@@ -229,7 +234,8 @@ async def test_one_decision_per_proposal_a_decision_cannot_cross_clinics_and_the
     pid = await seed_proposal(db, w)
     assert await outcome(db, decision_sql(w.a, pid, w.people["nurse_a"], key="d1")) is None
     assert await outcome(db, decision_sql(w.a, pid, w.people["doctor_a"], key="d2")) == "23505"  # a second decision on the same proposal
-    assert await outcome(db, decision_sql(w.b, pid, w.people["nurse_b"])) == "23503"  # clinic B cannot decide clinic A's proposal
+    pid2 = await seed_proposal(db, w, doc=w.doc_a2)  # a proposal with no decision yet, so the unique (proposal) key cannot fire before the foreign key
+    assert await outcome(db, decision_sql(w.b, pid2, w.people["nurse_b"])) == "23503"  # clinic B cannot decide clinic A's proposal
 
 
 async def test_only_nurse_doctor_and_worker_read_decisions(db):

@@ -153,7 +153,7 @@ async def test_the_table_is_append_only_even_for_the_owner(db):
     await db.execute(doc_sql(w.a, w.people["front_desk_a"]))
     assert await outcome(db, "update docs.documents set kind = 'other'") == "23001"
     assert await outcome(db, "delete from docs.documents") == "23001"
-    assert await outcome(db, "truncate docs.documents") == "23001"
+    assert await outcome(db, "truncate docs.documents cascade") == "23001"  # since 0018 a foreign key references this table, so a plain TRUNCATE is refused earlier (0A000); CASCADE reaches the trigger
 
 
 @pytest.mark.parametrize(

@@ -321,6 +321,7 @@ async def test_a_worker_serving_two_clinics_gets_each_clinics_own_rows_for_the_s
     await saver.aput(cfg(w, thread, clinic_id=str(w.b)), c_b, {"step": 0}, c_b["channel_versions"])
     late = checkpoint({"x": "poison"})
     late["id"] = "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    late["channel_versions"] = {"x": "00000000000000000000000000000002.0000000000000002"}  # a new version, as a real graph always has (a reused one keeps the first blob)
     await saver.aput(cfg(w, thread, clinic_id=str(w.b)), late, {"step": 1}, late["channel_versions"])
     got_a = await saver.aget_tuple(cfg(w, thread))
     got_b = await saver.aget_tuple(cfg(w, thread, clinic_id=str(w.b)))

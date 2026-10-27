@@ -176,10 +176,11 @@ async def test_the_worker_cannot_update_or_delete_anything_in_mpi_and_cannot_wri
     assert near.candidate_ids == (first.patient_id,)
     fd, w = p["fd_a"], p["worker_a"]
     merge = (
-        "insert into mpi.merges (clinic_id, master_patient_id, subordinate_patient_id, approved_by, origin, idempotency_key, status) "
-        "values (:c, :m, :s, :u, 'test', :k, 'awaiting_second_approval')"
+        "insert into mpi.merges (clinic_id, master_patient_id, subordinate_patient_id, candidate_id, approved_by, origin, idempotency_key, status) "
+        "values (:c, :m, :s, :cand, :u, 'test', :k, 'awaiting_second_approval')"
     )
-    assert await attempt(db, fd, merge, c=a, m=first.patient_id, s=near.patient_id, u=fd, k="m-fd") == 1  # a real pending merge, proposed by a person
+    cand = (await db.execute(text("select id from mpi.match_candidates where patient_id = :p"), {"p": near.patient_id})).scalar_one()
+    assert await attempt(db, fd, merge, c=a, m=first.patient_id, s=near.patient_id, cand=cand, u=fd, k="m-fd") == 1  # a real pending merge, proposed by a person
     # positive controls: the same statements, as front desk, DO change rows, so a 0 for the worker means the policy filtered them
     assert await attempt(db, fd, "update mpi.patients set name_key_version = name_key_version where id = :i", i=first.patient_id) == 1
     assert await attempt(db, fd, "update mpi.match_candidates set status = status where clinic_id = :c", c=a) == 1
@@ -193,7 +194,7 @@ async def test_the_worker_cannot_update_or_delete_anything_in_mpi_and_cannot_wri
     for table in ("mpi.patients", "mpi.identity_tokens", "mpi.match_candidates", "mpi.merges"):
         assert await attempt(db, w, f"delete from {table}") == "42501", table
     # merges stay human: the worker cannot propose one between two real, distinct patients
-    assert await attempt(db, w, merge, c=a, m=near.patient_id, s=first.patient_id, u=w, k="m-worker") == "42501"
+    assert await attempt(db, w, merge, c=a, m=near.patient_id, s=first.patient_id, cand=cand, u=w, k="m-worker") == "42501"
     # the worker cannot write an already-resolved possible duplicate (that would close a human review)
     cand = (
         "insert into mpi.match_candidates (clinic_id, patient_id, candidate_patient_id, matched_kinds, reason, status, resolved_at, origin, idempotency_key) "
@@ -228,5 +229,5 @@ async def test_the_other_roles_are_unchanged_nurse_cannot_register_front_desk_st
     assert (await ingest(db, pipeline, p["fd_a"], a)).outcome == "created"
     async with db.begin_nested():
         await as_user(db, p["worker_a"])
-        assert (await db.execute(text("select count(*) from mpi.patients where clinic_id = :c"), {"c": a})).scalar_one() == 2  # the worker reads its clinic (needed to match)
+        assert (await db.execute(text("select count(*) from mpi.patients where clinic_id = :c"), {"c": a})).scalar_one() == 1  # the worker reads its clinic's one patient (needed to match)
         await db.exec_driver_sql("reset role")
