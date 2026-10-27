@@ -67,6 +67,7 @@ from careflow.auth import (
 from careflow.checkpointer import CheckpointerError
 from careflow.crypto import CryptoError, DemographicVault
 from careflow.db import make_app_engine, set_request_claims
+from careflow.dead_letters import raise_dead_letter_tasks
 from careflow.front_door import FrontDoorError, run_config
 from careflow.front_door_runner import TASK_TYPE as FRONT_DOOR_TASK
 from careflow.front_door_runner import (
@@ -1066,6 +1067,7 @@ def create_app(
         app.state.front_door = front_door
         app.state.poker = Poker()  # routes that enqueue call `app.state.poker.poke()` after their transaction commits (7.4)
         handlers = {FRONT_DOOR_TASK: front_door_handler(front_door, session_for=front_door_session_for)} if front_door is not None else {}
+        sweeps = [lambda conn: raise_dead_letter_tasks(conn, front_door.dead_letters)] if front_door is not None else []  # a dead-lettered run is never silent
         worker: asyncio.Task | None = None
         if cfg.run_worker:
             if cfg.worker_account_id is None:
@@ -1073,7 +1075,7 @@ def create_app(
             else:
                 worker = asyncio.create_task(
                     worker_loop(app.state.engine, PostgresQueue(), handlers, app.state.poker,
-                                worker_account_id=cfg.worker_account_id, worker_id=f"api-{uuid.uuid4().hex[:8]}"),
+                                worker_account_id=cfg.worker_account_id, worker_id=f"api-{uuid.uuid4().hex[:8]}", sweeps=sweeps),
                     name="careflow-worker",
                 )
         app.state.worker = worker

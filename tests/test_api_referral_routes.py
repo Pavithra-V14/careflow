@@ -28,7 +28,7 @@ DOC = uuid.uuid4()
 
 
 def components():
-    return FrontDoorComponents(None, None, None, None, None, None, None, None)  # type: ignore[arg-type]
+    return FrontDoorComponents(None, None, None, None, None, None, None, None, None)  # type: ignore[arg-type]
 
 
 async def fake_db(claims=Depends(verified_claims)):

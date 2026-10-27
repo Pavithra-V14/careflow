@@ -38,6 +38,7 @@ from careflow.app import Settings, create_app, db_conn, verified_claims
 from careflow.budget import RunBudget, TickClock
 from careflow.crypto import DemographicVault
 from careflow.db import set_request_claims
+from careflow.dead_letters import SqlDeadLetterTaskWriter
 from careflow.front_door_runner import FrontDoorComponents, front_door_handler
 from careflow.mpi import PatientIngestionPipeline
 from careflow.queue import PostgresQueue
@@ -156,7 +157,7 @@ async def world():
         components = FrontDoorComponents(
             engine=RedFlagEngine(), texts=texts, extractor=extractor, ingestor=PatientIngestionPipeline(vault, key_version=1), retriever=Retriever(),  # type: ignore[arg-type]
             proposer=SqlTriageProposer(mode=ApprovalMode.ASSISTED, assigned_role="nurse", task_priority="standard"),  # test inputs
-            recorder=SqlReviewRecorder(), holds=SqlHoldTaskWriter(priority="standard"), retrieval_scope={"domain": "stand-in"}, profile="demo",
+            recorder=SqlReviewRecorder(), holds=SqlHoldTaskWriter(priority="standard"), dead_letters=SqlDeadLetterTaskWriter(priority="standard"), retrieval_scope={"domain": "stand-in"}, profile="demo",
         )
         lock = asyncio.Lock()
 

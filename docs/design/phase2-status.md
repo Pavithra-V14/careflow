@@ -42,6 +42,6 @@ Real-engine contract tests; retrieval gold-set gate; P2-4; the route/worker to r
 3. Priya's `STRONG_IDENTIFIERS` sign-off; `identity_refused` routing confirmed by the clinic.
 4. A retention/erasure procedure for checkpoints and review tasks (history is append-only today).
 5. audit.log rows for human clinical decisions.
-6. A handler failure that is retried five times without success dead-letters the `front_door_run` job and no review task is raised for it (only the dead-letter metric shows it): a human-visible task for a dead-lettered front_door_run.
+6. (DONE 2026-10-27) A dead-lettered `front_door_run` job now raises a nurse's `referral_dead_letter` review task (careflow/dead_letters.py, run by the tick's sweep); its priority is a required placeholder (clinician-decisions item 15).
 7. The dedicated-harness role-matrix exception for the two referral routes applies the standing rule (append-only tables); the owner has not named it separately. Please confirm.
 8. No process has yet run the graph through the real pooler engine and a real commit (the production session factories are only unit-tested).

@@ -11,9 +11,8 @@ WHO RUNS WHAT (owner decision of 2026-10-24: the graph runs as the `queue_worker
 EXTERNAL ENGINES are stand-ins: the components the app is built with (`FrontDoorComponents`) hold the extractor, the retriever (embedder and vector store) and the text source.
 Nothing real is wired here: with `components=None` the routes answer a visible 503 and no handler is registered (a queued job would be dead-lettered as "no handler", never lost).
 
-KNOWN LIMIT ("no run ends silently" is about the GRAPH): a handler failure that is not retried into success (a malformed or mis-addressed job, an engine that keeps failing) ends in the
-queue's dead-letter state after five attempts, and no review task is created for it; the dead-letter metric is what shows it. Closing that needs a human-visible task for a dead-lettered
-front_door_run (recorded in docs/design/phase2-status.md).
+A handler failure that is not retried into success (a malformed or mis-addressed job, an engine that keeps failing) ends in the queue's dead-letter state after five attempts. The
+tick's end-of-tick sweep (careflow.dead_letters) then raises a nurse's `referral_dead_letter` review task for it, once, so that ending is not silent either.
 
 The handler is safe to run twice and to cancel at any await: a second run resumes the thread from its last checkpoint (`ainvoke(None)`), a thread paused at review or already
 finished is left alone, and every side effect inside the graph carries an idempotency key derived from the document.
@@ -64,6 +63,7 @@ class FrontDoorComponents:
     proposer: TriageProposer
     recorder: ReviewRecorder
     holds: HoldTaskWriter
+    dead_letters: Any  # SqlDeadLetterTaskWriter: the nurse's task for a front_door_run job that was dead-lettered (careflow.dead_letters); priority is required there
     retrieval_scope: dict[str, str] = field(default_factory=dict)
     profile: str | None = None
 

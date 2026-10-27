@@ -29,11 +29,11 @@ import asyncio
 import logging
 import time
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Final
 
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from careflow.budget import BudgetExceeded, RunBudget, TickClock
 from careflow.db import set_request_claims
@@ -57,6 +57,7 @@ class JobContext:
 
 
 Handler = Callable[[JobContext], Awaitable[None]]
+Sweep = Callable[[AsyncConnection], Awaitable[int]]  # run at the end of every tick as the worker account; returns how many rows it created
 
 
 @dataclass
@@ -65,6 +66,7 @@ class TickResult:
     completed: int = 0
     dead_lettered: int = 0
     left_for_retry: int = 0
+    swept: int = 0  # rows the end-of-tick sweeps created (e.g. tasks for dead-lettered jobs)
     stopped_by: str = "empty"  # empty | deadline
     job_ids: list[uuid.UUID] = field(default_factory=list)
 
@@ -110,8 +112,22 @@ async def run_tick(
     clock: Callable[[], float] = time.monotonic,
     on_warn: Callable[[str, int, int], None] | None = None,
     relay: Callable[..., Awaitable[int]] | None = None,
+    sweeps: Sequence[Sweep] = (),
 ) -> TickResult:
-    """Run one tick. `relay` defaults to the queue's own `relay_outbox` when it has one."""
+    """Run one tick. `relay` defaults to the queue's own `relay_outbox` when it has one. `sweeps` run after the jobs, even when the tick's time ran out; a failing sweep is
+    logged (class only) and never fails the tick."""
+    result = await _drain(engine, queue, handlers, worker_account_id, worker_id, tick_seconds, clock, on_warn, relay)
+    for sweep in sweeps:
+        try:
+            result.swept += await _as_worker(engine, worker_account_id, sweep)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001  (a sweep must not take the tick down)
+            log.error("a tick sweep failed (error=%s)", type(exc).__name__)
+    return result
+
+
+async def _drain(engine, queue, handlers, worker_account_id, worker_id, tick_seconds, clock, on_warn, relay) -> TickResult:
     tick = TickClock(tick_seconds, clock=clock)
     result = TickResult()
     relay_fn = relay or getattr(queue, "relay_outbox", None)
@@ -189,11 +205,12 @@ async def worker_loop(
     worker_id: str,
     interval_seconds: float = TICK_INTERVAL_SECONDS,
     tick_seconds: float = 40.0,
+    sweeps: Sequence[Sweep] = (),
 ) -> None:
     """Tick on every poke and at least every `interval_seconds`, until cancelled. A failing tick is logged (class only) and the loop goes on."""
     while True:
         try:
-            outcome = await run_tick(engine, queue, handlers, worker_account_id=worker_account_id, worker_id=worker_id, tick_seconds=tick_seconds)
+            outcome = await run_tick(engine, queue, handlers, worker_account_id=worker_account_id, worker_id=worker_id, tick_seconds=tick_seconds, sweeps=sweeps)
             if outcome.processed:
                 log.info("tick done (processed=%s completed=%s dead_lettered=%s retry=%s stopped_by=%s)", outcome.processed,
                          outcome.completed, outcome.dead_lettered, outcome.left_for_retry, outcome.stopped_by)

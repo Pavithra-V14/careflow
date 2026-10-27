@@ -19,3 +19,4 @@ column, never a default, and is marked `# CLINICAL-PLACEHOLDER: needs clinician 
 | 12 | The patient-facing emergency template and any reply text | `patient_reply = pending_clinician_template`; nothing is sent | clinical lead |
 | 13 | `STRONG_IDENTIFIERS` (what counts as a confident identity match) | `careflow/mpi.py`, pending Priya's sign-off; no real patient data until recorded | Priya (health-information lead) |
 | 14 | Whether `identity_refused` (data-entry refusals from the identity module) belongs to front desk or a nurse | currently front desk, PENDING CLINIC CONFIRMATION (owner decision 2026-10-24); an idempotency-key conflict goes to a nurse | clinical lead |
+| 15 | The `priority` of a `referral_dead_letter` review task (a front_door_run job that failed five times) | `SqlDeadLetterTaskWriter(priority=...)` required, no default | clinical lead |
