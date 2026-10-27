@@ -19,12 +19,12 @@ CLINIC, DOC, WORKER = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
 
 
 class Conn:
-    def __init__(self, clinic):
-        self.clinic = clinic
+    def __init__(self, clinic, origin="test"):
+        self.clinic, self.origin = clinic, origin
 
     async def execute(self, statement, params=None):
         assert "from docs.documents" in str(statement)
-        return SimpleNamespace(first=lambda: None if self.clinic is None else SimpleNamespace(clinic_id=self.clinic))
+        return SimpleNamespace(first=lambda: None if self.clinic is None else SimpleNamespace(clinic_id=self.clinic, origin=self.origin))
 
 
 class Graph:
@@ -44,7 +44,7 @@ def ctx(payload=None, clinic=CLINIC):
     return JobContext(job=job, budget=RunBudget(TickClock()), engine=object(), worker_account_id=WORKER)  # type: ignore[arg-type]
 
 
-def handler(graph, doc_clinic=CLINIC, monkeypatch=None):
+def handler(graph, doc_clinic=CLINIC, monkeypatch=None, doc_origin="test"):
     seen = {}
 
     def session_for(engine, account):
@@ -52,7 +52,7 @@ def handler(graph, doc_clinic=CLINIC, monkeypatch=None):
 
         @asynccontextmanager
         async def session():
-            yield Conn(doc_clinic)
+            yield Conn(doc_clinic, doc_origin)
 
         return session
 
@@ -98,7 +98,45 @@ async def test_a_job_that_does_not_name_a_document_or_names_one_of_another_clini
     h3, _ = handler(graph, doc_clinic=None, monkeypatch=monkeypatch)  # a document the worker cannot see
     with pytest.raises(RunnerError):
         await h3(ctx())
+    h4, _ = handler(graph, doc_origin="live", monkeypatch=monkeypatch)  # the job says origin 'test', the document is 'live'
+    with pytest.raises(RunnerError):
+        await h4(ctx())
     assert graph.invoked == []
+
+
+async def test_the_production_worker_session_sets_the_workers_claims_first_and_commits_on_a_clean_exit():
+    events = []
+
+    class Conn:
+        async def execute(self, statement, params=None):
+            events.append(("execute", str(statement), params))
+
+    class Begin:
+        async def __aenter__(self):
+            events.append(("begin",))
+
+        async def __aexit__(self, *exc):
+            events.append(("commit" if exc[0] is None else "rollback",))
+
+    class Connect:
+        async def __aenter__(self):
+            conn = Conn()
+            conn.begin = lambda: Begin()
+            return conn
+
+        async def __aexit__(self, *exc):
+            events.append(("closed",))
+
+    engine = SimpleNamespace(connect=lambda: Connect())
+    async with runner.worker_session(engine, WORKER)() as conn:  # type: ignore[arg-type]
+        assert conn is not None
+    assert events[0] == ("begin",) and events[1][0] == "execute" and "set_config('request.jwt.claims'" in events[1][1] and str(WORKER) in events[1][2]["c"]
+    assert ("commit",) in events
+    events.clear()
+    with pytest.raises(ValueError):
+        async with runner.worker_session(engine, WORKER)():  # type: ignore[arg-type]
+            raise ValueError("boom")
+    assert ("rollback",) in events and ("commit",) not in events
 
 
 async def test_the_error_text_never_carries_the_payload(monkeypatch):

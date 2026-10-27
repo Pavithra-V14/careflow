@@ -11,6 +11,10 @@ WHO RUNS WHAT (owner decision of 2026-10-24: the graph runs as the `queue_worker
 EXTERNAL ENGINES are stand-ins: the components the app is built with (`FrontDoorComponents`) hold the extractor, the retriever (embedder and vector store) and the text source.
 Nothing real is wired here: with `components=None` the routes answer a visible 503 and no handler is registered (a queued job would be dead-lettered as "no handler", never lost).
 
+KNOWN LIMIT ("no run ends silently" is about the GRAPH): a handler failure that is not retried into success (a malformed or mis-addressed job, an engine that keeps failing) ends in the
+queue's dead-letter state after five attempts, and no review task is created for it; the dead-letter metric is what shows it. Closing that needs a human-visible task for a dead-lettered
+front_door_run (recorded in docs/design/phase2-status.md).
+
 The handler is safe to run twice and to cancel at any await: a second run resumes the thread from its last checkpoint (`ainvoke(None)`), a thread paused at review or already
 finished is left alone, and every side effect inside the graph carries an idempotency key derived from the document.
 """
@@ -110,9 +114,9 @@ def front_door_handler(components: FrontDoorComponents, *, session_for: SessionF
             raise RunnerError("the job payload does not name a document") from None
         session = session_for(ctx.engine, ctx.worker_account_id)
         async with session() as conn:
-            row = (await conn.execute(text("select clinic_id from docs.documents where id = :d"), {"d": document_id})).first()
-        if row is None or row.clinic_id != ctx.job.clinic_id:
-            raise RunnerError("the document is not in the job's clinic")  # a tampered or mis-addressed job: retried, then dead-lettered, never run
+            row = (await conn.execute(text("select clinic_id, origin from docs.documents where id = :d"), {"d": document_id})).first()
+        if row is None or row.clinic_id != ctx.job.clinic_id or row.origin != ctx.job.origin:
+            raise RunnerError("the document is not in the job's clinic and origin")  # a tampered or mis-addressed job: retried, then dead-lettered, never run
         graph = graph_for(components, session)
         config = run_config(document_id, ctx.job.clinic_id, ctx.job.origin)
         state = await graph.aget_state(config)

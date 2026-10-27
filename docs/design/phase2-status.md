@@ -4,13 +4,14 @@ Updated 2026-10-24. Branch stack: next-backend (PR #2, CI green) <- p2-3-docs <-
 (`python -m careflow.migrate --check` against dev on 2026-10-24: 0017 and 0018 pending, ledger intact; 0019 to 0021 did not exist yet). Apply to dev only after merge and review.
 
 ## Done (code, offline tests, reviewed)
+- The live run, on stand-ins for the external engines: the worker job handler for the Front Door graph (`careflow/front_door_runner.py`), `POST /v1/staff/referrals/{id}/run` (enqueue) and `/review` (resume as the signed-in reviewer), each with its role-matrix case in the dedicated live harness `tests/test_api_referrals_live.py` (NEVER RUN yet: it first runs in CI on PR #3).
 - P2-1 runner, budgets, tick; P2-2 decision tier with fakes and the three-adapter contract harness (against fakes only).
 - P2-3 documents: signed upload service, server-side re-verification, registration, `read_verified` re-hash, uploads disabled outside demo, clinical readiness needs a scanner (0017).
 - P2-5 tiered grounding (plain code; Guardrails AI not needed).
 - P2-6 pure-code retrieval: structured-field text, BM25, RRF, version-checked join, abstention with no default threshold, fake vector store.
 - P2-7 referral to identity: rules before any model on every path; verified facts only into mpi.
 - P2-8 the Front Door graph: structural no-side-effect-across-a-pause hard CI gate (fails closed), topology and agent-inventory pins, crash-resume tests, tracing refused.
-  Postgres checkpointer: our own asyncpg saver on 0021 (forced RLS, append-only history), conformance with LangGraph's InMemorySaver, restart-durability test over the in-memory store (and a single rolled-back transaction against the real tables): NOT yet proven across a real process restart and commit, because no production session factory exists.
+  Postgres checkpointer: our own asyncpg saver on 0021 (forced RLS, append-only history), conformance with LangGraph's InMemorySaver, restart-durability test over the in-memory store (and a single rolled-back transaction against the real tables): NOT yet proven across a real process restart and commit. The production session factories exist (`front_door_runner.worker_session`, `request_session`) and are unit-tested with fakes, but nothing has run them against the real pooler.
 - P2-9 triage: 0018 (proposal and human-only decision tables), routing policy with no clinical values, SQL writers.
 - No run ends silently: `hold_for_human` raises a `referral_hold` review task (0020: front desk can see and resolve its own).
 - The queue worker can register patients from a verified referral (0019: INSERT plus the reads matching needs; no UPDATE/DELETE; merges stay human and two-person).
@@ -18,7 +19,6 @@ Updated 2026-10-24. Branch stack: next-backend (PR #2, CI green) <- p2-3-docs <-
 
 ## Buildable now
 - A LIVE end-to-end run against the real database. The policies now allow the worker to run the whole clean path (0017 to 0021), but no such run has happened yet and the new live tests have never been executed.
-- The worker/process that starts and resumes runs, and the authenticated resume route with its role-matrix cases (rule 8).
 - Retention/erasure procedure for checkpoints (history is append-only; deletion is refused today).
 
 ## Blocked on clinicians (see docs/design/clinician-decisions.md)
@@ -42,3 +42,6 @@ Real-engine contract tests; retrieval gold-set gate; P2-4; the route/worker to r
 3. Priya's `STRONG_IDENTIFIERS` sign-off; `identity_refused` routing confirmed by the clinic.
 4. A retention/erasure procedure for checkpoints and review tasks (history is append-only today).
 5. audit.log rows for human clinical decisions.
+6. A handler failure that is retried five times without success dead-letters the `front_door_run` job and no review task is raised for it (only the dead-letter metric shows it): a human-visible task for a dead-lettered front_door_run.
+7. The dedicated-harness role-matrix exception for the two referral routes applies the standing rule (append-only tables); the owner has not named it separately. Please confirm.
+8. No process has yet run the graph through the real pooler engine and a real commit (the production session factories are only unit-tested).

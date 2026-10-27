@@ -64,6 +64,7 @@ from careflow.auth import (
     step_up_failure,
     verify_token,
 )
+from careflow.checkpointer import CheckpointerError
 from careflow.crypto import CryptoError, DemographicVault
 from careflow.db import make_app_engine, set_request_claims
 from careflow.front_door import FrontDoorError, run_config
@@ -101,7 +102,7 @@ from careflow.scheduling import (
     UnknownReference,
 )
 from careflow.tick import Poker, worker_loop
-from careflow.triage_store import DecisionConflict
+from careflow.triage_store import DecisionConflict, TriageStoreError
 from careflow.triage_store import NotPermitted as TriageNotPermitted
 
 log = logging.getLogger("careflow.app")
@@ -918,8 +919,9 @@ async def readyz(request: Request) -> JSONResponse:
 # graph as the queue_worker system identity and pauses at review.
 # /review RESUMES the paused thread as the REVIEWER: nurse or doctor of the clinic. The reviewer is the signed-in account (claims["sub"]), never a body field; the decision row
 # is written with decided_by = auth.uid() (migration 0018). Nothing is ever approved by this route's absence or by a timeout: no decision, no resume.
-# Both need `X-Idempotency-Key` (rule 5). /run uses it (scoped to the document) as the job's key, so a replay returns the same job; /review is idempotent on the document (one
-# decision per proposal): the same decision by the same reviewer again is a `replayed: true`, a different one is 409.
+# Both REQUIRE `X-Idempotency-Key` (rule 5). /run uses it (scoped to the document) as the job's key, so a replay returns the same job. /review validates it but does not use it:
+# its write is idempotent on the DOCUMENT (the decision key is `review:<document id>`, one decision per proposal): the same decision by the same reviewer again is `replayed: true`,
+# a different one is 409.
 # Both answer a visible 503 when no Front Door components are configured (this package only ever runs on stand-ins for the external engines).
 
 staff_referrals = APIRouter(prefix="/v1/staff/referrals", tags=["staff referrals"])
@@ -1015,8 +1017,15 @@ async def review_referral(
         await graph.ainvoke(Command(resume={"decision": body.decision, "reviewer_id": reviewer}), config)
     except DecisionConflict:
         raise HTTPException(status_code=409, detail="this referral is not waiting for a decision") from None
-    except (TriageNotPermitted, FrontDoorError):
-        raise HTTPException(status_code=403, detail="your role may not review a referral") from None
+    except TriageNotPermitted:
+        # Either the role (the decision policy) or a review task another reviewer already acknowledged: one fixed answer for both, and the request transaction rolls back.
+        raise HTTPException(status_code=403, detail="you cannot record this decision") from None
+    except TriageStoreError:
+        raise HTTPException(status_code=404, detail="not found") from None  # the proposal is missing or invisible to you: the one fixed 404
+    except (FrontDoorError, CheckpointerError):
+        # A deployment fault (hosted tracing switched on, a checkpoint without its scope): not a role problem and not the client's. Logged by class only.
+        log.error("a referral review failed in the graph or its checkpointer; nothing was recorded")
+        raise HTTPException(status_code=503, detail="referral runs are unavailable") from None
     return ReviewOut(document_id=document_id, decision=body.decision, replayed=False)
 
 

@@ -460,3 +460,17 @@ async def test_a_worker_job_for_a_document_of_another_clinic_is_refused_before_a
     with pytest.raises(Exception, match="not in the job's clinic"):
         await run_worker(w)
     assert w.extractor.calls == [] and await rows(w, "select id from agents.graph_checkpoints where thread_id = :t", t=f"front_door:{doc}") == []
+
+
+async def test_a_review_task_another_reviewer_already_acknowledged_refuses_the_decision_and_the_run_stays_paused(w):
+    doc = await paused(w)
+    ((task,),) = await rows(w, "select review_task_id from agents.triage_proposals where document_id = :d", d=doc)
+    async with w.worker_session_for(object(), w.ids["doctor_a"])() as conn:  # the doctor picks the task up first
+        n = (await conn.execute(text("update agents.review_tasks set status = 'acknowledged', acknowledged_by = :u, acknowledged_at = now() where id = :t"),
+                                {"u": w.ids["doctor_a"], "t": task})).rowcount
+    assert n == 1
+    refused = await post(w, "nurse_a", REVIEW.format(doc), json={"decision": "approve"})
+    assert (refused.status_code, refused.json()) == (403, {"detail": "you cannot record this decision"})
+    assert await decisions(w, doc) == []  # the request rolled back: no decision on an unresolved task
+    still_open = await post(w, "doctor_a", REVIEW.format(doc), json={"decision": "approve"})
+    assert still_open.status_code == 200 and len(await decisions(w, doc)) == 1  # the run was still paused: the acknowledging doctor can decide

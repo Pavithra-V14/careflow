@@ -14,10 +14,11 @@ from fastapi.testclient import TestClient
 from careflow import app as app_module
 from careflow.app import Settings, create_app, db_conn, verified_claims
 from careflow.auth import JWKSClient
+from careflow.checkpointer import CheckpointerError
 from careflow.front_door import FrontDoorError
 from careflow.front_door_runner import FrontDoorComponents
 from careflow.queue import EnqueueResult
-from careflow.triage_store import DecisionConflict, NotPermitted
+from careflow.triage_store import DecisionConflict, NotPermitted, TriageStoreError
 
 PROJECT = "https://example-project.supabase.co"
 RUN, REVIEW = "/v1/staff/referrals/{}/run", "/v1/staff/referrals/{}/review"
@@ -190,8 +191,9 @@ def test_a_repeated_decision_is_a_replay_and_a_different_one_or_by_somebody_else
 
 @pytest.mark.parametrize(
     ("error", "status", "detail"),
-    [(DecisionConflict("SECRET"), 409, "this referral is not waiting for a decision"), (NotPermitted("SECRET"), 403, "your role may not review a referral"),
-     (FrontDoorError("SECRET"), 403, "your role may not review a referral")],
+    [(DecisionConflict("SECRET"), 409, "this referral is not waiting for a decision"), (NotPermitted("SECRET"), 403, "you cannot record this decision"),
+     (TriageStoreError("SECRET"), 404, "not found"), (FrontDoorError("SECRET"), 503, "referral runs are unavailable"),
+     (CheckpointerError("SECRET"), 503, "referral runs are unavailable")],
 )
 def test_review_maps_writer_errors_to_fixed_bodies_without_leaking_their_text(world, error, status, detail):
     world.graph = paused()
@@ -199,3 +201,15 @@ def test_review_maps_writer_errors_to_fixed_bodies_without_leaking_their_text(wo
     with make_client() as c:
         r = c.post(REVIEW.format(DOC), headers=key(), json={"decision": "reject"})
     assert (r.status_code, r.json()) == (status, {"detail": detail}) and "SECRET" not in r.text
+
+
+
+def test_the_poke_is_given_only_after_a_successful_enqueue_and_a_refused_run_never_pokes(world):
+    with make_client() as c:
+        assert not c.app.state.poker._event.is_set()
+        world.role_ok = False
+        c.post(RUN.format(DOC), headers=key())
+        assert not c.app.state.poker._event.is_set()  # nothing was enqueued, nobody is woken
+        world.role_ok = True
+        assert c.post(RUN.format(DOC), headers=key("poke")).status_code == 200
+        assert c.app.state.poker._event.is_set()  # woken after the response (a background task), i.e. after the commit
