@@ -158,3 +158,7 @@ holds (every live file in exactly one shard, and no whole-table count of a table
 **So that the next rebalance does not guess:** every shard now writes `--junitxml=shard-times.xml` and prints `SHARD-TIMES` / `SHARD-TIME` lines (seconds, test count and file, slowest first) from
 `scripts/ci_shard_times.py` in a step that runs even when tests fail. Compare the estimate above with those lines after the next run and move files again if a shard is over 40 minutes.
 
+
+**Measured after the rebalance (run 40529226066, all green, total about 47 min):** shard 1 24:54, shard 2 42:21, shard 3 46:44 (pytest time). Shard 3 and shard 2 are now over the 40-minute line the previous paragraph set; the next rebalance should start from the `SHARD-TIME` lines of that run.
+
+**One-off timing failure, recorded:** `test_concurrent_reads_from_different_identities_neither_mix_rows_nor_leak_connections` failed once with `QueuePool limit of size 5 overflow 5 reached ... timeout 30.00` (run 40521334349, shard 1: 40 concurrent reads queued behind a slow pooler) and passed unchanged in run 40529226066. No change was made to the test or to the app pool settings; if it recurs, check what the 40 requests wait on before changing anything.

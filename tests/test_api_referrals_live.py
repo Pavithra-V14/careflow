@@ -247,15 +247,15 @@ async def post(w, who, path, *, key="new", json=None, token=None):
     return await w.client.post(path, headers=headers, json=json)
 
 
-async def run_worker(w, *, expect_job=True):
+async def run_worker(w, *, expect_job=True, worker="worker_a"):
     """Claim the next job as the worker and run the real handler on it, exactly as the tick would; acknowledge on success."""
-    queue, session = PostgresQueue(), w.worker_session_for(object(), w.ids["worker_a"])
+    queue, session = PostgresQueue(), w.worker_session_for(object(), w.ids[worker])
     async with session() as conn:
         job = await queue.claim(conn, "test-worker", 120.0)
     if job is None:
         assert not expect_job, "no job was queued"
         return None
-    ctx = JobContext(job=job, budget=RunBudget(TickClock()), engine=object(), worker_account_id=w.ids["worker_a"])  # type: ignore[arg-type]
+    ctx = JobContext(job=job, budget=RunBudget(TickClock()), engine=object(), worker_account_id=w.ids[worker])  # type: ignore[arg-type]
     await w.handler(ctx)
     async with session() as conn:
         await queue.acknowledge(conn, job.id, worker_id="test-worker")
@@ -408,12 +408,17 @@ async def test_no_patient_text_reaches_a_response_a_job_a_task_or_a_checkpoint(w
         assert not any(s in response.text for s in ("Asha", "Rao", "1980", "98765", "9876543210"))
     stored = " ".join(str(r[0]) for r in await rows(w, "select payload::text from ops.queue union all select provenance::text from agents.review_tasks"))
     assert not any(s in stored for s in ("Asha", "Rao", "1980", "98765"))
-    control = (await rows(w, "select count(*) from agents.graph_checkpoints where position(convert_to('front_door', 'UTF8') in metadata) > 0"))[0][0]
-    assert control > 0  # the probe below CAN find a string that is there
+    async def probe(table, column, needle):
+        """The ONE probe used for the control and for the strict check below: how many rows of `table` hold `needle` as bytes in `column` (a column or an expression)."""
+        return (await rows(w, f"select count(*) from {table} where position(convert_to(:s, 'UTF8') in {column}) > 0", s=needle))[0][0]
+
+    # The positive control runs the SAME probe against a string that is certainly there: the checkpoint's thread_id is "front_door:<document id>". It can fail: a string that is
+    # certainly absent (a fresh uuid) must be found zero times by the same probe, so the control both finds a planted string and discriminates.
+    assert await probe("agents.graph_checkpoints", "convert_to(thread_id, 'UTF8')", str(doc)) >= 1
+    assert await probe("agents.graph_checkpoints", "convert_to(thread_id, 'UTF8')", str(_u())) == 0
     for table, column in (("agents.graph_checkpoints", "checkpoint"), ("agents.graph_checkpoints", "metadata"), ("agents.graph_checkpoint_blobs", "blob"), ("agents.graph_checkpoint_writes", "write_blob")):
         for needle in ("Asha", "Rao", "1980", "98765"):
-            n = (await rows(w, f"select count(*) from {table} where position(convert_to(:s, 'UTF8') in {column}) > 0", s=needle))[0][0]
-            assert n == 0, (table, column, needle)
+            assert await probe(table, column, needle) == 0, (table, column, needle)
 
 
 async def test_a_red_flag_letter_raises_the_immediate_nurse_task_and_no_model_is_called(w):
@@ -430,7 +435,7 @@ async def test_a_red_flag_letter_raises_the_immediate_nurse_task_and_no_model_is
 async def test_a_letter_in_a_clinic_with_no_usable_rules_is_held_for_a_nurse_never_treated_as_clear(w):
     doc = await new_doc(w, w.b, w.ids["fd_b"])
     assert (await post(w, "fd_b", RUN.format(doc))).status_code == 200
-    await run_worker(w)
+    await run_worker(w, worker="worker_b")  # the job is clinic B's: only clinic B's worker can claim it (RLS hides it from clinic A's worker)
     assert w.extractor.calls == []
     ((kind, role, provenance),) = await rows(w, "select kind, assigned_role, provenance from agents.review_tasks where source_message_id = :s", s=f"document:{doc}")
     assert (kind, role) == ("referral_hold", "nurse") and provenance["status"] == "held_unassessable"
@@ -472,7 +477,7 @@ async def test_a_worker_job_for_a_document_of_another_clinic_is_refused_before_a
     )
     with pytest.raises(Exception, match="not in the job's clinic"):
         await run_worker(w)
-    assert w.extractor.calls == [] and await rows(w, "select id from agents.graph_checkpoints where thread_id = :t", t=f"front_door:{doc}") == []
+    assert w.extractor.calls == [] and await rows(w, "select thread_id from agents.graph_checkpoints where thread_id = :t", t=f"front_door:{doc}") == []
 
 
 async def test_a_review_task_another_reviewer_already_acknowledged_refuses_the_decision_and_the_run_stays_paused(w):
