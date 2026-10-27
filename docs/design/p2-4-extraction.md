@@ -46,7 +46,9 @@ Conclusion: the light mode requested **cannot exist** without the heavy extras. 
 
 Fixed: a vision spend stop (`BudgetExceeded`) is now the visible manual outcome, not a re-raise that would leave a letter unscreened and unheld (§15.2: the safety path is never budget-limited); a mis-registered vision adapter fails the page (`PermanentError`) instead of crashing the job; the in-process memo keeps at most 8 documents.
 
-Open, owner decisions (not closed by default):
+Decided 2026-10-27: (a) the rules-first carve-out for image-to-text transcription is approved as NARROW and drafted (DRAFT, owner confirmation pending, commit 91d5289), with an order test (after the transcription the rules run before any other model, on the success and failure paths); (b) a page with a usable text layer and a large image (>= 20% of the page area, a named setting pending confirmation; unmeasurable counts as large) sends the image to vision, or holds the page for a nurse when there is no usable vision route; (c) the vision timeout stays the registry row's `timeout_seconds`, required with no default via `vlm_row`; (d) the real-PDF spike is a pre-launch blocker (phase2-status item 9).
+
+Superseded by those decisions (kept for the record):
 - Rule 2 carve-out for image-only pages (vision runs before the screen can read the page) needs recording in the spec; the offline invariant test does not see the vision call because the fake writes no model event.
 - The reviewer argues the skipped-images case is "unknown treated as clear": a scanned referral with a typed header has a text layer of 20+ characters, so the image body is never read. Suggested minimum: a page with a usable text layer AND an image covering most of the page (a technical threshold) goes to vision or a nurse. Awaiting your call; today such images are only counted.
 - §16.1 gives vision a 60 s per-page timeout: `ModelRow.timeout_seconds` is the gateway's lever; confirm the registry row sets it when a real route is approved.
