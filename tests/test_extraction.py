@@ -26,7 +26,7 @@ from careflow.extraction import (
     worker_context,
 )
 from careflow.gateway import NoApprovedRoute
-from careflow.ports import DataClass, PermanentError, TransientError
+from careflow.ports import DataClass, PermanentError, TransientError, VisionRequest
 from tests.pdf_factory import TEXT_LONG, pdf
 
 pytestmark = pytest.mark.asyncio
@@ -208,3 +208,65 @@ async def test_every_reason_the_pipeline_can_give_is_in_the_closed_vocabulary_a_
     from careflow.referral import is_fixed_reason
 
     assert all(is_fixed_reason(word) for word in REASONS)
+
+
+# ---- the gateway-backed vision adapter -----------------------------------------------------------------------------------------------------
+
+
+def _gateway(*rows, adapters=None):
+    from datetime import date
+    from decimal import Decimal as D
+
+    from careflow.gateway import Gateway, InMemorySpendLedger, SpendLimits
+
+    return Gateway(list(rows), adapters or {}, InMemorySpendLedger(today=lambda: date(2030, 1, 1)), SpendLimits(D("10.00"), D("1.00")), origin="test")
+
+
+def _vlm_row(policy):
+    from decimal import Decimal as D
+
+    from careflow.gateway import ModelRow
+
+    return ModelRow("vlm", "fake-vision-provider", "fake-vlm-1", policy, 1, D(0), D(0), D(0), D(0))
+
+
+async def test_a_scanned_page_is_phi_so_a_synthetic_only_route_is_never_offered_it_and_the_page_becomes_manual():
+    from careflow.adapters.vision import GatewayVision
+
+    seen = []
+
+    async def adapter(request):
+        seen.append(request.page)
+        raise AssertionError("a synthetic_only route must never receive a scanned page")
+
+    gateway = _gateway(_vlm_row("synthetic_only"), adapters={("fake-vision-provider", "fake-vlm-1"): adapter})
+    with pytest.raises(NoApprovedRoute):
+        await GatewayVision(gateway).read(VisionRequest(b"px", "image/png", 1, CLINIC))
+    result = await run(ExtractionPipeline(PypdfExtractor(), vision=GatewayVision(gateway)), pdf([(TEXT_LONG, False), ("", True)]))
+    assert seen == [] and not result.complete and result.manual_pages == (2,) and result.pages[1].reason == R_VISION_UNAVAILABLE
+
+
+async def test_with_no_registry_row_at_all_the_pipeline_still_degrades_visibly():
+    from careflow.adapters.vision import GatewayVision
+
+    result = await run(ExtractionPipeline(PypdfExtractor(), vision=GatewayVision(_gateway())), pdf([("", True)]))
+    assert not result.complete and result.reasons == (R_VISION_UNAVAILABLE, R_PAGES_NEED_VISION)
+
+
+async def test_a_phi_approved_route_reads_the_page_and_a_wrongly_typed_answer_fails_the_page():
+    from careflow.adapters.vision import GatewayVision
+    from careflow.ports import AdapterResult, Usage, VisionResult
+
+    async def good(request):
+        return AdapterResult(VisionResult("Scanned letter text: referral for review of a persistent cough."), Usage(10, 10))
+
+    async def wrong(request):
+        return AdapterResult("just a string", Usage(1, 1))
+
+    key = ("fake-vision-provider", "fake-vlm-1")
+    ok = await run(ExtractionPipeline(PypdfExtractor(), vision=GatewayVision(_gateway(_vlm_row("phi_approved"), adapters={key: good}))), pdf([("", True)]))
+    assert ok.complete and ok.pages[0].tier == "vision"
+    with pytest.raises(TypeError):
+        await GatewayVision(_gateway(_vlm_row("phi_approved"), adapters={key: wrong})).read(
+            VisionRequest(b"px", "image/png", 1, CLINIC)
+        )
