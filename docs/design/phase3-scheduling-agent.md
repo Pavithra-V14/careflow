@@ -12,6 +12,10 @@ Nothing below may invent a clinical value or message wording. Every such value i
 | The official `mcp` SDK is approved: **pinned, in-process only, no network transport.** | Mounted with the SDK's in-memory transport; no HTTP/SSE/stdio transport is created, and a test asserts no socket is opened. A **short spike runs at the START of Phase 3** and is reported before anything is built on it (section 4). No external service. |
 | Clinician-owned values stay **named placeholders** (`needs clinician sign-off`). | No values and no message wording are written. |
 
+## 1a. Stated constraint (owner, 2026-10-27; confirmed for the open question in section 9)
+
+**Offers are created and sent under the requesting front-desk user's own session and role.** There is no worker identity in Phase 3 and **no new grants on `sched` or `msg`**. The agent only proposes; a person presses send. Any step that would still need a grant is listed in section 9 as an open question and is NOT given one here. What front desk can already do under existing policies (checked in migrations 0004 and 0011/0013): read and insert/update `sched.holds`, `sched.bookings`, `sched.waitlist`; insert a staff message on an `appointments`-topic thread; read the same topic. It cannot insert or read `agents.review_tasks` (except `unmerge_review`), cannot write graph checkpoints, and cannot write the spend ledger (queue-worker only).
+
 ## 2. What the agent does, and what it does not
 
 Four flows, each ending in a person's click:
@@ -27,18 +31,18 @@ It does **not**: send anything on its own, discuss clinical matters (that is a `
 
 The Front Door graph runs in the queue worker, and the LangGraph checkpoint tables are writable only by the worker, nurses and doctors (migration 0021). With no worker grants on `sched`/`msg`, and front desk unable to write checkpoints, a LangGraph scheduling graph that holds and messages is **not possible** in Phase 3. The design therefore does not use one:
 
-- **State is rows, not a graph checkpoint.** An offer is a row state (`drafted` -> `sent` -> `answered` -> `booked`/`released`/`expired`) in operational tables (an offers table is a new migration, reviewed by `rls-security-reviewer`; front desk and nurse read/write their clinic's rows). "Waiting for the patient" is simply a row that sits in `sent`; there is no pause to resume, so rule 4 (no side effect in a node that pauses) is satisfied by construction. If a graph is introduced later, the structural gate applies to it.
+- **State is existing rows, not a graph checkpoint and not a new table.** A draft is COMPUTED on demand and never stored. An offer that has been sent is its `sched.holds` row (active, with expiry) plus its `appointments`-topic message; a booking is a `sched.bookings` row. "Waiting for the patient" is simply an active hold that has not expired; there is no pause to resume, so rule 4 (no side effect in a node that pauses) is satisfied by construction. If a graph or a stored draft/offer row is wanted later, that needs a grant and is an open question (section 9, Q4).
 - **Each press is one MCP call under the person's claims**: schema validation, row-level authorization, policy, budget, idempotency key (spec §8 order), one transaction.
-- **Computation that needs no write can still be prepared ahead**, but only by something that may read: Phase 3 does not build a background reader. A freed slot is noticed **in the cancel request itself** (a staff member cancels; the same request computes the ranked list and stores a `drafted` offer for the top candidate, in the staff member's own transaction, under their claims). A cancellation made by a patient, by a path with no staff identity, produces no automatic draft; a front-desk screen lists "slots freed with no draft" (a query, not a job).
+- **Nothing runs in the background.** A freed slot is noticed **by the front-desk screen**: after a staff cancellation the same request returns the ranked list and a computed draft for the top candidate; any freed slot (including a patient-initiated cancellation) also appears on a front-desk "freed slots" query screen. Nothing is stored and no job runs; the person sees the draft and presses send.
 - **Reply interpretation is run when a person opens the reply** (or on a front-desk request), through the `DecisionPort`, as a request under the front desk's claims.
 
-*Question for the owner (section 9, Q1): is that acceptable, or should a later phase add a narrow worker grant (the alternative the owner has now declined for Phase 3)?*
+*Settled by the owner on 2026-10-27: this shape applies in Phase 3.*
 
 ## 4. Two MCP servers, mounted in-process (spec §8)
 
 | Server | Tools | Database role | Why |
 |---|---|---|---|
-| `scheduling` (read + write) | `find_slots`, `hold_slot`, `book_appointment`, `cancel_appointment`, `join_waitlist`, `rank_waitlist`, `release_hold`, `draft_offer`, `send_offer` | the app role with the **acting person's claims** | the only place a booking can change |
+| `scheduling` (read + write) | `find_slots`, `hold_slot`, `book_appointment`, `cancel_appointment`, `join_waitlist`, `rank_waitlist`, `release_hold`, `propose_offer` (read-only: returns ranked candidates and a draft, writes nothing), `send_offer` (one transaction: hold + message) | the app role with the **acting person's claims** | the only place a booking can change |
 | `clinical` (read-only) | `read_priority_context` (the waitlist entry's `priority_code`; nothing else of the chart) | a **separate read-only role / connection** with SELECT only on the columns the tool returns | a read tool must be physically unable to write: a server split, not a flag |
 
 Spec §8's write order is kept: schema validation, row-level authorization, autonomy-mode policy, budget, idempotency key. Results are `ok | empty | degraded | unavailable`, and callers branch (an unreachable source is never `empty`). `find_slots` is load-bearing for an offer: `unavailable` means no draft and a visible message to the user, never a guessed slot. **Clinic isolation stays in the database**: the servers carry no clinic check of their own.
@@ -66,19 +70,23 @@ Trigger: a staff `cancel_appointment` (section 3). `rank_waitlist` (exists) orde
 
 | Step | Effect | Key |
 |---|---|---|
-| draft offer | offers row `drafted` | `offer-draft:<slot>:<candidate>` |
-| send (front desk) | hold + `msg` message + offers row `sent` | `offer-send:<offer>` |
+| propose | none (read-only) | n/a |
+| send (front desk) | hold + `msg` message, one transaction | `offer-send:<slot>:<patient>` |
 | book | booking, hold converted | `book:<offer>` |
 | release | hold released | `release:<offer>` |
 
-Degradation (§16.2): MCP `scheduling` unavailable -> the screen says so and nothing is half-done (one transaction per press); `decision` outage -> every reply is shown with no suggestion; message sending unavailable -> the offer stays `drafted`, the hold is not taken. No path silently drops an offer. Expired holds are released by the existing soft filter in `SlotManager`, not by a job.
+Degradation (§16.2): MCP `scheduling` unavailable -> the screen says so and nothing is half-done (one transaction per press); `decision` outage -> every reply is shown with no suggestion; message sending unavailable -> the send fails whole, the hold is not taken. No path silently drops an offer. Expired holds are released by the existing soft filter in `SlotManager`, not by a job.
 
 ## 8. Tests that gate the phase
 
-Role-matrix cases for every new route in the same change as the route (rule 8); the backfill-priority end-to-end; a "read tool cannot write" test (the `clinical` server's role is refused an INSERT/UPDATE by the database); an MCP-boundary test (a schema violation is rejected before any write); replay tests per write; a missing idempotency key refused on every write tool; **a test that the queue worker has no grant on `sched` or `msg` and never writes there**; a test that no scheduling code path sends a message without a front-desk action; `decision` outage; red-flag reply before any model.
+Role-matrix cases for every new route in the same change as the route (rule 8); the backfill-priority end-to-end; a "read tool cannot write" test (the `clinical` server's role is refused an INSERT/UPDATE by the database); an MCP-boundary test (a schema violation is rejected before any write); replay tests per write; a missing idempotency key refused on every write tool; **a test that Phase 3 adds no grant on `sched` or `msg` (the grants of migrations 0004/0011/0013 are unchanged) and that the queue worker never writes there**; a test that no scheduling code path sends a message without a front-desk action; `decision` outage; red-flag reply before any model.
 
 ## 9. Questions for the owner
 
-1. **Section 3's consequence of "no worker grants":** offers are request-driven row state, with no background graph and no automatic draft for a patient-initiated cancellation. Acceptable for Phase 3?
-2. Everything clinician-owned is in `docs/design/clinician-decisions.md` items 16-22 (priority levels and ranks, the confidence threshold for suggesting an accept, offer expiry and hold lifetime, how many backfill candidates, message templates, whether any mode may auto-send, the priority/role of scheduling tasks). Nothing here supplies a value.
-3. Patient-initiated reschedule is out of scope (the spec's "Scheduling conflict" hand-off); confirm it is a later phase.
+1. (Settled 2026-10-27) Offers are request-driven under the front-desk user's own session; see section 1a.
+2. **Open question, a grant would be needed: the `clinical` read-only server.** It needs a separate read-only database role. The only field it would serve, `priority_code`, is already on `sched.waitlist`, which front desk can read. Recommendation: do not mount a `clinical` server in Phase 3 (nothing to serve); revisit when a real clinical read is needed. Not built, no role created.
+3. **Open question, a grant would be needed: spend ledger for the reply-interpretation model call.** The gateway writes a spend ledger that only the queue worker may insert into; a front-desk request cannot. Options (owner to choose): an in-memory ledger for Phase 3 (spend is not durable across restarts, and the daily ceiling then cannot be enforced across processes), or a narrow grant later. Nothing added.
+4. **Open question, a grant would be needed: any stored draft or offer-tracking row, and any front-desk-visible scheduling task** ("slot freed, no ranked candidates", "reply needs a person"). Front desk cannot insert or read `agents.review_tasks`, and no offers table exists. This design uses on-screen queries instead. If you want durable drafts or tasks, that is a new table or policy.
+5. **Open question: red-flag handling of a patient's reply.** The immediate nurse task is raised by the existing screening path (`msg.record_screening`); confirm that path is what runs when a reply arrives, since a front-desk session cannot insert the nurse task itself.
+6. Everything clinician-owned is in `docs/design/clinician-decisions.md` items 16-22 (priority levels and ranks, the confidence threshold for suggesting an accept, offer expiry and hold lifetime, how many backfill candidates, message templates, whether any mode may auto-send, the priority/role of scheduling tasks). Nothing here supplies a value.
+7. Patient-initiated reschedule is out of scope (the spec's "Scheduling conflict" hand-off); confirm it is a later phase.
