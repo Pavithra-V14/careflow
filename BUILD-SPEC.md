@@ -168,7 +168,7 @@ Three engines answer the same typed-decision questions (`choice`, `score`, `noul
 
 **Absolute rule: the red-flag deterministic rules run first, on every path, before any `decision` engine call. A `decision` engine's safety-net opinion can only escalate a case, never de-escalate one the rules already flagged.**
 
-**Narrow carve-out (DRAFT, pending the owner's confirmation; do not rely on it until confirmed).** The deterministic rules read text, so a scanned page or photograph cannot be screened until it is text. Transcription of an image into text (the `vlm` vision role, §10.4) is the ONLY model call that may precede the red-flag rules, and only for pages, or parts of a page (a large image beside a text layer), that cannot be screened as text. No other tier counts: a layout-analysis tier (§10.4 step 2) that uses a model is NOT covered by this carve-out and must be brought back to the owner before it is wired in. Its output is quoted data, not a decision: it is screened by the deterministic rules before ANY other model call (the `decision` engine, fact extraction, triage, summarisation, retrieval embedding), and a transcription that fails, is empty, or is unavailable is never treated as clear: the document holds for a human, who is shown the image. No other model call is covered by this carve-out.
+**Narrow carve-out (confirmed by the owner, 2026-10-27).** The deterministic rules read text, so a scanned page or photograph cannot be screened until it is text. Transcription of an image into text (the `vlm` vision role, §10.4) is the ONLY model call that may precede the red-flag rules, and only for pages, or parts of a page (a large image beside a text layer), that cannot be screened as text. No other tier counts: a layout-analysis tier (§10.4 step 2) that uses a model is NOT covered by this carve-out and must be brought back to the owner before it is wired in. Its output is quoted data, not a decision: it is screened by the deterministic rules before ANY other model call (the `decision` engine, fact extraction, triage, summarisation, retrieval embedding), and a transcription that fails, is empty, or is unavailable is never treated as clear: the document holds for a human, who is shown the image. No other model call is covered by this carve-out.
 
 ### 5.3 Deprecation handling
 
@@ -348,7 +348,7 @@ Tiered, cheapest-first, heavy work in the worker never the request path:
 3. Any element with no text layer, plus every embedded image and scanned page → **Gemini 2.5 Flash** for extraction (external call — see §2 profile table).
 4. Merge results back in document order, carrying page/element provenance so a citation still points at a physical page.
 
-*Ordering note (DRAFT, pending the owner's confirmation; see the narrow carve-out in §5.2).* Step 3 is a model call that precedes the red-flag rules, because the rules need text. It is the only one that may. Its transcription is screened by the deterministic rules before any other model call, and a failed, empty or unavailable transcription holds the document for a human instead of being treated as clear.
+*Ordering note (confirmed by the owner, 2026-10-27; see the narrow carve-out in §5.2).* Step 3 is a model call that precedes the red-flag rules, because the rules need text. It is the only one that may. Its transcription is screened by the deterministic rules before any other model call, and a failed, empty or unavailable transcription holds the document for a human instead of being treated as clear.
 
 ### 10.5 Embeddings
 

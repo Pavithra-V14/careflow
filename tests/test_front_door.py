@@ -597,7 +597,7 @@ async def test_a_scanned_letter_with_no_approved_vision_route_becomes_a_nurse_ta
 
 
 
-# ---- the DRAFT narrow carve-out: vision transcription is the only model call that may precede the rules (BUILD-SPEC 5.2 / 10.4) -------------------
+# ---- the confirmed narrow carve-out: vision transcription is the only model call that may precede the rules (BUILD-SPEC 5.2 / 10.4) -------------------
 
 
 def _logging_vision(**kw):
