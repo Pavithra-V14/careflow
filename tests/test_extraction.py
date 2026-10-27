@@ -201,3 +201,10 @@ async def test_results_and_requests_do_not_print_page_text_or_image_bytes():
     from careflow.ports import VisionRequest
 
     assert "fake pixels" not in repr(VisionRequest(b"fake pixels", "image/png", 1, CLINIC))
+
+
+async def test_every_reason_the_pipeline_can_give_is_in_the_closed_vocabulary_a_hold_task_accepts():
+    from careflow.extraction import REASONS
+    from careflow.referral import is_fixed_reason
+
+    assert all(is_fixed_reason(word) for word in REASONS)

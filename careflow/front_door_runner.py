@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from careflow.checkpointer import PostgresCheckpointSaver, SqlCheckpointStore
 from careflow.db import set_request_claims
+from careflow.extraction import worker_context
 from careflow.front_door import (
     FrontDoorDeps,
     HoldTaskWriter,
@@ -124,10 +125,11 @@ def front_door_handler(components: FrontDoorComponents, *, session_for: SessionF
         graph = graph_for(components, session)
         config = run_config(document_id, ctx.job.clinic_id, ctx.job.origin)
         state = await graph.aget_state(config)
-        if not state.values:
-            await graph.ainvoke(initial_state(document_id, ctx.job.clinic_id, ctx.job.origin), config)
-        elif state.next and state.next != ("review",):
-            await graph.ainvoke(None, config)  # a crashed run: continue from the last checkpoint
+        with worker_context():  # document extraction (heavy, and it may call the vision model) is allowed here and nowhere in the request path
+            if not state.values:
+                await graph.ainvoke(initial_state(document_id, ctx.job.clinic_id, ctx.job.origin), config)
+            elif state.next and state.next != ("review",):
+                await graph.ainvoke(None, config)  # a crashed run: continue from the last checkpoint
         # paused at review (a person must decide) or finished: nothing to do, and the job is complete
 
     return handle

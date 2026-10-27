@@ -146,7 +146,7 @@ def _model_undeclared(state):
 
 
 def _clean(state):
-    deps.texts.text_for(state)
+    deps.session()  # a neutral port (the text source is a model port since P2-4)
     return {}
 
 

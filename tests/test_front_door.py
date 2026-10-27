@@ -536,3 +536,59 @@ async def test_every_status_a_node_can_produce_is_known_and_has_a_destination():
                 assert target == END
             else:
                 assert target == "hold_for_human", (router, status)
+
+
+# ---- the extraction pipeline behind the graph (P2-4) -------------------------------------------------------------------------------------------
+
+
+def _with_pipeline_texts(vision, scanned_pdf):
+    """The graph from `world()` with the real text source over a synthetic PDF: native tier, fake vision."""
+    import dataclasses
+
+    from careflow.adapters.fake import FakeVision  # noqa: F401
+    from careflow.adapters.pdf import PypdfExtractor
+    from careflow.extraction import ExtractionPipeline, PipelineTextSource
+
+    graph, log, *_ = world()
+
+    async def loader(document_id):
+        return scanned_pdf, "application/pdf", uuid.UUID(CLINIC) if isinstance(CLINIC, str) else CLINIC
+
+    texts = PipelineTextSource(ExtractionPipeline(PypdfExtractor(), vision=vision), loader)
+    deps = dataclasses.replace(graph.test_deps, texts=texts)
+    rebuilt = build_front_door(deps, InMemorySaver(), environ={})
+    rebuilt.test_deps = deps  # type: ignore[attr-defined]
+    return rebuilt, log, deps
+
+
+async def test_a_scanned_letter_is_read_by_vision_once_screened_and_runs_on():
+    from careflow.adapters.fake import FakeVision
+    from careflow.extraction import worker_context
+    from tests.pdf_factory import pdf
+
+    vision = FakeVision(script={1: LETTER})
+    graph, log, _ = _with_pipeline_texts(vision, pdf([("", True)]))
+    with worker_context():
+        await graph.ainvoke(START, CONFIG)
+    state = await graph.aget_state(CONFIG)
+    assert state.next == ("review",) and vision.pages == [1]  # three nodes asked for the text; the page was read (and billed) once
+    assert_rules_before_every_model_call(log)
+
+
+async def test_a_scanned_letter_with_no_approved_vision_route_becomes_a_nurse_task_and_nothing_downstream_runs():
+    from careflow.adapters.fake import FakeVision
+    from careflow.extraction import worker_context
+    from careflow.gateway import NoApprovedRoute
+    from careflow.ports import DataClass
+    from tests.pdf_factory import pdf
+
+    vision = FakeVision()
+    vision.fail_next(5, NoApprovedRoute("vlm", DataClass.PHI))
+    graph, log, deps = _with_pipeline_texts(vision, pdf([("", True)]))
+    with worker_context():
+        await graph.ainvoke(START, CONFIG)
+    state = await graph.aget_state(CONFIG)
+    (task,) = deps.holds.tasks
+    assert state.next == () and state.values["status"] == "extraction_unavailable"
+    assert task["role"] == "nurse" and task["status"] == "extraction_unavailable" and {"vision_unavailable", "pages_need_vision"} <= set(task["reasons"])
+    assert model_events(log) == [] and deps.ingestor.calls == [] and deps.proposer.attempts == []  # unknown is not clear: nothing was assessed, nothing proposed
