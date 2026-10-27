@@ -184,10 +184,15 @@ async def test_proposal_constraints_one_per_document_key_per_clinic_abstained_me
     assert await outcome(db, proposal_sql(w, abstained="true", candidates="'[{\"card_id\": \"c\", \"version\": 1}]'", doc=w.doc_a)) == "23514"  # CHECK constraints are evaluated before any unique key
     w2 = await world(db)
     assert await outcome(db, proposal_sql(w2, abstained="false", candidates="'[{\"card_id\": \"c\", \"version\": 1}]'")) is None
-    # A JSON OBJECT instead of an array is refused too. Which error says so depends on the order Postgres evaluates the CHECK constraints in: the length check may run
-    # first and raise 22023 (invalid parameter value) before the type check can raise 23514. Both are refusals; the row never exists.
-    assert await outcome(db, proposal_sql(w2, candidates="'{}'", doc=w2.doc_a2, task=w2.task_a)) in ("23514", "22023")
+    # Two DISTINCT bad inputs, each pinned to its own exact SQLSTATE (run in CI, 2026-10-24, for the first):
+    #  * a JSON OBJECT instead of an array (abstained, as proposal_sql defaults): 22023. The `abstained => no candidates` CHECK calls jsonb_array_length on it, which RAISES
+    #    (invalid_parameter_value, "cannot get array length of a non-array") before the type CHECK can report an ordinary 23514. Postgres does not define the order in which CHECK
+    #    constraints are evaluated; this one is the observed order. The row is refused either way and the next assertion proves none exists.
+    assert await outcome(db, proposal_sql(w2, candidates="'{}'", doc=w2.doc_a2, task=w2.task_a)) == "22023"
     assert await db.fetchval("select count(*) from agents.triage_proposals where candidates = '{}'::jsonb") == 0
+    #  * an ARRAY OF THE WRONG LENGTH (21 entries, abstained false): an ordinary CHECK failure, 23514, because no function raises: the length bound is simply false.
+    too_many = "'[" + ", ".join(f'{{"card_id": "c{n}", "version": 1}}' for n in range(21)) + "]'"
+    assert await outcome(db, proposal_sql(w2, abstained="false", candidates=too_many, doc=w2.doc_a3)) == "23514"
     assert await outcome(db, proposal_sql(w2, mode="fully_automatic")) == "23514"
 
 
