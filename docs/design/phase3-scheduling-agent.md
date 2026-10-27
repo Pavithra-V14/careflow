@@ -47,7 +47,14 @@ The Front Door graph runs in the queue worker, and the LangGraph checkpoint tabl
 
 Spec §8's write order is kept: schema validation, row-level authorization, autonomy-mode policy, budget, idempotency key. Results are `ok | empty | degraded | unavailable`, and callers branch (an unreachable source is never `empty`). `find_slots` is load-bearing for an offer: `unavailable` means no draft and a visible message to the user, never a guessed slot. **Clinic isolation stays in the database**: the servers carry no clinic check of their own.
 
-### SDK spike (first task of Phase 3, reported before building)
+### SDK spike: DONE and accepted (2026-10-27): GO, pin `mcp==2.3.0` (v1.30.0 the documented fallback)
+The spike lives on the local, unmerged branch `phase3-mcp-spike` (`docs/design/phase3-mcp-spike.md` there); the main lockfile is not touched until Phase 3 code starts. **Conditions the Phase 3 code must meet:**
+1. Only `async def` tools are registered; a registration helper refuses a sync function and a test fails if one is registered (a sync tool would run in a worker thread).
+2. Production code raises **fixed-word exceptions only** (no patient text, ids or SQL in any message), and a logging filter on the SDK's records withholds tracebacks and exception text; a test proves a planted sentinel never reaches a log record (with a negative control showing the test can fail).
+3. Every tool call on the `clinical` server writes an **audit record**: who, role, tool, outcome; never arguments or results (they could hold patient text). A wrapper we own, because the SDK has no hook. (Whether the first cut has a `clinical` server at all is item 1 below.)
+4. `pywin32` is a Windows-only marker dependency; confirmed absent from a Linux resolution, so it does not matter on Linux CI.
+
+### (historical) the spike plan
 Pin `mcp` (v1.30.0 or v2.3.0, chosen by the spike). Verify: (1) the in-memory client (`Client(server)` in v2, `create_connected_server_and_client_session` in v1.x) lists tools, validates arguments against their JSON schema before the handler runs, and returns structured results with the four statuses; (2) **no socket, thread or subprocess is opened** (test); (3) tool handlers can receive the caller's claims and a transaction; (4) the added packages (`httpx-sse`/`httpx2`, `mcp-types`, `jsonschema` with `referencing`/`rpds-py`/`attrs`, `python-multipart`, `sse-starlette`, `pywin32` on Windows) import cleanly and the data-flow register gets a "no network in-process" line and test. If the spike fails, fall back to a hand-written in-process registry behind the same interface (and tell the owner).
 
 ## 5. Reply interpretation through the DecisionPort
@@ -81,12 +88,27 @@ Degradation (§16.2): MCP `scheduling` unavailable -> the screen says so and not
 
 Role-matrix cases for every new route in the same change as the route (rule 8); the backfill-priority end-to-end; a "read tool cannot write" test (the `clinical` server's role is refused an INSERT/UPDATE by the database); an MCP-boundary test (a schema violation is rejected before any write); replay tests per write; a missing idempotency key refused on every write tool; **a test that Phase 3 adds no grant on `sched` or `msg` (the grants of migrations 0004/0011/0013 are unchanged) and that the queue worker never writes there**; a test that no scheduling code path sends a message without a front-desk action; `decision` outage; red-flag reply before any model.
 
-## 9. Questions for the owner
+## 9. Proposals and questions for the owner
 
-1. (Settled 2026-10-27) Offers are request-driven under the front-desk user's own session; see section 1a.
-2. **Open question, a grant would be needed: the `clinical` read-only server.** It needs a separate read-only database role. The only field it would serve, `priority_code`, is already on `sched.waitlist`, which front desk can read. Recommendation: do not mount a `clinical` server in Phase 3 (nothing to serve); revisit when a real clinical read is needed. Not built, no role created.
-3. **Open question, a grant would be needed: spend ledger for the reply-interpretation model call.** The gateway writes a spend ledger that only the queue worker may insert into; a front-desk request cannot. Options (owner to choose): an in-memory ledger for Phase 3 (spend is not durable across restarts, and the daily ceiling then cannot be enforced across processes), or a narrow grant later. Nothing added.
-4. **Open question, a grant would be needed: any stored draft or offer-tracking row, and any front-desk-visible scheduling task** ("slot freed, no ranked candidates", "reply needs a person"). Front desk cannot insert or read `agents.review_tasks`, and no offers table exists. This design uses on-screen queries instead. If you want durable drafts or tasks, that is a new table or policy.
-5. **Open question: red-flag handling of a patient's reply.** The immediate nurse task is raised by the existing screening path (`msg.record_screening`); confirm that path is what runs when a reply arrives, since a front-desk session cannot insert the nurse task itself.
-6. Everything clinician-owned is in `docs/design/clinician-decisions.md` items 16-22 (priority levels and ranks, the confidence threshold for suggesting an accept, offer expiry and hold lifetime, how many backfill candidates, message templates, whether any mode may auto-send, the priority/role of scheduling tasks). Nothing here supplies a value.
+Items 1-4 below are **PROPOSED, needs user sign-off**. None adds a grant, a table, a role or code; where a proposal depends on something that would, that is stated.
+
+1. **PROPOSED, needs user sign-off: the `clinical` read-only server.** No new database role at first. Reads go through the requesting front-desk user's own session, so RLS decides. Revisit only if a read cannot be done that way. (Today the only field such a server would serve, `priority_code`, is already on `sched.waitlist`, which front desk can read, so the first cut may mount no `clinical` server at all; the audit-wrapper condition applies the day one is mounted.)
+2. **PROPOSED, needs user sign-off: spend ledger for the reply-interpretation call.** Reuse the existing AI spend ledger with its own call class and ceiling. It is not a safety class, so it can be budget-limited, and a stop becomes a visible hold for a person (the same behaviour as the extraction vision stop). **Dependency to be aware of:** the ledger can be written only by the queue worker (migration 0016, `spend_ledger_insert_worker`), `CallClass` has two values today (`ordinary`, `safety`), and a front-desk request cannot insert. So this proposal is complete only if the owner accepts one of: (a) a narrow policy letting the requesting staff session insert its own clinic's rows, which IS a new grant and is therefore NOT added here; or (b) an in-memory ledger for the first cut (not durable across restarts or processes). Which one?
+3. **PROPOSED, needs user sign-off: stored drafts or front-desk-visible tasks.** None in the first Phase 3 cut. Drafts are computed on demand; the freed-slots list is a query.
+4. **PROPOSED, needs user sign-off: a patient's reply.** The deterministic red-flag rules run on it first, before any model. A hit or an unassessable reply creates a nurse review task. The agent never auto-replies to a reply that was not screened. (Confirm the existing `msg.record_screening` path is what raises that nurse task when the reply arrives, since a front-desk session cannot insert the task itself.)
+5. (Settled 2026-10-27) Offers are request-driven under the front-desk user's own session; see section 1a.
+6. Everything clinician-owned is in `docs/design/clinician-decisions.md` items 16-22; the list for Priya is in the next section. Nothing here supplies a value.
 7. Patient-initiated reschedule is out of scope (the spec's "Scheduling conflict" hand-off); confirm it is a later phase.
+
+## 10. What I need from the clinicians before Phase 3 code
+
+One list, to be handed to Priya. **Every item is a required, undefaulted input marked `# CLINICAL-PLACEHOLDER: needs clinician sign-off`; this document and the code supply no value and no wording.**
+
+1. The clinic's **priority levels and their ranks** (codes, labels, a strict order, 1 first), authored and approved by a named doctor in `sched.priority_levels`.
+2. The **minimum confidence** at which the system may SUGGEST "accept" to the front desk (per clinic); and whether an accept may ever book without a click (not built, a person confirms today).
+3. **Offer expiry**: how long an offer stays open.
+4. **Hold lifetime**: how long a slot is held for an offer.
+5. **Backfill count**: how many next-ranked patients are drafted for before a person is told "no one could be offered".
+6. **Message templates**: the offer, the confirmation and the "that time is gone" wording, and the languages.
+7. Whether any autonomy mode may send an offer **without** the front desk pressing send (current decision: no).
+8. The **priority and assigned role** of any scheduling task (only relevant if tasks are later added; none in the first cut).
