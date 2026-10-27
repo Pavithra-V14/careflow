@@ -22,6 +22,7 @@ Nothing here logs. Page bytes, text and image bytes are patient data (`repr=Fals
 """
 
 import asyncio
+import dataclasses
 import re
 import uuid
 from collections import OrderedDict
@@ -46,6 +47,10 @@ from careflow.ports import (
 MIN_PAGE_CHARS: Final = 20
 MIN_ALNUM_RATIO: Final = 0.5
 MEMO_DOCUMENTS: Final = 8  # documents whose text the in-process memo keeps; the oldest is dropped (technical bound)
+# PENDING OWNER CONFIRMATION (a technical setting, not a clinical value): an image covering at least this share of the page area is "large". A page whose text layer was read AND
+# that holds a large image is not complete without the image (a scanned referral with a typed header), so the image goes to vision or the page goes to a nurse. Smaller
+# images (logos, stamps) are ignored. An image whose size cannot be determined counts as large: unknown is not a value.
+IMAGE_COVERAGE_THRESHOLD: Final = 0.20
 MAX_PAGES: Final = 200  # a technical bound on one document's work in one job
 
 # The closed vocabulary of reasons this module can produce (a subset of careflow.referral.FIXED_REASONS, which a test pins).
@@ -122,6 +127,11 @@ def require_worker() -> None:
 class PageImage:
     content_type: str  # image/png or image/jpeg
     data: bytes = field(repr=False)
+    coverage: float | None = None  # share of the page area the image is drawn over; None = could not be measured (counts as large)
+
+    @property
+    def large(self) -> bool:
+        return self.coverage is None or self.coverage >= IMAGE_COVERAGE_THRESHOLD
 
 
 @dataclass(frozen=True)
@@ -156,7 +166,8 @@ class PageOutcome:
     page: int
     tier: Tier | None  # None: nobody read it
     reason: str | None = None  # why the page needs a person, when tier is None
-    skipped_images: int = 0  # images on a page whose text layer was read: not sent to vision, but recorded
+    skipped_images: int = 0  # small images (logos, stamps) on a page whose text layer was read: not sent to vision, but recorded
+    vision_images: int = 0  # large images on a page whose text layer was read, transcribed by vision and merged after the page's own text
 
 
 @dataclass(frozen=True)
@@ -234,19 +245,23 @@ class ExtractionPipeline:
         if not pages or len(pages) > MAX_PAGES:
             return ExtractionResult("", (), (), (R_DOCUMENT_UNREADABLE,))
 
-        texts: list[tuple[NativePage, Tier | None, str, str | None, int]] = []
+        texts: list[tuple[NativePage, Tier | None, str, str | None, int, str]] = []
         calls = 0
         for page in pages:
             if useful(page.text):
-                texts.append(
-                    (
-                        page,
-                        "native",
-                        page.text,
-                        None,
-                        len(page.images) + page.unreadable_images,
-                    )
-                )  # cheap tier succeeded: no further tier, no vision
+                large = tuple(i for i in page.images if i.large)
+                if not large and not page.unreadable_images:
+                    # cheap tier succeeded and nothing large sits beside the text: no further tier, no vision. Small images are recorded, never silent.
+                    texts.append((page, "native", page.text, None, len(page.images), ""))
+                    continue
+                # A usable text layer is not the whole page when a large image sits beside it. An image that cannot be handed to vision counts as large too.
+                beside = dataclasses.replace(page, images=large)
+                extra, reason, made = await self._vision_text(beside, clinic_id)
+                calls += made
+                if extra:
+                    texts.append((page, "native", page.text, None, len(page.images) - len(large), extra))
+                else:
+                    texts.append((page, None, "", reason, 0, ""))
                 continue
             if self._layout is not None:
                 try:
@@ -254,12 +269,12 @@ class ExtractionPipeline:
                 except (TransientError, PermanentError):
                     laid_out = None
                 if laid_out and useful(laid_out):
-                    texts.append((page, "layout", laid_out, None, 0))
+                    texts.append((page, "layout", laid_out, None, 0, ""))
                     continue
             text, reason, made = await self._vision_text(page, clinic_id)
             calls += made
             texts.append(
-                (page, "vision" if text else None, text, None if text else reason, 0)
+                (page, "vision" if text else None, text, None if text else reason, 0, "")
             )
 
         return self._merge(texts, calls)
@@ -300,41 +315,48 @@ class ExtractionPipeline:
 
     @staticmethod
     def _merge(
-        items: list[tuple[NativePage, Tier | None, str, str | None, int]], calls: int
+        items: list[tuple[NativePage, Tier | None, str, str | None, int, str]],
+        calls: int,
     ) -> ExtractionResult:
-        """Document order, page by page, element by element, with spans into the merged text."""
+        """Document order, page by page, element by element, with spans into the merged text. A page's own text comes first, then the transcription of its large images."""
         out: list[str] = []
         elements: list[Element] = []
         outcomes: list[PageOutcome] = []
         reasons: list[str] = []
         cursor = 0
-        for page, tier, text, reason, skipped in sorted(
+        for page, tier, text, reason, skipped, extra in sorted(
             items, key=lambda it: it[0].number
         ):
-            outcomes.append(PageOutcome(page.number, tier, reason, skipped))
+            outcomes.append(
+                PageOutcome(
+                    page.number, tier, reason, skipped, len(page.images) - skipped if extra else 0
+                )
+            )
             if tier is None:
                 reasons.append(reason or R_EXTRACTION_FAILED)
                 continue
             if out:
                 out.append("\n\n")
                 cursor += 2
-            blocks = _blocks(text)
-            for index, block in enumerate(blocks):
-                if index:
-                    out.append("\n")
-                    cursor += 1
-                out.append(block)
-                elements.append(
-                    Element(
-                        page.number,
-                        index,
-                        tier,
-                        cursor,
-                        cursor + len(block),
-                        "image_text" if tier == "vision" else "text",
+            index = 0
+            for segment_tier, segment in ((tier, text), ("vision", extra)):
+                for block in _blocks(segment):
+                    if index:
+                        out.append("\n")
+                        cursor += 1
+                    out.append(block)
+                    elements.append(
+                        Element(
+                            page.number,
+                            index,
+                            segment_tier,  # type: ignore[arg-type]
+                            cursor,
+                            cursor + len(block),
+                            "image_text" if segment_tier == "vision" else "text",
+                        )
                     )
-                )
-                cursor += len(block)
+                    cursor += len(block)
+                    index += 1
         if (
             any(o.tier is None for o in outcomes)
             and R_PAGES_NEED_VISION not in reasons

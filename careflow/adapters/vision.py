@@ -6,7 +6,9 @@ service is created here: the gateway's registry decides which adapters exist, an
 Gemini (the §10.4 choice) is NOT approved, so there is no real route; when one is approved it is registered as a gateway adapter returning `AdapterResult[VisionResult]`.
 """
 
-from careflow.gateway import Gateway
+from decimal import Decimal
+
+from careflow.gateway import Gateway, ModelRow
 from careflow.ports import DataClass, PermanentError, VisionRequest, VisionResult
 
 
@@ -20,3 +22,12 @@ class GatewayVision:
         if not isinstance(value, VisionResult):  # a mis-registered adapter fails the page, it does not produce text
             raise PermanentError("the vlm route did not return a VisionResult")
         return value
+
+
+def vlm_row(
+    *, provider: str, model_id: str, data_policy: str, priority: int, timeout_seconds: float,
+    price_in_per_1k: Decimal, price_out_per_1k: Decimal, shadow_in_per_1k: Decimal, shadow_out_per_1k: Decimal,
+) -> ModelRow:
+    """The ONLY way code should build a `vlm` registry row. `timeout_seconds` (BUILD-SPEC 16.1: a per-page limit for vision, worker only) is REQUIRED with no default: a hung page must not
+    hold the screen node, and the limit is a decision for whoever approves the route, not a value we pick. Every price is required as well (a free tier still states its shadow price)."""
+    return ModelRow("vlm", provider, model_id, data_policy, priority, price_in_per_1k, price_out_per_1k, shadow_in_per_1k, shadow_out_per_1k, timeout_seconds=timeout_seconds)

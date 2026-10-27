@@ -4,12 +4,14 @@ Pure functions of the bytes; synchronous and CPU-bound, so the pipeline runs `re
 open (corrupt, truncated, password-protected) is the fixed `ExtractionFailed("document_unreadable")`.
 """
 
+import dataclasses
 import io
 import struct
 import zlib
 
 from pypdf import PdfReader
 from pypdf.errors import PyPdfError
+from pypdf.generic import ContentStream
 
 from careflow.extraction import (
     R_DOCUMENT_UNREADABLE,
@@ -67,6 +69,41 @@ def _image(obj) -> PageImage | None:
     return None
 
 
+def _coverage(page) -> tuple[dict[str, float], int]:
+    """(share of the page area each image XObject is drawn over, by name; count of inline images). Reads the page's content stream: the current transformation matrix at each `Do`
+    gives the drawn size (|a*d - b*c| of the unit square). A name that is never drawn directly (it sits inside a form XObject) is absent: its size is unknown and counts as large.
+    Any failure to measure returns an empty map, which makes every image unknown, which is the safe direction."""
+    try:
+        box = page.mediabox
+        area = abs(float(box.width) * float(box.height))
+        if area <= 0:
+            return {}, 0
+        stream = ContentStream(page.get_contents(), page.pdf)
+        stack: list[tuple[float, ...]] = []
+        ctm: tuple[float, ...] = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+        drawn: dict[str, float] = {}
+        inline = 0
+        for operands, operator in stream.operations:
+            if operator == b"q":
+                stack.append(ctm)
+            elif operator == b"Q" and stack:
+                ctm = stack.pop()
+            elif operator == b"cm" and len(operands) == 6:
+                a, b, c, d, e, f = (float(x) for x in operands)
+                m = ctm  # new CTM = this matrix x the current one
+                ctm = (
+                    a * m[0] + b * m[2], a * m[1] + b * m[3], c * m[0] + d * m[2],
+                    c * m[1] + d * m[3], e * m[0] + f * m[2] + m[4], e * m[1] + f * m[3] + m[5],
+                )
+            elif operator == b"Do" and operands:
+                drawn[str(operands[0])] = drawn.get(str(operands[0]), 0.0) + abs(ctm[0] * ctm[3] - ctm[1] * ctm[2]) / area
+            elif operator == b"INLINE IMAGE":
+                inline += 1
+        return drawn, inline
+    except (PyPdfError, ValueError, KeyError, TypeError, IndexError, AttributeError, RecursionError):
+        return {}, 0
+
+
 class PypdfExtractor:
     def read(self, content: bytes) -> list[NativePage]:
         try:
@@ -97,7 +134,8 @@ class PypdfExtractor:
         except (PyPdfError, ValueError, KeyError, TypeError, RecursionError):
             text = ""  # a page whose text cannot be decoded is a page with no text layer: the next tier gets it
         images: list[PageImage] = []
-        unreadable = 0
+        drawn, inline = _coverage(page)
+        unreadable = inline  # an inline image cannot be handed to vision: counted, and unknown size counts as large
         try:
             resources = page.get("/Resources")
             xobjects = (
@@ -124,7 +162,7 @@ class PypdfExtractor:
                 if image is None:
                     unreadable += 1  # counted, never silently dropped
                 else:
-                    images.append(image)
+                    images.append(dataclasses.replace(image, coverage=drawn.get(str(name))))
         except (PyPdfError, ValueError, KeyError, TypeError, AttributeError):
             unreadable += 1
         return NativePage(number, text, tuple(images), unreadable)

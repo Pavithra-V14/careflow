@@ -15,13 +15,14 @@ def _stream(body: bytes, extra: str = "") -> bytes:
     )
 
 
-def pdf(pages: list[tuple[str, bool]]) -> bytes:
-    """pages: (text, has_image) per page. Empty text means no text layer."""
+def pdf(pages: list[tuple[str, bool | float | str]]) -> bytes:
+    """pages: (text, image) per page. Empty text means no text layer. image: False (none), True (a 100-point square), a number (that many points square), or "unmeasured"
+    (listed in the page resources but never drawn directly: its size cannot be determined)."""
     objs: dict[int, bytes] = {}
     font = 3
     objs[font] = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
     kids, nxt = [], 4
-    for text, has_image in pages:
+    for text, image in pages:
         page_id, content_id = nxt, nxt + 1
         nxt += 2
         ops = ""
@@ -29,14 +30,16 @@ def pdf(pages: list[tuple[str, bool]]) -> bytes:
             safe = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
             ops += f"BT /F1 12 Tf 50 700 Td ({safe}) Tj ET\n"
         xobj = ""
-        if has_image:
+        if image:
             image_id = nxt
             nxt += 1
             objs[image_id] = _stream(
                 zlib.compress(bytes(range(12))),
                 "/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode ",
             )
-            ops += "q 100 0 0 100 50 500 cm /Im1 Do Q\n"
+            side = 100 if image is True else image
+            if image != "unmeasured":
+                ops += f"q {side} 0 0 {side} 50 50 cm /Im1 Do Q\n"
             xobj = f"/XObject << /Im1 {image_id} 0 R >>"
         objs[content_id] = _stream(ops.encode())
         objs[page_id] = (

@@ -281,3 +281,73 @@ async def test_the_memo_is_bounded_so_patient_text_is_not_kept_for_the_life_of_t
         for _ in range(MEMO_DOCUMENTS + 5):
             await source.text_for(uuid.uuid4())
     assert len(source._memo) == MEMO_DOCUMENTS and len(source._locks) <= MEMO_DOCUMENTS + 1
+
+
+# ---- a text layer is not the whole page when a large image sits beside it (owner decision 2026-10-27; threshold pending confirmation) --------------
+
+HEADER = "Memorial Clinic Referral Letter Header"
+BODY_SCAN = "Handwritten body of the referral: the patient reports a persistent cough and night sweats."
+
+
+async def test_a_scanned_page_with_a_typed_header_sends_the_large_image_to_vision_and_keeps_the_header_first():
+    vision = FakeVision(script={1: BODY_SCAN})
+    result = await run(make(vision), pdf([(HEADER, 600)]))
+    assert vision.pages == [1] and result.complete and result.pages[0].vision_images == 1 and result.pages[0].skipped_images == 0
+    assert result.text.startswith(HEADER) and BODY_SCAN in result.text and result.text.index(HEADER) < result.text.index(BODY_SCAN)
+    assert [(e.tier, e.kind) for e in result.elements] == [("native", "text"), ("vision", "image_text")]
+    assert result.locate(result.text.index("night sweats")).page == 1
+
+
+async def test_a_small_logo_or_stamp_is_not_sent_but_is_recorded():
+    vision = FakeVision()
+    result = await run(make(vision), pdf([(TEXT_LONG, 60)]))
+    assert vision.calls == 0 and result.complete and result.pages[0].skipped_images == 1 and result.pages[0].vision_images == 0
+
+
+async def test_the_threshold_is_twenty_percent_of_the_page_area():
+    from careflow.extraction import IMAGE_COVERAGE_THRESHOLD
+
+    assert IMAGE_COVERAGE_THRESHOLD == 0.20
+    just_under, just_over = FakeVision(), FakeVision()
+    await run(make(just_under), pdf([(TEXT_LONG, 310)]))  # 310*310 / (612*792) = 19.8%
+    await run(make(just_over), pdf([(TEXT_LONG, 312)]))  # 20.08%
+    assert just_under.calls == 0 and just_over.calls == 1
+
+
+async def test_an_image_whose_size_cannot_be_determined_counts_as_large_and_is_sent():
+    vision = FakeVision(script={1: BODY_SCAN})
+    result = await run(make(vision), pdf([(TEXT_LONG, "unmeasured")]))
+    assert vision.pages == [1] and result.complete and result.pages[0].vision_images == 1
+
+
+async def test_a_large_image_with_no_usable_vision_route_is_a_nurse_hold_not_a_clear_page():
+    for vision in (None, FakeVision()):
+        if vision is not None:
+            vision.fail_next(1, NoApprovedRoute("vlm", DataClass.PHI))
+        result = await run(make(vision), pdf([(HEADER, 600)]))
+        assert not result.complete and result.manual_pages == (1,) and result.reasons == (R_VISION_UNAVAILABLE, R_PAGES_NEED_VISION)
+    source = PipelineTextSource(make(None), _loader(pdf([(HEADER, 600)])))
+    with worker_context(), pytest.raises(ExtractionNeedsManual):
+        await source.text_for(uuid.uuid4())
+
+
+async def test_a_large_image_the_reader_cannot_hand_to_vision_holds_the_page():
+    class Native:
+        def read(self, content):
+            return [NativePage(1, TEXT_LONG, (), 1)]  # text read, plus one image of unknown size that cannot be sent
+
+    result = await run(ExtractionPipeline(Native(), vision=FakeVision()), b"%PDF")
+    assert not result.complete and R_IMAGE_UNREADABLE in result.reasons
+
+
+async def test_a_vision_registry_row_cannot_be_built_without_an_explicit_timeout():
+    from decimal import Decimal as D
+
+    from careflow.adapters.vision import vlm_row
+
+    prices = {"price_in_per_1k": D(0), "price_out_per_1k": D(0), "shadow_in_per_1k": D(0), "shadow_out_per_1k": D(0)}
+    base = {"provider": "p", "model_id": "m-1", "data_policy": "phi_approved", "priority": 1, **prices}
+    with pytest.raises(TypeError):
+        vlm_row(**base)  # type: ignore[call-arg]
+    row = vlm_row(**base, timeout_seconds=45.0)  # a test input, not a recommendation
+    assert row.role == "vlm" and row.timeout_seconds == 45.0
