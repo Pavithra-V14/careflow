@@ -408,12 +408,17 @@ async def test_no_patient_text_reaches_a_response_a_job_a_task_or_a_checkpoint(w
         assert not any(s in response.text for s in ("Asha", "Rao", "1980", "98765", "9876543210"))
     stored = " ".join(str(r[0]) for r in await rows(w, "select payload::text from ops.queue union all select provenance::text from agents.review_tasks"))
     assert not any(s in stored for s in ("Asha", "Rao", "1980", "98765"))
-    control = (await rows(w, "select count(*) from agents.graph_checkpoints where position(convert_to('front_door', 'UTF8') in metadata) > 0"))[0][0]
-    assert control > 0  # the probe below CAN find a string that is there
+    async def probe(table, column, needle):
+        """The ONE probe used for the control and for the strict check below: how many rows of `table` hold `needle` as bytes in `column` (a column or an expression)."""
+        return (await rows(w, f"select count(*) from {table} where position(convert_to(:s, 'UTF8') in {column}) > 0", s=needle))[0][0]
+
+    # The positive control runs the SAME probe against a string that is certainly there: the checkpoint's thread_id is "front_door:<document id>". It can fail: a string that is
+    # certainly absent (a fresh uuid) must be found zero times by the same probe, so the control both finds a planted string and discriminates.
+    assert await probe("agents.graph_checkpoints", "convert_to(thread_id, 'UTF8')", str(doc)) >= 1
+    assert await probe("agents.graph_checkpoints", "convert_to(thread_id, 'UTF8')", str(_u())) == 0
     for table, column in (("agents.graph_checkpoints", "checkpoint"), ("agents.graph_checkpoints", "metadata"), ("agents.graph_checkpoint_blobs", "blob"), ("agents.graph_checkpoint_writes", "write_blob")):
         for needle in ("Asha", "Rao", "1980", "98765"):
-            n = (await rows(w, f"select count(*) from {table} where position(convert_to(:s, 'UTF8') in {column}) > 0", s=needle))[0][0]
-            assert n == 0, (table, column, needle)
+            assert await probe(table, column, needle) == 0, (table, column, needle)
 
 
 async def test_a_red_flag_letter_raises_the_immediate_nurse_task_and_no_model_is_called(w):
