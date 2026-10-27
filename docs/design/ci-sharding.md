@@ -129,3 +129,32 @@ Step A makes that unnecessary). A file added to no shard can never go unrun.
 **Not recommended: shrinking the 200-attempt count.** It is the spec's number (BUILD-SPEC §21); it gets its own shard budget instead.
 
 Needs your decision: Step A first (I would do it on `next-backend`, run serially in CI, then Step B), or Step B with only two shards now.
+
+## Rebalance of 2026-10-27 (owner decision), from the first PR #3 run
+
+Measured on run 40113599668 (the committed workflow at that commit; hosted-database latency varies from run to run):
+
+| Shard | Tests | pytest time | Wall time of the job | PEAK-CONNECTIONS (total / careflow_app / other) |
+|---|---|---|---|---|
+| 1 | 193 | 31:13 | about 31 min | 31 / 16 / 15 |
+| 2 | 372 | **50:42** (limit 60) | about 51 min | 20 / 10 / 12 |
+| 3 | 80 | 11:26 | about 12 min | 31 / 16 / 15 |
+
+Shard 2 had grown with every new live file (ai_registry, spend, docs, triage, worker, hold, checkpoints) while shard 3 stayed small. The averages per test were 9.7 s (shard 1), 8.2 s
+(shard 2) and 8.6 s (shard 3, whose time is dominated by two concurrency tests: the 200-booking test 296 s and the concurrent-holds test 75 s; its other 78 tests averaged 4 s).
+Only the 25 slowest calls are in the log, so per-FILE times were estimated from the earlier per-file table above (screenings 9.4 min for 89 tests, rotation 4.9 min for 24 tests, scaled by
+about 1.17 for today's latency) and from test counts.
+
+**Change: `test_rls_screenings_live.py` and `test_rotation_live.py` move from shard 2 to shard 3.** Both are safe next to shard 3's files: the partition gate (`tests/test_ci_shards.py`) still
+holds (every live file in exactly one shard, and no whole-table count of a table another file commits), `msg.*` and the rules table are never committed, and rotation is the only file that commits
+`ops.key_rotation_batches`.
+
+| Shard | Files | Estimated |
+|---|---|---|
+| 1 | role matrix (now with the committed half of the referral routes), identity, rules, screen message, read message, patient binding | about 33 min |
+| 2 | queue, msg, mpi, iam_audit, migrate, real_token, child_tables, ai_registry, spend, docs, triage, mpi_worker, referral_hold, checkpoints, triage_writers | about 34 min |
+| 3 | screenings, rotation, scheduling, rls_mpi_scheduling, scheduling_concurrency, api_referrals, dead_letters | about 33 min |
+
+**So that the next rebalance does not guess:** every shard now writes `--junitxml=shard-times.xml` and prints `SHARD-TIMES` / `SHARD-TIME` lines (seconds, test count and file, slowest first) from
+`scripts/ci_shard_times.py` in a step that runs even when tests fail. Compare the estimate above with those lines after the next run and move files again if a shard is over 40 minutes.
+

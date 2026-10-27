@@ -81,7 +81,7 @@ def test_the_required_check_named_test_passes_only_if_every_shard_did():
 
 def test_every_shard_keeps_verbose_durations_the_zero_skip_check_and_the_connection_sampler():
     run = " ".join(step.get("run", "") for step in WORKFLOW["jobs"]["live"]["steps"])
-    for needle in ("-v", "--durations=25", "SKIPPED", "scripts/ci_peak_connections.py", "pytest"):
+    for needle in ("-v", "--durations=25", "SKIPPED", "scripts/ci_peak_connections.py", "pytest", "--junitxml=shard-times.xml", "scripts/ci_shard_times.py"):
         assert needle in run, needle
 
 
