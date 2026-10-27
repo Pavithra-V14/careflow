@@ -180,6 +180,10 @@ async def test_the_worker_cannot_update_or_delete_anything_in_mpi_and_cannot_wri
         "values (:c, :m, :s, :cand, :u, 'test', :k, 'awaiting_second_approval')"
     )
     cand = (await db.execute(text("select id from mpi.match_candidates where patient_id = :p"), {"p": near.patient_id})).scalar_one()
+    # merges stay human: the worker cannot propose one between two real, distinct patients. This runs BEFORE front desk's merge below on purpose: the BEFORE INSERT trigger
+    # mpi.check_merge_links (flat links) fires before the row-level-security check, so once a live link exists between these two patients the same statement would fail with
+    # 23514 (check_violation) instead of 42501. (Found by CI run 40512040646: the test, not the schema, was wrong.)
+    assert await attempt(db, w, merge, c=a, m=near.patient_id, s=first.patient_id, cand=cand, u=w, k="m-worker") == "42501"
     assert await attempt(db, fd, merge, c=a, m=first.patient_id, s=near.patient_id, cand=cand, u=fd, k="m-fd") == 1  # a real pending merge, proposed by a person
     # positive controls: the same statements, as front desk, DO change rows, so a 0 for the worker means the policy filtered them
     assert await attempt(db, fd, "update mpi.patients set name_key_version = name_key_version where id = :i", i=first.patient_id) == 1
@@ -193,8 +197,6 @@ async def test_the_worker_cannot_update_or_delete_anything_in_mpi_and_cannot_wri
     # no DELETE privilege exists on any of them
     for table in ("mpi.patients", "mpi.identity_tokens", "mpi.match_candidates", "mpi.merges"):
         assert await attempt(db, w, f"delete from {table}") == "42501", table
-    # merges stay human: the worker cannot propose one between two real, distinct patients
-    assert await attempt(db, w, merge, c=a, m=near.patient_id, s=first.patient_id, cand=cand, u=w, k="m-worker") == "42501"
     # the worker cannot write an already-resolved possible duplicate (that would close a human review)
     cand = (
         "insert into mpi.match_candidates (clinic_id, patient_id, candidate_patient_id, matched_kinds, reason, status, resolved_at, origin, idempotency_key) "
