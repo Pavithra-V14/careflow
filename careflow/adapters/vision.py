@@ -7,7 +7,7 @@ Gemini (the §10.4 choice) is NOT approved, so there is no real route; when one 
 """
 
 from careflow.gateway import Gateway
-from careflow.ports import DataClass, VisionRequest, VisionResult
+from careflow.ports import DataClass, PermanentError, VisionRequest, VisionResult
 
 
 class GatewayVision:
@@ -18,5 +18,5 @@ class GatewayVision:
         outcome = await self._gateway.call("vlm", request, data_class=DataClass.PHI, clinic_id=request.clinic_id)
         value = outcome.value
         if not isinstance(value, VisionResult):  # a mis-registered adapter fails the page, it does not produce text
-            raise TypeError("the vlm route did not return a VisionResult")
+            raise PermanentError("the vlm route did not return a VisionResult")
         return value

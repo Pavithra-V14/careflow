@@ -24,6 +24,7 @@ Nothing here logs. Page bytes, text and image bytes are patient data (`repr=Fals
 import asyncio
 import re
 import uuid
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Generator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -44,6 +45,7 @@ from careflow.ports import (
 # (a broken font encoding), counts as no text layer. Tuning constants; changing them needs no clinician.
 MIN_PAGE_CHARS: Final = 20
 MIN_ALNUM_RATIO: Final = 0.5
+MEMO_DOCUMENTS: Final = 8  # documents whose text the in-process memo keeps; the oldest is dropped (technical bound)
 MAX_PAGES: Final = 200  # a technical bound on one document's work in one job
 
 # The closed vocabulary of reasons this module can produce (a subset of careflow.referral.FIXED_REASONS, which a test pins).
@@ -199,13 +201,9 @@ def _blocks(text: str) -> list[str]:
     return parts or ([text.strip()] if text.strip() else [])
 
 
-_VISION_FAILURES = (
-    NoApprovedRoute,
-    AllRoutesFailed,
-    SpendCeilingReached,
-    TransientError,
-    PermanentError,
-)  # BudgetExceeded is NOT here: it stops the run
+# A spend ceiling is a visible manual outcome like any other vision failure: the safety path is never budget-limited (15.2), and a re-raise would leave the letter
+# unscreened and unheld until the job dead-letters.
+_VISION_FAILURES = (NoApprovedRoute, AllRoutesFailed, SpendCeilingReached, BudgetExceeded, TransientError, PermanentError)
 
 
 class ExtractionPipeline:
@@ -285,8 +283,6 @@ class ExtractionPipeline:
                         image.data, image.content_type, page.number, clinic_id
                     )
                 )
-            except BudgetExceeded:
-                raise
             except _VISION_FAILURES:
                 return (
                     "",
@@ -367,7 +363,7 @@ class PipelineTextSource:
 
     def __init__(self, pipeline: ExtractionPipeline, loader: Loader) -> None:
         self._pipeline, self._loader = pipeline, loader
-        self._memo: dict[uuid.UUID, ExtractionResult] = {}
+        self._memo: OrderedDict[uuid.UUID, ExtractionResult] = OrderedDict()  # bounded: patient text is not kept for the life of the worker
         self._locks: dict[uuid.UUID, asyncio.Lock] = {}
 
     async def result_for(self, document_id: uuid.UUID) -> ExtractionResult:
@@ -378,6 +374,10 @@ class PipelineTextSource:
                 self._memo[document_id] = await self._pipeline.run(
                     content, content_type, clinic_id=clinic_id
                 )
+                while len(self._memo) > MEMO_DOCUMENTS:
+                    evicted, _ = self._memo.popitem(last=False)
+                    self._locks.pop(evicted, None)
+            self._memo.move_to_end(document_id)
             return self._memo[document_id]
 
     async def text_for(self, document_id: uuid.UUID) -> str:

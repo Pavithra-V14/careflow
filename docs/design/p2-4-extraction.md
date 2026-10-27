@@ -41,3 +41,13 @@ Conclusion: the light mode requested **cannot exist** without the heavy extras. 
 2. A persisted, encrypted extraction cache (a crash-resume currently re-reads; vision would be billed again) needs a schema and a privacy review; for now an in-process memo only.
 3. A real vision provider (Gemini) needs approval, a key, a registry row, a data-flow-register entry and a register test.
 4. Embedded images on pages whose text layer succeeded are recorded but not read (15.3); confirm that is acceptable (a clinically meaningful chart image would be missed by design).
+
+## Review findings (spec-compliance-checker, 2026-10-27)
+
+Fixed: a vision spend stop (`BudgetExceeded`) is now the visible manual outcome, not a re-raise that would leave a letter unscreened and unheld (§15.2: the safety path is never budget-limited); a mis-registered vision adapter fails the page (`PermanentError`) instead of crashing the job; the in-process memo keeps at most 8 documents.
+
+Open, owner decisions (not closed by default):
+- Rule 2 carve-out for image-only pages (vision runs before the screen can read the page) needs recording in the spec; the offline invariant test does not see the vision call because the fake writes no model event.
+- The reviewer argues the skipped-images case is "unknown treated as clear": a scanned referral with a typed header has a text layer of 20+ characters, so the image body is never read. Suggested minimum: a page with a usable text layer AND an image covering most of the page (a technical threshold) goes to vision or a nurse. Awaiting your call; today such images are only counted.
+- §16.1 gives vision a 60 s per-page timeout: `ModelRow.timeout_seconds` is the gateway's lever; confirm the registry row sets it when a real route is approved.
+- pypdf was tried only on synthetic PDFs; real scanner output (JBIG2, CMYK, odd fonts) routes to a nurse via `image_unreadable`. A spike on real-world-like files is needed before launch.

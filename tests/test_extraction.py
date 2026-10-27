@@ -128,11 +128,12 @@ async def test_an_empty_vision_answer_is_a_failed_page_not_empty_text():
     assert not result.complete and result.reasons == (R_EXTRACTION_FAILED,)
 
 
-async def test_a_spend_stop_is_not_swallowed_into_a_manual_task():
+async def test_a_spend_stop_on_vision_becomes_a_visible_manual_outcome_not_an_unheld_failure():
+    # 15.2: the safety path is never budget-limited. A re-raise would leave the letter unscreened and unheld until the job dead-letters.
     vision = FakeVision()
     vision.fail_next(1, BudgetExceeded("daily", 1.0))
-    with pytest.raises(BudgetExceeded):
-        await run(make(vision), pdf([("", True)]))
+    result = await run(make(vision), pdf([("", True)]))
+    assert not result.complete and result.reasons == (R_VISION_UNAVAILABLE, R_PAGES_NEED_VISION)
 
 
 @pytest.mark.parametrize("content", [b"", b"not a pdf", b"%PDF-1.4\ntruncated", pdf([(TEXT_LONG, False)])[:60]])
@@ -266,7 +267,17 @@ async def test_a_phi_approved_route_reads_the_page_and_a_wrongly_typed_answer_fa
     key = ("fake-vision-provider", "fake-vlm-1")
     ok = await run(ExtractionPipeline(PypdfExtractor(), vision=GatewayVision(_gateway(_vlm_row("phi_approved"), adapters={key: good}))), pdf([("", True)]))
     assert ok.complete and ok.pages[0].tier == "vision"
-    with pytest.raises(TypeError):
+    with pytest.raises(PermanentError):
         await GatewayVision(_gateway(_vlm_row("phi_approved"), adapters={key: wrong})).read(
             VisionRequest(b"px", "image/png", 1, CLINIC)
         )
+
+
+async def test_the_memo_is_bounded_so_patient_text_is_not_kept_for_the_life_of_the_worker():
+    from careflow.extraction import MEMO_DOCUMENTS
+
+    source = PipelineTextSource(make(), _loader(pdf([(TEXT_LONG, False)])))
+    with worker_context():
+        for _ in range(MEMO_DOCUMENTS + 5):
+            await source.text_for(uuid.uuid4())
+    assert len(source._memo) == MEMO_DOCUMENTS and len(source._locks) <= MEMO_DOCUMENTS + 1
