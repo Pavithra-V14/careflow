@@ -31,10 +31,10 @@ Updated 2026-10-24. Branch stack: next-backend (PR #2, CI green) <- p2-3-docs <-
 - The real embedding, Qdrant and storage adapters (each needs its data-flow entry and an Appendix B spike: signed-upload overwrite, Qdrant access control).
 
 ## Parked for RAM
-- P2-4 extraction pipeline (pypdf, Unstructured local). Its disk and RAM needs will be restated when it is reached; nothing is installed.
+- P2-4 extraction: BUILT on branch p2-4-extraction (pypdf native tier, layout slot, vision through a port with fakes only, manual fallback, worker-only); Unstructured light mode is impossible without torch and was NOT installed. See p2-4-extraction.md.
 
 ## Not done and gating real use
-Real-engine contract tests; retrieval gold-set gate; P2-4; the route/worker to run the graph; the review console; the malware scanner; audit.log rows for the human decisions.
+Real-engine contract tests; retrieval gold-set gate; the route/worker to run the graph; the review console; the malware scanner; audit.log rows for the human decisions.
 
 ## PRE-LAUNCH BLOCKERS (recorded decisions; nothing here blocks the merge, all of it blocks real patient data)
 1. **Worker token-attach and pending-duplicate forgery (0019 residual risk 4).** INSERT on `mpi.identity_tokens` and `mpi.match_candidates` lets a queue worker attach an identity token to ANY existing patient of its clinic, or forge a pending possible-duplicate between two patients; a wrongly attached token would make a later referral link to the wrong person. The owner decided (2026-10-24) NOT to build the SECURITY DEFINER ingestion function now, and to accept the risk while the worker is a trusted, synthetic-data-only identity. It must be closed (a function that touches only the record it just created) or explicitly re-accepted before any real patient data.
