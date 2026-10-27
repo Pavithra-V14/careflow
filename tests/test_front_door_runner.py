@@ -144,3 +144,31 @@ async def test_the_error_text_never_carries_the_payload(monkeypatch):
     with pytest.raises(RunnerError) as exc:
         await h(ctx({"document_id": "SENTINEL-NOT-A-UUID"}))
     assert "SENTINEL" not in str(exc.value)
+
+
+async def test_the_request_session_serialises_its_savepoints_so_concurrent_uses_never_interleave():
+    import asyncio
+
+    events = []
+
+    class Conn:
+        def begin_nested(self):
+            @asynccontextmanager
+            async def cm():
+                events.append("enter")
+                try:
+                    yield self
+                finally:
+                    events.append("exit")
+
+            return cm()
+
+    session = runner.request_session(Conn())  # type: ignore[arg-type]
+
+    async def use():
+        async with session():
+            await asyncio.sleep(0)  # a task switch inside the savepoint, as LangGraph's tasks cause
+            await asyncio.sleep(0)
+
+    await asyncio.gather(use(), use(), use())
+    assert events == ["enter", "exit"] * 3  # never enter, enter, exit, exit

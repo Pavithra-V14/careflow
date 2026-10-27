@@ -18,6 +18,7 @@ The handler is safe to run twice and to cancel at any await: a second run resume
 finished is left alone, and every side effect inside the graph carries an idempotency key derived from the document.
 """
 
+import asyncio
 import uuid
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
@@ -91,11 +92,14 @@ def worker_session(engine: AsyncEngine, account_id: uuid.UUID) -> SessionFactory
 
 
 def request_session(conn: AsyncConnection) -> SessionFactory:
-    """The request's own connection: each use is a savepoint inside the request transaction, so one failing step cannot poison the others."""
+    """The request's own connection: each use is a savepoint inside the request transaction, so one failing step cannot poison the others. Uses are SERIALISED by a lock: LangGraph
+    runs nodes and checkpoint writes in separate tasks, and two savepoints opened and closed out of order on one connection corrupt the transaction (SQLAlchemy: "nested transaction
+    already deassociated", then PendingRollbackError on the request's own rollback; found by the first CI run of the review route). No node holds a session while the saver wants one."""
+    lock = asyncio.Lock()
 
     @asynccontextmanager
     async def session():
-        async with conn.begin_nested():
+        async with lock, conn.begin_nested():
             yield conn
 
     return session
