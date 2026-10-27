@@ -247,15 +247,15 @@ async def post(w, who, path, *, key="new", json=None, token=None):
     return await w.client.post(path, headers=headers, json=json)
 
 
-async def run_worker(w, *, expect_job=True):
+async def run_worker(w, *, expect_job=True, worker="worker_a"):
     """Claim the next job as the worker and run the real handler on it, exactly as the tick would; acknowledge on success."""
-    queue, session = PostgresQueue(), w.worker_session_for(object(), w.ids["worker_a"])
+    queue, session = PostgresQueue(), w.worker_session_for(object(), w.ids[worker])
     async with session() as conn:
         job = await queue.claim(conn, "test-worker", 120.0)
     if job is None:
         assert not expect_job, "no job was queued"
         return None
-    ctx = JobContext(job=job, budget=RunBudget(TickClock()), engine=object(), worker_account_id=w.ids["worker_a"])  # type: ignore[arg-type]
+    ctx = JobContext(job=job, budget=RunBudget(TickClock()), engine=object(), worker_account_id=w.ids[worker])  # type: ignore[arg-type]
     await w.handler(ctx)
     async with session() as conn:
         await queue.acknowledge(conn, job.id, worker_id="test-worker")
@@ -435,7 +435,7 @@ async def test_a_red_flag_letter_raises_the_immediate_nurse_task_and_no_model_is
 async def test_a_letter_in_a_clinic_with_no_usable_rules_is_held_for_a_nurse_never_treated_as_clear(w):
     doc = await new_doc(w, w.b, w.ids["fd_b"])
     assert (await post(w, "fd_b", RUN.format(doc))).status_code == 200
-    await run_worker(w)
+    await run_worker(w, worker="worker_b")  # the job is clinic B's: only clinic B's worker can claim it (RLS hides it from clinic A's worker)
     assert w.extractor.calls == []
     ((kind, role, provenance),) = await rows(w, "select kind, assigned_role, provenance from agents.review_tasks where source_message_id = :s", s=f"document:{doc}")
     assert (kind, role) == ("referral_hold", "nurse") and provenance["status"] == "held_unassessable"
