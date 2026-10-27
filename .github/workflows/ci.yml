@@ -227,6 +227,19 @@ jobs:
             exit 1
           fi
 
+      # The PEAK-CONNECTIONS line is printed inside the test step above on pass or fail. This step repeats it in the job SUMMARY on every outcome (including a cancelled or timed-out
+      # step, where the first print is never reached), so a passed shard's number is visible without opening the log. It never fails the shard.
+      - name: "Peak connections, shard ${{ matrix.shard }}"
+        if: always()
+        run: |
+          if [ -s peak.out ]; then
+            cat peak.out
+            { echo "### Peak connections, shard ${{ matrix.shard }}"; echo; echo '```'; cat peak.out; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "no PEAK-CONNECTIONS line was produced (the sampler did not run or was killed before it printed)"
+            echo "PEAK-CONNECTIONS label=shard-${{ matrix.shard }} NOT-CAPTURED" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       # Seconds per test FILE, from the JUnit XML, so the next rebalance of the shards starts from measurements (scripts/ci_shard_times.py; it never fails the shard).
       - name: "Per-file times, shard ${{ matrix.shard }}"
         if: always()
