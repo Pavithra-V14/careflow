@@ -1,5 +1,6 @@
 """The role matrix AND the live end-to-end run for POST /v1/staff/referrals/{document_id}/run and /review, against the real database (BUILD-SPEC.md §7.2, §12.1, §18.4, §21; CLAUDE.md rule 8).
 
+THE DEDICATED HALF of a split matrix (the committed half is in tests/test_api_role_matrix.py: every identity against random document ids, nothing to clean up).
 WHY A SEPARATE HARNESS. Same reason as tests/test_api_screen_message_live.py: the rows these routes and the worker write (docs.documents, ops.queue, agents.graph_checkpoints,
 agents.triage_proposals, agents.review_decisions, audit-style review tasks) are append-only, so tests/test_api_role_matrix.py's commit-and-delete fixture could never clean them up.
 Here the app is driven over HTTP (httpx ASGI transport) with real signed tokens and the real auth dependency; its database dependency is ONE shared connection inside a
@@ -76,8 +77,19 @@ REVIEWS = {
     "nurse_a": 200, "doctor_a": 200, "multi": 200, "fd_a": 403, "worker_a": 403,
     "admin_a": 404, "auditor_a": 404, "owner_a": 404, "nurse_b": 404, "fd_b": 404, "patient": 404, "guardian": 404, "invited": 404, "suspended": 404,
 }
-# Read by tests/test_api_role_matrix.py::test_separately_tested_routes_have_a_dedicated_matrix_that_covers_them (both routes: the same roles, one driving test).
-COVERED = {("POST", "/v1/staff/referrals/{document_id}/run"): tuple(START), ("POST", "/v1/staff/referrals/{document_id}/review"): tuple(START)}
+# Read by tests/test_api_role_matrix.py::test_split_routes_have_both_halves_and_the_dedicated_half_covers_every_role_on_every_axis_value: every required role is tried on
+# BOTH routes by the one driving test, and the tests named below must exist.
+GRID_AXIS = ("run", "review")
+GRID_DRIVER = "test_who_can_start_a_run_and_who_can_review"
+GRID_REQUIRED_TESTS = (
+    "test_authentication_comes_first_for_every_kind_of_bad_credential", "test_the_idempotency_key_and_the_path_are_validated",
+    "test_a_replay_with_the_same_key_returns_the_original_and_a_new_key_is_a_no_op_not_a_second_task", "test_the_whole_run_from_a_registered_letter_to_a_human_decision",
+    "test_a_red_flag_letter_raises_the_immediate_nurse_task_and_no_model_is_called", "test_a_review_task_another_reviewer_already_acknowledged_refuses_the_decision_and_the_run_stays_paused",
+)
+COVERED_GRID = {
+    ("POST", "/v1/staff/referrals/{document_id}/run"): {who: GRID_AXIS for who in START},
+    ("POST", "/v1/staff/referrals/{document_id}/review"): {who: GRID_AXIS for who in START},
+}
 
 
 def _u() -> uuid.UUID:
@@ -271,8 +283,8 @@ async def decisions(w, doc):
 
 
 @pytest.mark.parametrize("who", list(START))
-async def test_who_can_screen_which_topic(w, who):
-    """The driving test of the matrix harness (the name is fixed by tests/test_api_role_matrix.py; here 'topic' is the ROUTE: each identity tries /run, then /review)."""
+async def test_who_can_start_a_run_and_who_can_review(w, who):
+    """The driving test of the dedicated half: each of the 14 identities tries /run and then /review on real documents (the 403s and 200s the committed half cannot reach)."""
     doc = await paused(w)
     other = await new_doc(w, w.a, w.ids["fd_a"])
     run = await post(w, who, RUN.format(other))
@@ -325,7 +337,7 @@ async def test_authentication_comes_first_for_every_kind_of_bad_credential(w):
 
 
 async def test_the_idempotency_key_and_the_path_are_validated(w):
-    """(The name is fixed by the matrix harness; this also validates the review body: the reviewer is never accepted from it.)"""
+    """(This also validates the review body: the reviewer is never accepted from it.)"""
     doc = await paused(w)
     for key in (None, "", "   "):
         assert (await post(w, "nurse_a", RUN.format(doc), key=key)).status_code == 422, key
@@ -342,7 +354,7 @@ async def test_the_idempotency_key_and_the_path_are_validated(w):
 
 
 async def test_a_replay_with_the_same_key_returns_the_original_and_a_new_key_is_a_no_op_not_a_second_task(w):
-    """(The name is fixed by the matrix harness.) Same key: the same job. New key: a second job, but the RUN is idempotent: one patient, one proposal, one review task."""
+    """Same key: the same job. New key: a second job, but the RUN is idempotent: one patient, one proposal, one review task."""
     doc = await new_doc(w, w.a, w.ids["fd_a"])
     first = await post(w, "fd_a", RUN.format(doc), key="same")
     again = await post(w, "fd_a", RUN.format(doc), key="same")

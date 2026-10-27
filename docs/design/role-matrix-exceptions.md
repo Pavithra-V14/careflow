@@ -73,14 +73,20 @@ exactly those roles, and the audit, refusal, erased and authentication tests to 
 
 Both halves must run in CI with zero skips.
 
-## POST /v1/staff/referrals/{document_id}/run and /review (Front Door runs)
+## POST /v1/staff/referrals/{document_id}/run and /review (Front Door runs): a SPLIT matrix, confirmed by the owner on 2026-10-24
 
-Both routes are registered in `SEPARATE_HARNESS` and tested in `tests/test_api_referrals_live.py`. Why: a run writes append-only rows (`docs.documents`, `ops.queue`
-claims, `agents.graph_checkpoints`, `agents.triage_proposals`, `agents.review_decisions`) that the committed-fixture matrix could never delete. The dedicated module drives the
-real app over HTTP with real signed tokens, and the real worker handler (claimed from the real queue and run as the worker account), inside one never-committed transaction.
-It covers every required role on BOTH routes (start: front desk, nurse, doctor; review: nurse, doctor; the worker gets 403; everyone else the fixed 404), authentication before
-validation, the key and path and body validation (the reviewer is never accepted from the body), replay, and the whole run end to end on stand-ins for the external engines.
-Not covered, same list as the screening route: the real pooler engine, commit-before-response, a process restart across a commit.
+Both routes are in `MATRIX` AND in `SPLIT_HARNESS` (the guard `test_split_routes_have_both_halves...` requires both halves and now reads each dedicated module's declared grid).
+
+**Committed half** (`tests/test_api_role_matrix.py`, `referral_run_cases` / `referral_review_cases`, real pooler role, real commits): every one of the 14 identities plus a valid
+user with no account, each asking about a RANDOM document id. Nothing exists, so there is nothing to clean up. It pins the fixed bodies of **401** (five kinds of bad credential, even
+without the key), **404** (the one fixed body, identical for every identity) and **422** (a missing or blank key, a document id that is not a uuid, and for `/review`: an empty body,
+an unknown decision, and a body that names a reviewer). The shared test app is built with stand-in front-door components so the routes get past their 503.
+It CANNOT produce a **403 or a 200**: both need an existing referral document, and `docs.documents` is append-only for every role, so a committed fixture could never be deleted.
+
+**Dedicated half** (`tests/test_api_referrals_live.py`, one never-committed transaction, the real app over HTTP with real signed tokens, the worker handler run from the real queue):
+every required identity on BOTH routes against real documents (the **403**s: the queue worker on `/run`, front desk and the worker on `/review`; the **200**s; the 404 for everyone who
+cannot see the document), replay and conflict, a refused decision leaving the run paused, and the whole run on stand-ins for the external engines.
+Not covered by either half: the real pooler engine for the success path, commit-before-response, a process restart across a commit, concurrent reviewers (one connection plus a lock).
 
 ## Rule for future routes
 

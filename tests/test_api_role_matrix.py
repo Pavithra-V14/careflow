@@ -38,6 +38,7 @@ from starlette.testclient import TestClient
 from careflow.app import Settings, create_app
 from careflow.auth import JWKSClient
 from careflow.crypto import DemographicVault
+from careflow.front_door_runner import FrontDoorComponents
 from tests.bounds import bounded
 
 ENV = dotenv_values(Path(__file__).resolve().parent.parent / ".env")
@@ -234,7 +235,8 @@ STEP_UP_WINDOW = 1800
 @pytest.fixture(scope="module")
 def app() -> FastAPI:
     settings = Settings(supabase_url=PROJECT, database_url_app=APP_URL or "", step_up_max_age_seconds=STEP_UP_WINDOW)
-    return create_app(settings, jwks=fake_jwks_client(), vault=TEST_VAULT)
+    # Stand-in components (all None): the referral routes need SOME configured front door to get past their 503; the paths tested here (404, 422, 401) never touch a component.
+    return create_app(settings, jwks=fake_jwks_client(), vault=TEST_VAULT, front_door=FrontDoorComponents(None, None, None, None, None, None, None, None, None))
 
 
 @pytest.fixture(scope="module")
@@ -816,6 +818,48 @@ def message_read_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(), None)
 
 
+# ---- POST /v1/staff/referrals/{document_id}/run and /review: the COMMITTED half of a split matrix --------------------------------------------------------
+#
+# A run needs a registered referral document, and docs.documents (like the checkpoint and decision tables a run writes) is append-only for every role, so a committed fixture could
+# never be cleaned up. This half therefore runs every identity against RANDOM document ids (nothing exists, nothing to clean up) on the real pooler role and pins the fixed bodies
+# of 401, 404 and 422. It CANNOT produce a 403 or a 200: both need an existing document. Those, the full run, the worker handler and replay are in the dedicated never-committed
+# module tests/test_api_referrals_live.py. Documented in docs/design/role-matrix-exceptions.md.
+
+RUN_REFERRAL = "/v1/staff/referrals/{document_id}/run"
+REVIEW_REFERRAL = "/v1/staff/referrals/{document_id}/review"
+
+
+def _referral_cases(ids, template: str, body) -> list[tuple]:
+    path = lambda: template.format(document_id=uuid.uuid4())
+    cases = [
+        _case(ids, f"{p} asking about a document that does not exist gets the one fixed 404",
+              bearer(mint(ids.no_account if p == "no account" else ids.people[p][0])), 404, path(), json=body, body=_fixed(404))
+        for p in [*ids.people, "no account"]
+    ]
+    fd = "front_desk_a"
+    cases += [
+        _case(ids, "a missing X-Idempotency-Key is rejected", fd, 422, path(), json=body, key=None, body=_fixed(422)),
+        _case(ids, "a blank X-Idempotency-Key is rejected", fd, 422, path(), json=body, key="   ", body=_fixed(422)),
+        _case(ids, "a document id that is not a uuid is rejected", fd, 422, template.format(document_id="nope"), json=body, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), body)
+
+
+def referral_run_cases(ids) -> list[tuple]:
+    return _referral_cases(ids, RUN_REFERRAL, None)
+
+
+def referral_review_cases(ids) -> list[tuple]:
+    cases = _referral_cases(ids, REVIEW_REFERRAL, {"decision": "approve"})
+    path = lambda: REVIEW_REFERRAL.format(document_id=uuid.uuid4())
+    for label, bad in (
+        ("an empty body", {}), ("a decision that is not one of the three", {"decision": "approve-all"}),
+        ("a body that names the reviewer (the reviewer is the signed-in account, never the body)", {"decision": "approve", "reviewer_id": str(uuid.uuid4())}),
+    ):
+        cases.append(_case(ids, f"{label} is rejected", "nurse_a", 422, path(), json=bad, body=_fixed(422)))
+    return cases
+
+
 # One entry per route: add the new route's cases here in the same change that adds the route.
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
@@ -831,6 +875,8 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", APPROVE): merge_approve_cases,
     ("POST", UNMERGE): merge_unmerge_cases,
     ("GET", READ): message_read_cases,
+    ("POST", RUN_REFERRAL): referral_run_cases,
+    ("POST", REVIEW_REFERRAL): referral_review_cases,
 }
 
 
@@ -843,9 +889,6 @@ MATRIX: dict[tuple[str, str], Callable] = {
 # must cover the route (see test_separately_tested_routes_have_a_dedicated_matrix_that_covers_them).
 SEPARATE_HARNESS: dict[tuple[str, str], str] = {
     ("POST", "/v1/staff/messages/{message_id}/screen"): "test_api_screen_message_live.py",
-    # Both Front Door run routes: the rows are append-only (documents, checkpoints, proposals, decisions) and the worker is part of the flow.
-    ("POST", "/v1/staff/referrals/{document_id}/run"): "test_api_referrals_live.py",
-    ("POST", "/v1/staff/referrals/{document_id}/review"): "test_api_referrals_live.py",
 }
 
 
@@ -854,6 +897,9 @@ SEPARATE_HARNESS: dict[tuple[str, str], str] = {
 # route MUST also be in MATRIX, and the dedicated half must cover every required role on every topic.
 SPLIT_HARNESS: dict[tuple[str, str], str] = {
     ("GET", READ): "test_api_read_message_live.py",
+    # Both Front Door run routes: the committed half above (random document ids: 401, 404, 422) and the dedicated half (existing documents, the worker, the whole run).
+    ("POST", RUN_REFERRAL): "test_api_referrals_live.py",
+    ("POST", REVIEW_REFERRAL): "test_api_referrals_live.py",
 }
 
 
@@ -903,14 +949,21 @@ def test_split_routes_have_both_halves_and_the_dedicated_half_covers_every_role_
         module = importlib.import_module(f"tests.{filename.removesuffix('.py')}")
         grid = module.COVERED_GRID[(method, path)]
         assert REQUIRED_SEPARATE_ROLES <= set(grid), f"{filename} is missing roles: {REQUIRED_SEPARATE_ROLES - set(grid)}"
-        assert set(module.TOPICS) == {"care", "appointments", "safety"}
-        assert all(set(topics) == set(module.TOPICS) for topics in grid.values()), "every role must be tried on every topic"
-        driver = module.test_who_can_read_which_topic
+        # A module declares its own axis (GRID_AXIS), its driving test (GRID_DRIVER) and the tests that must exist (GRID_REQUIRED_TESTS). One that declares none is the
+        # message-read module: three topics, its own driver and required tests.
+        axis = tuple(getattr(module, "GRID_AXIS", ())) or tuple(module.TOPICS)
+        if not hasattr(module, "GRID_AXIS"):
+            assert set(module.TOPICS) == {"care", "appointments", "safety"}
+        driver_name = getattr(module, "GRID_DRIVER", "test_who_can_read_which_topic")
+        required_tests = getattr(module, "GRID_REQUIRED_TESTS", (
+            "test_every_successful_read_writes_exactly_one_audit_row_with_ids_only", "test_refused_reads_write_no_audit_row",
+            "test_an_erased_message_is_410_for_those_who_can_see_it_and_404_for_those_who_cannot",
+            "test_authentication_comes_first_for_every_kind_of_bad_credential"))
+        assert all(set(values) == set(axis) for values in grid.values()), "every role must be tried on every axis value"
+        driver = getattr(module, driver_name)
         parametrized = [m for m in getattr(driver, "pytestmark", []) if m.name == "parametrize"]
         assert parametrized and list(parametrized[0].args[1]) == list(grid), "the driving test must be parametrized over every covered role"
-        for needed in ("test_every_successful_read_writes_exactly_one_audit_row_with_ids_only", "test_refused_reads_write_no_audit_row",
-                       "test_an_erased_message_is_410_for_those_who_can_see_it_and_404_for_those_who_cannot",
-                       "test_authentication_comes_first_for_every_kind_of_bad_credential"):
+        for needed in required_tests:
             assert callable(getattr(module, needed, None)), f"{filename} no longer defines {needed}"
 
 
