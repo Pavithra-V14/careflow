@@ -123,6 +123,8 @@ pygments==2.21.0
     # via pytest
 pyjwt==2.15.1
     # via careflow
+pypdf==6.21.3
+    # via careflow
 pytest==9.1.1
     # via pytest-asyncio
 pytest-asyncio==1.4.0
