@@ -72,40 +72,39 @@ def _image(obj) -> PageImage | None:
 MAX_FORM_DEPTH = 5  # nested forms deeper than this are counted as one unknown image (a technical bound)
 
 
-def _images_in_form(form, depth: int = 0) -> int:
-    """How many image XObjects a form holds, looking inside nested forms. Past the depth bound, or if the form cannot be read, the answer is 1: unknown is not zero."""
+def _images_in_form(form, pdf, depth: int = 0) -> int:
+    """How many images a form holds: image XObjects (looking inside nested forms) and inline images in its own content stream. Past the depth bound, or if the form cannot be read,
+    the answer is 1: unknown is not zero."""
     if depth >= MAX_FORM_DEPTH:
         return 1
     try:
+        count = sum(1 for _, operator in ContentStream(form, pdf).operations if operator == b"INLINE IMAGE")
         resources = form.get("/Resources")
-        if resources is None:
-            return 0
-        xobjects = resources.get_object().get("/XObject")
+        xobjects = resources.get_object().get("/XObject") if resources is not None else None
         if xobjects is None:
-            return 0
+            return count
         xobjects = xobjects.get_object()
-        count = 0
         for name in xobjects:
             inner = xobjects[name].get_object()
             if inner.get("/Subtype") == "/Image":
                 count += 1
             elif inner.get("/Subtype") == "/Form":
-                count += _images_in_form(inner, depth + 1)
+                count += _images_in_form(inner, pdf, depth + 1)
         return count
-    except (PyPdfError, ValueError, KeyError, TypeError, AttributeError, RecursionError):
+    except (PyPdfError, ValueError, KeyError, TypeError, AttributeError, RecursionError, IndexError):
         return 1
 
 
 def _coverage(page) -> tuple[dict[str, float], int]:
     """(share of the page area each image XObject is drawn over, by name; count of inline images). Reads the page's content stream: the current transformation matrix at each `Do`
     gives the drawn size (|a*d - b*c| of the unit square). A name that is never drawn directly (it sits inside a form XObject) is absent: its size is unknown and counts as large.
-    Any failure to measure returns an empty map, which makes every image unknown, which is the safe direction."""
+    Any failure to measure returns an empty map AND one unreadable image: unknown is not zero (an inline image we could not parse must never look like no image)."""
     try:
         # The visible page is the CropBox when there is one: measure against the smaller of the two so a cropped scan is never under-counted.
         areas = [abs(float(b.width) * float(b.height)) for b in (page.mediabox, page.cropbox)]
         area = min((a for a in areas if a > 0), default=0.0)
         if area <= 0:
-            return {}, 0
+            return {}, 1
         stream = ContentStream(page.get_contents(), page.pdf)
         stack: list[tuple[float, ...]] = []
         ctm: tuple[float, ...] = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
@@ -129,7 +128,7 @@ def _coverage(page) -> tuple[dict[str, float], int]:
                 inline += 1
         return drawn, inline
     except (PyPdfError, ValueError, KeyError, TypeError, IndexError, AttributeError, RecursionError):
-        return {}, 0
+        return {}, 1
 
 
 class PypdfExtractor:
@@ -177,7 +176,7 @@ class PypdfExtractor:
                 if obj.get("/Subtype") == "/Form":
                     # An image drawn inside a form XObject (a common scanner and PDF-wrapper shape) is not listed in the page's own resources and its size cannot be measured here:
                     # it is counted as an image that cannot be handed to vision, which holds the page for a person. A form with no image inside is ignored.
-                    unreadable += _images_in_form(obj)
+                    unreadable += _images_in_form(obj, page.pdf)
                     continue
                 if obj.get("/Subtype") != "/Image":
                     continue

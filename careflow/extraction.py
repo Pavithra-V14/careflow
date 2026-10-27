@@ -263,7 +263,7 @@ class ExtractionPipeline:
                 else:
                     texts.append((page, None, "", reason, 0, ""))
                 continue
-            if self._layout is not None:
+            if self._layout is not None and not page.unreadable_images:  # an image nobody can read is not a page a layout tier may call done
                 try:
                     laid_out = await self._layout.read_page(content, page.number)
                 except (TransientError, PermanentError):

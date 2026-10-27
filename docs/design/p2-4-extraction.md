@@ -53,3 +53,9 @@ Superseded by those decisions (kept for the record):
 - The reviewer argues the skipped-images case is "unknown treated as clear": a scanned referral with a typed header has a text layer of 20+ characters, so the image body is never read. Suggested minimum: a page with a usable text layer AND an image covering most of the page (a technical threshold) goes to vision or a nurse. Awaiting your call; today such images are only counted.
 - §16.1 gives vision a 60 s per-page timeout: `ModelRow.timeout_seconds` is the gateway's lever; confirm the registry row sets it when a real route is approved.
 - pypdf was tried only on synthetic PDFs; real scanner output (JBIG2, CMYK, odd fonts) routes to a nurse via `image_unreadable`. A spike on real-world-like files is needed before launch.
+
+## Third review (2026-10-27): closed, and documented limits
+
+Closed: images inside form XObjects (and inline images inside them) hold the page; a content stream that cannot be parsed counts as an unreadable image, never as no image; a page with an unreadable image never takes the layout path (relevant once a layout tier is approved). pypdf's reader copies inherited /Resources, /MediaBox and /CropBox onto each page (checked in its source).
+
+DOCUMENTED LIMITS, awaiting the owner (rule 3 gaps that are low probability): images in annotation appearance streams (/Annots, /AP), in tiling patterns and in Type3 glyph procedures are not examined. They are covered by the real-PDF spike (pre-launch blocker 9), which should decide whether to hold any page that has annotations or patterns carrying images.

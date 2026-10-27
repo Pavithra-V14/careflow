@@ -39,13 +39,14 @@ def pdf(pages: list[tuple[str, bool | float | str]], *, cropbox: str | None = No
                 "/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode ",
             )
             side = 100 if image is True else image
-            if image == "in_form":
+            if image in ("in_form", "inline_in_form"):
                 form_id = nxt
                 nxt += 1
-                objs[form_id] = _stream(
-                    b"q 400 0 0 400 0 0 cm /Im1 Do Q\n",
-                    f"/Type /XObject /Subtype /Form /BBox [0 0 612 792] /Resources << /XObject << /Im1 {image_id} 0 R >> >> ",
-                )
+                if image == "in_form":
+                    form_ops, form_res = b"q 400 0 0 400 0 0 cm /Im1 Do Q\n", f"/XObject << /Im1 {image_id} 0 R >>"
+                else:  # an inline image (BI ... ID <bytes> EI) in the form's own content stream, listed nowhere
+                    form_ops, form_res = b"q 400 0 0 400 0 0 cm BI /W 2 /H 2 /CS /G /BPC 8 ID \x10\x20\x30\x40 EI Q\n", ""
+                objs[form_id] = _stream(form_ops, f"/Type /XObject /Subtype /Form /BBox [0 0 612 792] /Resources << {form_res} >> ")
                 ops += "/Fm1 Do\n"
                 xobj = f"/XObject << /Fm1 {form_id} 0 R >>"  # the page lists only the form, never the image
             else:

@@ -382,3 +382,32 @@ async def test_the_measured_coverage_is_the_drawn_share_of_the_page_area():
     reader = PdfReader(io.BytesIO(pdf([(TEXT_LONG, 306)])))
     drawn, inline = _coverage(reader.pages[0])
     assert inline == 0 and abs(drawn["/Im1"] - (306 * 306) / (612 * 792)) < 1e-9
+
+
+# ---- the third review: images we could not see are never "no image" (rule 3) ---------------------------------------------------------------------
+
+
+async def test_an_inline_image_inside_a_form_holds_the_page():
+    result = await run(make(FakeVision()), pdf([(HEADER, "inline_in_form")]))
+    assert not result.complete and result.manual_pages == (1,) and R_IMAGE_UNREADABLE in result.reasons
+
+
+async def test_when_the_page_content_cannot_be_parsed_the_page_holds_instead_of_looking_image_free(monkeypatch):
+    import careflow.adapters.pdf as adapter
+
+    def broken(*args, **kwargs):
+        raise ValueError("unparseable content stream")
+
+    monkeypatch.setattr(adapter, "ContentStream", broken)
+    result = await run(make(FakeVision()), pdf([(TEXT_LONG, False)]))
+    assert not result.complete and R_IMAGE_UNREADABLE in result.reasons  # unknown is not zero
+
+
+async def test_a_page_with_an_unreadable_image_never_takes_the_layout_path():
+    class Native:
+        def read(self, content):
+            return [NativePage(1, "", (), 1)]
+
+    layout = FakeLayout(script={1: "A table of readings: systolic 120 diastolic 80 recorded at the visit."})
+    result = await run(ExtractionPipeline(Native(), layout=layout, vision=FakeVision()), b"%PDF")
+    assert layout.pages == [] and not result.complete and R_IMAGE_UNREADABLE in result.reasons
