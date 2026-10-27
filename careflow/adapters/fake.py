@@ -29,6 +29,8 @@ from careflow.ports import (
     Usage,
     VectorHit,
     VectorPoint,
+    VisionRequest,
+    VisionResult,
 )
 
 
@@ -221,3 +223,30 @@ class FakeVectorStore(_Fake):
             hits.append(VectorHit(p.card_id, p.version, sum(a * b for a, b in zip(vector, p.vector, strict=True)) / (norm_q * norm_p)))
         hits.sort(key=lambda h: (-h.similarity, h.card_id))
         return hits[:limit]
+
+
+class FakeVision(_Fake):
+    """Stands in for the vision role (no hosted service is approved). Returns a fixed transcription per page number, or a default tagged with the page; records the pages it was asked
+    for so a test can prove the 15.3 cascade (vision only for pages that failed the earlier tiers)."""
+
+    def __init__(self, name: str = "fake-vision", *, script: dict[int, str] | None = None, **kw) -> None:
+        super().__init__(name, **kw)
+        self.script, self.pages = script or {}, []
+
+    async def read(self, request: VisionRequest) -> VisionResult:
+        await self._enter()
+        self.pages.append(request.page)
+        return VisionResult(self.script.get(request.page, f"Transcribed text of the scanned page {request.page}: findings are as described in the attached letter."))
+
+
+class FakeLayout(_Fake):
+    """Stands in for the layout tier. `script` maps a page number to its text; a page not in it returns None (the layout tier did not help)."""
+
+    def __init__(self, name: str = "fake-layout", *, script: dict[int, str] | None = None, **kw) -> None:
+        super().__init__(name, **kw)
+        self.script, self.pages = script or {}, []
+
+    async def read_page(self, content: bytes, page: int) -> str | None:
+        await self._enter()
+        self.pages.append(page)
+        return self.script.get(page)
