@@ -1,4 +1,4 @@
-**FIRST LINE: design note only. No code, no migration. Option A, if chosen, needs ONE migration (0023: a column, a function change, a verify path) and a small matcher change; option B is not recommended. Waiting for the owner's OK.**
+**STATUS 2026-10-28: SIGNED OFF by the owner. Option A approved and built on branch `optionA-unverified-worker-records` (migrations 0023 and 0024, a front-desk confirm-identity route, matcher change); Option C LATER (deferred list); Option B REJECTED (reasons in section 2). Verification is an explicit front-desk "confirm identity" action, NOT a nurse's triage approval. The review workload for repeat referrals is accepted until a console exists. The worker-account rule is enforced by migration 0024 plus a read-only stop-gap check.**
 
 # Pre-launch blocker 10: a worker-created record can carry a token for a person who is not registered yet (design note)
 

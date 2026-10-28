@@ -9,6 +9,11 @@ Everything here is **known and intentionally not done yet**. Each line says what
 one, delete its line in the same change. Source of the first group: the msg / iam design review of 2026-10-23
 (`docs/design/msg-screening-binding-design.md`).
 
+## Planted tokens (pre-launch blocker 10)
+- **Option C (later):** the registration function takes the id of a registered `docs.documents` row of the clinic and refuses a second patient from the same document: bounds a worker to one record per human-registered document and gives every worker-created record an audit anchor. Not needed for option A; revisit with the review console.
+- **Option B (rejected, 2026-10-28):** the database derives the tokens. Reasons: the HMAC key and the plaintext name, date of birth and phone would cross into SQL (logs, `pg_stat_statements`, error text); key rotation and the per-field subkeys would have to be duplicated in SQL; it contradicts "the database holds only ciphertext and keyed tokens".
+- **A console for confirm-identity:** until a review console exists, a repeat referral for a worker-created patient goes to review (accepted workload).
+
 ## Waiting for a real vision route (P2-4)
 - **Checklist for any real vision provider (none approved; the fakes stay):** (1) the owner's approval of the provider; (2) a key, kept out of the repository; (3) a registry row built with `careflow.adapters.vision.vlm_row`; (4) a data-flow-register entry and its register test; (5) an explicit `timeout_seconds` (required by `vlm_row`, no default).
 - **Extraction cache.** Crash-resume re-reads and re-bills vision; a persisted encrypted cache needs schema + privacy review. The in-process memo (bounded to 8 documents) stays until then.
