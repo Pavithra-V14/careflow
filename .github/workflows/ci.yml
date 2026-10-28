@@ -30,7 +30,9 @@ on:
 # origin='test' rows behind in the CI project (they are tagged and harmless, and never deleted automatically).
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Pull-request runs are superseded by a newer push to the same PR. A run triggered by a push to main is NEVER cancelled: cancelling one mid-test skips the live tests' teardown
+  # and leaves committed rows in the shared CI database (how PR #3's main run was killed, and why its successors failed on tables they assumed were empty).
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
