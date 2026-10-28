@@ -1,5 +1,11 @@
 **FIRST LINE: this fix needs ONE new migration (0022) and ONE new grant: `EXECUTE` on a new `SECURITY DEFINER` function for `careflow_app`. In exchange it REMOVES three of the worker's `INSERT` policies. Net: the queue worker ends with fewer privileges than today. No code yet; waiting for the owner's OK.**
 
+**OPEN QUESTIONS (answers needed before any code), each with my recommendation and what it blocks:**
+
+1. **Should the registration function also close the front-desk route (`POST /v1/staff/patients`), or only the unattended worker?** Recommendation: only the worker. Front desk is a person's authenticated request, and one change at a time keeps the review small. *Blocks:* the scope of the migration and of the pipeline change; if you say "both", the front-desk policies and the route tests are in scope too.
+2. **Is "three worker INSERT policies removed, one `EXECUTE` grant on one `SECURITY DEFINER` function added" acceptable as the grant change?** Recommendation: yes; it is the only way to make "attach a token to an existing patient" impossible, because a row-level predicate cannot express "the record this call just created". Net, the worker has fewer privileges than today. *Blocks:* migration 0022 and everything after it, including the rls-security-reviewer pass.
+3. **Should the function write an `audit.log` row for each registration?** Recommendation: no, not in this change; it belongs to the audit-log work (item c) and would be the first writer of `audit.log` from a definer function, which deserves its own review. *Blocks:* nothing in this fix; it only decides whether the function's signature and tests grow now or later.
+
 # Pre-launch blocker 1: the worker can attach identity tokens to any patient and forge possible-duplicates (design note)
 
 Source: 0019's header, residual risk 4. Owner decision 2026-10-24 accepted it for synthetic data only; it must be closed before any real patient data.
