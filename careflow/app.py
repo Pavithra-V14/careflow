@@ -28,6 +28,7 @@ missing.
 import asyncio
 import contextlib
 import logging
+import os
 import time
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterator
@@ -35,6 +36,7 @@ from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
+from dotenv import dotenv_values
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -47,6 +49,7 @@ from fastapi import (
     Response,
 )
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from langgraph.types import Command
@@ -65,6 +68,7 @@ from careflow.auth import (
     verify_token,
 )
 from careflow.checkpointer import CheckpointerError
+from careflow.cors import middleware_kwargs, parse_origins
 from careflow.crypto import CryptoError, DemographicVault
 from careflow.db import make_app_engine, set_request_claims
 from careflow.dead_letters import raise_dead_letter_tasks
@@ -142,6 +146,9 @@ class Settings(BaseSettings):
     # Roles whose absence of a phi_approved route makes a `clinical` deployment report NOT ready (BUILD-SPEC 2). A comma list with no default in
     # code: which roles are launch-blocking is a deployment decision. Unset means "not configured", and a clinical deployment is then not ready.
     required_roles: str | None = Field(default=None, validation_alias=AliasChoices("CAREFLOW_REQUIRED_ROLES", "required_roles"))
+
+    # Browser origins allowed to call the API (careflow/cors.py): a comma-separated list of EXACT origins. Unset means none.
+    cors_allowed_origins: str | None = Field(default=None, validation_alias=AliasChoices("CORS_ALLOWED_ORIGINS", "cors_allowed_origins"))
 
     @property
     def issuer(self) -> str:
@@ -1092,6 +1099,11 @@ def create_app(
                 await app.state.jwks.aclose()
 
     app = FastAPI(title="CareFlow", lifespan=lifespan)
+    # CORS is decided when the app is BUILT, so a misconfigured deployment refuses to start (careflow/cors.py). Unset means no origin is allowed.
+    raw_origins = settings.cors_allowed_origins if settings is not None else (os.environ.get("CORS_ALLOWED_ORIGINS") or dotenv_values(".env").get("CORS_ALLOWED_ORIGINS"))
+    origins = parse_origins(raw_origins, resolve_profile())
+    if origins:
+        app.add_middleware(CORSMiddleware, **middleware_kwargs(origins))
     app.add_exception_handler(RequestValidationError, _validation_error_handler)  # type: ignore[arg-type]
     app.include_router(router)
     app.include_router(scheduling)
