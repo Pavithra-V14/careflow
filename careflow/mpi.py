@@ -157,15 +157,21 @@ def parse_date_of_birth(raw: str, *, today: date | None = None) -> date:
     return parsed
 
 
-def classify(hits: dict[uuid.UUID, set[str]]) -> tuple[Literal["match", "review", "none"], dict[uuid.UUID, str]]:
+def classify(
+    hits: dict[uuid.UUID, set[str]], unverified: frozenset[uuid.UUID] | set[uuid.UUID] = frozenset()
+) -> tuple[Literal["match", "review", "none"], dict[uuid.UUID, str]]:
     """Decide from the token kinds that agreed per existing record.
 
     Returns ("match", {id: ...}) for exactly one confident record; ("review", {id: reason}) when any
     record agrees partially or more than one agrees fully; ("none", {}) when nothing agrees.
+
+    An UNVERIFIED record (created by the unattended worker and not yet confirmed by a front-desk person; migration 0023) is never a confident match, however fully it agrees: a
+    person decides (it is reported as a near match). This is what stops a planted record, which carries a token for someone not yet registered, from capturing that person's
+    real referral silently (pre-launch blocker 10).
     """
     if not hits:
         return "none", {}
-    confident = [pid for pid, kinds in hits.items() if STRONG_IDENTIFIERS <= kinds]
+    confident = [pid for pid, kinds in hits.items() if STRONG_IDENTIFIERS <= kinds and pid not in unverified]
     if len(confident) == 1:
         return "match", {confident[0]: "match"}
     reasons = {pid: ("ambiguous" if pid in confident else "near_match") for pid in hits}
@@ -257,8 +263,8 @@ class PatientIngestionPipeline:
         # 4. Look the tokens up (clinic- and origin-scoped; erased records never match) and decide. A subordinate
         #    of an ACTIVE merge counts as its master, and the identifiers of both pool together, so a merged person
         #    never looks like two confident matches (which would be "ambiguous").
-        hits = await self._find(conn, clinic_id, origin, tokens)
-        decision, reasons = classify(hits)
+        hits, unverified = await self._find(conn, clinic_id, origin, tokens)
+        decision, reasons = classify(hits, unverified)
         if decision == "match":
             return IngestResult("matched", next(iter(reasons)))
 
@@ -356,7 +362,9 @@ class PatientIngestionPipeline:
 
     async def _find(
         self, conn: AsyncConnection, clinic_id: uuid.UUID, origin: str, tokens: dict[str, bytes]
-    ) -> dict[uuid.UUID, set[str]]:
+    ) -> tuple[dict[uuid.UUID, set[str]], set[uuid.UUID]]:
+        """The existing records whose tokens agree, with the kinds that agreed, and which of them are UNVERIFIED (worker-created and not confirmed by front desk). A subordinate of an
+        active merge counts as its master, and so does its verification status."""
         clauses = ["(t.kind = 'name_dob' and t.token = :nd)"]
         params: dict = {"clinic": clinic_id, "kv": self._kv, "origin": origin, "nd": tokens[NAME_DOB]}
         if PHONE in tokens:
@@ -364,10 +372,13 @@ class PatientIngestionPipeline:
             params["ph"] = tokens[PHONE]
         rows = await conn.execute(
             text(
-                f"""select coalesce(mg.master_patient_id, t.patient_id) as patient_id, array_agg(distinct t.kind) as kinds
+                f"""select coalesce(mg.master_patient_id, t.patient_id) as patient_id, array_agg(distinct t.kind) as kinds,
+                           bool_or(pm.registered_via = 'front_desk' or ic.id is not null) as verified
                     from mpi.identity_tokens t
                     join mpi.patients p on p.id = t.patient_id and p.clinic_id = t.clinic_id
                     left join mpi.merges mg on mg.subordinate_patient_id = t.patient_id and mg.status = 'active'
+                    join mpi.patients pm on pm.id = coalesce(mg.master_patient_id, t.patient_id) and pm.clinic_id = t.clinic_id
+                    left join mpi.identity_confirmations ic on ic.patient_id = pm.id
                     where t.clinic_id = :clinic and t.key_version = :kv
                       and p.origin = :origin and p.erased_at is null
                       and ({' or '.join(clauses)})
@@ -375,4 +386,59 @@ class PatientIngestionPipeline:
             ),
             params,
         )
-        return {r[0]: set(r[1]) for r in rows}
+        hits: dict[uuid.UUID, set[str]] = {}
+        unverified: set[uuid.UUID] = set()
+        for pid, kinds, verified in rows:
+            hits[pid] = set(kinds)
+            if not verified:
+                unverified.add(pid)
+        return hits, unverified
+
+
+# ---- front-desk confirmation of a worker-created record (migration 0023; pre-launch blocker 10) ----------------------------------------------
+
+
+class PatientNotFound(IngestionError):
+    """No such live patient is visible to the caller (an invisible one is the same as a missing one)."""
+
+
+@dataclass(frozen=True)
+class ConfirmResult:
+    patient_id: uuid.UUID
+    replayed: bool
+
+
+async def confirm_identity(
+    conn: AsyncConnection, *, clinic_id: uuid.UUID, origin: Origin, patient_id: uuid.UUID, confirmed_by: uuid.UUID, idempotency_key: str
+) -> ConfirmResult:
+    """Record that a front-desk person confirmed this patient's identity. After this, a match on the record (if it was created by the unattended worker) is a confident match again.
+    Append-only and idempotent: the same key replays; a patient already confirmed (under any key) answers as a replay; a key used for a different patient is an
+    IdempotencyConflict. Row-level security (front desk of the clinic, confirmed_by = the caller) is what permits the insert."""
+    if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+        raise MissingRequiredField("an idempotency key is required on every write")
+    if origin not in ORIGINS:
+        raise ValueError(f"origin must be one of {ORIGINS}, got {origin!r}")
+    by_key = (await conn.execute(text("select patient_id, clinic_id from mpi.identity_confirmations where idempotency_key = :k"), {"k": idempotency_key})).first()
+    if by_key is not None:
+        if by_key[0] != patient_id or by_key[1] != clinic_id:
+            raise IdempotencyConflict("this idempotency key was used for a different request")
+        return ConfirmResult(patient_id, True)
+    live = (await conn.execute(text("select 1 from mpi.patients where id = :p and clinic_id = :c and erased_at is null"), {"p": patient_id, "c": clinic_id})).first()
+    if live is None:
+        raise PatientNotFound("not found")
+    try:
+        async with conn.begin_nested():
+            done = (
+                await conn.execute(
+                    text(
+                        """insert into mpi.identity_confirmations (clinic_id, patient_id, confirmed_by, origin, idempotency_key)
+                           values (:c, :p, :u, :o, :k) on conflict (patient_id) do nothing returning id"""
+                    ),
+                    {"c": clinic_id, "p": patient_id, "u": confirmed_by, "o": origin, "k": idempotency_key},
+                )
+            ).first()
+    except DBAPIError as exc:
+        if getattr(exc.orig, "sqlstate", None) == "42501":
+            raise NotPermitted("this role may not confirm identities in this clinic") from exc
+        raise
+    return ConfirmResult(patient_id, done is None)  # nothing inserted: the patient was already confirmed, so this is a replay in effect
