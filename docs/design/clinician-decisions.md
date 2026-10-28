@@ -20,3 +20,11 @@ column, never a default, and is marked `# CLINICAL-PLACEHOLDER: needs clinician 
 | 13 | `STRONG_IDENTIFIERS` (what counts as a confident identity match) | `careflow/mpi.py`, pending Priya's sign-off; no real patient data until recorded | Priya (health-information lead) |
 | 14 | Whether `identity_refused` (data-entry refusals from the identity module) belongs to front desk or a nurse | currently front desk, PENDING CLINIC CONFIRMATION (owner decision 2026-10-24); an idempotency-key conflict goes to a nurse | clinical lead |
 | 15 | The `priority` of a `referral_dead_letter` review task (a front_door_run job that failed five times) | `SqlDeadLetterTaskWriter(priority=...)` required, no default | clinical lead |
+| 16 | **Phase 3 (scheduling), one list for Priya.** The clinic's priority levels: codes, labels and strict ranks (1 = served first) in `sched.priority_levels`; authored and approved by a named doctor | the table is empty by design; `rank_waitlist` offers nobody when it is empty | doctors / clinical lead |
+| 17 | Phase 3: the minimum confidence at which the system may SUGGEST "accept" to the front desk, per clinic (and whether an accept may ever book without a click: not built) | required argument, no default | clinical lead |
+| 18 | Phase 3: how long an offer stays open and how long a hold lasts | required arguments, no default | clinic / clinical lead |
+| 19 | Phase 3: how many next-ranked patients are drafted for before a person is told "no one could be offered" | required argument, no default | clinical lead |
+| 20 | Phase 3: the offer, confirmation and "that time is gone" message wording and languages | `pending_clinician_template`; nothing is sent | clinical lead |
+| 21 | Phase 3: whether any autonomy mode may send an offer without the front desk pressing send (current decision: no) | no code path sends without a person | clinical lead + owner |
+| 22 | Phase 3: the `priority` and the assigned role of scheduling tasks ("slot freed, no ranked candidates", "reply needs a person", "offer blocked by a red flag") | required arguments, no default | clinical lead |
+

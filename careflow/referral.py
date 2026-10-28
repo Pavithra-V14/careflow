@@ -35,6 +35,7 @@ from typing import Final, Literal, Protocol
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from careflow.extraction import REASONS as EXTRACTION_REASONS
 from careflow.gateway import AllRoutesFailed, NoApprovedRoute, SpendCeilingReached
 from careflow.grounding import StructuredKind, canonical_date, verify_structured, words
 from careflow.mpi import IdempotencyConflict as IdentityKeyConflict
@@ -217,6 +218,7 @@ _FIELDS = ("name", "dob", "phone")
 _FIELD_REASONS = ("missing", "empty", "not_found", "ambiguous", "unparseable_value", "unreadable", "quote_not_in_letter")
 FIXED_REASONS: Final = frozenset(
     {"screening_unassessable", "demo_profile_on_live_origin", "extraction_unavailable", "identity_refused", "identity_key_conflict", "empty_letter", "dob_unreadable"}
+    | set(EXTRACTION_REASONS)  # why a page needed a person (P2-4): document_unreadable, no_text_layer, pages_need_vision, vision_unavailable, image_unreadable, extraction_failed
     | {f"{f}_{r}" for f in _FIELDS for r in _FIELD_REASONS}
     | {f"{f}_dropped_{r}" for f in _FIELDS for r in _FIELD_REASONS}
 )

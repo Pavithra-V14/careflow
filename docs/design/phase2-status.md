@@ -31,10 +31,10 @@ Updated 2026-10-24. Branch stack: next-backend (PR #2, CI green) <- p2-3-docs <-
 - The real embedding, Qdrant and storage adapters (each needs its data-flow entry and an Appendix B spike: signed-upload overwrite, Qdrant access control).
 
 ## Parked for RAM
-- P2-4 extraction pipeline (pypdf, Unstructured local). Its disk and RAM needs will be restated when it is reached; nothing is installed.
+- P2-4 extraction: BUILT on branch p2-4-extraction (pypdf native tier, layout slot, vision through a port with fakes only, manual fallback, worker-only); Unstructured light mode is impossible without torch and was NOT installed. See p2-4-extraction.md.
 
 ## Not done and gating real use
-Real-engine contract tests; retrieval gold-set gate; P2-4; the route/worker to run the graph; the review console; the malware scanner; audit.log rows for the human decisions.
+Real-engine contract tests; retrieval gold-set gate; the route/worker to run the graph; the review console; the malware scanner; audit.log rows for the human decisions.
 
 ## PRE-LAUNCH BLOCKERS (recorded decisions; nothing here blocks the merge, all of it blocks real patient data)
 1. **Worker token-attach and pending-duplicate forgery (0019 residual risk 4).** INSERT on `mpi.identity_tokens` and `mpi.match_candidates` lets a queue worker attach an identity token to ANY existing patient of its clinic, or forge a pending possible-duplicate between two patients; a wrongly attached token would make a later referral link to the wrong person. The owner decided (2026-10-24) NOT to build the SECURITY DEFINER ingestion function now, and to accept the risk while the worker is a trusted, synthetic-data-only identity. It must be closed (a function that touches only the record it just created) or explicitly re-accepted before any real patient data.
@@ -43,5 +43,6 @@ Real-engine contract tests; retrieval gold-set gate; P2-4; the route/worker to r
 4. A retention/erasure procedure for checkpoints and review tasks (history is append-only today).
 5. audit.log rows for human clinical decisions.
 6. (DONE 2026-10-27) A dead-lettered `front_door_run` job now raises a nurse's `referral_dead_letter` review task (careflow/dead_letters.py, run by the tick's sweep); its priority is a required placeholder (clinician-decisions item 15).
-7. The dedicated-harness role-matrix exception for the two referral routes applies the standing rule (append-only tables); the owner has not named it separately. Please confirm.
+7. (CONFIRMED 2026-10-27, on the owner's two conditions, both met and enforced by tests) The dedicated-harness role-matrix exception for the two referral routes: every one of the 14 identities has its own case on each route in the dedicated harness (`tests/test_api_referrals_live.py`; the split guard requires every required role on both routes and a driving test parametrized over exactly them), and `test_every_route_is_in_the_matrix` fails when any route in the served OpenAPI document is covered by neither the main matrix nor a dedicated harness (and when a case is stale).
 8. No process has yet run the graph through the real pooler engine and a real commit (the production session factories are only unit-tested).
+9. **Real-world PDF spike (P2-4).** pypdf and the image reader were tried only on synthetic PDFs. Run real scanner output (JBIG2, CMYK, odd fonts, inline images, encrypted files) through the pipeline. Failures already route to a nurse as `image_unreadable` / `document_unreadable`, which is the safe behaviour; the spike measures how often that happens. Images in annotation appearance streams, tiling patterns and Type3 glyph procedures are accepted DOCUMENTED LIMITS (owner decision 2026-10-27). **No real referral is processed until the real-PDF spike has cleared this.** Until then the `data_policy` must stay `synthetic_only` for the referral path (no registry row on that path may be `phi_approved`).

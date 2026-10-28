@@ -9,6 +9,14 @@ Everything here is **known and intentionally not done yet**. Each line says what
 one, delete its line in the same change. Source of the first group: the msg / iam design review of 2026-10-23
 (`docs/design/msg-screening-binding-design.md`).
 
+## Waiting for a real vision route (P2-4)
+- **Checklist for any real vision provider (none approved; the fakes stay):** (1) the owner's approval of the provider; (2) a key, kept out of the repository; (3) a registry row built with `careflow.adapters.vision.vlm_row`; (4) a data-flow-register entry and its register test; (5) an explicit `timeout_seconds` (required by `vlm_row`, no default).
+- **Extraction cache.** Crash-resume re-reads and re-bills vision; a persisted encrypted cache needs schema + privacy review. The in-process memo (bounded to 8 documents) stays until then.
+- **Tier 2 (layout).** Stays an empty port; revisit after the real-PDF spike. (A model-based layout tier is not covered by the confirmed carve-out and must return to the owner first.)
+- **Vision timeout.** BUILD-SPEC 16.1 gives vision a per-page limit (worker only). It is the registry row's `timeout_seconds`; a real `vlm` row must be built with `careflow.adapters.vision.vlm_row`, where `timeout_seconds` is REQUIRED (no default). The value is the approver's decision. Also needed with a real route: the approval, a key, a data-flow-register entry and its test.
+- **Large-image threshold.** `IMAGE_COVERAGE_THRESHOLD = 0.20` (careflow/extraction.py) is a conservative technical setting, PENDING OWNER CONFIRMATION.
+- **Narrow rules-first carve-out** for image-to-text transcription (BUILD-SPEC 5.2/10.4, CLAUDE.md rule 2): CONFIRMED by the owner on 2026-10-27 (commits 91d5289, 2df1ec9). Nothing else may precede the rules; a model-based layout tier is not covered.
+
 ## Waiting for the patient portal phase
 - **Claim function**: the database enforces the BUILD-SPEC 17.2 rule (verified contact AND date of birth match) when an
   account claims a patient record. Migration 0013 only protects an existing binding.

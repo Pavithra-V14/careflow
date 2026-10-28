@@ -536,3 +536,133 @@ async def test_every_status_a_node_can_produce_is_known_and_has_a_destination():
                 assert target == END
             else:
                 assert target == "hold_for_human", (router, status)
+
+
+# ---- the extraction pipeline behind the graph (P2-4) -------------------------------------------------------------------------------------------
+
+
+def _with_pipeline_texts(vision, scanned_pdf, *, vision_for=None):
+    """The graph from `world()` with the real text source over a synthetic PDF: native tier, fake vision."""
+    import dataclasses
+
+    from careflow.adapters.fake import FakeVision  # noqa: F401
+    from careflow.adapters.pdf import PypdfExtractor
+    from careflow.extraction import ExtractionPipeline, PipelineTextSource
+
+    graph, log, *_ = world()
+    if vision_for is not None:
+        vision = vision_for(log)  # a vision stand-in that writes to the graph's own event log
+
+    async def loader(document_id):
+        return scanned_pdf, "application/pdf", uuid.UUID(CLINIC) if isinstance(CLINIC, str) else CLINIC
+
+    texts = PipelineTextSource(ExtractionPipeline(PypdfExtractor(), vision=vision), loader)
+    deps = dataclasses.replace(graph.test_deps, texts=texts)
+    rebuilt = build_front_door(deps, InMemorySaver(), environ={})
+    rebuilt.test_deps = deps  # type: ignore[attr-defined]
+    return rebuilt, log, deps
+
+
+async def test_a_scanned_letter_is_read_by_vision_once_screened_and_runs_on():
+    from careflow.adapters.fake import FakeVision
+    from careflow.extraction import worker_context
+    from tests.pdf_factory import pdf
+
+    vision = FakeVision(script={1: LETTER})
+    graph, log, _ = _with_pipeline_texts(vision, pdf([("", True)]))
+    with worker_context():
+        await graph.ainvoke(START, CONFIG)
+    state = await graph.aget_state(CONFIG)
+    assert state.next == ("review",) and vision.pages == [1]  # three nodes asked for the text; the page was read (and billed) once
+    assert_rules_before_every_model_call(log)
+
+
+async def test_a_scanned_letter_with_no_approved_vision_route_becomes_a_nurse_task_and_nothing_downstream_runs():
+    from careflow.adapters.fake import FakeVision
+    from careflow.extraction import worker_context
+    from careflow.gateway import NoApprovedRoute
+    from careflow.ports import DataClass
+    from tests.pdf_factory import pdf
+
+    vision = FakeVision()
+    vision.fail_next(5, NoApprovedRoute("vlm", DataClass.PHI))
+    graph, log, deps = _with_pipeline_texts(vision, pdf([("", True)]))
+    with worker_context():
+        await graph.ainvoke(START, CONFIG)
+    state = await graph.aget_state(CONFIG)
+    (task,) = deps.holds.tasks
+    assert state.next == () and state.values["status"] == "extraction_unavailable"
+    assert task["role"] == "nurse" and task["status"] == "extraction_unavailable" and {"vision_unavailable", "pages_need_vision"} <= set(task["reasons"])
+    assert model_events(log) == [] and deps.ingestor.calls == [] and deps.proposer.attempts == []  # unknown is not clear: nothing was assessed, nothing proposed
+
+
+
+# ---- the confirmed narrow carve-out: vision transcription is the only model call that may precede the rules (BUILD-SPEC 5.2 / 10.4) -------------------
+
+
+def _logging_vision(**kw):
+    """A factory taking the graph's event log and returning a FakeVision that records every call there as a model event."""
+    from careflow.adapters.fake import FakeVision
+
+    def make(log):
+        class LoggingVision(FakeVision):
+            async def read(self, request):
+                log.append("MODEL:vision")
+                return await super().read(request)
+
+        vision = LoggingVision(**kw.get("init", {}))
+        for count, error in kw.get("fail", []):
+            vision.fail_next(count, error)
+        return vision
+
+    return make
+
+
+async def test_the_transcription_is_screened_by_the_rules_before_any_other_model_is_called():
+    from careflow.extraction import worker_context
+    from tests.pdf_factory import pdf
+
+    graph, log, _ = _with_pipeline_texts(None, pdf([("", True)]), vision_for=_logging_vision(init={"script": {1: LETTER}}))
+    with worker_context():
+        await graph.ainvoke(START, CONFIG)
+    assert log.index("MODEL:vision") < log.index("rules") < log.index("MODEL:retrieve")
+    pending = False
+    for event in log:  # between the transcription and the first rules run, no other model may be called
+        if event == "MODEL:vision":
+            pending = True
+        elif event == "rules":
+            pending = False
+        elif event.startswith("MODEL") and pending:
+            raise AssertionError(f"a model other than vision ran before the rules: {log}")
+
+
+@pytest.mark.parametrize("failure", ["transient", "no_route", "empty"])
+async def test_a_failed_or_empty_transcription_calls_no_other_model_and_holds_for_a_human(failure):
+    from careflow.extraction import worker_context
+    from careflow.gateway import NoApprovedRoute
+    from careflow.ports import DataClass, TransientError
+    from tests.pdf_factory import pdf
+
+    kw = {
+        "transient": {"fail": [(5, TransientError("down"))]},
+        "no_route": {"fail": [(5, NoApprovedRoute("vlm", DataClass.PHI))]},
+        "empty": {"init": {"script": {1: "  "}}},
+    }[failure]
+    graph, log, deps = _with_pipeline_texts(None, pdf([("", True)]), vision_for=_logging_vision(**kw))
+    with worker_context():
+        await graph.ainvoke(START, CONFIG)
+    state = await graph.aget_state(CONFIG)
+    assert state.values["status"] == "extraction_unavailable" and state.next == () and len(deps.holds.tasks) == 1
+    assert [e for e in log if e.startswith("MODEL") and e != "MODEL:vision"] == []  # no decision, extraction, retrieval or triage model was called
+    assert deps.ingestor.calls == [] and deps.proposer.attempts == []
+
+
+async def test_a_typed_header_with_a_large_scanned_body_is_transcribed_then_screened_before_any_other_model():
+    from careflow.extraction import worker_context
+    from tests.pdf_factory import pdf
+
+    graph, log, _ = _with_pipeline_texts(None, pdf([("Memorial Clinic Referral Letter Header", 600)]), vision_for=_logging_vision(init={"script": {1: LETTER}}))
+    with worker_context():
+        await graph.ainvoke(START, CONFIG)
+    assert log.index("MODEL:vision") < log.index("rules") < log.index("MODEL:retrieve")
+    assert (await graph.aget_state(CONFIG)).next == ("review",)

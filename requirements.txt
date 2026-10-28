@@ -114,6 +114,8 @@ pydantic-settings==2.15.0
     # via careflow
 pyjwt==2.15.1
     # via careflow
+pypdf==6.21.3
+    # via careflow
 python-dotenv==1.2.3
     # via
     #   pydantic-settings

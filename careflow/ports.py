@@ -14,6 +14,7 @@ Data class: a request is `SYNTHETIC` or `PHI`. The gateway (careflow.gateway) wi
 `data_policy` is `phi_approved`; an adapter never decides that for itself.
 """
 
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -135,6 +136,36 @@ class VectorStorePort(Protocol):
     async def search(self, vector: tuple[float, ...], *, limit: int, scope: dict[str, str]) -> list[VectorHit]: ...
 
     async def delete(self, card_ids: list[str]) -> None: ...
+
+
+# ---- vision (reading an image that has no text layer) ---------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class VisionRequest:
+    """One image to transcribe. The bytes are a patient's document: never in a repr, never logged. `page` is for the record only."""
+
+    image: bytes = field(repr=False)
+    content_type: str  # image/png or image/jpeg
+    page: int
+    clinic_id: uuid.UUID
+
+
+@dataclass(frozen=True)
+class VisionResult:
+    text: str = field(repr=False)
+
+
+class VisionPort(Protocol):
+    """The `vlm` role (BUILD-SPEC.md 5.1, 10.4 tier 3). Real adapters go through the gateway (data policy: patient data only to a phi_approved route); none is approved yet."""
+
+    async def read(self, request: VisionRequest) -> VisionResult: ...
+
+
+class LayoutPort(Protocol):
+    """Tier 2, layout-aware reading of ONE page (tables, columns). No adapter exists: Unstructured cannot run in its light mode (docs/design/p2-4-extraction.md)."""
+
+    async def read_page(self, content: bytes, page: int) -> str | None: ...
 
 
 @dataclass(frozen=True)

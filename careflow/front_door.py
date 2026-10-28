@@ -55,10 +55,12 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from careflow.extraction import ExtractionNeedsManual
 from careflow.referral import (
     ReferralDocumentNotFound,
     ReferralError,
     ReferralExtractor,
+    is_fixed_reason,
     process_referral,
     screen_referral,
 )
@@ -122,7 +124,8 @@ STATUSES: Final = (
 class TextSource(Protocol):
     async def text_for(self, document_id: uuid.UUID) -> str:
         """The letter's text. The real one reads the stored document through `DocumentIntake.read_verified` (so the bytes are re-hashed) and
-        the P2-4 extraction. Never cached in graph state."""
+        the P2-4 extraction. Never cached in graph state. Raises `ExtractionNeedsManual` when any page could not be read by any tier: the nodes turn that into the
+        `extraction_unavailable` hold (a nurse is shown the document), never into partial text."""
         ...
 
 
@@ -181,8 +184,8 @@ SIDE_EFFECT_PORTS: Final = {
     "recorder": "review_decision",
     "holds": "hold_task",
 }
-MODEL_PORTS: Final = {"extractor": "model", "retriever": "model"}  # the retriever calls the embedding model
-NEUTRAL_PORTS: Final = {"session", "texts", "retrieval_scope", "profile"}
+MODEL_PORTS: Final = {"extractor": "model", "retriever": "model", "texts": "model"}  # the retriever calls the embedding model; the text source calls the vision model for a page with no text layer (P2-4)
+NEUTRAL_PORTS: Final = {"session", "retrieval_scope", "profile"}
 
 
 @dataclass(frozen=True)
@@ -194,7 +197,7 @@ class NodeSpec:
 
 
 NODE_SPECS: Final = {
-    "screen": NodeSpec("screen", frozenset({"escalation"}), pauses=False, models=False),
+    "screen": NodeSpec("screen", frozenset({"escalation"}), pauses=False, models=True),
     "resolve_identity": NodeSpec("resolve_identity", frozenset({"escalation", "identity"}), pauses=False, models=True),
     "match_protocol": NodeSpec("match_protocol", frozenset({"escalation"}), pauses=False, models=True),
     "hold_for_human": NodeSpec("hold_for_human", frozenset({"hold_task"}), pauses=False, models=False),
@@ -205,6 +208,11 @@ NODE_SPECS: Final = {
 
 
 # ---- the graph -----------------------------------------------------------------------------------------------------------------------------
+
+
+def _unavailable(exc: ExtractionNeedsManual) -> FrontDoorState:
+    """The letter could not be read in full by any tier (P2-4): nothing was screened, so unknown is not clear. A nurse is shown the document (the hold path). Fixed words only."""
+    return {"status": "extraction_unavailable", "reasons": [r for r in exc.reasons if is_fixed_reason(r)][:20] or ["extraction_unavailable"]}
 
 
 def _ids(state: FrontDoorState) -> tuple[uuid.UUID, uuid.UUID]:
@@ -231,7 +239,10 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
         assert_tracing_off()  # also at run time: the environment can change after the graph was built
         document_id, _ = _ids(state)
         async with deps.session() as conn:
-            text_ = await deps.texts.text_for(document_id)
+            try:
+                text_ = await deps.texts.text_for(document_id)
+            except ExtractionNeedsManual as exc:
+                return _unavailable(exc)
             try:
                 screened = await screen_referral(conn, deps.engine, document_id, text_, profile=deps.profile)  # type: ignore[arg-type]
             except ReferralDocumentNotFound:
@@ -247,7 +258,10 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
         assert_tracing_off()  # also at run time: the environment can change after the graph was built
         document_id, _ = _ids(state)
         async with deps.session() as conn:
-            text_ = await deps.texts.text_for(document_id)
+            try:
+                text_ = await deps.texts.text_for(document_id)
+            except ExtractionNeedsManual as exc:
+                return _unavailable(exc)
             result = await process_referral(conn, deps.engine, deps.extractor, deps.ingestor, document_id, text_, profile=deps.profile)  # type: ignore[arg-type]
         update: FrontDoorState = {"status": result.status, "reasons": list(result.reasons)}
         if result.identity is not None:
@@ -259,7 +273,10 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
         document_id, _ = _ids(state)
         # Rules first on EVERY path, including a resume that lands here after a crash: the retriever embeds the letter text with a model.
         async with deps.session() as conn:
-            text_ = await deps.texts.text_for(document_id)
+            try:
+                text_ = await deps.texts.text_for(document_id)
+            except ExtractionNeedsManual as exc:
+                return _unavailable(exc)
             screened = await screen_referral(conn, deps.engine, document_id, text_, profile=deps.profile)  # type: ignore[arg-type]
         if screened.clearance is None:
             assert screened.result is not None

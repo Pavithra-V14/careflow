@@ -172,3 +172,19 @@ async def test_the_request_session_serialises_its_savepoints_so_concurrent_uses_
 
     await asyncio.gather(use(), use(), use())
     assert events == ["enter", "exit"] * 3  # never enter, enter, exit, exit
+
+
+async def test_the_graph_runs_inside_the_worker_context_so_extraction_is_allowed_there_and_nowhere_else(monkeypatch):
+    from careflow.extraction import NotInWorker, require_worker
+
+    class Probe(Graph):
+        async def ainvoke(self, payload, config):
+            require_worker()  # raises NotInWorker if the handler did not set the context
+            await super().ainvoke(payload, config)
+
+    graph = Probe()
+    h, _ = handler(graph, monkeypatch=monkeypatch)
+    await h(ctx())
+    assert len(graph.invoked) == 1
+    with pytest.raises(NotInWorker):  # and it is gone again afterwards
+        require_worker()

@@ -73,7 +73,7 @@ exactly those roles, and the audit, refusal, erased and authentication tests to 
 
 Both halves must run in CI with zero skips.
 
-## POST /v1/staff/referrals/{document_id}/run and /review (Front Door runs): a SPLIT matrix, confirmed by the owner on 2026-10-24
+## POST /v1/staff/referrals/{document_id}/run and /review (Front Door runs): a SPLIT matrix, confirmed by the owner on 2026-10-24 and again on 2026-10-27 (conditions: every role has its own case on each route in the dedicated half; the matrix test fails if any served route is in neither the main matrix nor a dedicated harness; both are tested)
 
 Both routes are in `MATRIX` AND in `SPLIT_HARNESS` (the guard `test_split_routes_have_both_halves...` requires both halves and now reads each dedicated module's declared grid).
 

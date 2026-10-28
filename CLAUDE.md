@@ -5,7 +5,7 @@ Read `BUILD-SPEC.md` in full before writing code. This file is the short, load-b
 ## Non-negotiable rules
 
 1. **Never invent clinical content.** No threshold, dose, red-flag phrase, or protocol rule may be written from your own judgment. Insert `# CLINICAL-PLACEHOLDER: needs clinician sign-off` and stop. (`BUILD-SPEC.md` §20.2)
-2. **Red-flag deterministic rules run before any model call, on every path, with no exception.** A model's safety opinion can only escalate a case that passed the rules clean — it can never de-escalate one the rules already flagged. (§5.2)
+2. **Red-flag deterministic rules run before any model call, on every path, with no exception.** A model's safety opinion can only escalate a case that passed the rules clean — it can never de-escalate one the rules already flagged. (§5.2) One narrow carve-out, confirmed by the owner (2026-10-27): transcribing an image into text (the vision role) may precede the rules, because the rules need text to read; nothing else may, and the transcription is screened by the rules before any other model call and is never treated as clear if it fails or is empty. (§5.2, §10.4)
 3. **Unknown is not a value.** A missing or unverified fact satisfies no rule. It is never treated as true, never treated as false, and never silently closes a loop. (§9.5, §11.2, §14.3)
 4. **A node that pauses must never also cause a side effect.** Side effects go in the step immediately before an interrupt/wait. This is enforced by a structural test — do not merge a graph change that fails it. (§7.2)
 5. **Every write carries an idempotency key.** A missing one on any write path is a release blocker, not a nitpick. (§7.2, §16.1)
