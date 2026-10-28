@@ -211,7 +211,8 @@ async def test_the_worker_cannot_update_or_delete_anything_in_mpi_and_cannot_wri
     # no DELETE privilege exists on any of them
     for table in ("mpi.patients", "mpi.identity_tokens", "mpi.match_candidates", "mpi.merges"):
         assert await attempt(db, w, f"delete from {table}") == "42501", table
-    # the worker cannot write an already-resolved possible duplicate (that would close a human review)
+    # the worker cannot write an already-resolved possible duplicate (that would close a human review). Since 0022 it has no INSERT policy at all, so this is refused for that
+    # reason (the function forces status 'pending'); only front desk resolves a review.
     cand = (
         "insert into mpi.match_candidates (clinic_id, patient_id, candidate_patient_id, matched_kinds, reason, status, resolved_at, origin, idempotency_key) "
         "values (:c, :p, :o, array['phone'], 'near_match', 'resolved', now(), 'test', 'cand-resolved')"
@@ -370,15 +371,21 @@ async def test_the_function_refuses_bad_candidates_and_bad_shapes(db, direct_pip
     foreign = (await ingest(db, direct_pipeline, p["fd_b"], b)).patient_id
     w = p["worker_a"]
     assert isinstance(await fn(db, w, a, cands=f"[{candidate(own)}]"), uuid.UUID)  # positive control for every refusal below
-    assert await fn(db, w, a, cands=f"[{candidate(foreign)}]") == "42501"  # a patient of another clinic
-    assert await fn(db, w, a, cands=f"[{candidate(_u())}]") == "42501"  # a patient that does not exist
-    assert await fn(db, w, a, cands=f"[{candidate(own)}]", origin="eval") == "42501"  # the candidate is an origin='test' record, the new one would be 'eval'
+    assert await fn(db, w, a, cands=f"[{candidate(foreign)}]") == "22023"  # a patient of another clinic: a bad argument (22023), never reported as an authorisation failure (42501)
+    assert await fn(db, w, a, cands=f"[{candidate(_u())}]") == "22023"  # a patient that does not exist
+    assert await fn(db, w, a, cands=f"[{candidate(own)}]", origin="eval") == "22023"  # the candidate is an origin='test' record, the new one would be 'eval'
+    EMAIL_KIND, REPEATED_KIND = '["email"]', '["phone", "phone"]'
     bad_shapes = {
         "an unknown reason": f"[{candidate(own, reason='resolved')}]",
         "no kinds": f"[{candidate(own, kinds='[]')}]",
         "not an array": candidate(own),
         "an element that is not an object": '["x"]',
         "more than twenty": "[" + ",".join([candidate(own)] * 21) + "]",
+        "the same patient twice": f"[{candidate(own)},{candidate(own)}]",
+        "a kind outside the closed set": f"[{candidate(own, kinds=EMAIL_KIND)}]",
+        "a null kind": f"[{candidate(own, kinds='[null]')}]",
+        "a repeated kind": f"[{candidate(own, kinds=REPEATED_KIND)}]",
+        "a patient_id that is not a uuid": '[{"patient_id": "not-a-uuid", "kinds": ["phone"], "reason": "near_match"}]',
     }
     for label, cands in bad_shapes.items():
         assert await fn(db, w, a, cands=cands) == "22023", label
@@ -387,3 +394,10 @@ async def test_the_function_refuses_bad_candidates_and_bad_shapes(db, direct_pip
     assert await fn(db, w, a, kinds="array['email']") == "22023"  # a kind outside the closed set
     assert await fn(db, w, a, origin="prod") == "22023"
     assert await fn(db, w, a, key="   ") == "22023"
+
+
+async def test_the_migrating_role_bypasses_rls_which_the_definer_function_relies_on(db):
+    # The function writes tables with FORCE ROW LEVEL SECURITY as its owner (the migrating role). If that role did not bypass RLS the function would fail closed with 42501 and look
+    # like an authorisation failure, so assert the assumption directly (the same check as tests/test_rls_msg_live.py for msg.record_screening).
+    owner = (await db.execute(text("select pg_get_userbyid(proowner) from pg_proc where oid = to_regprocedure(:s)"), {"s": FUNCTION_SIG})).scalar_one()
+    assert (await db.execute(text("select rolbypassrls or rolsuper from pg_roles where rolname = :r"), {"r": owner})).scalar_one() is True, owner

@@ -53,6 +53,13 @@ def test_bounds_and_closed_sets_are_enforced_in_the_function():
     assert "p.erased_at is null" in LOW and "p.origin = p_origin" in LOW and "p.clinic_id = p_clinic" in LOW
 
 
+def test_the_review_hardening_is_in_the_text():
+    assert "matched kinds must be distinct members of the closed set" in LOW
+    assert "each candidate must name a different patient" in LOW and "a candidate patient_id must be a uuid" in LOW
+    body = CODE.split("returns uuid", 1)[1]
+    assert "using errcode = '42501'" in body and body.count("errcode = '42501'") == 1  # 42501 only for the caller check; a bad candidate is 22023
+
+
 def test_execute_goes_to_the_app_role_only_and_the_three_worker_insert_policies_are_dropped_and_nothing_else():
     assert "revoke all on function mpi.register_patient_from_referral" in LOW and " from public;" in LOW
     assert LOW.count("grant execute on function mpi.register_patient_from_referral") == 1 and "to careflow_app;" in LOW
