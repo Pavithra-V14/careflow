@@ -734,6 +734,38 @@ async def register_patient(
     return IngestOut(patient_id=result.patient_id, outcome=result.outcome, candidate_ids=list(result.candidate_ids))
 
 
+class ConfirmIdentityOut(_Out):
+    """Ids and a flag only."""
+
+    patient_id: uuid.UUID
+    confirmed: Literal[True]
+    replayed: bool
+
+
+@staff_patients.post("/{patient_id}/confirm-identity", response_model=ConfirmIdentityOut)
+async def confirm_patient_identity(
+    patient_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)
+) -> ConfirmIdentityOut:
+    """A front-desk person confirms a patient's identity. A record the unattended worker created is NOT auto-linked to by later referrals until this is done (a match on it goes
+    to a person); confirming it makes it match normally. A triage approval does NOT do this (owner decision). 404 if the patient is not visible to you (or erased), 403 if you
+    are not front desk of that clinic, 409 if the key was used for a different patient, 422 for a bad id or key."""
+    row = (await conn.execute(text("select clinic_id, origin from mpi.patients where id = :i and erased_at is null"), {"i": patient_id})).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    origin = await _front_desk_gate(conn, claims, row[0])
+    try:
+        result = await mpi.confirm_identity(
+            conn, clinic_id=row[0], origin=origin, patient_id=patient_id, confirmed_by=uuid.UUID(claims["sub"]), idempotency_key=idempotency_key
+        )
+    except mpi.PatientNotFound:
+        raise HTTPException(status_code=404, detail="not found") from None
+    except mpi.NotPermitted:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    except mpi.IdempotencyConflict:
+        raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request") from None
+    return ConfirmIdentityOut(patient_id=result.patient_id, confirmed=True, replayed=result.replayed)
+
+
 async def _validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     """FastAPI's default 422 body includes the offending INPUT. On a route that takes a name, a date of birth and a phone that would put them
     in an error response (and in anything that records responses), so every validation error is reduced to its type, location and

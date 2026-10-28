@@ -220,6 +220,33 @@
         "title": "CandidateOut",
         "type": "object"
       },
+      "ConfirmIdentityOut": {
+        "additionalProperties": false,
+        "description": "Ids and a flag only.",
+        "properties": {
+          "confirmed": {
+            "const": true,
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "patient_id",
+          "confirmed",
+          "replayed"
+        ],
+        "title": "ConfirmIdentityOut",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1398,6 +1425,69 @@
           }
         ],
         "summary": "Register Patient",
+        "tags": [
+          "staff patients"
+        ]
+      }
+    },
+    "/v1/staff/patients/{patient_id}/confirm-identity": {
+      "post": {
+        "description": "A front-desk person confirms a patient's identity. A record the unattended worker created is NOT auto-linked to by later referrals until this is done (a match on it goes\nto a person); confirming it makes it match normally. A triage approval does NOT do this (owner decision). 404 if the patient is not visible to you (or erased), 403 if you\nare not front desk of that clinic, 409 if the key was used for a different patient, 422 for a bad id or key.",
+        "operationId": "confirm_patient_identity_v1_staff_patients__patient_id__confirm_identity_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "patient_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Patient Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmIdentityOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Confirm Patient Identity",
         "tags": [
           "staff patients"
         ]
