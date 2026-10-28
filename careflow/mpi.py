@@ -35,6 +35,7 @@ Safety properties
 """
 
 import hashlib
+import json
 import re
 import uuid
 from dataclasses import dataclass
@@ -188,12 +189,21 @@ def _lock_key(clinic_id: uuid.UUID, kind: str, token: bytes) -> int:
     return int.from_bytes(digest[:8], "big", signed=True)
 
 
+Registrar = Literal["direct", "function"]
+
+
 class PatientIngestionPipeline:
-    def __init__(self, vault: DemographicVault, *, key_version: int) -> None:
+    def __init__(self, vault: DemographicVault, *, key_version: int, registrar: Registrar = "direct") -> None:
         if key_version not in vault.key_versions:
             raise ValueError(f"key_version {key_version} is not loaded in the vault {vault.key_versions}")
+        if registrar not in ("direct", "function"):
+            raise ValueError("registrar must be 'direct' or 'function'")
         self._vault = vault
         self._kv = key_version
+        # "direct": the front-desk route inserts the three tables under its own row-level-security policies (a person's authenticated request).
+        # "function": the unattended queue worker (the Front Door graph) registers through mpi.register_patient_from_referral (migration 0022), the only way it may write
+        # them: that function creates one new patient and can attach tokens or candidates to that patient only (pre-launch blocker 1).
+        self._registrar = registrar
 
     async def ingest(
         self,
@@ -255,53 +265,15 @@ class PatientIngestionPipeline:
         # 5. Create the record, its tokens and any review rows in one savepoint.
         try:
             async with conn.begin_nested():
-                pid = (
-                    await conn.execute(
-                        text(
-                            """insert into mpi.patients
-                                   (clinic_id, name_ct, name_key_version, dob_ct, dob_key_version,
-                                    phone_ct, phone_key_version, origin, idempotency_key)
-                               values (:clinic, :name_ct, :kv, :dob_ct, :kv, :phone_ct, :phone_kv, :origin, :idem)
-                               returning id"""
-                        ),
-                        {
-                            "clinic": clinic_id,
-                            "name_ct": self._vault.encrypt(name, field="name", key_version=self._kv),
-                            "dob_ct": self._vault.encrypt(dob_iso, field="dob", key_version=self._kv),
-                            "phone_ct": None
-                            if phone_c is None
-                            else self._vault.encrypt(phone_c, field="phone", key_version=self._kv),
-                            "kv": self._kv,
-                            "phone_kv": None if phone_c is None else self._kv,
-                            "origin": origin,
-                            "idem": idempotency_key,
-                        },
+                if self._registrar == "function":
+                    pid = await self._register_via_function(
+                        conn, clinic_id=clinic_id, origin=origin, name=name, dob_iso=dob_iso, phone_c=phone_c,
+                        idempotency_key=idempotency_key, tokens=tokens, reasons=reasons, hits=hits,
                     )
-                ).scalar_one()
-                for kind, tok in tokens.items():
-                    await conn.execute(
-                        text(
-                            """insert into mpi.identity_tokens (patient_id, clinic_id, kind, token, key_version, origin)
-                               values (:p, :c, :kind, :tok, :kv, :origin)"""
-                        ),
-                        {"p": pid, "c": clinic_id, "kind": kind, "tok": tok, "kv": self._kv, "origin": origin},
-                    )
-                for other, reason in reasons.items():
-                    await conn.execute(
-                        text(
-                            """insert into mpi.match_candidates
-                                   (clinic_id, patient_id, candidate_patient_id, matched_kinds, reason, origin, idempotency_key)
-                               values (:c, :p, :other, :kinds, :reason, :origin, :idem)"""
-                        ),
-                        {
-                            "c": clinic_id,
-                            "p": pid,
-                            "other": other,
-                            "kinds": sorted(hits[other]),
-                            "reason": reason,
-                            "origin": origin,
-                            "idem": f"cand:{idempotency_key}:{other}",
-                        },
+                else:
+                    pid = await self._register_directly(
+                        conn, clinic_id=clinic_id, origin=origin, name=name, dob_iso=dob_iso, phone_c=phone_c,
+                        idempotency_key=idempotency_key, tokens=tokens, reasons=reasons, hits=hits,
                     )
         except IntegrityError as exc:
             if "idempotency_key" in str(exc.orig):
@@ -312,6 +284,75 @@ class PatientIngestionPipeline:
                 raise NotPermitted("this role may not register patients in this clinic") from exc
             raise
         return IngestResult("review" if reasons else "created", pid, tuple(reasons))
+
+    async def _register_directly(self, conn, *, clinic_id, origin, name, dob_iso, phone_c, idempotency_key, tokens, reasons, hits) -> uuid.UUID:
+        pid = (
+            await conn.execute(
+                text(
+                    """insert into mpi.patients
+                           (clinic_id, name_ct, name_key_version, dob_ct, dob_key_version,
+                            phone_ct, phone_key_version, origin, idempotency_key)
+                       values (:clinic, :name_ct, :kv, :dob_ct, :kv, :phone_ct, :phone_kv, :origin, :idem)
+                       returning id"""
+                ),
+                self._patient_params(clinic_id, origin, name, dob_iso, phone_c, idempotency_key),
+            )
+        ).scalar_one()
+        for kind, tok in tokens.items():
+            await conn.execute(
+                text(
+                    """insert into mpi.identity_tokens (patient_id, clinic_id, kind, token, key_version, origin)
+                       values (:p, :c, :kind, :tok, :kv, :origin)"""
+                ),
+                {"p": pid, "c": clinic_id, "kind": kind, "tok": tok, "kv": self._kv, "origin": origin},
+            )
+        for other, reason in reasons.items():
+            await conn.execute(
+                text(
+                    """insert into mpi.match_candidates
+                           (clinic_id, patient_id, candidate_patient_id, matched_kinds, reason, origin, idempotency_key)
+                       values (:c, :p, :other, :kinds, :reason, :origin, :idem)"""
+                ),
+                {
+                    "c": clinic_id,
+                    "p": pid,
+                    "other": other,
+                    "kinds": sorted(hits[other]),
+                    "reason": reason,
+                    "origin": origin,
+                    "idem": f"cand:{idempotency_key}:{other}",
+                },
+            )
+        return pid
+
+    async def _register_via_function(self, conn, *, clinic_id, origin, name, dob_iso, phone_c, idempotency_key, tokens, reasons, hits) -> uuid.UUID:
+        """One call to mpi.register_patient_from_referral (migration 0022): the same values the direct path inserts, handed over together so the database can bind the tokens and
+        the candidates to the one patient it creates."""
+        params = self._patient_params(clinic_id, origin, name, dob_iso, phone_c, idempotency_key)
+        kinds = list(tokens)
+        candidates = [{"patient_id": str(other), "kinds": sorted(hits[other]), "reason": reason} for other, reason in reasons.items()]
+        return (
+            await conn.execute(
+                text(
+                    """select mpi.register_patient_from_referral(
+                           :clinic, :origin, :name_ct, cast(:kv as smallint), :dob_ct, cast(:kv as smallint), :phone_ct, cast(:phone_kv as smallint),
+                           :idem, cast(:kinds as text[]), cast(:toks as bytea[]), cast(:kv as smallint), cast(:cands as jsonb))"""
+                ),
+                {**params, "kinds": kinds, "toks": [tokens[k] for k in kinds], "cands": json.dumps(candidates)},
+            )
+        ).scalar_one()
+
+    def _patient_params(self, clinic_id, origin, name, dob_iso, phone_c, idempotency_key) -> dict:
+        return {
+            "clinic": clinic_id,
+            "name_ct": self._vault.encrypt(name, field="name", key_version=self._kv),
+            "dob_ct": self._vault.encrypt(dob_iso, field="dob", key_version=self._kv),
+            "phone_ct": None if phone_c is None else self._vault.encrypt(phone_c, field="phone", key_version=self._kv),
+            "kv": self._kv,
+            "phone_kv": None if phone_c is None else self._kv,
+            "origin": origin,
+            "idem": idempotency_key,
+        }
 
     async def _find(
         self, conn: AsyncConnection, clinic_id: uuid.UUID, origin: str, tokens: dict[str, bytes]

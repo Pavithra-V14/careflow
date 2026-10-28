@@ -38,6 +38,7 @@ Real-engine contract tests; retrieval gold-set gate; the route/worker to run the
 
 ## PRE-LAUNCH BLOCKERS (recorded decisions; nothing here blocks the merge, all of it blocks real patient data)
 1. **Worker token-attach and pending-duplicate forgery (0019 residual risk 4).** INSERT on `mpi.identity_tokens` and `mpi.match_candidates` lets a queue worker attach an identity token to ANY existing patient of its clinic, or forge a pending possible-duplicate between two patients; a wrongly attached token would make a later referral link to the wrong person. The owner decided (2026-10-24) NOT to build the SECURITY DEFINER ingestion function now, and to accept the risk while the worker is a trusted, synthetic-data-only identity. It must be closed (a function that touches only the record it just created) or explicitly re-accepted before any real patient data.
+   **STATUS (2026-10-28): fix written, not merged.** Migration 0022 adds `mpi.register_patient_from_referral` (SECURITY DEFINER) as the worker's only write path and drops its three INSERT policies; branch `blocker1-worker-registration-fn`; design `docs/design/blocker1-worker-token-forgery.md`. The blocker closes when 0022 is merged and the live tests pass in CI.
 2. The malware scanner (uploads are disabled outside demo; clinical readiness needs one).
 3. Priya's `STRONG_IDENTIFIERS` sign-off; `identity_refused` routing confirmed by the clinic.
 4. A retention/erasure procedure for checkpoints and review tasks (history is append-only today).
