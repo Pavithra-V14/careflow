@@ -71,14 +71,17 @@ def test_a_newer_commit_on_the_same_branch_cancels_its_own_older_run():
 
 def test_the_required_check_named_test_passes_only_if_every_shard_did():
     test = WORKFLOW["jobs"]["test"]
-    assert set(test["needs"]) == {"migrate", "live"} and test["if"] == "always()"
+    # The offline job runs lint, the OpenAPI snapshot and the structural no-side-effect-across-a-pause gate: the one required check must depend on it too.
+    assert set(test["needs"]) == {"secret-scan", "offline", "migrate", "live"} and test["if"] == "always()"
     script = " ".join(step.get("run", "") for step in test["steps"])
-    assert "needs.live.result" in script and '!= "success"' in script  # cancelled and skipped count as failure
+    for job in ("secret-scan", "offline", "migrate", "live"):
+        assert f"needs.{job}.result" in script
+    assert '!= "success"' in script  # cancelled and skipped count as failure
 
 
 def test_every_shard_keeps_verbose_durations_the_zero_skip_check_and_the_connection_sampler():
     run = " ".join(step.get("run", "") for step in WORKFLOW["jobs"]["live"]["steps"])
-    for needle in ("-v", "--durations=25", "SKIPPED", "scripts/ci_peak_connections.py", "pytest"):
+    for needle in ("-v", "--durations=25", "SKIPPED", "scripts/ci_peak_connections.py", "pytest", "--junitxml=shard-times.xml", "scripts/ci_shard_times.py"):
         assert needle in run, needle
 
 

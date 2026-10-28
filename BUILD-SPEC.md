@@ -1016,6 +1016,8 @@ message might).
 - Google AI Studio's exact Gemini Live free-tier rate limits (requests/concurrent-sessions/minutes) in production, and whether they're sufficient for expected clinic volume before this needs a paid Vertex AI tier.
 - Whether Gemini Live supports updating a session's system instructions mid-conversation, which the scope-restriction design in §23.2 assumes is possible per workflow (a booking-reply session and an intake-question session should each be scoped only to their own task).
 
+- Whether a Supabase Storage **signed upload URL can overwrite an existing object**, and **for how long it stays valid** (the P2-3 service issues a 600 s URL and records the sha256 observed at registration; an overwrite inside that window would change the bytes after they were verified). Must be confirmed with a real call before the `UploadPort` adapter exists.
+
 ---
 
 ## Appendix C — Traceability to the reference architecture's 17 layers

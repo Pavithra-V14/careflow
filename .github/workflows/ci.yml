@@ -151,8 +151,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Estimated minutes at the pace of the 2026-10-24 runs. tests/test_ci_shards.py requires every live test file to appear in exactly one shard.
-          - shard: 1  # about 32 min
+          # Estimated minutes from the 2026-10-24 PR #3 run (shard 2 took 50:42 against the 60-minute limit, shard 3 11:39): about 33 minutes each. Every shard prints
+          # per-file times (SHARD-TIME lines) so the next rebalance uses measurements. tests/test_ci_shards.py requires every live test file to appear in exactly one shard.
+          - shard: 1  # about 33 min
             files: >-
               tests/test_api_role_matrix.py
               tests/test_identity_live.py
@@ -160,11 +161,9 @@ jobs:
               tests/test_api_screen_message_live.py
               tests/test_api_read_message_live.py
               tests/test_patient_binding_live.py
-          - shard: 2  # about 31 min
+          - shard: 2  # about 34 min
             files: >-
-              tests/test_rls_screenings_live.py
               tests/test_queue_live.py
-              tests/test_rotation_live.py
               tests/test_rls_msg_live.py
               tests/test_mpi_live.py
               tests/test_rls_iam_audit_live.py
@@ -173,11 +172,21 @@ jobs:
               tests/test_rls_child_tables_live.py
               tests/test_rls_ai_registry_live.py
               tests/test_rls_spend_and_approval_live.py
-          - shard: 3  # about 25 min (the 200-booking test alone may take 6 to 15)
+              tests/test_rls_docs_live.py
+              tests/test_rls_triage_live.py
+              tests/test_rls_mpi_worker_live.py
+              tests/test_rls_referral_hold_live.py
+              tests/test_rls_checkpoints_live.py
+              tests/test_triage_writers_live.py
+          - shard: 3  # about 33 min (the 200-booking test alone takes 5 to 7)
             files: >-
+              tests/test_rls_screenings_live.py
+              tests/test_rotation_live.py
               tests/test_scheduling_live.py
               tests/test_rls_mpi_scheduling_live.py
               tests/test_scheduling_concurrency_live.py
+              tests/test_api_referrals_live.py
+              tests/test_dead_letters_live.py
     env:
       CAREFLOW_ENV: ci
       CAREFLOW_PROFILE: demo
@@ -208,7 +217,7 @@ jobs:
           uv run python scripts/ci_peak_connections.py --label "shard-${{ matrix.shard }}" > peak.out 2>&1 &
           sampler=$!
           status=0
-          uv run pytest -v -rs --durations=25 -p no:cacheprovider ${{ matrix.files }} 2>&1 | tee pytest.out || status=$?
+          uv run pytest -v -rs --durations=25 --junitxml=shard-times.xml -p no:cacheprovider ${{ matrix.files }} 2>&1 | tee pytest.out || status=$?
           kill -TERM "$sampler" 2>/dev/null || true
           wait "$sampler" 2>/dev/null || true
           cat peak.out
@@ -218,18 +227,38 @@ jobs:
             exit 1
           fi
 
+      # The PEAK-CONNECTIONS line is printed inside the test step above on pass or fail. This step repeats it in the job SUMMARY on every outcome (including a cancelled or timed-out
+      # step, where the first print is never reached), so a passed shard's number is visible without opening the log. It never fails the shard.
+      - name: "Peak connections, shard ${{ matrix.shard }}"
+        if: always()
+        run: |
+          if [ -s peak.out ]; then
+            cat peak.out
+            { echo "### Peak connections, shard ${{ matrix.shard }}"; echo; echo '```'; cat peak.out; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "no PEAK-CONNECTIONS line was produced (the sampler did not run or was killed before it printed)"
+            echo "PEAK-CONNECTIONS label=shard-${{ matrix.shard }} NOT-CAPTURED" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Seconds per test FILE, from the JUnit XML, so the next rebalance of the shards starts from measurements (scripts/ci_shard_times.py; it never fails the shard).
+      - name: "Per-file times, shard ${{ matrix.shard }}"
+        if: always()
+        run: uv run python scripts/ci_shard_times.py shard-times.xml --label "shard-${{ matrix.shard }}"
+
   # The single required check. It is named `test`, as before, so branch protection does not change: it passes only if EVERY shard passed.
   test:
     if: always()
-    needs: [migrate, live]
+    needs: [secret-scan, offline, migrate, live]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Every shard must have succeeded (a cancelled or skipped shard is a failure)
+      - name: Every job must have succeeded (a cancelled or skipped job is a failure)
         run: |
+          echo "secret-scan: ${{ needs.secret-scan.result }}"
+          echo "offline (lint, structural gate, offline tests): ${{ needs.offline.result }}"
           echo "migrate: ${{ needs.migrate.result }}"
           echo "live shards: ${{ needs.live.result }}"
-          if [ "${{ needs.migrate.result }}" != "success" ] || [ "${{ needs.live.result }}" != "success" ]; then
-            echo "::error::the live gate did not fully succeed"
+          if [ "${{ needs.secret-scan.result }}" != "success" ] || [ "${{ needs.offline.result }}" != "success" ] || [ "${{ needs.migrate.result }}" != "success" ] || [ "${{ needs.live.result }}" != "success" ]; then
+            echo "::error::a required job did not succeed"
             exit 1
           fi

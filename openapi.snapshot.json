@@ -516,6 +516,55 @@
         "title": "ProposeMergeIn",
         "type": "object"
       },
+      "ReviewIn": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "approve",
+              "edit",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "ReviewIn",
+        "type": "object"
+      },
+      "ReviewOut": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "approve",
+              "edit",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "document_id",
+          "decision",
+          "replayed"
+        ],
+        "title": "ReviewOut",
+        "type": "object"
+      },
       "RoleGrant": {
         "properties": {
           "clinic_id": {
@@ -533,6 +582,26 @@
           "role"
         ],
         "title": "RoleGrant",
+        "type": "object"
+      },
+      "RunOut": {
+        "additionalProperties": false,
+        "properties": {
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "job_id",
+          "replayed"
+        ],
+        "title": "RunOut",
         "type": "object"
       },
       "ScreenOut": {
@@ -1331,6 +1400,142 @@
         "summary": "Register Patient",
         "tags": [
           "staff patients"
+        ]
+      }
+    },
+    "/v1/staff/referrals/{document_id}/review": {
+      "post": {
+        "description": "Record the reviewer's decision on a paused run and finish it. 404 if you cannot see the document, 403 unless nurse or doctor there, 404 if the document has no\nrun, 409 if the run is not waiting for a decision or already has a different one, 503 if not configured.",
+        "operationId": "review_referral_v1_staff_referrals__document_id__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Review Referral",
+        "tags": [
+          "staff referrals"
+        ]
+      }
+    },
+    "/v1/staff/referrals/{document_id}/run": {
+      "post": {
+        "description": "Enqueue a Front Door run for a referral document. 404 if you cannot see it, 403 if you may not start a run, 503 if not configured.",
+        "operationId": "start_referral_run_v1_staff_referrals__document_id__run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Start Referral Run",
+        "tags": [
+          "staff referrals"
         ]
       }
     },

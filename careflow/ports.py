@@ -15,6 +15,7 @@ Data class: a request is `SYNTHETIC` or `PHI`. The gateway (careflow.gateway) wi
 """
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import StrEnum
 from typing import Final, Literal, Protocol
 
@@ -109,6 +110,34 @@ class EmbeddingPort(Protocol):
 
 
 @dataclass(frozen=True)
+class VectorPoint:
+    """One protocol card in the vector index (BUILD-SPEC.md 10.2: one card = one retrieval unit; cards hold no patient data). The index is
+    disposable: Postgres is truth, and `version` is what the index was built from, checked again at the join (10.8)."""
+
+    card_id: str
+    version: int
+    vector: tuple[float, ...] = field(repr=False)
+    scope: dict[str, str] = field(default_factory=dict)  # deterministic metadata only; the only fields allowed to gate a query (10.7)
+
+
+@dataclass(frozen=True)
+class VectorHit:
+    card_id: str
+    version: int
+    similarity: float  # cosine, in [-1, 1]
+
+
+class VectorStorePort(Protocol):
+    """The card index (Qdrant). `scope` is a PRE-filter (10.7) and is required: a search with an empty scope raises rather than searching everything."""
+
+    async def upsert(self, points: list[VectorPoint]) -> None: ...
+
+    async def search(self, vector: tuple[float, ...], *, limit: int, scope: dict[str, str]) -> list[VectorHit]: ...
+
+    async def delete(self, card_ids: list[str]) -> None: ...
+
+
+@dataclass(frozen=True)
 class RerankRequest:
     query: str = field(repr=False)
     candidates: tuple[str, ...] = field(repr=False)
@@ -157,3 +186,43 @@ class EmailPort(Protocol):
 
 class SmsPort(Protocol):
     async def send(self, to: str, body: str, *, idempotency_key: str) -> SendResult: ...
+
+
+# ---- uploads (BUILD-SPEC.md §17.3; docs/design/uploads-supabase-storage.md) ------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SignedUpload:
+    """What the browser is handed: a short-lived URL it can PUT one object to, at a path the SERVER chose. The signature may carry a size and
+    type limit, but the server never relies on that: it re-verifies the stored object itself (careflow.documents)."""
+
+    url: str
+    path: str
+    expires_at: datetime
+
+
+@dataclass(frozen=True)
+class StoredObject:
+    """What the storage actually holds at a path, as observed by the server side of the adapter, not as claimed by any client."""
+
+    path: str
+    size: int
+    content_type: str  # as stored (may be whatever the uploader said; verified against `head` by the caller)
+    head: bytes = field(repr=False)  # the first bytes of the content, for a magic-number check
+    sha256: str  # lowercase hex of the whole content
+
+
+class UploadPort(Protocol):
+    async def create_signed_upload(self, *, path: str, content_type: str, max_bytes: int, expires_in_seconds: int) -> SignedUpload: ...
+
+    async def describe(self, path: str) -> StoredObject | None:
+        """The object at `path`, or None if nothing is there. Reads the stored bytes; never trusts a client-supplied size or type."""
+        ...
+
+    async def read(self, path: str) -> bytes | None:
+        """The full bytes at `path`, or None if nothing is there. For a worker that is about to use the document: the caller re-hashes them."""
+        ...
+
+    async def delete(self, path: str) -> None:
+        """Remove the object at `path` (a no-op if it is already gone)."""
+        ...

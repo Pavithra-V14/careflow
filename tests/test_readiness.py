@@ -33,7 +33,7 @@ def test_demo_is_ready_with_an_empty_registry_and_no_required_roles():
 
 def test_clinical_is_ready_only_when_every_required_role_has_an_enabled_phi_approved_route():
     reg = [row("decision"), row("llm_large", policy="synthetic_only"), row("vlm", enabled=False)]
-    assert check_readiness("clinical", reg, ["decision"]).ready
+    assert check_readiness("clinical", reg, ["decision"], malware_scanner_configured=True).ready
     got = check_readiness("clinical", reg, ["decision", "llm_large", "vlm", "embed"])
     assert not got.ready and got.missing_roles == ("llm_large", "vlm", "embed")  # synthetic_only, disabled and absent all count as missing
 
@@ -46,7 +46,7 @@ def test_unknown_is_never_ready():
         ("clinical", [row()], ["not_a_role"]),  # an unknown role name
         ("production", [row()], ["decision"]),  # an unrecognised profile is treated as clinical...
     ):
-        got = check_readiness(profile, reg, required)
+        got = check_readiness(profile, reg, required, malware_scanner_configured=True)
         if profile == "production":
             assert got.ready and got.profile == "clinical" and "unrecognised profile" in got.reasons[0]  # ...and can still be ready on the merits
         else:
@@ -57,7 +57,7 @@ def test_unknown_is_never_ready():
 def test_a_phi_approved_row_with_no_wired_adapter_does_not_count():
     reg = [row("decision")]
     assert not check_readiness("clinical", reg, ["decision"], wired=set()).ready
-    assert check_readiness("clinical", reg, ["decision"], wired={("local", "laya-1")}).ready
+    assert check_readiness("clinical", reg, ["decision"], wired={("local", "laya-1")}, malware_scanner_configured=True).ready
 
 
 def test_a_route_that_is_phi_approved_but_for_a_different_role_does_not_satisfy_this_one():
@@ -146,3 +146,12 @@ def test_an_invalid_registry_row_is_not_ready(monkeypatch, caplog):
     with client(monkeypatch, profile="clinical", error=RegistryError("registry row x is not valid"), required_roles="decision",
                 worker_account_id=uuid.uuid4()) as c:
         assert c.get("/readyz").status_code == 503
+
+
+def test_clinical_is_not_ready_without_a_configured_malware_scanner_whatever_the_registry_says():
+    reg = [row("decision")]
+    got = check_readiness("clinical", reg, ["decision"])  # the scanner flag has no permissive default
+    assert not got.ready and got.reasons == ("no malware scanner is configured for uploads",)
+    assert not check_readiness("clinical", reg, ["decision"], malware_scanner_configured=False).ready
+    assert not check_readiness("production", reg, ["decision"]).ready  # an unrecognised profile counts as clinical
+    assert check_readiness("demo", None, None).ready  # demo is unaffected: uploads there are synthetic
