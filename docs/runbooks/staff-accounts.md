@@ -1,0 +1,3 @@
+# Runbook: staff accounts and roles
+
+**Worker accounts hold `queue_worker` ONLY.** The unattended queue worker (the Front Door graph) is a system identity. Give it the `queue_worker` role and no other, in any clinic. A worker account that also holds `front_desk` in the same clinic gets the union of both roles' row-level-security policies (permissive policies OR together) and so keeps front desk's direct INSERT on `mpi.identity_tokens` and `mpi.match_candidates`, which is exactly the path migration 0022 closes for the worker alone. Review `iam.staff_roles` whenever a role is granted; a database-side enforcement is proposed in `docs/design/planted-token-design.md` and is not built yet.
