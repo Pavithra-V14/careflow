@@ -10,6 +10,8 @@ one, delete its line in the same change. Source of the first group: the msg / ia
 (`docs/design/msg-screening-binding-design.md`).
 
 ## Planted tokens (pre-launch blocker 10)
+- **Revoking a mistaken identity confirmation (owner request 2026-10-28):** a confirmation is permanent today (append-only, one row per patient). Design only: `docs/design/identity-confirmation-revoke.md` (an append-only event log, latest event wins; front desk, one person, no step-up; the matcher treats the record as unverified again; a nurse review task lists what was linked meanwhile). Not built.
+- **Open item: step-up on confirm-identity.** Left out for now (a confirmation only makes a record match normally). REVISIT WITH THE CLINICAL SAFETY LEAD.
 - **Option C (later):** the registration function takes the id of a registered `docs.documents` row of the clinic and refuses a second patient from the same document: bounds a worker to one record per human-registered document and gives every worker-created record an audit anchor. Not needed for option A; revisit with the review console.
 - **Option B (rejected, 2026-10-28):** the database derives the tokens. Reasons: the HMAC key and the plaintext name, date of birth and phone would cross into SQL (logs, `pg_stat_statements`, error text); key rotation and the per-field subkeys would have to be duplicated in SQL; it contradicts "the database holds only ciphertext and keyed tokens".
 - **A console for confirm-identity:** until a review console exists, a repeat referral for a worker-created patient goes to review (accepted workload).
