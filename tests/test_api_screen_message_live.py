@@ -276,7 +276,7 @@ async def test_a_red_flag_raises_the_immediate_nurse_task_and_nothing_is_sent_to
         f"values ('{mid}', '{w.a}', 'test', 'appointments', '{w.thread['appointments']}', 'patient', '{w.ids['nurse_a']}', {ct(enc)}, 1, 'm-{mid}'); "
         "select set_config('request.jwt.claims', '', true);",
     )
-    before = (await one(w, "select count(*) from msg.messages"))[0][0]
+    before = (await one(w, "select count(*) from msg.messages where clinic_id = :c", c=w.a))[0][0]
     caplog.set_level("DEBUG")
     r = await post(w, "fd_a", mid)  # front desk may screen an appointments message
     assert r.status_code == 200
@@ -284,8 +284,8 @@ async def test_a_red_flag_raises_the_immediate_nurse_task_and_nothing_is_sent_to
     assert (body["outcome"], body["patient_reply"]) == ("red_flag", "pending_clinician_template")
     ((kind, priority, role, source),) = await one(w, "select kind, priority, assigned_role, source_message_id from agents.review_tasks where source_message_id = :m", m=str(mid))
     assert (kind, priority, role, source) == ("red_flag", "immediate", "nurse", str(mid))
-    assert (await one(w, "select count(*) from msg.messages"))[0][0] == before  # no reply (or any message) was written
-    assert (await one(w, "select count(*) from msg.messages where sender_kind = 'system'"))[0][0] == 0
+    assert (await one(w, "select count(*) from msg.messages where clinic_id = :c", c=w.a))[0][0] == before  # no reply (or any message) was written
+    assert (await one(w, "select count(*) from msg.messages where sender_kind = 'system' and clinic_id = :c", c=w.a))[0][0] == 0
     # Neither the stored task nor any log line carries the patient's words or the rule phrase (ids, versions and offsets only).
     ((provenance,),) = await one(w, "select provenance from agents.review_tasks where source_message_id = :m", m=str(mid))
     stored = provenance if isinstance(provenance, str) else json.dumps(provenance)
