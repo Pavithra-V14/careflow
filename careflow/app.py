@@ -210,6 +210,8 @@ router = APIRouter()
 class RoleGrant(BaseModel):
     clinic_id: uuid.UUID
     role: str
+    clinic_name: str | None  # None only if the clinic row is not visible to the caller (never expected for one's own grant)
+    clinic_origin: str | None
 
 
 class Me(BaseModel):
@@ -237,8 +239,9 @@ async def me(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) ->
         raise HTTPException(status_code=403, detail="no active account")
     grants = await conn.execute(
         text(
-            "select clinic_id, role from iam.staff_roles "
-            "where account_id = :i and revoked_at is null order by clinic_id, role"
+            "select sr.clinic_id, sr.role, c.name as clinic_name, c.origin as clinic_origin from iam.staff_roles sr "
+            "left join iam.clinics c on c.id = sr.clinic_id "
+            "where sr.account_id = :i and sr.revoked_at is null order by sr.clinic_id, sr.role"
         ),
         {"i": account_id},
     )
@@ -246,7 +249,7 @@ async def me(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) ->
         account_id=account.id,
         account_type=account.account_type,
         status=account.status,
-        roles=[RoleGrant(clinic_id=g.clinic_id, role=g.role) for g in grants],
+        roles=[RoleGrant(clinic_id=g.clinic_id, role=g.role, clinic_name=g.clinic_name, clinic_origin=g.clinic_origin) for g in grants],
     )
 
 
