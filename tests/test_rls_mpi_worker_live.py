@@ -27,7 +27,8 @@ from tests.db_helpers import ensure_app_role_sa
 ROOT = Path(__file__).resolve().parent.parent
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or dotenv_values(ROOT / ".env").get("DATABASE_URL_MIGRATOR")
 SQL = {n: (ROOT / "db" / "migrations" / f).read_text(encoding="utf-8") for n, f in (
-    ("0003", "0003_mpi_match_candidates.sql"), ("0008", "0008_mpi_merge_ledger.sql"), ("0019", "0019_mpi_queue_worker_ingestion.sql"), ("0022", "0022_worker_registration_function.sql"))}
+    ("0003", "0003_mpi_match_candidates.sql"), ("0008", "0008_mpi_merge_ledger.sql"), ("0019", "0019_mpi_queue_worker_ingestion.sql"), ("0022", "0022_worker_registration_function.sql"),
+    ("0023", "0023_unverified_worker_records.sql"), ("0024", "0024_worker_role_exclusive.sql"))}
 
 pytestmark = [pytest.mark.asyncio(loop_scope="module"), pytest.mark.skipif(not MIGRATOR, reason="DATABASE_URL_MIGRATOR not configured")]
 NAME, DOB, PHONE = "Asha Venkatesh", "1987-04-23", "+91 98765 43210"
@@ -75,6 +76,10 @@ async def _conn():
             await raw(conn, SQL["0019"])
         if (await conn.execute(text("select to_regprocedure('mpi.register_patient_from_referral(uuid,text,bytea,smallint,bytea,smallint,bytea,smallint,text,text[],bytea[],smallint,jsonb)') is null"))).scalar_one():
             await raw(conn, SQL["0022"])
+        if (await conn.execute(text("select count(*) = 0 from information_schema.columns where table_schema = 'mpi' and table_name = 'patients' and column_name = 'registered_via'"))).scalar_one():
+            await raw(conn, SQL["0023"])
+        if (await conn.execute(text("select count(*) = 0 from pg_trigger where tgname = 'staff_roles_queue_worker_exclusive'"))).scalar_one():
+            await raw(conn, SQL["0024"])
         yield conn
     finally:
         await outer.rollback()
@@ -401,3 +406,120 @@ async def test_the_migrating_role_bypasses_rls_which_the_definer_function_relies
     # like an authorisation failure, so assert the assumption directly (the same check as tests/test_rls_msg_live.py for msg.record_screening).
     owner = (await db.execute(text("select pg_get_userbyid(proowner) from pg_proc where oid = to_regprocedure(:s)"), {"s": FUNCTION_SIG})).scalar_one()
     assert (await db.execute(text("select rolbypassrls or rolsuper from pg_roles where rolname = :r"), {"r": owner})).scalar_one() is True, owner
+
+
+# ---- migration 0023: worker-created records are unverified; the planted-token attack lands in review ------------------------------------------------
+
+
+async def owner_sqlstate(conn, sql, **params):
+    """Run one statement as the (owner) test connection in a savepoint: the SQLSTATE of the refusal, or 'ok'."""
+    try:
+        async with conn.begin_nested():
+            await conn.execute(text(sql), params)
+        return "ok"
+    except DBAPIError as exc:
+        return getattr(exc.orig, "sqlstate", None)
+
+
+async def registered_via(conn, patient):
+    return (await conn.execute(text("select registered_via from mpi.patients where id = :p"), {"p": patient})).scalar_one()
+
+
+async def confirm_as(conn, uid, clinic, patient, *, confirmed_by=None, key=None):
+    return await attempt(
+        conn, uid,
+        "insert into mpi.identity_confirmations (clinic_id, patient_id, confirmed_by, origin, idempotency_key) values (:c, :p, :u, 'test', :k)",
+        c=clinic, p=patient, u=confirmed_by or uid, k=key or f"conf-{_u()}",
+    )
+
+
+async def test_the_function_marks_the_record_unverified_and_front_desk_records_are_front_desk_and_nobody_can_change_the_flag(db, pipeline, direct_pipeline):
+    a, _, p = await seed(db)
+    worker_made = (await ingest(db, pipeline, p["worker_a"], a)).patient_id
+    desk_made = (await ingest(db, direct_pipeline, p["fd_a"], a, name="Meera Nair", phone="+91 90000 00001")).patient_id
+    assert await registered_via(db, worker_made) == "referral_worker" and await registered_via(db, desk_made) == "front_desk"
+    # the application role has no column privilege on it, and the worker cannot set it in a direct insert either
+    for priv in ("INSERT", "UPDATE"):
+        assert (await db.execute(text("select has_column_privilege('careflow_app', 'mpi.patients', 'registered_via', :p)"), {"p": priv})).scalar_one() is False, priv
+    for who in ("worker_a", "fd_a"):
+        assert await attempt(db, p[who], "update mpi.patients set registered_via = 'front_desk' where id = :i", i=worker_made) in ("42501", 0), who  # denied, or no row visible to change
+    assert await registered_via(db, worker_made) == "referral_worker"
+
+
+async def test_the_planted_token_attack_lands_in_review_and_never_links(db, pipeline, vault):
+    a, _, p = await seed(db)
+    victim = {"name": "Kavya Menon", "dob": "1991-02-14", "phone": "+91 98111 22233"}
+    # the attacker (a worker) computes the real person's tokens and plants a junk record carrying them BEFORE the person is registered
+    tokens = mpi.derive_tokens(vault, name=victim["name"], dob_iso=victim["dob"], phone_canonical=mpi.canonicalize_phone(victim["phone"]), key_version=1)
+    kinds = list(tokens)
+    token_sql = "array[" + ", ".join(f"'\\x{tokens[k].hex()}'::bytea" for k in kinds) + "]"
+    planted = await fn(db, p["worker_a"], a, kinds="array[" + ", ".join(f"'{k}'" for k in kinds) + "]", tokens=token_sql)
+    assert isinstance(planted, uuid.UUID) and await registered_via(db, planted) == "referral_worker"
+    # the person's real referral arrives (through the worker's pipeline): it must NOT be linked to the planted record
+    real = await ingest(db, pipeline, p["worker_a"], a, idempotency_key="referral:real-1", **victim)
+    assert real.outcome == "review" and real.outcome != "matched"
+    assert real.patient_id != planted and real.candidate_ids == (planted,)  # a NEW record, and the planted one queued for a person to look at
+    pending = (await db.execute(text("select patient_id, candidate_patient_id, reason, status from mpi.match_candidates where clinic_id = :c"), {"c": a})).all()
+    assert pending == [(real.patient_id, planted, "near_match", "pending")]
+
+
+async def test_a_fully_agreeing_record_created_by_front_desk_still_matches_and_a_confirmed_worker_record_matches_after_confirmation(db, pipeline, direct_pipeline):
+    a, _, p = await seed(db)
+    desk = await ingest(db, direct_pipeline, p["fd_a"], a)
+    again = await ingest(db, pipeline, p["worker_a"], a)  # the same person, referred: the front-desk record is verified
+    assert (again.outcome, again.patient_id) == ("matched", desk.patient_id)
+    other = {"name": "Ravi Shankar", "dob": "1979-06-30", "phone": "+91 97000 11122"}
+    first = await ingest(db, pipeline, p["worker_a"], a, idempotency_key="referral:r-1", **other)  # created by the worker: unverified
+    second = await ingest(db, pipeline, p["worker_a"], a, idempotency_key="referral:r-2", **other)
+    assert first.outcome == "created" and second.outcome == "review" and second.candidate_ids == (first.patient_id,)  # repeat referral for a worker-created record goes to a person
+    assert await confirm_as(db, p["fd_a"], a, first.patient_id) == 1  # front desk confirms the first record
+    third = await ingest(db, pipeline, p["worker_a"], a, idempotency_key="referral:r-3", **other)
+    assert third.outcome == "matched" and third.patient_id == first.patient_id  # now it matches normally
+
+
+async def test_only_front_desk_of_the_clinic_can_confirm_and_only_as_themselves_and_the_record_is_append_only(db, pipeline, direct_pipeline):
+    a, b, p = await seed(db)
+    target = (await ingest(db, pipeline, p["worker_a"], a)).patient_id
+    assert await confirm_as(db, p["fd_a"], a, target, confirmed_by=p["nurse_a"]) == "42501"  # naming somebody else
+    for who in ("worker_a", "nurse_a", "fd_b", "worker_b"):
+        assert await confirm_as(db, p[who], a, target) == "42501", who
+    assert await confirm_as(db, p["fd_a"], b, target) == "42501"  # the wrong clinic id for this patient
+    key = f"conf-{_u()}"
+    assert await confirm_as(db, p["fd_a"], a, target, key=key) == 1  # positive control: the right caller, the right clinic, as themselves
+    assert await confirm_as(db, p["fd_a"], a, target) == "23505"  # one confirmation per patient
+    row = (await db.execute(text("select id, confirmed_by from mpi.identity_confirmations where patient_id = :p"), {"p": target})).one()
+    assert row.confirmed_by == p["fd_a"]
+    # append-only for everyone, the owner included
+    assert await owner_sqlstate(db, "update mpi.identity_confirmations set origin = 'live' where id = :i", i=row.id) == "23001"
+    assert await owner_sqlstate(db, "delete from mpi.identity_confirmations where id = :i", i=row.id) == "23001"
+    assert await owner_sqlstate(db, "truncate mpi.identity_confirmations") == "23001"
+    # who can read them: front desk, nurse, doctor and the worker of the clinic (the matcher needs it); nobody of another clinic
+    for who, expected in (("fd_a", 1), ("nurse_a", 1), ("worker_a", 1), ("fd_b", 0), ("worker_b", 0)):
+        async with db.begin_nested():
+            await as_user(db, p[who])
+            n = (await db.execute(text("select count(*) from mpi.identity_confirmations where patient_id = :p"), {"p": target})).scalar_one()
+            await db.exec_driver_sql("reset role")
+        assert n == expected, who
+
+
+# ---- migration 0024: queue_worker and any other role never coexist ---------------------------------------------------------------------------------
+
+
+async def test_a_queue_worker_cannot_hold_another_role_and_nobody_else_can_become_one(db):
+    a, b, p = await seed(db)
+    worker_a, fd_a, nurse_a = p["worker_a"], p["fd_a"], p["nurse_a"]
+    grant = "insert into iam.staff_roles (account_id, clinic_id, role, origin) values (:u, :c, :r, 'test')"
+    assert await owner_sqlstate(db, grant, u=worker_a, c=a, r="front_desk") == "23514"  # a worker with front desk
+    assert await owner_sqlstate(db, grant, u=worker_a, c=b, r="nurse") == "23514"  # in another clinic too
+    assert await owner_sqlstate(db, grant, u=fd_a, c=a, r="queue_worker") == "23514"  # front desk becoming a worker
+    assert await owner_sqlstate(db, grant, u=nurse_a, c=b, r="queue_worker") == "23514"
+    # allowed: a worker in a second clinic, and an ordinary account with a second ordinary role (positive controls)
+    assert await owner_sqlstate(db, grant, u=worker_a, c=b, r="queue_worker") == "ok"
+    assert await owner_sqlstate(db, grant, u=nurse_a, c=b, r="doctor") == "ok"
+    # a REVOKED grant conflicts with nothing: revoke front desk's grant, then it may become a worker
+    await db.execute(text("update iam.staff_roles set revoked_at = now() where account_id = :u and role = 'front_desk'"), {"u": fd_a})
+    assert await owner_sqlstate(db, grant, u=fd_a, c=a, r="queue_worker") == "ok"
+    # changing an existing grant's role into the forbidden combination is refused too. (Order-dependent on purpose: worker_a holds a SECOND queue_worker grant in clinic b, added above.)
+    assert await owner_sqlstate(db, "update iam.staff_roles set role = 'nurse' where account_id = :u and role = 'queue_worker' and clinic_id = :c", u=worker_a, c=b) == "23514"
+    survivors = (await db.execute(text("select count(distinct role) from iam.staff_roles where account_id = :u and revoked_at is null"), {"u": worker_a})).scalar_one()
+    assert survivors == 1  # the worker still holds exactly one distinct role
