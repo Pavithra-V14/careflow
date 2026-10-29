@@ -37,7 +37,7 @@ async def test_the_trigger_is_enabled_always_and_two_concurrent_conflicting_gran
     clinic, accounts = uuid.uuid4(), [uuid.uuid4() for _ in range(8)]
     setup = await connect()
     try:
-        assert await setup.fetchval("select tgenabled from pg_trigger where tgname = 'staff_roles_queue_worker_exclusive'") == "A"  # ENABLE ALWAYS
+        assert await setup.fetchval("select tgenabled from pg_trigger where tgname = 'staff_roles_queue_worker_exclusive'") in ("A", b"A")  # ENABLE ALWAYS ("char" comes back as bytes from asyncpg)
         assert await setup.fetchval("select has_function_privilege('careflow_app', 'iam.keep_queue_worker_exclusive()', 'execute')") is False
         await setup.execute("insert into iam.clinics (id, name, origin) values ($1, 'Concurrency', 'test')", clinic)
         await setup.executemany("insert into iam.accounts (id, account_type, status, origin) values ($1, 'staff', 'active', 'test')", [(a,) for a in accounts])

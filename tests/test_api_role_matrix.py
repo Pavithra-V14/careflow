@@ -207,10 +207,20 @@ async def _cleanup(ids, conn=None):
         for table in ("sched.bookings", "sched.holds", "sched.waitlist", "sched.slots", "sched.priority_levels",
                       "mpi.merges", "agents.review_tasks", "mpi.match_candidates", "mpi.identity_tokens", "mpi.patients", "sched.visit_types", "sched.providers",
                       "sched.locations"):
+            if table == "mpi.patients":
+                # A confirmed patient cannot be deleted: mpi.identity_confirmations is append-only (migration 0023, a trigger blocks the owner too) and references it. Such patients, and
+                # whatever references them (the confirming accounts, the clinics), stay behind, tagged origin='test'; nothing reads them and every other suite is scoped to its own clinic.
+                await conn.execute(
+                    "delete from mpi.patients p where p.clinic_id = any($1) and not exists (select 1 from mpi.identity_confirmations c where c.patient_id = p.id)", clinics
+                )
+                continue
             await conn.execute(f"delete from {table} where clinic_id = any($1)", clinics)
         await conn.execute("delete from iam.staff_roles where clinic_id = any($1)", [ids.clinic_a, ids.clinic_b])
-        await conn.execute("delete from iam.accounts where id = any($1)", accounts)
-        await conn.execute("delete from iam.clinics where id = any($1)", [ids.clinic_a, ids.clinic_b])
+        for statement, args in (("delete from iam.accounts where id = any($1)", accounts), ("delete from iam.clinics where id = any($1)", [ids.clinic_a, ids.clinic_b])):
+            try:
+                await conn.execute(statement, args)
+            except asyncpg.ForeignKeyViolationError:
+                pass  # still referenced by an append-only confirmation (see above): left behind on purpose
     finally:
         if own:
             await conn.close()
@@ -1048,7 +1058,7 @@ def test_the_harness_catches_a_route_that_lets_everyone_in(ids):
 def test_a_caller_sees_only_their_own_grants_even_if_rls_would_let_an_admin_read_more(client, ids):
     """RLS lets a clinic admin SELECT every grant in their clinic; /me must still return only their own."""
     body = client.get("/v1/iam/me", headers=bearer(mint(ids.people["admin_a"][0]))).json()
-    assert body["roles"] == [{"clinic_id": str(ids.clinic_a), "role": "admin"}]
+    assert body["roles"] == [{"clinic_id": str(ids.clinic_a), "role": "admin", "clinic_name": "Matrix A", "clinic_origin": "test"}]
 
 
 def test_a_multi_clinic_account_gets_exactly_its_own_grants(client, ids):
