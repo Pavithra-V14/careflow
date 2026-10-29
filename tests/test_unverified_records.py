@@ -155,6 +155,8 @@ class ConfirmConn:
         self.calls.append((sql, params or {}))
         if "pg_advisory_xact_lock" in sql:
             return Result([])
+        if "from mpi.merges" in sql:
+            return Result([])  # not the subordinate of an active merge
         if "where idempotency_key = :k" in sql:
             return Result([self.by_key] if self.by_key else [])
         if "select registered_via from mpi.patients" in sql:
@@ -366,10 +368,42 @@ def test_0025_extends_the_review_task_insert_policy_by_exactly_one_front_desk_cl
     assert "iam.has_clinic_role(clinic_id, array['front_desk', 'admin']) and kind = 'unmerge_review'" in policy
     assert "iam.has_clinic_role(clinic_id, array['front_desk']) and kind = 'identity_confirmation_revoked' and assigned_role in ('nurse', 'doctor')" in policy
     assert policy.count(" or ") == 2  # three clauses in all
-    assert "select" not in CODE25.split("create policy review_tasks_insert")[1].lower().replace("review_tasks_select", "")  # the SELECT policy is untouched: front desk cannot read the task
+    assert "review_tasks_select" not in LOW25 and "create policy" in LOW25 and LOW25.count("create policy") == 1  # the SELECT policy is untouched: front desk cannot read the task
+    # bound to a revoke event the same person wrote: open, unacknowledged, key and source fixed by the event id (no squatting on another writer's predictable key)
+    assert "status = 'open' and acknowledged_by is null" in policy and "e.confirmed_by = auth.uid()" in policy
+    assert "review_tasks.idempotency_key = 'identity-revoke-review:' || e.id::text" in policy and "review_tasks.source_message_id = 'identity-revoke:' || e.id::text" in policy
 
 
 def test_the_application_never_reads_back_or_arbitrates_a_task_front_desk_cannot_see():
     source = (Path(__file__).resolve().parent.parent / "careflow" / "mpi.py").read_text(encoding="utf-8")
     task_insert = source.split("insert into agents.review_tasks")[1].split('"""')[0]
     assert "returning" not in task_insert.lower() and "on conflict" not in task_insert.lower()
+
+
+@pytest.mark.asyncio
+async def test_a_record_merged_into_another_is_refused_for_confirm_and_revoke_because_the_matcher_reads_its_master():
+    class Merged(ConfirmConn):
+        async def execute(self, statement, params=None):
+            if "from mpi.merges" in str(statement):
+                self.calls.append((str(statement), params or {}))
+                return Result([(1,)])
+            return await super().execute(statement, params)
+
+    for conn, call in ((Merged(latest=CONFIRMED), lambda c: mpi.revoke_identity(c, task=TASK, **RKW)), (Merged(), lambda c: mpi.confirm_identity(c, **KW))):
+        with pytest.raises(mpi.RecordIsMerged):
+            await call(conn)
+        assert conn.inserts("mpi.identity_confirmations") == [] and conn.inserts("agents.review_tasks") == []
+
+
+@pytest.mark.asyncio
+async def test_a_key_held_by_a_row_this_role_cannot_see_is_an_idempotency_conflict_not_a_server_error():
+    class Collides(ConfirmConn):
+        async def execute(self, statement, params=None):
+            if "insert into mpi.identity_confirmations" in str(statement):
+                raise db_error("23505")
+            return await super().execute(statement, params)
+
+    with pytest.raises(mpi.IdempotencyConflict):
+        await mpi.confirm_identity(Collides(), **KW)  # type: ignore[arg-type]
+    with pytest.raises(mpi.IdempotencyConflict):
+        await mpi.revoke_identity(Collides(latest=CONFIRMED), task=TASK, **RKW)  # type: ignore[arg-type]

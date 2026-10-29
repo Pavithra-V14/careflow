@@ -425,6 +425,16 @@ async def _event_by_key(conn: AsyncConnection, key: str) -> tuple[uuid.UUID, uui
     return None if row is None else (row[0], row[1], row[2])
 
 
+class RecordIsMerged(IngestionError):
+    """The patient is the subordinate of an ACTIVE merge: the matcher takes verification from the master, so an event on this record would change nothing. Act on the master."""
+
+
+async def _refuse_if_merged(conn: AsyncConnection, patient_id: uuid.UUID) -> None:
+    merged = (await conn.execute(text("select 1 from mpi.merges where subordinate_patient_id = :p and status = 'active'"), {"p": patient_id})).first()
+    if merged is not None:
+        raise RecordIsMerged("this record is merged into another; act on that record")
+
+
 def _check_write_arguments(origin: Origin, idempotency_key: str) -> None:
     if not isinstance(idempotency_key, str) or not idempotency_key.strip():
         raise MissingRequiredField("an idempotency key is required on every write")
@@ -449,6 +459,7 @@ async def confirm_identity(
     live = (await conn.execute(text("select 1 from mpi.patients where id = :p and clinic_id = :c and erased_at is null"), {"p": patient_id, "c": clinic_id})).first()
     if live is None:
         raise PatientNotFound("not found")
+    await _refuse_if_merged(conn, patient_id)
     latest = await _latest_event(conn, patient_id)
     if latest is not None and latest[0] == "confirm":
         return ConfirmResult(patient_id, True)  # already confirmed: a replay in effect
@@ -462,8 +473,11 @@ async def confirm_identity(
                 {"c": clinic_id, "p": patient_id, "u": confirmed_by, "o": origin, "k": idempotency_key},
             )
     except DBAPIError as exc:
-        if getattr(exc.orig, "sqlstate", None) == "42501":
+        state = getattr(exc.orig, "sqlstate", None)
+        if state == "42501":
             raise NotPermitted("this role may not confirm identities in this clinic") from exc
+        if state == "23505":  # the key is held by a row this role cannot see (another clinic's): the same answer as a key used for a different request
+            raise IdempotencyConflict("this idempotency key was used for a different request") from exc
         raise
     return ConfirmResult(patient_id, False)
 
@@ -523,6 +537,7 @@ async def revoke_identity(
     row = (await conn.execute(text("select registered_via from mpi.patients where id = :p and clinic_id = :c and erased_at is null"), {"p": patient_id, "c": clinic_id})).first()
     if row is None:
         raise PatientNotFound("not found")
+    await _refuse_if_merged(conn, patient_id)
     latest = await _latest_event(conn, patient_id)
     verified = (latest[0] == "confirm") if latest is not None else (row[0] == "front_desk")
     if not verified:
@@ -539,8 +554,11 @@ async def revoke_identity(
                 {"i": event_id, "c": clinic_id, "p": patient_id, "u": revoked_by, "o": origin, "k": idempotency_key, "r": reason},
             )
     except DBAPIError as exc:
-        if getattr(exc.orig, "sqlstate", None) == "42501":
+        state = getattr(exc.orig, "sqlstate", None)
+        if state == "42501":
             raise NotPermitted("this role may not revoke identities in this clinic") from exc
+        if state == "23505":
+            raise IdempotencyConflict("this idempotency key was used for a different request") from exc
         raise
     settings = task or RevokeTaskSettings()
     if not settings.configured:

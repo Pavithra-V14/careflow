@@ -612,14 +612,35 @@ async def test_only_front_desk_of_the_clinic_can_revoke_as_themselves_with_a_lis
         if expected:
             kind, priority, role, provenance = rows[0]
             assert (kind, priority, role) == ("identity_confirmation_revoked", "standard", "nurse") and set(provenance) == {"patient_id", "revoke_event_id", "reason", "confirmed_at", "record_created_by"}
-    # front desk may raise ONLY this kind of task, for a nurse or doctor, in its own clinic
-    new_task = "insert into agents.review_tasks (clinic_id, origin, kind, priority, assigned_role, source_message_id, provenance, idempotency_key) values (:c, 'test', :k, 'standard', :r, 'x', '{}'::jsonb, :ik)"
+    # front desk may raise ONLY this kind of task, for a nurse or doctor, in its own clinic, BOUND to a revoke event it wrote (the key and source id are fixed by the event's id)
+    new_task = (
+        "insert into agents.review_tasks (clinic_id, origin, kind, priority, assigned_role, source_message_id, provenance, idempotency_key, status) "
+        "values (:c, 'test', :k, 'standard', :r, :src, '{}'::jsonb, :ik, :st)"
+    )
 
-    async def task_as(uid, *, clinic=a, kind="identity_confirmation_revoked", role="nurse"):
-        return await attempt(db, uid, new_task, c=clinic, k=kind, r=role, ik=f"t-{_u()}")
+    async def fresh_event(uid=p["fd_a"], clinic=a):
+        event = _u()
+        n = await attempt(
+            db, uid,
+            "insert into mpi.identity_confirmations (id, clinic_id, patient_id, confirmed_by, origin, idempotency_key, kind, reason) values (:i, :c, :p, :u, 'test', :k, 'revoke', 'wrong_person')",
+            i=event, c=clinic, p=target, u=uid, k=f"ev-{_u()}",
+        )
+        assert n == 1
+        return event
 
-    assert await task_as(p["fd_a"]) == 1 and await task_as(p["fd_a"], role="doctor") == 1  # positive controls
-    assert await task_as(p["fd_a"], role="front_desk") == "42501"  # not for itself
-    assert await task_as(p["fd_a"], kind="referral_hold") == "42501" and await task_as(p["fd_a"], kind="some_other_kind") == "42501"  # no other kind
-    assert await task_as(p["fd_a"], clinic=b) == "42501" and await task_as(p["fd_b"]) == "42501"  # not across clinics
-    assert await task_as(p["fd_b"], clinic=b) == 1  # its own clinic works (the same clause)
+    async def task_as(uid, event, *, clinic=a, kind="identity_confirmation_revoked", role="nurse", status="open", ik=None, src=None):
+        return await attempt(
+            db, uid, new_task, c=clinic, k=kind, r=role, st=status, ik=ik or f"identity-revoke-review:{event}", src=src or f"identity-revoke:{event}",
+        )
+
+    event = await fresh_event()
+    assert await task_as(p["fd_a"], event) == 1  # positive control: bound to its own revoke event
+    assert await task_as(p["fd_a"], await fresh_event(), role="doctor") == 1
+    assert await task_as(p["fd_a"], await fresh_event(), role="front_desk") == "42501"  # not for itself
+    for other_kind in ("referral_hold", "some_other_kind"):
+        assert await task_as(p["fd_a"], await fresh_event(), kind=other_kind) == "42501", other_kind  # no other kind
+    assert await task_as(p["fd_a"], await fresh_event(), ik="redflag:squatted-key") == "42501"  # an arbitrary or predictable key (key squatting)
+    assert await task_as(p["fd_a"], await fresh_event(), src="whatever") == "42501"
+    assert await task_as(p["fd_a"], await fresh_event(), status="resolved") == "42501"  # a new task is open
+    assert await task_as(p["fd_a"], uuid.uuid4()) == "42501"  # no such revoke event
+    assert await task_as(p["fd_a"], event, clinic=b) == "42501" and await task_as(p["fd_b"], event) == "42501"  # not across clinics
