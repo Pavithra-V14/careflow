@@ -107,6 +107,7 @@ ROUTES = {
     "approve_merge": "merge.approve",
     "unmerge": "merge.unmerge",
     "confirm_patient_identity": "patient.confirm_identity",
+    "revoke_patient_identity": "patient.revoke_identity",
 }
 
 

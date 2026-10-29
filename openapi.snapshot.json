@@ -592,6 +592,63 @@
         "title": "ReviewOut",
         "type": "object"
       },
+      "RevokeIdentityIn": {
+        "additionalProperties": false,
+        "description": "A closed reason word, nothing else (no free text).",
+        "properties": {
+          "reason": {
+            "enum": [
+              "wrong_person",
+              "planted_or_suspect",
+              "mistaken_click"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "RevokeIdentityIn",
+        "type": "object"
+      },
+      "RevokeIdentityOut": {
+        "additionalProperties": false,
+        "description": "Ids, a flag and a closed word. `review_task`: `raised` (a nurse or doctor will re-check what was linked), `not_configured` (the revoke is recorded but NO task was raised, because the\nclinician-owned task settings are unset) or `on_record` (nothing new was written by this call).",
+        "properties": {
+          "confirmed": {
+            "const": false,
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "review_task": {
+            "enum": [
+              "raised",
+              "not_configured",
+              "on_record"
+            ],
+            "title": "Review Task",
+            "type": "string"
+          }
+        },
+        "required": [
+          "patient_id",
+          "confirmed",
+          "replayed",
+          "review_task"
+        ],
+        "title": "RevokeIdentityOut",
+        "type": "object"
+      },
       "RoleGrant": {
         "properties": {
           "clinic_id": {
@@ -1512,6 +1569,79 @@
           }
         ],
         "summary": "Confirm Patient Identity",
+        "tags": [
+          "staff patients"
+        ]
+      }
+    },
+    "/v1/staff/patients/{patient_id}/revoke-identity": {
+      "post": {
+        "description": "A front-desk person revokes a mistaken identity confirmation (or demotes a front-desk-created record): afterwards a full match on the record is a review, never an automatic link.\nNothing already linked is undone; a nurse or doctor review task lists the patient and the window (when the clinician-owned task settings are configured; the response says if not).\nOne person, as themselves, no step-up (a revoke only moves a record towards 'a person decides'). 404 if the patient is not visible to you (or erased), 403 if you are not front desk\nof that clinic, 409 if the key was used for a different request, 422 for a bad id, key or reason.",
+        "operationId": "revoke_patient_identity_v1_staff_patients__patient_id__revoke_identity_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "patient_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Patient Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeIdentityIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokeIdentityOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Revoke Patient Identity",
         "tags": [
           "staff patients"
         ]

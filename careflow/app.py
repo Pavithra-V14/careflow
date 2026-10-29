@@ -782,6 +782,58 @@ async def confirm_patient_identity(
     return ConfirmIdentityOut(patient_id=result.patient_id, confirmed=True, replayed=result.replayed)
 
 
+class RevokeIdentityIn(BaseModel):
+    """A closed reason word, nothing else (no free text)."""
+
+    model_config = ConfigDict(extra="forbid")
+    reason: Literal["wrong_person", "planted_or_suspect", "mistaken_click"]
+
+
+class RevokeIdentityOut(_Out):
+    """Ids, a flag and a closed word. `review_task`: `raised` (a nurse or doctor will re-check what was linked), `not_configured` (the revoke is recorded but NO task was raised, because the
+    clinician-owned task settings are unset) or `on_record` (nothing new was written by this call)."""
+
+    patient_id: uuid.UUID
+    confirmed: Literal[False]
+    replayed: bool
+    review_task: Literal["raised", "not_configured", "on_record"]
+
+
+def revoke_task_settings() -> mpi.RevokeTaskSettings:
+    return mpi.RevokeTaskSettings()
+
+
+@staff_patients.post("/{patient_id}/revoke-identity", response_model=RevokeIdentityOut)
+async def revoke_patient_identity(
+    patient_id: uuid.UUID, body: RevokeIdentityIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims),
+    task: mpi.RevokeTaskSettings = Depends(revoke_task_settings),
+) -> RevokeIdentityOut:
+    """A front-desk person revokes a mistaken identity confirmation (or demotes a front-desk-created record): afterwards a full match on the record is a review, never an automatic link.
+    Nothing already linked is undone; a nurse or doctor review task lists the patient and the window (when the clinician-owned task settings are configured; the response says if not).
+    One person, as themselves, no step-up (a revoke only moves a record towards 'a person decides'). 404 if the patient is not visible to you (or erased), 403 if you are not front desk
+    of that clinic, 409 if the key was used for a different request, 422 for a bad id, key or reason."""
+    row = (await conn.execute(text("select clinic_id, origin from mpi.patients where id = :i and erased_at is null"), {"i": patient_id})).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    origin = await _front_desk_gate(conn, claims, row[0])
+    try:
+        result = await mpi.revoke_identity(
+            conn, clinic_id=row[0], origin=origin, patient_id=patient_id, revoked_by=uuid.UUID(claims["sub"]), reason=body.reason, idempotency_key=idempotency_key, task=task
+        )
+    except mpi.PatientNotFound:
+        raise HTTPException(status_code=404, detail="not found") from None
+    except mpi.NotPermitted:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    except mpi.IdempotencyConflict:
+        raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request") from None
+    await write_audit(
+        conn, clinic_id=row[0], origin=origin, actor_id=uuid.UUID(claims["sub"]), actor_role="front_desk", action="patient.revoke_identity", resource_type="patient",
+        resource_id=patient_id, details={"reason": body.reason, "replayed": result.replayed, "review_task": result.review_task},
+        idempotency_key=f"audit:revoke-identity:{patient_id}:{idempotency_key}",
+    )
+    return RevokeIdentityOut(patient_id=result.patient_id, confirmed=False, replayed=result.replayed, review_task=result.review_task)
+
+
 async def _validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     """FastAPI's default 422 body includes the offending INPUT. On a route that takes a name, a date of birth and a phone that would put them
     in an error response (and in anything that records responses), so every validation error is reduced to its type, location and

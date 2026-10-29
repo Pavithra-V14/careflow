@@ -931,6 +931,64 @@ def patient_confirm_cases(ids) -> list[tuple]:
     return cases
 
 
+# ---- POST /v1/staff/patients/{patient_id}/revoke-identity: front desk revokes a mistaken confirmation (migration 0025) ---------------------------------------
+#
+# Same refusals as confirm-identity (front desk of the clinic only: nurse, doctor and `multi` can see the patient and get 403; everyone else 404), one person, no step-up. The body is one
+# closed reason word. In the matrix the clinician-owned task settings are UNSET, so a real revoke answers `review_task: not_configured`; the `raised` path is tested below with the settings
+# overridden.
+
+REVOKE = "/v1/staff/patients/{patient_id}/revoke-identity"
+REASON = {"reason": "wrong_person"}
+
+
+async def _new_confirmed_patient(conn, clinic, front_desk):
+    """A synthetic worker-created patient that front desk has CONFIRMED (written by the owner), so there is something to revoke."""
+    pid = await _new_worker_patient(conn, clinic)
+    await conn.execute(
+        "insert into mpi.identity_confirmations (clinic_id, patient_id, confirmed_by, origin, idempotency_key) values ($1, $2, $3, 'test', $4)",
+        clinic, pid, front_desk, f"matrix-c-{uuid.uuid4().hex}",
+    )
+    return pid
+
+
+def new_confirmed_patient(ids, *, clinic=None):
+    return _run(_owner(lambda conn: _new_confirmed_patient(conn, clinic or ids.clinic_a, ids.people["front_desk_a"][0])))
+
+
+def _revoke_body(patient, replayed, review_task):
+    return lambda b: b == {"patient_id": str(patient), "confirmed": False, "replayed": replayed, "review_task": review_task}
+
+
+def patient_revoke_cases(ids) -> list[tuple]:
+    fd = "front_desk_a"
+    ok, other, refused = new_confirmed_patient(ids), new_confirmed_patient(ids), new_confirmed_patient(ids)
+    path = lambda pid: REVOKE.format(patient_id=pid)
+    key = _new_key()
+    cases = [
+        _case(ids, "front desk of the clinic revokes a confirmed patient", fd, 200, path(ok), json=REASON, key=key, body=_revoke_body(ok, False, "not_configured")),
+        _case(ids, "replaying the same key is a replay", fd, 200, path(ok), json=REASON, key=key, body=_revoke_body(ok, True, "on_record")),
+        _case(ids, "an already unverified patient under a new key is a replay in effect", fd, 200, path(ok), json=REASON, body=_revoke_body(ok, True, "on_record")),
+        _case(ids, "a key already used for a different patient is refused", fd, 409, path(other), json=REASON, key=key,
+              body=lambda b: b == {"detail": "this idempotency key was already used by a different request"}),
+        _case(ids, "an unknown patient is not found", fd, 404, path(uuid.uuid4()), json=REASON, body=_fixed(404)),
+        _case(ids, "missing X-Idempotency-Key is rejected", fd, 422, path(refused), json=REASON, key=None, body=_fixed(422)),
+        _case(ids, "blank X-Idempotency-Key is rejected", fd, 422, path(refused), json=REASON, key="   ", body=_fixed(422)),
+        _case(ids, "a patient id that is not a uuid is rejected", fd, 422, path("nope"), json=REASON, body=_fixed(422)),
+        _case(ids, "a reason outside the closed list is rejected", fd, 422, path(refused), json={"reason": "because I said so"}, body=_fixed(422)),
+        _case(ids, "a missing body is rejected", fd, 422, path(refused), json=None, body=_fixed(422)),
+        _case(ids, "an extra field is rejected", fd, 422, path(refused), json={**REASON, "note": "free text"}, body=_fixed(422)),
+    ]
+    visible_but_not_front_desk = {"nurse_a", "doctor_a", "multi"}
+    for person in [*ids.people, "no account"]:
+        if person == fd:
+            continue
+        status = 403 if person in visible_but_not_front_desk else 404
+        who = bearer(mint(ids.no_account)) if person == "no account" else person
+        cases.append(_case(ids, f"{person} is refused", who, status, path(refused), json=REASON, body=_fixed(status)))
+    cases += _unauthenticated(ids, path(refused), REASON)
+    return cases
+
+
 # One entry per route: add the new route's cases here in the same change that adds the route.
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
@@ -946,6 +1004,7 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", APPROVE): merge_approve_cases,
     ("POST", UNMERGE): merge_unmerge_cases,
     ("POST", CONFIRM): patient_confirm_cases,
+    ("POST", REVOKE): patient_revoke_cases,
     ("GET", READ): message_read_cases,
     ("POST", RUN_REFERRAL): referral_run_cases,
     ("POST", REVIEW_REFERRAL): referral_review_cases,
@@ -1571,6 +1630,47 @@ def test_a_failing_audit_insert_rolls_the_decision_back_and_the_replay_of_a_real
     monkeypatch.undo()
     ok = client.post(CONFIRM.format(patient_id=patient), headers={**bearer(mint(fd)), "X-Idempotency-Key": _new_key()})
     assert ok.status_code == 200 and ok.json()["replayed"] is False
+
+
+def test_a_revoke_writes_one_event_one_audit_row_and_with_the_task_settings_configured_one_nurse_task_with_ids_only(client, ids):
+    from careflow import app as app_module
+    from careflow.mpi import RevokeTaskSettings
+
+    patient = new_confirmed_patient(ids)
+    fd = ids.people["front_desk_a"][0]
+    # test inputs only: stand-ins for the clinician-owned task settings, not recommendations
+    client.app.dependency_overrides[app_module.revoke_task_settings] = lambda: RevokeTaskSettings(_env_file=None, priority="standard", assigned_role="nurse")
+    try:
+        key = _new_key()
+        ok = client.post(REVOKE.format(patient_id=patient), headers={**bearer(mint(fd)), "X-Idempotency-Key": key}, json=REASON)
+        assert ok.status_code == 200 and ok.json() == {"patient_id": str(patient), "confirmed": False, "replayed": False, "review_task": "raised"}
+        again = client.post(REVOKE.format(patient_id=patient), headers={**bearer(mint(fd)), "X-Idempotency-Key": key}, json=REASON)
+        assert again.json()["replayed"] is True and again.json()["review_task"] == "on_record"
+    finally:
+        client.app.dependency_overrides.pop(app_module.revoke_task_settings, None)
+    events = _run(_fetch("select kind, reason, confirmed_by from mpi.identity_confirmations where patient_id = $1 order by seq", patient))
+    assert [(e["kind"], e["reason"]) for e in events] == [("confirm", None), ("revoke", "wrong_person")] and events[1]["confirmed_by"] == fd
+    tasks = _run(_fetch("select kind, priority, assigned_role, provenance from agents.review_tasks where provenance ->> 'patient_id' = $1", str(patient)))
+    assert len(tasks) == 1 and (tasks[0]["kind"], tasks[0]["priority"], tasks[0]["assigned_role"]) == ("identity_confirmation_revoked", "standard", "nurse")
+    provenance = json.loads(tasks[0]["provenance"]) if isinstance(tasks[0]["provenance"], str) else tasks[0]["provenance"]
+    assert set(provenance) == {"patient_id", "revoke_event_id", "reason", "confirmed_at", "record_created_by"}
+    audit = "select actor_id, actor_role, details, clinic_id from audit.log where resource_type = 'patient' and resource_id = $1 and action = 'patient.revoke_identity'"
+    (row,) = _run(_fetch(audit, str(patient)))  # one row: the replay wrote none
+    details = json.loads(row["details"]) if isinstance(row["details"], str) else row["details"]
+    assert (row["actor_id"], row["actor_role"], row["clinic_id"]) == (fd, "front_desk", ids.clinic_a)
+    assert details == {"reason": "wrong_person", "replayed": False, "review_task": "raised"}
+
+
+def test_with_the_task_settings_unset_the_revoke_is_recorded_and_says_no_task_was_raised(client, ids):
+    patient = new_confirmed_patient(ids)
+    fd = ids.people["front_desk_a"][0]
+    done = client.post(REVOKE.format(patient_id=patient), headers={**bearer(mint(fd)), "X-Idempotency-Key": _new_key()}, json=REASON)
+    assert done.status_code == 200 and done.json()["review_task"] == "not_configured"
+    assert _run(_fetch("select count(*) as n from mpi.identity_confirmations where patient_id = $1 and kind = 'revoke'", patient))[0]["n"] == 1
+    assert _run(_fetch("select count(*) as n from agents.review_tasks where provenance ->> 'patient_id' = $1", str(patient)))[0]["n"] == 0
+    (row,) = _run(_fetch("select details from audit.log where resource_id = $1 and action = 'patient.revoke_identity'", str(patient)))
+    details = json.loads(row["details"]) if isinstance(row["details"], str) else row["details"]
+    assert details["review_task"] == "not_configured"  # the audit row says so too
 
 
 # ---- message reads: the committed half's behaviour -----------------------------------------------------------------------------------------
