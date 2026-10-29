@@ -29,6 +29,8 @@ ACTIONS: Final = frozenset(
         "merge.unmerge",
         "patient.confirm_identity",
         "patient.revoke_identity",
+        "review_task.acknowledge",
+        "review_task.resolve",
         "clinical.tool_call",  # a call on the clinical read-only MCP server (careflow/mcp_kit.py `audited`): tool name and outcome only
     }
 )

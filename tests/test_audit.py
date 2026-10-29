@@ -108,13 +108,25 @@ ROUTES = {
     "unmerge": "merge.unmerge",
     "confirm_patient_identity": "patient.confirm_identity",
     "revoke_patient_identity": "patient.revoke_identity",
+    "acknowledge_review_task": "review_task.acknowledge",
+    "resolve_review_task": "review_task.resolve",
 }
+
+
+SHARED_TRANSITION = {"acknowledge_review_task": "acknowledge", "resolve_review_task": "resolve"}
 
 
 @pytest.mark.parametrize(("function", "action"), sorted(ROUTES.items()))
 async def test_each_human_decision_route_writes_its_audit_row_in_the_same_transaction(function, action):
     source = inspect.getsource(getattr(app_module, function))
-    assert "await write_audit(" in source and f'action="{action}"' in source
+    if function in SHARED_TRANSITION:  # these two routes share one function that decides and then audits; the route must call it with its own verb
+        verb = SHARED_TRANSITION[function]
+        assert f'_transition("{verb}"' in source and action == f"review_task.{verb}"
+        source = inspect.getsource(app_module._transition)
+        assert 'action=f"review_task.{action}"' in source
+    else:
+        assert f'action="{action}"' in source
+    assert "await write_audit(" in source
     assert "idempotency_key=f\"audit:" in source  # keyed on the request's idempotency key, so a replay writes nothing more
     assert source.index("await write_audit(") > source.index("await ")  # after the decision itself, on the same connection `conn` (the request's transaction)
     assert re.search(r"write_audit\(\s*conn,", source)

@@ -50,6 +50,7 @@ For: Priya and the clinical lead. Plain language. **We have not filled in any an
 |---|---|---|---|---|
 | 23 | The list of reasons front desk can give when they take back a confirmation of who a patient is. Today: wrong person, planted or suspect record, mistaken click. | A short fixed list (no free text, which could hold patient details) shows why records get demoted. Operational words, not clinical content. | (the three words above; change, add or remove) | |
 | 24 | When a confirmation is taken back, a nurse or doctor is asked to re-check what was linked to that record in the meantime. Who gets that task, and how urgent is it? | Until this is answered NO task is raised: the take-back is recorded, the screen says no task was raised, and nobody re-checks. | role: nurse or doctor; urgency: immediate or standard | |
+| 25 | What does it take to CLOSE a red-flag review task: who may close it, what must be recorded (what was done, who was told), and does a second person confirm? | Until this is answered no route closes a red-flag task: a nurse can acknowledge it, nothing more. | (who, what is recorded, one or two people) | |
 
 ## What happens with your answers
 Each answer goes in as a setting or as clinician-authored data, with your name and the date, and is reviewed before it goes live. Where two people must approve (red-flag rules), both names are recorded. If any answer is "not yet", the software keeps sending that case to a person.

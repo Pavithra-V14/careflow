@@ -989,6 +989,161 @@ def patient_revoke_cases(ids) -> list[tuple]:
     return cases
 
 
+# ---- /v1/staff/review-tasks: list, open, acknowledge, resolve (careflow/review_tasks.py) --------------------------------------------------------------------
+#
+# Row-level security decides what a person sees and may change (0007, 0013, 0020). Task readers are front desk, nurse, doctor and admin of SOME clinic (everyone else, including a suspended
+# account, an auditor, the business owner, patients and an account-less token, is refused with 403 before any query). What a reader then sees: nurse and doctor every kind of their clinic,
+# front desk `unmerge_review` and its own `referral_hold`s, admin `unmerge_review` only; a reader of ANOTHER clinic sees none of this clinic's tasks (404 for one task). A task a role can see
+# but not change is a 403; a task another person holds, or one of a kind that closes elsewhere (`red_flag`), is a 409.
+
+TASKS = "/v1/staff/review-tasks"
+TASK = TASKS + "/{task_id}"
+TASK_ACK = TASK + "/acknowledge"
+TASK_RESOLVE = TASK + "/resolve"
+TASK_READER_KEYS = ("front_desk_a", "nurse_a", "doctor_a", "admin_a", "multi", "front_desk_b")
+
+
+async def _new_task(conn, clinic, kind, role, *, priority="standard", status="open", acknowledged_by=None):
+    tid = uuid.uuid4()
+    await conn.execute(
+        "insert into agents.review_tasks (id, clinic_id, origin, kind, priority, assigned_role, status, acknowledged_by, acknowledged_at, source_message_id, provenance, idempotency_key) "
+        "values ($1, $2, 'test', $3, $4, $5, $6, $7, case when $7::uuid is null then null else now() end, $8, '{}'::jsonb, $9)",
+        tid, clinic, kind, priority, role, status, acknowledged_by, f"matrix-task:{tid}", f"matrix-task-{tid}",
+    )
+    return tid
+
+
+def new_task(ids, kind, role="nurse", **kw):
+    return _run(_owner(lambda conn: _new_task(conn, ids.clinic_a, kind, role, **kw)))
+
+
+def _tasks_page(ids, must_have=(), must_lack=(), kinds=None):
+    """A list response that contains every id in `must_have`, none in `must_lack`, only kinds in `kinds` (if given), and only this clinic's rows."""
+    return _page(
+        ids, clinic_only=ids.clinic_a,
+        check=lambda items: {str(i) for i in must_have} <= {i["task_id"] for i in items} and not ({str(i) for i in must_lack} & {i["task_id"] for i in items})
+        and (kinds is None or {i["kind"] for i in items} <= set(kinds)),
+    )
+
+
+def review_task_list_cases(ids) -> list[tuple]:
+    hold, unmerge, red = new_task(ids, "referral_hold", "front_desk"), new_task(ids, "unmerge_review", "nurse", priority="immediate"), new_task(ids, "red_flag", "nurse", priority="immediate")
+    seen_by = {
+        "nurse_a": (hold, unmerge, red), "doctor_a": (hold, unmerge, red), "multi": (hold, unmerge, red),
+        "front_desk_a": (hold, unmerge), "admin_a": (unmerge,),
+    }
+    hidden_from = {"front_desk_a": (red,), "admin_a": (hold, red)}
+    cases = [
+        _case(ids, f"{who} lists exactly what row-level security shows it", who, 200, TASKS, key=None, body=_tasks_page(ids, must_have=seen, must_lack=hidden_from.get(who, ())))
+        for who, seen in seen_by.items()
+    ]
+    cases += [
+        _case(ids, "a reader of another clinic sees none of this clinic's tasks", "front_desk_b", 200, TASKS, key=None, body=_page(ids, check=lambda items: items == [])),
+        _case(ids, "an immediate task is listed before a standard one", "nurse_a", 200, TASKS, key=None,
+              body=_page(ids, check=lambda items: [i["priority"] for i in items] == sorted((i["priority"] for i in items), key=lambda p: p != "immediate"))),
+        _case(ids, "filter by kind", "nurse_a", 200, TASKS + "?kind=red_flag", key=None, body=_tasks_page(ids, must_have=(red,), must_lack=(hold, unmerge), kinds=("red_flag",))),
+        _case(ids, "filter by status", "nurse_a", 200, TASKS + "?status=resolved", key=None, body=_tasks_page(ids, must_lack=(hold, unmerge, red))),
+        _case(ids, "filter by assigned role", "nurse_a", 200, TASKS + "?assigned_role=front_desk", key=None, body=_tasks_page(ids, must_have=(hold,), must_lack=(unmerge, red))),
+        _case(ids, "limit=1 returns one row and says there are more", "nurse_a", 200, TASKS + "?limit=1", key=None,
+              body=lambda b: len(b["items"]) == 1 and b["limit"] == 1 and b["has_more"] is True),
+        _case(ids, "limit=0 is rejected", "nurse_a", 422, TASKS + "?limit=0", key=None),
+        _case(ids, "limit=501 is rejected", "nurse_a", 422, TASKS + "?limit=501", key=None),
+        _case(ids, "an unknown status is rejected", "nurse_a", 422, TASKS + "?status=bogus", key=None),
+        _case(ids, "a malformed kind is rejected", "nurse_a", 422, TASKS + "?kind=BAD%20KIND", key=None),
+        _case(ids, "an unknown assigned role is rejected", "nurse_a", 422, TASKS + "?assigned_role=owner", key=None),
+    ]
+    denied = [p for p in ids.people if p not in TASK_READER_KEYS]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, TASKS, key=None) for p in denied]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, TASKS, key=None))
+    return cases + _unauthenticated(ids, TASKS, None)
+
+
+def _task_detail(task, kind):
+    return lambda b: b["task_id"] == str(task) and b["kind"] == kind and set(b) >= {"provenance", "source_message_id"} and isinstance(b["provenance"], dict)
+
+
+def review_task_open_cases(ids) -> list[tuple]:
+    hold, unmerge, red = new_task(ids, "referral_hold", "front_desk"), new_task(ids, "unmerge_review", "nurse"), new_task(ids, "red_flag", "nurse", priority="immediate")
+    path = lambda t: TASK.format(task_id=t)
+    cases = [_case(ids, f"{who} opens the hold", who, 200, path(hold), key=None, body=_task_detail(hold, "referral_hold")) for who in ("front_desk_a", "nurse_a", "doctor_a", "multi")]
+    cases += [
+        _case(ids, "front desk opens the unmerge task", "front_desk_a", 200, path(unmerge), key=None, body=_task_detail(unmerge, "unmerge_review")),
+        _case(ids, "admin opens the unmerge task", "admin_a", 200, path(unmerge), key=None, body=_task_detail(unmerge, "unmerge_review")),
+        _case(ids, "nurse opens the red-flag task", "nurse_a", 200, path(red), key=None, body=_task_detail(red, "red_flag")),
+        _case(ids, "front desk cannot see the red-flag task: the same 404 as a missing one", "front_desk_a", 404, path(red), key=None, body=_fixed(404)),
+        _case(ids, "admin cannot see a hold", "admin_a", 404, path(hold), key=None, body=_fixed(404)),
+        _case(ids, "a reader of another clinic gets the same 404", "front_desk_b", 404, path(hold), key=None, body=_fixed(404)),
+        _case(ids, "an unknown task is not found", "nurse_a", 404, path(uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "a task id that is not a uuid is rejected", "nurse_a", 422, path("nope"), key=None, body=_fixed(422)),
+    ]
+    denied = [p for p in ids.people if p not in TASK_READER_KEYS]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path(hold), key=None, body=_fixed(403)) for p in denied]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, path(hold), key=None, body=_fixed(403)))
+    return cases + _unauthenticated(ids, path(hold), None)
+
+
+def _transition_body(task, status, replayed):
+    return lambda b: b == {"task_id": str(task), "status": status, "replayed": replayed}
+
+
+def _task_write_denials(ids, path, cases):
+    denied = [p for p in ids.people if p not in TASK_READER_KEYS]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path, body=_fixed(403)) for p in denied]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, path, body=_fixed(403)))
+    return cases
+
+
+def review_task_acknowledge_cases(ids) -> list[tuple]:
+    hold, held, unmerge, red = new_task(ids, "referral_hold", "front_desk"), new_task(ids, "referral_hold", "front_desk"), new_task(ids, "unmerge_review", "nurse"), new_task(ids, "red_flag", "nurse")
+    path = lambda t: TASK_ACK.format(task_id=t)
+    key = _new_key()
+    cases = [
+        _case(ids, "front desk acknowledges its own hold", "front_desk_a", 200, path(hold), key=key, body=_transition_body(hold, "acknowledged", False)),
+        _case(ids, "replaying the same key is a replay", "front_desk_a", 200, path(hold), key=key, body=_transition_body(hold, "acknowledged", True)),
+        _case(ids, "the same person again under a new key is a replay in effect", "front_desk_a", 200, path(hold), body=_transition_body(hold, "acknowledged", True)),
+        _case(ids, "a doctor cannot take what front desk holds", "doctor_a", 409, path(hold), body=lambda b: b == {"detail": "this task is already taken or closed"}),
+        _case(ids, "a nurse takes a hold assigned to front desk", "nurse_a", 200, path(held), body=_transition_body(held, "acknowledged", False)),
+        _case(ids, "a nurse takes the red-flag task", "nurse_a", 200, path(red), body=_transition_body(red, "acknowledged", False)),
+        _case(ids, "front desk cannot see the red-flag task", "front_desk_a", 404, path(red), body=_fixed(404)),
+        _case(ids, "front desk can see but not change an unmerge task", "front_desk_a", 403, path(unmerge), body=_fixed(403)),
+        _case(ids, "admin can see but not change an unmerge task", "admin_a", 403, path(unmerge), body=_fixed(403)),
+        _case(ids, "a reader of another clinic gets the same 404", "front_desk_b", 404, path(unmerge), body=_fixed(404)),
+        _case(ids, "an unknown task is not found", "nurse_a", 404, path(uuid.uuid4()), body=_fixed(404)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "nurse_a", 422, path(unmerge), key=None, body=_fixed(422)),
+        _case(ids, "blank X-Idempotency-Key is rejected", "nurse_a", 422, path(unmerge), key="   ", body=_fixed(422)),
+        _case(ids, "a task id that is not a uuid is rejected", "nurse_a", 422, path("nope"), body=_fixed(422)),
+    ]
+    cases = _task_write_denials(ids, path(unmerge), cases)
+    return cases + _unauthenticated(ids, path(unmerge), None)
+
+
+def review_task_resolve_cases(ids) -> list[tuple]:
+    hold, hold2, unmerge, red, shot = (new_task(ids, "referral_hold", "front_desk"), new_task(ids, "referral_hold", "front_desk"), new_task(ids, "unmerge_review", "nurse"),
+                                       new_task(ids, "red_flag", "nurse"), new_task(ids, "triage_proposal", "nurse"))
+    taken = new_task(ids, "referral_hold", "front_desk", status="acknowledged", acknowledged_by=ids.people["doctor_a"][0])
+    path = lambda t: TASK_RESOLVE.format(task_id=t)
+    key = _new_key()
+    cases = [
+        _case(ids, "front desk releases its own hold", "front_desk_a", 200, path(hold), key=key, body=_transition_body(hold, "resolved", False)),
+        _case(ids, "replaying the same key is a replay", "front_desk_a", 200, path(hold), key=key, body=_transition_body(hold, "resolved", True)),
+        _case(ids, "a resolved task under a new key is a replay in effect", "front_desk_a", 200, path(hold), body=_transition_body(hold, "resolved", True)),
+        _case(ids, "a nurse resolves a hold assigned to front desk", "nurse_a", 200, path(hold2), body=_transition_body(hold2, "resolved", False)),
+        _case(ids, "a task another person acknowledged is a conflict", "front_desk_a", 409, path(taken), body=lambda b: b == {"detail": "this task is already taken or closed"}),
+        _case(ids, "a red-flag task is not closed here", "nurse_a", 409, path(red), body=lambda b: b == {"detail": "this kind of task is closed through its own route"}),
+        _case(ids, "a triage proposal task is not closed here", "nurse_a", 409, path(shot), body=lambda b: b == {"detail": "this kind of task is closed through its own route"}),
+        _case(ids, "front desk can see but not change an unmerge task", "front_desk_a", 403, path(unmerge), body=_fixed(403)),
+        _case(ids, "admin can see but not change an unmerge task", "admin_a", 403, path(unmerge), body=_fixed(403)),
+        _case(ids, "a reader of another clinic gets the same 404", "front_desk_b", 404, path(unmerge), body=_fixed(404)),
+        _case(ids, "front desk cannot see the red-flag task", "front_desk_a", 404, path(red), body=_fixed(404)),
+        _case(ids, "an unknown task is not found", "nurse_a", 404, path(uuid.uuid4()), body=_fixed(404)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "nurse_a", 422, path(unmerge), key=None, body=_fixed(422)),
+        _case(ids, "blank X-Idempotency-Key is rejected", "nurse_a", 422, path(unmerge), key="   ", body=_fixed(422)),
+        _case(ids, "a task id that is not a uuid is rejected", "nurse_a", 422, path("nope"), body=_fixed(422)),
+    ]
+    cases = _task_write_denials(ids, path(unmerge), cases)
+    return cases + _unauthenticated(ids, path(unmerge), None)
+
+
 # One entry per route: add the new route's cases here in the same change that adds the route.
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
@@ -1005,6 +1160,10 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", UNMERGE): merge_unmerge_cases,
     ("POST", CONFIRM): patient_confirm_cases,
     ("POST", REVOKE): patient_revoke_cases,
+    ("GET", TASKS): review_task_list_cases,
+    ("GET", TASK): review_task_open_cases,
+    ("POST", TASK_ACK): review_task_acknowledge_cases,
+    ("POST", TASK_RESOLVE): review_task_resolve_cases,
     ("GET", READ): message_read_cases,
     ("POST", RUN_REFERRAL): referral_run_cases,
     ("POST", REVIEW_REFERRAL): referral_review_cases,
@@ -1671,6 +1830,29 @@ def test_with_the_task_settings_unset_the_revoke_is_recorded_and_says_no_task_wa
     (row,) = _run(_fetch("select details from audit.log where resource_id = $1 and action = 'patient.revoke_identity'", str(patient)))
     details = json.loads(row["details"]) if isinstance(row["details"], str) else row["details"]
     assert details["review_task"] == "not_configured"  # the audit row says so too
+
+
+def test_acknowledging_and_releasing_a_hold_write_one_audit_row_each_as_the_person_with_ids_only_and_a_replay_writes_none(client, ids):
+    task = new_task(ids, "referral_hold", "front_desk")
+    fd = ids.people["front_desk_a"][0]
+    key = _new_key()
+    audit = "select actor_id, actor_role, action, details, clinic_id from audit.log where resource_type = 'review-task' and resource_id = $1 order by id"
+    for path, wanted in ((TASK_ACK, "acknowledged"), (TASK_RESOLVE, "resolved")):
+        done = client.post(path.format(task_id=task), headers={**bearer(mint(fd)), "X-Idempotency-Key": key})
+        assert done.status_code == 200 and done.json()["status"] == wanted and done.json()["replayed"] is False
+    again = client.post(TASK_RESOLVE.format(task_id=task), headers={**bearer(mint(fd)), "X-Idempotency-Key": key})
+    assert again.json()["replayed"] is True
+    rows = _run(_fetch(audit, str(task)))
+    assert [r["action"] for r in rows] == ["review_task.acknowledge", "review_task.resolve"]  # the replay wrote nothing more
+    for r in rows:
+        assert (r["actor_id"], r["actor_role"], r["clinic_id"]) == (fd, "front_desk", ids.clinic_a)
+    details = json.loads(rows[1]["details"]) if isinstance(rows[1]["details"], str) else rows[1]["details"]
+    assert details == {"kind": "referral_hold", "replayed": False}
+    state = _run(_fetch("select status, acknowledged_by, resolved_at is not null as closed from agents.review_tasks where id = $1", task))[0]
+    assert (state["status"], state["acknowledged_by"], state["closed"]) == ("resolved", fd, True)
+    refused = new_task(ids, "unmerge_review", "nurse")
+    assert client.post(TASK_RESOLVE.format(task_id=refused), headers={**bearer(mint(fd)), "X-Idempotency-Key": _new_key()}).status_code == 403
+    assert _run(_fetch(audit, str(refused))) == []  # a refusal writes no audit row
 
 
 # ---- message reads: the committed half's behaviour -----------------------------------------------------------------------------------------
