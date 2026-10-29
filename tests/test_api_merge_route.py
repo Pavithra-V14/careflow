@@ -80,6 +80,13 @@ def stepped_claims(**over):
 def _fakes(monkeypatch):
     monkeypatch.delenv("CAREFLOW_STEP_UP_MAX_AGE_SECONDS", raising=False)  # Settings() reads the environment (and .env)
     monkeypatch.setattr("careflow.app.identity.IdentityManager", FakeManager)
+    FakeManager.audits = []
+
+    async def write_audit(conn, **kw):
+        FakeManager.audits.append(kw)
+        return True
+
+    monkeypatch.setattr("careflow.app.write_audit", write_audit)
     FakeManager.calls, FakeManager.error = [], None
     FakeManager.result = identity.MergeResult(MERGE, "awaiting_second_approval", MASTER, SUB)
 
@@ -176,6 +183,9 @@ def test_propose_returns_ids_and_a_status_only_and_reads_origin_from_the_clinic(
     }
     ((name, args),) = FakeManager.calls
     assert name == "propose" and args[2] == "canary" and args[5] == USER and args[6] == "k-1"
+    (audit,) = FakeManager.audits
+    assert (audit["actor_id"], audit["action"], audit["origin"], audit["resource_id"]) == (USER, "merge.propose", "canary", MERGE)
+    assert audit["idempotency_key"] == f"audit:merge-propose:{MERGE}:k-1" and set(audit["details"]) == {"master_patient_id", "subordinate_patient_id", "replayed"}
 
 
 def test_a_client_supplied_origin_is_an_unknown_field():

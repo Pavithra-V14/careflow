@@ -4,6 +4,9 @@ Status: **design, nothing built.** Updated 2026-10-27 with the owner's decisions
 
 Nothing below may invent a clinical value or message wording. Every such value is a **required, undefaulted argument** marked `# CLINICAL-PLACEHOLDER: needs clinician sign-off`, and all of them are listed once in `docs/design/clinician-decisions.md` (items 16-22) for Priya.
 
+## 0. Build status (2026-10-29)
+**Slice 1, mechanism only, built:** `careflow/mcp_kit.py` (session contextvar, async-only registration, the Envelope, the log filter, the audit wrapper, an in-process `invoke`), `careflow/scheduling_agent.py` (the five clinician-owned values as REQUIRED settings with no default; the read-only `scheduling` server: `find_slots`, `rank_waitlist`, `propose_offer`), `tests/test_scheduling_agent.py`. `mcp==2.3.0` is pinned in the lockfile. **Not built yet:** `send_offer` (hold + `appointments` message in one transaction; needs the approved template), reply interpretation (fake `decision` adapter only; the real engine stays blocked on the durable spend ledger), the front-desk screens and routes (each with its role-matrix case), the Phase-3 gate test (a higher-priority patient who joined later is offered a freed slot first, against the restricted role), the `appointments`-topic message path. Nothing real can run: every clinician value is unset, so `propose_offer` answers `unavailable`.
+
 ## 1. Owner decisions that shape this design (2026-10-27)
 
 | Decision | Consequence here |

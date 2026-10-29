@@ -1410,6 +1410,14 @@ def test_the_two_person_rule_end_to_end(client, ids):
     assert (second.status_code, second.json()["status"]) == (200, "active")
     (row,) = _run(_fetch("select status, approved_by, second_approved_by from mpi.merges where id = $1", uuid.UUID(merge_id)))
     assert row["status"] == "active" and row["approved_by"] == ids.people["front_desk_a"][0] and row["second_approved_by"] == ids.fd2
+    # each human step wrote exactly one audit row, as the person who took it, with ids only; the two refusals above wrote none
+    audit = _run(_fetch("select action, actor_id, actor_role, resource_id, details from audit.log where resource_type = 'merge' and resource_id = $1 order by action", merge_id))
+    assert [(r["action"], r["actor_id"], r["actor_role"]) for r in audit] == [
+        ("merge.approve", ids.fd2, "front_desk"), ("merge.propose", ids.people["front_desk_a"][0], "front_desk"),
+    ]
+    for r in audit:
+        details = json.loads(r["details"]) if isinstance(r["details"], str) else r["details"]
+        assert set(details) <= {"master_patient_id", "subordinate_patient_id", "replayed"} and all(isinstance(v, (str, bool)) for v in details.values())
 
 
 def test_unmerge_raises_one_nurse_task_for_an_active_link_and_none_for_a_cancelled_proposal(client, ids):
