@@ -5,8 +5,10 @@ import inspect
 import re
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from sqlalchemy.exc import DBAPIError
 
 from careflow import app as app_module
 from careflow.audit import ACTIONS, AuditDetailRefused, AuditError, write_audit
@@ -20,12 +22,29 @@ class Result:
         self.rowcount = rowcount
 
 
+class Savepoint:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False  # never swallows: the code under test decides what a duplicate means
+
+
+def duplicate_key_error(sqlstate="23505"):
+    return DBAPIError("insert", {}, SimpleNamespace(sqlstate=sqlstate))
+
+
 class Conn:
-    def __init__(self, rowcount=1):
-        self.calls, self.rowcount = [], rowcount
+    def __init__(self, rowcount=1, raises=None):
+        self.calls, self.rowcount, self.raises = [], rowcount, raises
+
+    def begin_nested(self):
+        return Savepoint()
 
     async def execute(self, statement, params=None):
         self.calls.append((str(statement), params or {}))
+        if self.raises is not None:
+            raise self.raises
         return Result(self.rowcount)
 
 
@@ -39,12 +58,18 @@ async def test_one_row_is_written_idempotently_as_the_actor_with_ids_and_closed_
     conn = Conn()
     assert await write_audit(conn, details={"master_patient_id": uuid.uuid4(), "decision": "approve", "replayed": False, "n": 2}, **KW) is True  # type: ignore[arg-type]
     ((sql, p),) = conn.calls
-    assert "insert into audit.log" in sql and "on conflict (idempotency_key) do nothing" in sql and "returning" not in sql  # RETURNING would need SELECT, which only auditors hold
+    assert "insert into audit.log" in sql and "on conflict" not in sql.lower() and "returning" not in sql  # both would need the SELECT policy, which only auditors pass
     assert p["a"] == ACTOR and p["c"] == CLINIC and p["k"] == "audit:k-1" and p["ri"] == str(RES) and p["r"] == "front_desk"
 
 
 async def test_a_replay_writes_no_second_row():
-    assert await write_audit(Conn(rowcount=0), details={}, **KW) is False  # type: ignore[arg-type]
+    assert await write_audit(Conn(raises=duplicate_key_error()), details={}, **KW) is False  # type: ignore[arg-type]
+
+
+async def test_only_a_duplicate_key_is_a_replay_any_other_database_error_propagates():
+    for state in ("42501", "23514", "40001", None):
+        with pytest.raises(DBAPIError):
+            await write_audit(Conn(raises=duplicate_key_error(state)), details={}, **KW)  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("bad", ["Asha Rao", "5 March 1980", "98765 43210", "a free sentence", "x" * 65, "UPPER", "", None, 1.5, ["a"], {"a": 1}])

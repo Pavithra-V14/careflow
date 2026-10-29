@@ -1554,6 +1554,25 @@ def test_the_step_up_check_is_off_the_database_path_when_the_window_is_unset(ids
     assert (r.status_code, r.json()) == (503, {"detail": "step-up re-authentication is not configured"})
 
 
+def test_a_failing_audit_insert_rolls_the_decision_back_and_the_replay_of_a_real_key_still_succeeds(client, ids, monkeypatch):
+    """Fail closed: an audit write that fails for any reason except a duplicate key makes the request fail and the decision (the confirmation row) does not commit."""
+    from careflow import app as app_module
+
+    patient = new_worker_patient(ids)
+    fd = ids.people["front_desk_a"][0]
+
+    async def broken(*args, **kwargs):
+        raise RuntimeError("audit unavailable")
+
+    monkeypatch.setattr(app_module, "write_audit", broken)
+    failed = client.post(CONFIRM.format(patient_id=patient), headers={**bearer(mint(fd)), "X-Idempotency-Key": _new_key()})
+    assert failed.status_code == 500
+    assert _run(_fetch("select count(*) as n from mpi.identity_confirmations where patient_id = $1", patient))[0]["n"] == 0  # nothing committed
+    monkeypatch.undo()
+    ok = client.post(CONFIRM.format(patient_id=patient), headers={**bearer(mint(fd)), "X-Idempotency-Key": _new_key()})
+    assert ok.status_code == 200 and ok.json()["replayed"] is False
+
+
 # ---- message reads: the committed half's behaviour -----------------------------------------------------------------------------------------
 
 
