@@ -775,6 +775,10 @@ async def confirm_patient_identity(
         raise HTTPException(status_code=403, detail="your role may not do this") from None
     except mpi.IdempotencyConflict:
         raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request") from None
+    await write_audit(
+        conn, clinic_id=row[0], origin=origin, actor_id=uuid.UUID(claims["sub"]), actor_role="front_desk", action="patient.confirm_identity", resource_type="patient",
+        resource_id=patient_id, details={"replayed": result.replayed}, idempotency_key=f"audit:confirm-identity:{patient_id}:{idempotency_key}",
+    )
     return ConfirmIdentityOut(patient_id=result.patient_id, confirmed=True, replayed=result.replayed)
 
 

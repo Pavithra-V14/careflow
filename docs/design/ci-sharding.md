@@ -208,3 +208,7 @@ union all select 'review_tasks', count(*) from agents.review_tasks where origin 
 ## Rebalance of 2026-10-29 (standing rule applied), from PR #6's run (40857011070)
 
 Shard 1 took 50:11 (the role matrix alone 1428 s, test_rls_screenings_live 604 s); shard 2 39:07; shard 3 27:23. Shard 1 passed 50 minutes, so by the standing rule (a shard job over 50 minutes is rebalanced in the next change) `test_rls_screenings_live.py` moves from shard 1 to shard 3. Estimates after the move: shard 1 about 40, shard 2 about 39, shard 3 about 37 minutes. The `test_ci_shards` gate accepts the pairs. Note the spread: the same shard varied by 10 minutes between runs of the same code (30:54 to 50:11), so the headroom rule is applied to the worst run seen, not the average.
+
+## Rebalance of 2026-10-29 (second), from PR #7's last run (40886609546)
+
+Shard 3 took 49:21 (job time; 49:10 pytest) after `test_rls_screenings_live` moved in; shard 1 26:15; shard 2 42:00. Shard 3 was a minute under the 50-minute line, so the rule did not fire, but it had under 11 minutes of headroom and shard 1 had 34. `test_rotation_live.py` (about 4 to 5 minutes) moves from shard 3 to shard 1. The rotation tests count every key-version-1 message and refuse to run beside a committed one (their loud precondition), so they share a shard with suites that commit no messages. Estimates: shard 1 about 32, shard 2 about 42, shard 3 about 44 minutes.

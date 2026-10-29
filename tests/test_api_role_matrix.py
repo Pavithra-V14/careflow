@@ -1565,3 +1565,21 @@ def test_refused_message_reads_write_no_audit_row(client, ids):
         assert "cache-control" not in r.headers
     rows = _run(_fetch("select count(*) as n from audit.log where action = 'message.read' and actor_id = any($1)", actors))
     assert rows[0]["n"] == 0
+
+
+def test_a_confirmation_writes_exactly_one_audit_row_as_the_confirmer_with_ids_only_and_a_replay_or_refusal_writes_none(client, ids):
+    patient = new_worker_patient(ids)
+    fd = ids.people["front_desk_a"][0]
+    key = _new_key()
+    audit = "select actor_id, actor_role, action, details, clinic_id from audit.log where resource_type = 'patient' and resource_id = $1 and action = 'patient.confirm_identity'"
+    refused = client.post(CONFIRM.format(patient_id=patient), headers={**bearer(mint(ids.people["nurse_a"][0])), "X-Idempotency-Key": _new_key()})
+    assert refused.status_code == 403 and _run(_fetch(audit, str(patient))) == []
+    ok = client.post(CONFIRM.format(patient_id=patient), headers={**bearer(mint(fd)), "X-Idempotency-Key": key})
+    assert ok.status_code == 200 and ok.json()["replayed"] is False
+    (row,) = _run(_fetch(audit, str(patient)))
+    assert (row["actor_id"], row["actor_role"], row["clinic_id"]) == (fd, "front_desk", ids.clinic_a)
+    details = json.loads(row["details"]) if isinstance(row["details"], str) else row["details"]
+    assert details == {"replayed": False}
+    again = client.post(CONFIRM.format(patient_id=patient), headers={**bearer(mint(fd)), "X-Idempotency-Key": key})
+    assert again.status_code == 200 and again.json()["replayed"] is True
+    assert len(_run(_fetch(audit, str(patient)))) == 1  # the same key writes no second row
