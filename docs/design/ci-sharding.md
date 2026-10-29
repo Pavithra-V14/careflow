@@ -188,3 +188,19 @@ union all select 'queue', count(*) from ops.queue where origin = 'test'
 union all select 'review_tasks', count(*) from agents.review_tasks where origin = 'test';
 ```
 **How to clean it safely.** Do NOT delete rows by hand: most of these tables are append-only on purpose (triggers refuse `DELETE`, `UPDATE` and `TRUNCATE` even for the owner), so cleaning them means disabling those triggers, which is exactly what the guards exist to prevent. Order of preference: (1) do nothing; the scoped tests ignore other clinics' rows. (2) If the first query above returns rows (the rotation tests' only global dependency), the CI project needs those messages gone or rotated: ask before touching anything. (3) Last resort: recreate the CI Supabase project (it is separate from dev) and let the migrate job rebuild the schema from the migrations, then re-enter its connection secrets. No automatic delete is added to CI, by decision.
+
+## Rebalance of 2026-10-29 (owner decision), from PR #5's first run (40719139488)
+
+**Measured (job time / pytest time):** shard 1 30:54 / 30:40, shard 2 35:25 / 35:12, **shard 3 55:16 / 55:05** against the 60-minute `timeout-minutes`: under 5 minutes of headroom, so the shard had to be rebalanced. Shard 3 was slower than in the previous green run (46:55), partly from the new referral tests.
+
+**Per-file seconds in shard 3:** test_api_referrals_live 1297 (27 tests), test_rls_screenings_live 614, test_scheduling_concurrency_live 608 (the 200-booking test alone 430), test_rotation_live 332, test_scheduling_live 327, test_rls_mpi_scheduling_live 70, test_dead_letters_live 55.
+
+**Moves:** `test_rls_screenings_live.py` (614 s) shard 3 -> shard 1; `test_scheduling_live.py` (327 s) shard 3 -> shard 2. The `test_ci_shards` gate accepted both pairs; every live file is still in exactly one shard.
+
+| Shard | Before | After (estimate) |
+|---|---|---|
+| 1 | 30:54 | about 41 min |
+| 2 | 35:25 | about 41 min |
+| 3 | 55:16 | about 40 min |
+
+**The headroom rule (standing):** every live shard job must finish with at least 10 minutes of headroom against its 60-minute timeout. If any shard job takes more than 50 minutes in a green-or-red run, rebalance in the next change, before adding more live tests to that shard. Re-measure from the `SHARD-TIME` lines after the first run on the new split.
