@@ -183,3 +183,10 @@ the **thread** row, not the message row, so key rotation can never stall an esca
 - STAYS on the future-route list: force `registered_by` to the caller's `auth.uid()`.
 - Appendix B now lists the signed-upload overwrite/validity spike (appended, no existing text changed).
 - Retrieval scope keys: wait for the card schema.
+
+## Hosted model providers: DRAFT wording only (2026-10-29; owner has not yet answered; nothing real is built, nothing in BUILD-SPEC.md or CLAUDE.md is edited)
+Proposed reading of spec 16.5 ("models that touch patient data run locally"), for the owner to accept or change:
+- A hosted model row (any model served by a third party: a hosted vision model, a decision model reached through a router, a hosted translation service) can NEVER be `data_policy: phi_approved` without a new, written owner decision that names the provider and the data it may see.
+- Every hosted row in the model registry must therefore be `data_policy: synthetic_only`, and the gateway refuses it outside profile `demo`.
+- A free-tier hosted row is `synthetic_only` by definition (free tiers may retain or train on inputs).
+- Until the owner approves a provider for synthetic demo use, the registry keeps fakes only and no adapter is built. If approved: adapters sit behind the gateway, each row has an explicit timeout through `vlm_row`, its own data-flow-register entry and test, keys are read only from the env names in `.env.example`, and each role has a spend ceiling.
