@@ -94,7 +94,7 @@ async def test_each_human_decision_route_writes_its_audit_row_in_the_same_transa
 
 
 async def test_every_action_has_a_route_or_is_listed_as_pending():
-    pending = {"patient.confirm_identity"}  # the route lives on the Option A branch; its audit call is added when that merges
+    pending = {"patient.confirm_identity", "clinical.tool_call"}  # confirm_identity: its route lives on the Option A branch; clinical.tool_call: written by careflow/mcp_kit.py `audited` (no clinical server is mounted yet)
     assert set(ROUTES.values()) | pending == set(ACTIONS)
 
 
