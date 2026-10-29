@@ -1,4 +1,10 @@
-**Design only (owner request 2026-10-28). No code, no migration. Goes to the deferred list.**
+**BUILT 2026-10-29 (branch identity-revoke; owner instruction to build per this note, no step-up, front desk as one person).** Migration `0025_identity_confirmation_revoke.sql`, route `POST /v1/staff/patients/{id}/revoke-identity`, `mpi.revoke_identity`, the matcher reads the latest event. Differences from the design below:
+- One table, not a sibling: `kind` and `reason` are added to `mpi.identity_confirmations`; `confirmed_by` is the actor of either kind. Events of one patient are ordered by an identity column `seq` and serialised by an advisory lock.
+- The task counts nothing: front desk cannot read `agents.triage_proposals`, so a count computed in its session would be a wrong zero. The task carries the patient, the revoke event, the reason and the time of the last confirmation; the nurse looks up the proposals.
+- The task's priority and role are required settings with no default (`CAREFLOW_REVOKE_TASK_PRIORITY`, `CAREFLOW_REVOKE_TASK_ROLE`; clinician sheet item 24). Unset: the revoke is still recorded and the response and audit row say `review_task: not_configured`.
+- One policy change: `agents.review_tasks_insert` gains one front-desk clause for kind `identity_confirmation_revoked` assigned to nurse or doctor (front desk still cannot read it).
+
+**Original design note (2026-10-28) follows.**
 
 # Revoking a mistaken identity confirmation
 
