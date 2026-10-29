@@ -175,4 +175,4 @@ async def test_a_decision_naming_somebody_else_and_a_non_clinical_role_are_refus
             async with db.begin_nested():
                 await as_user(db, w.people[who])
                 await SqlReviewRecorder().record(db, proposal_id=proposal.proposal_id, clinic_id=w.a, decision="approve", reviewer_id=w.people[claimed], idempotency_key=f"k-{who}")
-    assert (await one(db, "select count(*) as n from agents.review_decisions")).n == 0
+    assert (await one(db, "select count(*) as n from agents.review_decisions where clinic_id = :c", c=w.a)).n == 0

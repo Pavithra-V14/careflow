@@ -189,7 +189,7 @@ async def test_proposal_constraints_one_per_document_key_per_clinic_abstained_me
     #    (invalid_parameter_value, "cannot get array length of a non-array") before the type CHECK can report an ordinary 23514. Postgres does not define the order in which CHECK
     #    constraints are evaluated; this one is the observed order. The row is refused either way and the next assertion proves none exists.
     assert await outcome(db, proposal_sql(w2, candidates="'{}'", doc=w2.doc_a2, task=w2.task_a)) == "22023"
-    assert await db.fetchval("select count(*) from agents.triage_proposals where candidates = '{}'::jsonb") == 0
+    assert await db.fetchval("select count(*) from agents.triage_proposals where candidates = '{}'::jsonb and clinic_id = $1", w2.a) == 0
     #  * an ARRAY OF THE WRONG LENGTH (21 entries, abstained false): an ordinary CHECK failure, 23514, because no function raises: the length bound is simply false.
     too_many = "'[" + ", ".join(f'{{"card_id": "c{n}", "version": 1}}' for n in range(21)) + "]'"
     assert await outcome(db, proposal_sql(w2, abstained="false", candidates=too_many, doc=w2.doc_a3)) == "23514"

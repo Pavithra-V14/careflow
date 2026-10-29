@@ -162,3 +162,45 @@ holds (every live file in exactly one shard, and no whole-table count of a table
 **Measured after the rebalance (run 40529226066, all green, total about 47 min):** shard 1 24:54, shard 2 42:21, shard 3 46:44 (pytest time). Shard 3 and shard 2 are now over the 40-minute line the previous paragraph set; the next rebalance should start from the `SHARD-TIME` lines of that run.
 
 **One-off timing failure, recorded:** `test_concurrent_reads_from_different_identities_neither_mix_rows_nor_leak_connections` failed once with `QueuePool limit of size 5 overflow 5 reached ... timeout 30.00` (run 40521334349, shard 1: 40 concurrent reads queued behind a slow pooler) and passed unchanged in run 40529226066. No change was made to the test or to the app pool settings; if it recurs, check what the 40 requests wait on before changing anything.
+
+**Timeout headroom (checked 2026-10-27):** every live shard has `timeout-minutes: 60`. In run 40529226066 the shard JOBS took 25:07, 42:32 and 46:55, so the slowest has about 13 minutes of headroom (more than the 10-minute line the owner set). No rebalance was made; the next one is due when a shard's headroom falls under 10 minutes (job over 50 minutes) or after the next set of `SHARD-TIME` lines.
+
+## Leftover rows from killed runs (2026-10-28)
+
+**What happened.** Run 40693737334 failed in shards 1 and 2 on tests that read a whole shared table (`agents.review_tasks`, `ops.queue`, `ops.outbox`) and expected exactly the rows they had just made. The most likely cause (not proven: nobody has inspected the CI database) is that the `main` run for the PR #3 merge was cancelled mid-test; a cancelled job skips its teardown and leaves committed rows behind. The workflow now never cancels a run triggered by a push to main (only pull-request runs are superseded).
+
+**After the sweep, which tests can still be polluted?** Every live test now reads its own clinic's rows (random clinic ids). What is still global BY DESIGN:
+- `tests/test_rotation_live.py` rotates and counts EVERY non-erased message at key version 1 across all clinics (`message_version_usage(db)` and `rotate_message_bodies(db, ...)` without `clinic_id`), and sums the global rotation ledger `where from_version = 1 and to_version = 2`. A committed message still on key version 1 in any clinic would break it. No live test commits messages today, so this needs an outside leftover to bite.
+- The red-flag-rule precondition in `test_rules_live`, `test_api_screen_message_live`, `test_api_referrals_live` and `test_rls_screenings_live`: `kb` is not clinic-scoped, and the tests REFUSE TO RUN (a loud precondition, not a wrong pass) if a committed approved `origin = 'test'` rule with criteria exists.
+- Committed fixtures of `tests/test_api_role_matrix.py` (clinics, accounts, patients, all `origin = 'test'` with random ids): tagged and harmless to the scoped tests; they accumulate if a run is killed before its teardown.
+Not affected: advisory locks and open transactions die with the killed runner's connections.
+
+**How to look, by hand, read-only** (a migrator connection to the CI project, never the dev project):
+```sql
+-- the one global dependency of the rotation tests: messages still on key version 1
+select clinic_id, origin, count(*) from msg.messages where erased_at is null and body_key_version = 1 group by 1, 2;
+-- approved test-origin rules with criteria (the loud precondition)
+select count(*) from kb.red_flag_rules where origin = 'test' and status = 'approved' and (cardinality(phrases) > 0 or cardinality(patterns) > 0);
+-- how much committed test data is lying around
+select 'clinics' as t, count(*) from iam.clinics where origin = 'test'
+union all select 'accounts', count(*) from iam.accounts where origin = 'test'
+union all select 'queue', count(*) from ops.queue where origin = 'test'
+union all select 'review_tasks', count(*) from agents.review_tasks where origin = 'test';
+```
+**How to clean it safely.** Do NOT delete rows by hand: most of these tables are append-only on purpose (triggers refuse `DELETE`, `UPDATE` and `TRUNCATE` even for the owner), so cleaning them means disabling those triggers, which is exactly what the guards exist to prevent. Order of preference: (1) do nothing; the scoped tests ignore other clinics' rows. (2) If the first query above returns rows (the rotation tests' only global dependency), the CI project needs those messages gone or rotated: ask before touching anything. (3) Last resort: recreate the CI Supabase project (it is separate from dev) and let the migrate job rebuild the schema from the migrations, then re-enter its connection secrets. No automatic delete is added to CI, by decision.
+
+## Rebalance of 2026-10-29 (owner decision), from PR #5's first run (40719139488)
+
+**Measured (job time / pytest time):** shard 1 30:54 / 30:40, shard 2 35:25 / 35:12, **shard 3 55:16 / 55:05** against the 60-minute `timeout-minutes`: under 5 minutes of headroom, so the shard had to be rebalanced. Shard 3 was slower than in the previous green run (46:55), partly from the new referral tests.
+
+**Per-file seconds in shard 3:** test_api_referrals_live 1297 (27 tests), test_rls_screenings_live 614, test_scheduling_concurrency_live 608 (the 200-booking test alone 430), test_rotation_live 332, test_scheduling_live 327, test_rls_mpi_scheduling_live 70, test_dead_letters_live 55.
+
+**Moves:** `test_rls_screenings_live.py` (614 s) shard 3 -> shard 1; `test_scheduling_live.py` (327 s) shard 3 -> shard 2. The `test_ci_shards` gate accepted both pairs; every live file is still in exactly one shard.
+
+| Shard | Before | After (estimate) |
+|---|---|---|
+| 1 | 30:54 | about 41 min |
+| 2 | 35:25 | about 41 min |
+| 3 | 55:16 | about 40 min |
+
+**The headroom rule (standing):** every live shard job must finish with at least 10 minutes of headroom against its 60-minute timeout. If any shard job takes more than 50 minutes in a green-or-red run, rebalance in the next change, before adding more live tests to that shard. Re-measure from the `SHARD-TIME` lines after the first run on the new split.

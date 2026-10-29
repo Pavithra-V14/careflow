@@ -17,6 +17,7 @@ from careflow.referral import (
     screen_referral,
 )
 from careflow.rules import EscalationResult, Evaluation
+from tests.needles import assert_not_leaked
 
 pytestmark = pytest.mark.asyncio
 CLINIC, DOC, PATIENT, TASK = uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
@@ -246,8 +247,7 @@ async def test_no_letter_text_or_extracted_value_reaches_a_repr_or_a_result():
     parts = build()
     result = await run(parts)
     for obj in (result, GOOD, parts[3].clearances[0]):
-        text = repr(obj)
-        assert "SENTINEL" not in text and "Asha" not in text and "1980" not in text and "98765" not in text
+        assert_not_leaked(repr(obj), label="a repr")
 
 
 async def test_structurally_the_rules_step_precedes_the_only_model_call_in_the_source():

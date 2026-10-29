@@ -30,7 +30,9 @@ on:
 # origin='test' rows behind in the CI project (they are tagged and harmless, and never deleted automatically).
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Pull-request runs are superseded by a newer push to the same PR. A run triggered by a push to main is NEVER cancelled: cancelling one mid-test skips the live tests' teardown
+  # and leaves committed rows in the shared CI database (how PR #3's main run was killed, and why its successors failed on tables they assumed were empty).
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -153,7 +155,7 @@ jobs:
         include:
           # Estimated minutes from the 2026-10-24 PR #3 run (shard 2 took 50:42 against the 60-minute limit, shard 3 11:39): about 33 minutes each. Every shard prints
           # per-file times (SHARD-TIME lines) so the next rebalance uses measurements. tests/test_ci_shards.py requires every live test file to appear in exactly one shard.
-          - shard: 1  # about 33 min
+          - shard: 1  # about 41 min (30:54 measured in run 40719139488 + test_rls_screenings_live 10:14)
             files: >-
               tests/test_api_role_matrix.py
               tests/test_identity_live.py
@@ -161,7 +163,8 @@ jobs:
               tests/test_api_screen_message_live.py
               tests/test_api_read_message_live.py
               tests/test_patient_binding_live.py
-          - shard: 2  # about 34 min
+              tests/test_rls_screenings_live.py
+          - shard: 2  # about 41 min (35:25 measured + test_scheduling_live 5:27)
             files: >-
               tests/test_queue_live.py
               tests/test_rls_msg_live.py
@@ -178,11 +181,10 @@ jobs:
               tests/test_rls_referral_hold_live.py
               tests/test_rls_checkpoints_live.py
               tests/test_triage_writers_live.py
-          - shard: 3  # about 33 min (the 200-booking test alone takes 5 to 7)
-            files: >-
-              tests/test_rls_screenings_live.py
-              tests/test_rotation_live.py
               tests/test_scheduling_live.py
+          - shard: 3  # about 40 min (55:16 measured - screenings 10:14 - scheduling 5:27; the 200-booking test alone takes 5 to 10)
+            files: >-
+              tests/test_rotation_live.py
               tests/test_rls_mpi_scheduling_live.py
               tests/test_scheduling_concurrency_live.py
               tests/test_api_referrals_live.py
