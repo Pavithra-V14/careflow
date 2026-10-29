@@ -149,9 +149,11 @@ async def test_a_new_person_is_created_with_tokens_by_the_worker(db, pipeline):
     assert await count(db, "mpi.patients", a) == 1 and await count(db, "mpi.identity_tokens", a) == 2 and await count(db, "mpi.match_candidates", a) == 0
 
 
-async def test_a_confident_match_links_and_writes_nothing_new(db, pipeline):
+async def test_a_confident_match_links_and_writes_nothing_new(db, pipeline, direct_pipeline):
     a, _, p = await seed(db)
-    first = await ingest(db, pipeline, p["worker_a"], a)
+    # The record a worker links to must be VERIFIED (migration 0023): here front desk registered it. A record the worker itself created is unverified, so the same person's second
+    # referral goes to a person instead (test_a_fully_agreeing_record_created_by_front_desk_still_matches_and_a_confirmed_worker_record_matches_after_confirmation).
+    first = await ingest(db, direct_pipeline, p["fd_a"], a)
     again = await ingest(db, pipeline, p["worker_a"], a)
     assert (again.outcome, again.patient_id) == ("matched", first.patient_id)
     assert await count(db, "mpi.patients", a) == 1 and await count(db, "mpi.match_candidates", a) == 0
@@ -481,9 +483,13 @@ async def test_only_front_desk_of_the_clinic_can_confirm_and_only_as_themselves_
     a, b, p = await seed(db)
     target = (await ingest(db, pipeline, p["worker_a"], a)).patient_id
     assert await confirm_as(db, p["fd_a"], a, target, confirmed_by=p["nurse_a"]) == "42501"  # naming somebody else
-    for who in ("worker_a", "nurse_a", "fd_b", "worker_b"):
+    for who in ("worker_a", "nurse_a"):  # they can SEE the patient, so the trigger passes and row-level security refuses
         assert await confirm_as(db, p[who], a, target) == "42501", who
-    assert await confirm_as(db, p["fd_a"], b, target) == "42501"  # the wrong clinic id for this patient
+    # Another clinic's people cannot see the patient, and the BEFORE INSERT trigger (a confirmation carries its patient's origin) runs BEFORE the row-level-security check and cannot find
+    # the patient either: still refused, with the trigger's SQLSTATE 23514 instead of 42501. The wrong clinic id for this patient is the same case.
+    for who in ("fd_b", "worker_b"):
+        assert await confirm_as(db, p[who], a, target) == "23514", who
+    assert await confirm_as(db, p["fd_a"], b, target) == "23514"  # the wrong clinic id for this patient
     key = f"conf-{_u()}"
     assert await confirm_as(db, p["fd_a"], a, target, key=key) == 1  # positive control: the right caller, the right clinic, as themselves
     assert await confirm_as(db, p["fd_a"], a, target) == "23505"  # one confirmation per patient
