@@ -29,6 +29,7 @@ from careflow.identity import IdentityManager
 from careflow.mpi import PatientIngestionPipeline
 from tests.bounds import bounded
 from tests.db_helpers import ensure_app_role_sa
+from tests.needles import assert_not_leaked
 
 ROOT = Path(__file__).resolve().parent.parent
 _ENV = dotenv_values(ROOT / ".env")
@@ -394,8 +395,10 @@ async def test_unmerge_flags_review_rows_created_inside_the_window_too(db, mgr, 
     provenance = (await rows(db, "select provenance from agents.review_tasks where id = :i", i=result.review_task_id))[0][0]
     assert provenance["decisions"]["review_rows"] == [str(row_id)]
     assert result.decisions_flagged == 1
-    for patient_text in ("Asha", "Venkatesh", "Ravi", "Kumar", "Fourth", "1987", "98765"):
-        assert patient_text not in str(provenance), f"patient text leaked into the review task: {patient_text}"
+    # The words are safe in a string of ids (they contain non-hex letters); the digit values are searched in full (a bare "1987" or "98765" can appear by chance in a uuid).
+    assert_not_leaked(
+        str(provenance), ("Asha", "Venkatesh", "Ravi", "Kumar", "Fourth", "1987-04-23", "1990-01-15", "1960-06-06", "98765 43210", "9876543210"), label="the unmerge review task"
+    )
 
 
 async def test_unmerge_is_idempotent_one_person_and_cannot_be_repeated_under_a_new_key(db, mgr, pipeline):

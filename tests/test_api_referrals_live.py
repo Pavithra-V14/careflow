@@ -54,6 +54,7 @@ from careflow.triage_store import (
     SqlTriageProposer,
 )
 from tests.db_helpers import ensure_app_role_sa
+from tests.needles import NEEDLES, assert_not_leaked
 from tests.test_api_role_matrix import ATTACKER, PROJECT, bearer, fake_jwks_client, mint
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -405,19 +406,27 @@ async def test_no_patient_text_reaches_a_response_a_job_a_task_or_a_checkpoint(w
     await run_worker(w)
     review = await post(w, "nurse_a", REVIEW.format(doc), json={"decision": "approve"})
     for response in (run, review):
-        assert not any(s in response.text for s in ("Asha", "Rao", "1980", "98765", "9876543210"))
-    stored = " ".join(str(r[0]) for r in await rows(w, "select payload::text from ops.queue union all select provenance::text from agents.review_tasks"))
-    assert not any(s in stored for s in ("Asha", "Rao", "1980", "98765"))
+        assert_not_leaked(response.text, label="a response")
+    # ONLY this test's clinic (the tables are shared with the other shards), and the eight full distinctive values with a positive control (a short digit run like "1980" can
+    # appear by chance in the random ids these rows are full of; CI run 40719139488 failed on exactly that).
+    stored = " ".join(
+        str(r[0])
+        for r in await rows(
+            w, "select payload::text from ops.queue where clinic_id = :c union all select provenance::text from agents.review_tasks where clinic_id = :c", c=w.a
+        )
+    )
+    assert stored.strip(), "the probe is not vacuous: this run queued a job and raised a task"
+    assert_not_leaked(stored, label="the queued job and the review task")
     async def probe(table, column, needle):
         """The ONE probe used for the control and for the strict check below: how many rows of `table` hold `needle` as bytes in `column` (a column or an expression)."""
-        return (await rows(w, f"select count(*) from {table} where position(convert_to(:s, 'UTF8') in {column}) > 0", s=needle))[0][0]
+        return (await rows(w, f"select count(*) from {table} where clinic_id = :c and position(convert_to(:s, 'UTF8') in {column}) > 0", s=needle, c=w.a))[0][0]
 
     # The positive control runs the SAME probe against a string that is certainly there: the checkpoint's thread_id is "front_door:<document id>". It can fail: a string that is
     # certainly absent (a fresh uuid) must be found zero times by the same probe, so the control both finds a planted string and discriminates.
     assert await probe("agents.graph_checkpoints", "convert_to(thread_id, 'UTF8')", str(doc)) >= 1
     assert await probe("agents.graph_checkpoints", "convert_to(thread_id, 'UTF8')", str(_u())) == 0
     for table, column in (("agents.graph_checkpoints", "checkpoint"), ("agents.graph_checkpoints", "metadata"), ("agents.graph_checkpoint_blobs", "blob"), ("agents.graph_checkpoint_writes", "write_blob")):
-        for needle in ("Asha", "Rao", "1980", "98765"):
+        for needle in NEEDLES:
             assert await probe(table, column, needle) == 0, (table, column, needle)
 
 
