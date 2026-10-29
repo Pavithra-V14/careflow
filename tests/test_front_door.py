@@ -21,6 +21,7 @@ from careflow.front_door import (
     run_config,
 )
 from careflow.retrieval import Candidate, Retrieval
+from tests.needles import assert_not_leaked
 from tests.test_referral import (
     CLINIC,
     DOC,
@@ -305,10 +306,10 @@ async def test_no_letter_text_and_no_extracted_value_is_ever_written_to_a_checkp
     blobs = b"".join(v if isinstance(v, bytes) else repr(v).encode() for v in _walk(saver.storage)) + b"".join(
         blob[1] if isinstance(blob, tuple) and isinstance(blob[1], bytes) else b"" for blob in saver.blobs.values()
     )
-    for needle in (b"SENTINEL-LETTER", b"Asha", b"Rao", b"1980", b"98765", b"9876543210"):
-        assert needle not in blobs, needle
+    assert_not_leaked(blobs, label="the stored checkpoint bytes")
+    assert blobs  # the probe is not vacuous: something was stored
     values = repr((await graph.aget_state(CONFIG)).values)
-    assert "Asha" not in values and "1980" not in values and "SENTINEL" not in values
+    assert_not_leaked(values, label="the graph state")
 
 
 def _walk(obj):

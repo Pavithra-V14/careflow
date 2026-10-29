@@ -164,7 +164,7 @@ async def test_enqueue_is_idempotent_and_conflicts_on_an_altered_request(db, que
     first = await act(db, w.fd, queue.enqueue, w.a, "test", "demo.task", {"a": 1}, key)
     again = await act(db, w.fd, queue.enqueue, w.a, "test", "demo.task", {"a": 1}, key)
     assert (again.replayed, again.job_id) == (True, first.job_id)
-    assert await one(db, "select count(*) from ops.queue") == 1
+    assert await one(db, "select count(*) from ops.queue where clinic_id = :c", c=w.a) == 1
     for args in (("test", "demo.task", {"a": 2}), ("test", "other.task", {"a": 1}), ("eval", "demo.task", {"a": 1})):
         with pytest.raises(q.IdempotencyConflict):
             await act(db, w.fd, queue.enqueue, w.a, *args, key)
@@ -184,7 +184,7 @@ async def test_bad_inputs_are_refused_before_the_database(db, queue):
     for args in (("production", "demo.task", {}), ("test", "", {}), ("test", "Bad Type", {}), ("test", "demo.task", ["not", "an", "object"])):
         with pytest.raises((ValueError, TypeError, DBAPIError)):
             await act(db, w.fd, queue.enqueue, w.a, *args, _key())
-    assert await one(db, "select count(*) from ops.queue") == 0
+    assert await one(db, "select count(*) from ops.queue where clinic_id = :c", c=w.a) == 0
 
 
 # ---- who may do what (RLS) -------------------------------------------------------------------------
@@ -194,7 +194,7 @@ async def test_bad_inputs_are_refused_before_the_database(db, queue):
 async def test_producers_and_workers_can_enqueue_into_their_own_clinic(db, queue, who):
     w = await world(db)
     await enqueue(db, queue, w, uid=getattr(w, who))
-    assert await one(db, "select count(*) from ops.queue") == 1
+    assert await one(db, "select count(*) from ops.queue where clinic_id = :c", c=w.a) == 1
 
 
 @pytest.mark.parametrize("who", ["auditor", "fd_b", "worker_b", None])
@@ -202,7 +202,7 @@ async def test_everyone_else_cannot_enqueue_into_the_clinic(db, queue, who):
     w = await world(db)
     with pytest.raises(q.NotPermitted):
         await act(db, getattr(w, who) if who else None, queue.enqueue, w.a, "test", "demo.task", {}, _key())
-    assert await one(db, "select count(*) from ops.queue") == 0
+    assert await one(db, "select count(*) from ops.queue where clinic_id = :c", c=w.a) == 0
 
 
 async def test_only_a_worker_of_the_clinic_can_claim(db, queue):
@@ -210,7 +210,7 @@ async def test_only_a_worker_of_the_clinic_can_claim(db, queue):
     await enqueue(db, queue, w)
     for who in ("fd", "nurse", "admin", "auditor", "fd_b", "worker_b"):
         assert await claim(db, queue, w, uid=getattr(w, who)) is None, who  # RLS hides the job: nothing to claim
-    assert await one(db, "select state from ops.queue") == "unclaimed"
+    assert await one(db, "select state from ops.queue where clinic_id = :c", c=w.a) == "unclaimed"
     assert (await claim(db, queue, w)) is not None
 
 
@@ -366,9 +366,9 @@ async def test_an_event_becomes_exactly_one_job_even_if_relayed_twice(db, queue)
     assert (again.replayed, again.job_id) == (True, ev.job_id)
     assert await act(db, w.worker, queue.relay_outbox) == 1
     assert await act(db, w.worker, queue.relay_outbox) == 0
-    (job,) = await rows(db, "select id, task_type, payload, state, idempotency_key from ops.queue")
+    (job,) = await rows(db, "select id, task_type, payload, state, idempotency_key from ops.queue where clinic_id = :c", c=w.a)
     assert (job.task_type, job.payload, job.state, job.idempotency_key) == ("booking.confirmed", {"booking": "b1"}, "unclaimed", key)
-    (out,) = await rows(db, "select dispatched_at is not null as done, job_id from ops.outbox")
+    (out,) = await rows(db, "select dispatched_at is not null as done, job_id from ops.outbox where clinic_id = :c", c=w.a)
     assert (out.done, out.job_id) == (True, job.id)
 
 
@@ -378,7 +378,7 @@ async def test_relay_recovers_when_the_job_already_exists_under_the_events_key(d
     await act(db, w.fd, queue.record_event, w.a, "test", "booking.confirmed", {"x": 1}, key)
     await act(db, w.fd, queue.enqueue, w.a, "test", "booking.confirmed", {"x": 1}, key)  # an earlier, partly-failed relay
     assert await act(db, w.worker, queue.relay_outbox) == 1
-    assert await one(db, "select count(*) from ops.queue") == 1
+    assert await one(db, "select count(*) from ops.queue where clinic_id = :c", c=w.a) == 1
 
 
 async def test_only_a_worker_relays_and_clinics_are_isolated(db, queue):
@@ -386,7 +386,7 @@ async def test_only_a_worker_relays_and_clinics_are_isolated(db, queue):
     await act(db, w.fd, queue.record_event, w.a, "test", "booking.confirmed", {}, _key())
     for who in ("fd", "nurse", "auditor", "worker_b"):
         assert await act(db, getattr(w, who), queue.relay_outbox) == 0, who  # nothing visible to lock
-    assert await one(db, "select count(*) from ops.queue") == 0
+    assert await one(db, "select count(*) from ops.queue where clinic_id = :c", c=w.a) == 0
     assert await act(db, w.worker, queue.relay_outbox) == 1
 
 
@@ -399,7 +399,7 @@ async def test_the_outbox_event_shares_the_fate_of_the_business_transaction(db, 
             await set_request_claims(db, {"sub": str(w.fd), "role": "authenticated"})
             await queue.record_event(db, w.a, "test", "booking.confirmed", {}, _key())
             raise RuntimeError("the business change failed")
-    assert await one(db, "select count(*) from ops.outbox") == 0
+    assert await one(db, "select count(*) from ops.outbox where clinic_id = :c", c=w.a) == 0
 
 
 async def test_outbox_events_with_other_keys_stay_independent(db, queue):
@@ -408,7 +408,7 @@ async def test_outbox_events_with_other_keys_stay_independent(db, queue):
         await act(db, w.fd, queue.record_event, w.a, "test", "e.t", {"i": i}, _key())
     assert await act(db, w.worker, queue.relay_outbox, 2) == 2
     assert await act(db, w.worker, queue.relay_outbox, 2) == 1
-    assert await one(db, "select count(*) from ops.queue") == 3
+    assert await one(db, "select count(*) from ops.queue where clinic_id = :c", c=w.a) == 3
 
 
 # ---- table-level guarantees ------------------------------------------------------------------------

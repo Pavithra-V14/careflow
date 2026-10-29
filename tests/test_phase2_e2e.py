@@ -36,6 +36,7 @@ from careflow.retrieval import (
     CardRetriever,
     retrieval_text,
 )
+from tests.needles import assert_not_leaked
 from tests.test_front_door import Holds, Proposer, Recorder, Texts
 from tests.test_referral import (
     CLINIC,
@@ -128,7 +129,7 @@ async def test_an_offline_referral_goes_from_letter_to_a_human_decision_with_the
     assert state.next == ("review",) and deps.recorder.attempts == [] and len(deps.proposer.performed) == 1
     # 4. no patient text in the checkpoint
     blob = repr(state.values) + repr(saver.storage)
-    assert not any(needle in blob for needle in ("Asha", "SENTINEL-LETTER", "1980", "98765"))
+    assert_not_leaked(blob, label="the checkpoint")
     # 5. the structural gate passes on THIS graph
     assert violations(graph.node_functions, NODE_SPECS, SIDE_EFFECT_PORTS, MODEL_PORTS, NEUTRAL_PORTS) == []
 
