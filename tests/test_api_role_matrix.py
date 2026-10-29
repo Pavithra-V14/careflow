@@ -38,6 +38,7 @@ from starlette.testclient import TestClient
 from careflow.app import Settings, create_app
 from careflow.auth import JWKSClient
 from careflow.crypto import DemographicVault
+from careflow.db import make_app_engine
 from careflow.front_door_runner import FrontDoorComponents
 from tests.bounds import bounded
 
@@ -1077,22 +1078,38 @@ def test_error_bodies_never_say_why_a_token_failed(client, ids):
     assert client.get("/v1/iam/me").headers["www-authenticate"] == "Bearer"
 
 
-def test_identity_never_leaks_between_pooled_requests(app, ids):
+POOL_TIMEOUT_SECONDS = 120  # the two forty-request pool tests below only: see _pool_test_app
+
+
+def _pool_test_app():
+    """An app for the two tests that send forty concurrent requests through a pool of five (+5 overflow). Their claim is isolation under a SMALL pool, so the pool stays 5+5 and all forty requests
+    are kept; only the pool's WAIT is longer than the app's 30 seconds. On the shared CI database a request can wait that long for a connection when the other two shards are busy (a pool
+    timeout, never a wrong row, failed this test twice in CI: runs 40521334349 and 40879700466). No app pool setting changes: this builds the test's own engine. The caller disposes it."""
+    engine = make_app_engine(APP_URL or "", pool_size=5, max_overflow=5, pool_pre_ping=True, pool_timeout=POOL_TIMEOUT_SECONDS)
+    settings = Settings(supabase_url=PROJECT, database_url_app=APP_URL or "", step_up_max_age_seconds=STEP_UP_WINDOW)
+    return create_app(settings, jwks=fake_jwks_client(), vault=TEST_VAULT, front_door=FrontDoorComponents(None, None, None, None, None, None, None, None, None), engine=engine), engine
+
+
+def test_identity_never_leaks_between_pooled_requests(ids):
     """Forty concurrent requests from six identities over a pool of five connections: each must get exactly
     its own profile back, which only holds if the claims are transaction-local and set before any query."""
     keys = ["front_desk_a", "nurse_a", "admin_a", "auditor_a", "patient", "front_desk_b"]
+    app, engine = _pool_test_app()
 
     async def run():
-        async with app.router.lifespan_context(app):
-            transport = httpx.ASGITransport(app=app)
-            async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+        try:
+            async with app.router.lifespan_context(app):
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
 
-                async def call(i):
-                    key = keys[i % len(keys)]
-                    r = await http.get("/v1/iam/me", headers=bearer(mint(ids.people[key][0])))
-                    return key, r.status_code, r.json()
+                    async def call(i):
+                        key = keys[i % len(keys)]
+                        r = await http.get("/v1/iam/me", headers=bearer(mint(ids.people[key][0])))
+                        return key, r.status_code, r.json()
 
-                return await bounded(asyncio.gather(*(call(i) for i in range(40))), "the forty concurrent requests")
+                    return await bounded(asyncio.gather(*(call(i) for i in range(40))), "the forty concurrent requests", seconds=2 * POOL_TIMEOUT_SECONDS)
+        finally:
+            await engine.dispose()
 
     for key, status, body in _run(run()):
         assert status == 200, key
@@ -1245,23 +1262,28 @@ def test_list_responses_carry_identifiers_only(client, ids):
             assert set(item) <= allowed, (route, set(item) - allowed)
 
 
-def test_concurrent_reads_from_different_identities_neither_mix_rows_nor_leak_connections(app, ids):
+def test_concurrent_reads_from_different_identities_neither_mix_rows_nor_leak_connections(ids):
     """Forty concurrent reads over a pool of five: clinic A readers see only clinic A rows, clinic B's front desk sees
     none, admin, auditor and a patient are refused, and every connection is back in the pool."""
     plan = [("front_desk_a", 200), ("nurse_a", 200), ("front_desk_b", 200), ("admin_a", 403), ("auditor_a", 403), ("patient", 403)]
+    app, engine = _pool_test_app()
 
     async def run():
-        async with app.router.lifespan_context(app):
-            transport = httpx.ASGITransport(app=app)
-            async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+        try:
+            async with app.router.lifespan_context(app):
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
 
-                async def read(i):
-                    who, _ = plan[i % len(plan)]
-                    route = ("slots", "bookings", "waitlist")[i % 3]
-                    r = await http.get(f"{PREFIX}/{route}?limit=5", headers=bearer(mint(ids.people[who][0])))
-                    return who, r.status_code, (r.json()["items"] if r.status_code == 200 else None)
+                    async def read(i):
+                        who, _ = plan[i % len(plan)]
+                        route = ("slots", "bookings", "waitlist")[i % 3]
+                        r = await http.get(f"{PREFIX}/{route}?limit=5", headers=bearer(mint(ids.people[who][0])))
+                        return who, r.status_code, (r.json()["items"] if r.status_code == 200 else None)
 
-                return await bounded(asyncio.gather(*(read(i) for i in range(40))), "the forty concurrent reads"), app.state.engine.pool.checkedout()
+                    done = await bounded(asyncio.gather(*(read(i) for i in range(40))), "the forty concurrent reads", seconds=2 * POOL_TIMEOUT_SECONDS)
+                    return done, app.state.engine.pool.checkedout()
+        finally:
+            await engine.dispose()
 
     results, checked_out = _run(run())
     assert checked_out == 0
