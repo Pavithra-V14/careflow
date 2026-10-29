@@ -222,7 +222,8 @@ async def test_has_column_privilege_matrix(db):
     for c in cols:
         can_insert = await db.fetchval("select has_column_privilege('careflow_app', 'mpi.patients', $1, 'INSERT')", c)
         can_update = await db.fetchval("select has_column_privilege('careflow_app', 'mpi.patients', $1, 'UPDATE')", c)
-        assert can_insert == (c != "account_id"), ("INSERT", c)
+        # account_id (0012) and registered_via (0023) are written only by the database: the registration function and the column default; the application role has no INSERT on either
+        assert can_insert == (c not in ("account_id", "registered_via")), ("INSERT", c)
         assert can_update == (c in ALLOWED_UPDATE), ("UPDATE", c)
     assert set(NEVER_UPDATE) <= set(cols)
 

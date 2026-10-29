@@ -719,8 +719,12 @@ async def test_the_function_and_trigger_lock_the_thread_row_and_use_no_advisory_
 
 async def test_record_screening_leaves_no_advisory_lock_held(db):
     w = await seed(db)
+    # Count around the CALL: seeding staff roles in this transaction takes one advisory transaction lock per account (migration 0024's trigger), held until the transaction ends. The claim
+    # under test is that record_screening itself leaves none.
+    held = "select count(*) from pg_locks where locktype = 'advisory' and pid = pg_backend_pid()"
+    before = await db.fetchval(held)
     await record(db, w, "nurse_a", w.messages["care"])
-    assert await db.fetchval("select count(*) from pg_locks where locktype = 'advisory' and pid = pg_backend_pid()") == 0
+    assert await db.fetchval(held) == before
 
 
 async def test_a_held_advisory_lock_does_not_affect_a_screening(db):
