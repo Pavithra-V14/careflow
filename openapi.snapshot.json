@@ -247,6 +247,54 @@
         "title": "ConfirmIdentityOut",
         "type": "object"
       },
+      "Envelope": {
+        "additionalProperties": false,
+        "description": "The result of every tool. `data` holds ids, numbers and closed words only; a degraded or unavailable result says so in `status` and `reason` (a fixed word).",
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "empty",
+              "degraded",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Envelope",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1032,6 +1080,90 @@
           "patient_reply"
         ],
         "title": "ScreenOut",
+        "type": "object"
+      },
+      "SendOfferIn": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "slot_id": {
+            "format": "uuid",
+            "title": "Slot Id",
+            "type": "string"
+          },
+          "visit_type_id": {
+            "format": "uuid",
+            "title": "Visit Type Id",
+            "type": "string"
+          },
+          "waitlist_id": {
+            "format": "uuid",
+            "title": "Waitlist Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "visit_type_id",
+          "slot_id",
+          "waitlist_id"
+        ],
+        "title": "SendOfferIn",
+        "type": "object"
+      },
+      "SendOfferOut": {
+        "additionalProperties": false,
+        "description": "Ids and a time only.",
+        "properties": {
+          "hold_expires_at": {
+            "format": "date-time",
+            "title": "Hold Expires At",
+            "type": "string"
+          },
+          "hold_id": {
+            "format": "uuid",
+            "title": "Hold Id",
+            "type": "string"
+          },
+          "message_id": {
+            "format": "uuid",
+            "title": "Message Id",
+            "type": "string"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "slot_id": {
+            "format": "uuid",
+            "title": "Slot Id",
+            "type": "string"
+          },
+          "thread_id": {
+            "format": "uuid",
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "hold_id",
+          "slot_id",
+          "patient_id",
+          "thread_id",
+          "message_id",
+          "hold_expires_at",
+          "replayed"
+        ],
+        "title": "SendOfferOut",
         "type": "object"
       },
       "SlotList": {
@@ -2446,6 +2578,128 @@
           }
         ],
         "summary": "Cancel Booking",
+        "tags": [
+          "staff scheduling"
+        ]
+      }
+    },
+    "/v1/staff/scheduling/offers/draft": {
+      "get": {
+        "description": "The ranked candidates for a freed slot and a DRAFT offer for the first, computed now and stored nowhere (`status`: ok, empty, or unavailable with `not_configured:` and the names of the\nmissing clinician-owned settings). 404 for a clinic you cannot see, 403 unless you are front desk there.",
+        "operationId": "draft_offer_v1_staff_scheduling_offers_draft_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Clinic Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "visit_type_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Visit Type Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Draft Offer",
+        "tags": [
+          "staff scheduling"
+        ]
+      }
+    },
+    "/v1/staff/scheduling/offers/send": {
+      "post": {
+        "description": "Press send: hold the slot for the chosen ranked candidate and record the offer message. 404 for a clinic you cannot see, 403 unless you are front desk there, 409 if the slot is not open, the\ncandidate is not among the ranked ones, or the key was used for a different offer, 503 if the clinician-owned settings or the encryption keys are not configured.",
+        "operationId": "send_offer_route_v1_staff_scheduling_offers_send_post",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendOfferIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendOfferOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Send Offer Route",
         "tags": [
           "staff scheduling"
         ]

@@ -110,6 +110,7 @@ ROUTES = {
     "revoke_patient_identity": "patient.revoke_identity",
     "acknowledge_review_task": "review_task.acknowledge",
     "resolve_review_task": "review_task.resolve",
+    "send_offer_route": "offer.send",
 }
 
 

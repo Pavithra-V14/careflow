@@ -59,7 +59,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from careflow import identity, mpi, review_tasks
+from careflow import identity, mpi, offers, review_tasks
 from careflow.audit import write_audit
 from careflow.auth import (
     AuthError,
@@ -73,7 +73,7 @@ from careflow.cors import middleware_kwargs, parse_origins
 from careflow.crypto import CryptoError, DemographicVault
 from careflow.db import make_app_engine, set_request_claims
 from careflow.dead_letters import raise_dead_letter_tasks
-from careflow.demo_phase3 import refuse_demo_outside_demo
+from careflow.demo_phase3 import refuse_demo_outside_demo, scheduling_settings_for
 from careflow.front_door import FrontDoorError, run_config
 from careflow.front_door_runner import TASK_TYPE as FRONT_DOOR_TASK
 from careflow.front_door_runner import (
@@ -83,6 +83,8 @@ from careflow.front_door_runner import (
     request_session,
     worker_session,
 )
+from careflow.mcp_kit import Envelope
+from careflow.mcp_kit import invoke as mcp_invoke
 from careflow.messages import (
     MessageErased,
     MessageNotFound,
@@ -108,6 +110,7 @@ from careflow.scheduling import (
     SlotUnavailable,
     UnknownReference,
 )
+from careflow.scheduling_agent import SchedulingSettings, build_scheduling_server
 from careflow.tick import Poker, worker_loop
 from careflow.triage_store import DecisionConflict, TriageStoreError
 from careflow.triage_store import NotPermitted as TriageNotPermitted
@@ -963,6 +966,86 @@ async def resolve_review_task(
     """Close a task (releasing a referral hold is resolving its `referral_hold` task). Only the kinds in `RESOLVABLE_KINDS`; others are a 409. A task another person acknowledged is
     a 409. 404 if invisible, 403 if you may not change it."""
     return await _transition("resolve", task_id, idempotency_key, conn, claims)
+
+
+# ---- offers (Phase 3, slice 2, mechanism only; careflow/offers.py) -----------------------------------------------------------------------------------------
+#
+# Front desk only, under the person's own session; no worker identity and no new grant. The draft is computed now and stored nowhere; sending holds the slot for the chosen candidate and records the
+# offer as a staff message in the patient's `appointments` thread (the clinician-approved template, verbatim). Nothing is delivered to the patient and nothing is interpreted. Every clinician-owned
+# setting must exist (demo placeholders only in profile `demo`): otherwise the draft is `unavailable` and the send is a 503 naming the missing settings.
+
+
+def scheduling_settings() -> SchedulingSettings:
+    return scheduling_settings_for(os.environ, resolve_profile())
+
+
+class SendOfferIn(_Body):
+    clinic_id: uuid.UUID
+    visit_type_id: uuid.UUID
+    slot_id: uuid.UUID
+    waitlist_id: uuid.UUID  # which ranked candidate; recomputed and checked server-side, never trusted
+
+
+class SendOfferOut(_Out):
+    """Ids and a time only."""
+
+    hold_id: uuid.UUID
+    slot_id: uuid.UUID
+    patient_id: uuid.UUID
+    thread_id: uuid.UUID
+    message_id: uuid.UUID
+    hold_expires_at: datetime
+    replayed: bool
+
+
+@scheduling.get("/offers/draft", response_model=Envelope)
+async def draft_offer(
+    clinic_id: uuid.UUID, visit_type_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims),
+    settings: SchedulingSettings = Depends(scheduling_settings),
+) -> Envelope:
+    """The ranked candidates for a freed slot and a DRAFT offer for the first, computed now and stored nowhere (`status`: ok, empty, or unavailable with `not_configured:` and the names of the
+    missing clinician-owned settings). 404 for a clinic you cannot see, 403 unless you are front desk there."""
+    await _front_desk_gate(conn, claims, clinic_id)
+    return await mcp_invoke(
+        build_scheduling_server(settings), "propose_offer", {"clinic_id": str(clinic_id), "visit_type_id": str(visit_type_id)},
+        account_id=uuid.UUID(claims["sub"]), conn=conn, origin="live",
+    )
+
+
+@scheduling.post("/offers/send", response_model=SendOfferOut)
+async def send_offer_route(
+    body: SendOfferIn, idempotency_key: IdempotencyKey, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims),
+    settings: SchedulingSettings = Depends(scheduling_settings),
+) -> SendOfferOut:
+    """Press send: hold the slot for the chosen ranked candidate and record the offer message. 404 for a clinic you cannot see, 403 unless you are front desk there, 409 if the slot is not open, the
+    candidate is not among the ranked ones, or the key was used for a different offer, 503 if the clinician-owned settings or the encryption keys are not configured."""
+    vault: DemographicVault | None = request.app.state.vault
+    key_version = _active_key_version(request) if vault is not None else None
+    if vault is None or key_version is None:
+        log.error("offers are unavailable: no usable encryption key is configured (deployment fault)")
+        raise HTTPException(status_code=503, detail="offers are unavailable: encryption keys are not configured")
+    origin = await _front_desk_gate(conn, claims, body.clinic_id)
+    actor = uuid.UUID(claims["sub"])
+    try:
+        with _scheduling_errors():
+            sent = await offers.send_offer(
+                conn, vault, settings, key_version=key_version, clinic_id=body.clinic_id, origin=origin, visit_type_id=body.visit_type_id, slot_id=body.slot_id,
+                waitlist_id=body.waitlist_id, actor_id=actor, idempotency_key=idempotency_key,
+            )
+    except offers.OfferNotConfigured as exc:
+        raise HTTPException(status_code=503, detail="offers are unavailable: not configured: " + ",".join(exc.names)) from None
+    except offers.NotACandidate:
+        raise HTTPException(status_code=409, detail="the slot or the candidate cannot be offered") from None
+    except offers.OfferConflict:
+        raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request") from None
+    await write_audit(
+        conn, clinic_id=body.clinic_id, origin=origin, actor_id=actor, actor_role="front_desk", action="offer.send", resource_type="offer", resource_id=sent.hold_id,
+        details={"slot_id": sent.slot_id, "patient_id": sent.patient_id, "replayed": sent.replayed}, idempotency_key=f"audit:offer-send:{sent.hold_id}:{idempotency_key}",
+    )
+    return SendOfferOut(
+        hold_id=sent.hold_id, slot_id=sent.slot_id, patient_id=sent.patient_id, thread_id=sent.thread_id, message_id=sent.message_id,
+        hold_expires_at=sent.hold_expires_at, replayed=sent.replayed,
+    )
 
 
 async def _validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:

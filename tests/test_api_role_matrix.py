@@ -134,7 +134,7 @@ async def _seed() -> Identities:
     return ids
 
 
-POOL = {"hold": 40, "book": 40, "extra": 30, "cancel": 30}  # slots / bookings handed out one per test case
+POOL = {"hold": 40, "book": 40, "extra": 40, "cancel": 30}  # slots / bookings handed out one per test case
 N_PATIENTS = 45
 
 
@@ -1144,6 +1144,57 @@ def review_task_resolve_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(unmerge), None)
 
 
+# ---- /v1/staff/scheduling/offers/draft and /offers/send: Phase 3 slice 2 (careflow/offers.py) ----------------------------------------------------------------
+#
+# Front desk of the clinic only. Who can SEE the clinic row but is not front desk gets 403 (nurse, doctor, admin, business owner, auditor, `multi`); everyone else, including front desk of another
+# clinic, gets the same 404 as an unknown clinic. The matrix runs with the clinician-owned settings UNSET (so the draft is `unavailable` and a send is a 503 naming the missing settings); the
+# configured paths (a real draft, a real send, replays, conflicts, the audit row) are the live tests after the matrix, with the settings overridden.
+
+OFFER_DRAFT = PREFIX + "/offers/draft"
+OFFER_SEND = PREFIX + "/offers/send"
+CLINIC_VISIBLE_NOT_FRONT_DESK = {r: 403 for r in ("nurse_a", "doctor_a", "admin_a", "business_owner_a", "auditor_a", "multi")}
+
+
+def _offer_gate_cases(ids, make_request, expected_for_front_desk_b=404):
+    cases = []
+    for p in [*ids.people, "no account"]:
+        if p == "front_desk_a":
+            continue
+        status = CLINIC_VISIBLE_NOT_FRONT_DESK.get(p, 404)
+        who = bearer(mint(ids.no_account)) if p == "no account" else p
+        cases.append(make_request(f"{p} is refused", who, status))
+    return cases
+
+
+def offer_draft_cases(ids) -> list[tuple]:
+    q = lambda **o: f"{OFFER_DRAFT}?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, "visit_type_id": ids.vt_a, **o}.items())
+    cases = [
+        _case(ids, "front desk reads the draft: unavailable, naming the missing settings, nothing guessed", "front_desk_a", 200, q(), key=None,
+              body=lambda b: b["status"] == "unavailable" and b["reason"].startswith("not_configured:") and b["data"] is None),
+        _case(ids, "an unknown clinic is not found", "front_desk_a", 404, q(clinic_id=uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "a missing visit type is rejected", "front_desk_a", 422, f"{OFFER_DRAFT}?clinic_id={ids.clinic_a}", key=None, body=_fixed(422)),
+        _case(ids, "a clinic id that is not a uuid is rejected", "front_desk_a", 422, q(clinic_id="nope"), key=None, body=_fixed(422)),
+    ]
+    cases += _offer_gate_cases(ids, lambda label, who, status: _case(ids, label, who, status, q(), key=None, body=_fixed(status)))
+    return cases + _unauthenticated(ids, q(), None)
+
+
+def offer_send_cases(ids) -> list[tuple]:
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "visit_type_id": str(ids.vt_a), "slot_id": str(ids.pools["extra"][0]), "waitlist_id": str(uuid.uuid4()), **o}
+    unavailable = lambda b: b["detail"].startswith("offers are unavailable: not configured: ") and "offer_message_template" in b["detail"]
+    cases = [
+        _case(ids, "front desk with the settings unset is told offers are unavailable", "front_desk_a", 503, OFFER_SEND, json=body(), body=unavailable),
+        _case(ids, "an unknown clinic is not found", "front_desk_a", 404, OFFER_SEND, json=body(clinic_id=str(uuid.uuid4())), body=_fixed(404)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "front_desk_a", 422, OFFER_SEND, json=body(), key=None, body=_fixed(422)),
+        _case(ids, "blank X-Idempotency-Key is rejected", "front_desk_a", 422, OFFER_SEND, json=body(), key="   ", body=_fixed(422)),
+        _case(ids, "a slot id that is not a uuid is rejected", "front_desk_a", 422, OFFER_SEND, json=body(slot_id="nope"), body=_fixed(422)),
+        _case(ids, "a client-supplied patient or origin is an unknown field", "front_desk_a", 422, OFFER_SEND, json=body(patient_id=str(uuid.uuid4())), body=_fixed(422)),
+        _case(ids, "an empty body is rejected", "front_desk_a", 422, OFFER_SEND, json={}, body=_fixed(422)),
+    ]
+    cases += _offer_gate_cases(ids, lambda label, who, status: _case(ids, label, who, status, OFFER_SEND, json=body(), body=_fixed(status)))
+    return cases + _unauthenticated(ids, OFFER_SEND, body())
+
+
 # One entry per route: add the new route's cases here in the same change that adds the route.
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
@@ -1164,6 +1215,8 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", TASK): review_task_open_cases,
     ("POST", TASK_ACK): review_task_acknowledge_cases,
     ("POST", TASK_RESOLVE): review_task_resolve_cases,
+    ("GET", OFFER_DRAFT): offer_draft_cases,
+    ("POST", OFFER_SEND): offer_send_cases,
     ("GET", READ): message_read_cases,
     ("POST", RUN_REFERRAL): referral_run_cases,
     ("POST", REVIEW_REFERRAL): referral_review_cases,
@@ -1853,6 +1906,56 @@ def test_acknowledging_and_releasing_a_hold_write_one_audit_row_each_as_the_pers
     refused = new_task(ids, "unmerge_review", "nurse")
     assert client.post(TASK_RESOLVE.format(task_id=refused), headers={**bearer(mint(fd)), "X-Idempotency-Key": _new_key()}).status_code == 403
     assert _run(_fetch(audit, str(refused))) == []  # a refusal writes no audit row
+
+
+def _configured_scheduling_settings():
+    from careflow.scheduling_agent import SchedulingSettings
+
+    # test inputs only: stand-ins for the clinician-owned values, not recommendations
+    return SchedulingSettings(
+        _env_file=None, offer_expiry_seconds=3600, hold_lifetime_seconds=900, backfill_candidates=2, accept_confidence_threshold=0.5, offer_message_template="TEST-TEMPLATE-NOT-A-CLINICAL-TEXT",
+    )
+
+
+def test_a_configured_draft_is_computed_and_a_send_holds_the_slot_and_records_the_template_once_as_the_person(client, ids):
+    from careflow import app as app_module
+
+    fd = ids.people["front_desk_a"][0]
+    client.app.dependency_overrides[app_module.scheduling_settings] = _configured_scheduling_settings
+    try:
+        headers = {**bearer(mint(fd))}
+        draft = client.get(f"{OFFER_DRAFT}?clinic_id={ids.clinic_a}&visit_type_id={ids.vt_a}", headers=headers)
+        assert draft.status_code == 200 and draft.json()["status"] == "ok"
+        top = draft.json()["data"]["candidates"][0]
+        assert draft.json()["data"]["draft"]["template"] == "TEST-TEMPLATE-NOT-A-CLINICAL-TEXT" and draft.json()["data"]["draft"]["candidate_patient_id"] == top["patient_id"]
+        assert _run(_fetch("select count(*) as n from sched.holds where patient_id = $1", uuid.UUID(top["patient_id"])))[0]["n"] == 0  # a draft stores nothing
+        slot = ids.pools["extra"].pop()
+        send = {"clinic_id": str(ids.clinic_a), "visit_type_id": str(ids.vt_a), "slot_id": str(slot), "waitlist_id": top["waitlist_id"]}
+        key = _new_key()
+        ok = client.post(OFFER_SEND, headers={**headers, "X-Idempotency-Key": key}, json=send)
+        assert ok.status_code == 200 and ok.json()["replayed"] is False and ok.json()["patient_id"] == top["patient_id"] and ok.json()["slot_id"] == str(slot)
+        again = client.post(OFFER_SEND, headers={**headers, "X-Idempotency-Key": key}, json=send)
+        assert again.status_code == 200 and again.json()["replayed"] is True and again.json()["message_id"] == ok.json()["message_id"]
+        # the slot is held for that patient, the message is the template in the patient's appointments thread, recorded by the person; one of each
+        hold = _run(_fetch("select patient_id from sched.holds where slot_id = $1", slot))
+        assert [h["patient_id"] for h in hold] == [uuid.UUID(top["patient_id"])]
+        msgs = _run(_fetch("select topic, sender_kind, recorded_by, thread_id, body_ct from msg.messages where id = $1", uuid.UUID(ok.json()["message_id"])))
+        assert len(msgs) == 1 and (msgs[0]["topic"], msgs[0]["sender_kind"], msgs[0]["recorded_by"]) == ("appointments", "staff", fd)
+        assert b"TEST-TEMPLATE" not in bytes(msgs[0]["body_ct"])  # stored encrypted
+        # a different key for the SAME slot is refused (the slot is held); a candidate that is not ranked is refused
+        other = client.post(OFFER_SEND, headers={**headers, "X-Idempotency-Key": _new_key()}, json=send)
+        assert other.status_code == 409
+        stranger = client.post(OFFER_SEND, headers={**headers, "X-Idempotency-Key": _new_key()}, json={**send, "slot_id": str(ids.pools["extra"].pop()), "waitlist_id": str(uuid.uuid4())})
+        assert stranger.status_code == 409 and stranger.json() == {"detail": "the slot or the candidate cannot be offered"}
+        # a slot of another visit type or clinic is refused as the same 409
+        wrong = client.post(OFFER_SEND, headers={**headers, "X-Idempotency-Key": _new_key()}, json={**send, "visit_type_id": str(ids.vt_b), "slot_id": str(ids.pools["extra"].pop())})
+        assert wrong.status_code == 409
+        audit = _run(_fetch("select actor_id, actor_role, details, clinic_id from audit.log where resource_type = 'offer' and resource_id = $1 and action = 'offer.send'", uuid.UUID(ok.json()["hold_id"])))
+        assert len(audit) == 1 and (audit[0]["actor_id"], audit[0]["actor_role"], audit[0]["clinic_id"]) == (fd, "front_desk", ids.clinic_a)
+        details = json.loads(audit[0]["details"]) if isinstance(audit[0]["details"], str) else audit[0]["details"]
+        assert details == {"slot_id": str(slot), "patient_id": top["patient_id"], "replayed": False}
+    finally:
+        client.app.dependency_overrides.pop(app_module.scheduling_settings, None)
 
 
 # ---- message reads: the committed half's behaviour -----------------------------------------------------------------------------------------
