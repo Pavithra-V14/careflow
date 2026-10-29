@@ -168,7 +168,7 @@ async def world():
         )
         texts, extractor = Texts(), Extractor()
         components = FrontDoorComponents(
-            engine=RedFlagEngine(), texts=texts, extractor=extractor, ingestor=PatientIngestionPipeline(vault, key_version=1), retriever=Retriever(),  # type: ignore[arg-type]
+            engine=RedFlagEngine(), texts=texts, extractor=extractor, ingestor=PatientIngestionPipeline(vault, key_version=1, registrar="function"), retriever=Retriever(),  # type: ignore[arg-type]
             proposer=SqlTriageProposer(mode=ApprovalMode.ASSISTED, assigned_role="nurse", task_priority="standard"),  # test inputs
             recorder=SqlReviewRecorder(), holds=SqlHoldTaskWriter(priority="standard"), dead_letters=SqlDeadLetterTaskWriter(priority="standard"), retrieval_scope={"domain": "stand-in"}, profile="demo",
         )

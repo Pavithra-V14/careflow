@@ -27,7 +27,7 @@ from tests.db_helpers import ensure_app_role_sa
 ROOT = Path(__file__).resolve().parent.parent
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or dotenv_values(ROOT / ".env").get("DATABASE_URL_MIGRATOR")
 SQL = {n: (ROOT / "db" / "migrations" / f).read_text(encoding="utf-8") for n, f in (
-    ("0003", "0003_mpi_match_candidates.sql"), ("0008", "0008_mpi_merge_ledger.sql"), ("0019", "0019_mpi_queue_worker_ingestion.sql"))}
+    ("0003", "0003_mpi_match_candidates.sql"), ("0008", "0008_mpi_merge_ledger.sql"), ("0019", "0019_mpi_queue_worker_ingestion.sql"), ("0022", "0022_worker_registration_function.sql"))}
 
 pytestmark = [pytest.mark.asyncio(loop_scope="module"), pytest.mark.skipif(not MIGRATOR, reason="DATABASE_URL_MIGRATOR not configured")]
 NAME, DOB, PHONE = "Asha Venkatesh", "1987-04-23", "+91 98765 43210"
@@ -38,9 +38,21 @@ def _u() -> uuid.UUID:
 
 
 @pytest.fixture(scope="module")
-def pipeline():
+def vault():
     b = lambda: base64.b64encode(os.urandom(32)).decode()
-    return PatientIngestionPipeline(DemographicVault.from_env({"CAREFLOW_ENC_SECRET_V1": b(), "CAREFLOW_HMAC_SECRET_V1": b()}), key_version=1)
+    return DemographicVault.from_env({"CAREFLOW_ENC_SECRET_V1": b(), "CAREFLOW_HMAC_SECRET_V1": b()})
+
+
+@pytest.fixture(scope="module")
+def pipeline(vault):
+    """The Front Door's ingestor: the unattended worker registers ONLY through mpi.register_patient_from_referral (migration 0022)."""
+    return PatientIngestionPipeline(vault, key_version=1, registrar="function")
+
+
+@pytest.fixture(scope="module")
+def direct_pipeline(vault):
+    """The front-desk route's ingestor: direct inserts under front desk's own policies (unchanged)."""
+    return PatientIngestionPipeline(vault, key_version=1)
 
 
 async def raw(conn, sql):
@@ -59,8 +71,10 @@ async def _conn():
             await raw(conn, SQL["0003"])
         if (await conn.execute(text("select to_regclass('mpi.merges') is null"))).scalar_one():
             await raw(conn, SQL["0008"])
-        if (await conn.execute(text("select count(*) = 0 from pg_policies where schemaname = 'mpi' and policyname = 'patients_insert_worker'"))).scalar_one():
+        if (await conn.execute(text("select count(*) = 0 from pg_policies where schemaname = 'mpi' and policyname = 'patients_select_worker'"))).scalar_one():
             await raw(conn, SQL["0019"])
+        if (await conn.execute(text("select to_regprocedure('mpi.register_patient_from_referral(uuid,text,bytea,smallint,bytea,smallint,bytea,smallint,text,text[],bytea[],smallint,jsonb)') is null"))).scalar_one():
+            await raw(conn, SQL["0022"])
         yield conn
     finally:
         await outer.rollback()
@@ -197,7 +211,8 @@ async def test_the_worker_cannot_update_or_delete_anything_in_mpi_and_cannot_wri
     # no DELETE privilege exists on any of them
     for table in ("mpi.patients", "mpi.identity_tokens", "mpi.match_candidates", "mpi.merges"):
         assert await attempt(db, w, f"delete from {table}") == "42501", table
-    # the worker cannot write an already-resolved possible duplicate (that would close a human review)
+    # the worker cannot write an already-resolved possible duplicate (that would close a human review). Since 0022 it has no INSERT policy at all, so this is refused for that
+    # reason (the function forces status 'pending'); only front desk resolves a review.
     cand = (
         "insert into mpi.match_candidates (clinic_id, patient_id, candidate_patient_id, matched_kinds, reason, status, resolved_at, origin, idempotency_key) "
         "values (:c, :p, :o, array['phone'], 'near_match', 'resolved', now(), 'test', 'cand-resolved')"
@@ -224,12 +239,165 @@ async def test_the_worker_cannot_update_or_delete_anything_in_mpi_and_cannot_wri
     assert await attempt(db, w, upsert, i=first.patient_id, c=a) == "42501"
 
 
-async def test_the_other_roles_are_unchanged_nurse_cannot_register_front_desk_still_can(db, pipeline):
+async def test_the_other_roles_are_unchanged_nurse_cannot_register_front_desk_still_can(db, pipeline, direct_pipeline):
     a, _, p = await seed(db)
     with pytest.raises(mpi.NotPermitted):
         await ingest(db, pipeline, p["nurse_a"], a)
-    assert (await ingest(db, pipeline, p["fd_a"], a)).outcome == "created"
+    with pytest.raises(mpi.NotPermitted):
+        await ingest(db, direct_pipeline, p["nurse_a"], a)
+    assert (await ingest(db, direct_pipeline, p["fd_a"], a)).outcome == "created"
     async with db.begin_nested():
         await as_user(db, p["worker_a"])
         assert (await db.execute(text("select count(*) from mpi.patients where clinic_id = :c"), {"c": a})).scalar_one() == 1  # the worker reads its clinic's one patient (needed to match)
         await db.exec_driver_sql("reset role")
+
+
+# ---- migration 0022: the attack of pre-launch blocker 1 does not work any more ---------------------------------------------------------------------
+
+FUNCTION = "mpi.register_patient_from_referral"
+FUNCTION_SIG = "mpi.register_patient_from_referral(uuid,text,bytea,smallint,bytea,smallint,bytea,smallint,text,text[],bytea[],smallint,jsonb)"
+
+
+def call_sql(kinds="array['name_dob']", tokens="array['\\x0102'::bytea]"):
+    return (
+        f"select {FUNCTION}(cast(:c as uuid), :o, '\\x01'::bytea, cast(1 as smallint), '\\x02'::bytea, cast(1 as smallint), null, null, :k, "
+        f"{kinds}, {tokens}, cast(1 as smallint), cast(:cands as jsonb))"
+    )
+
+
+async def fn(conn, uid, clinic, *, cands="[]", origin="test", key=None, **sql_over):
+    """Call the function as `uid`; return the new patient id or the SQLSTATE of the refusal."""
+    sql = call_sql(**sql_over)
+    try:
+        async with conn.begin_nested():
+            await as_user(conn, uid)
+            value = (await conn.execute(text(sql), {"c": str(clinic), "cands": cands, "k": key or f"fn-{_u()}", "o": origin})).scalar_one()
+            await conn.exec_driver_sql("reset role")
+            return value
+    except DBAPIError as exc:
+        return getattr(exc.orig, "sqlstate", None)
+
+
+def candidate(patient, kinds='["name_dob"]', reason="near_match"):
+    return f'{{"patient_id": "{patient}", "kinds": {kinds}, "reason": "{reason}"}}'
+
+
+async def test_the_worker_cannot_insert_into_the_three_tables_directly_but_front_desk_still_can(db, direct_pipeline):
+    a, _, p = await seed(db)
+    victim = (await ingest(db, direct_pipeline, p["fd_a"], a)).patient_id
+    other = (await ingest(db, direct_pipeline, p["fd_a"], a, name="Meera Nair", phone="+91 90000 00001")).patient_id
+    w, fd = p["worker_a"], p["fd_a"]
+    attach = "insert into mpi.identity_tokens (patient_id, clinic_id, kind, token, key_version, origin) values (:v, :c, :kind, '\\x0a0b'::bytea, 1, 'test')"
+    forge = (
+        "insert into mpi.match_candidates (clinic_id, patient_id, candidate_patient_id, matched_kinds, reason, origin, idempotency_key) "
+        "values (:c, :v, :o, array['phone'], 'near_match', 'test', :k)"
+    )
+    new_patient = (
+        "insert into mpi.patients (clinic_id, name_ct, name_key_version, dob_ct, dob_key_version, origin, idempotency_key) "
+        "values (:c, '\\x01'::bytea, 1, '\\x01'::bytea, 1, 'test', :k)"
+    )
+    # positive controls: the SAME statements work for front desk (a person's route), so a 42501 for the worker is the missing policy and not a malformed statement
+    assert await attempt(db, fd, attach, v=victim, c=a, kind="email") == 1
+    assert await attempt(db, fd, forge, c=a, v=victim, o=other, k="forge-fd") == 1
+    assert await attempt(db, fd, new_patient, c=a, k="np-fd") == 1
+    # the attack of blocker 1, as the worker: attach a token to an existing patient, forge a possible duplicate between two existing patients, insert a patient of its own
+    before = (await count(db, "mpi.identity_tokens", a), await count(db, "mpi.match_candidates", a), await count(db, "mpi.patients", a))
+    assert await attempt(db, w, attach, v=victim, c=a, kind="sms") == "42501"
+    assert await attempt(db, w, forge, c=a, v=other, o=victim, k="forge-w") == "42501"
+    assert await attempt(db, w, new_patient, c=a, k="np-w") == "42501"
+    assert (await count(db, "mpi.identity_tokens", a), await count(db, "mpi.match_candidates", a), await count(db, "mpi.patients", a)) == before
+
+
+async def test_the_function_has_no_parameter_that_names_an_existing_patient_and_is_a_pinned_security_definer(db):
+    args = (await db.execute(text("select pg_get_function_arguments(to_regprocedure(:s))"), {"s": FUNCTION_SIG})).scalar_one()
+    names = [part.split()[0] for part in args.split(",") if part.strip()]
+    assert names == [
+        "p_clinic", "p_origin", "p_name_ct", "p_name_kv", "p_dob_ct", "p_dob_kv", "p_phone_ct", "p_phone_kv", "p_idempotency_key", "p_token_kinds", "p_tokens", "p_token_kv", "p_candidates",
+    ], names  # no patient id and no row id: there is nothing a token could be attached to
+    row = (await db.execute(text("select prosecdef, proconfig from pg_proc where oid = to_regprocedure(:s)"), {"s": FUNCTION_SIG})).one()
+    assert row.prosecdef is True and list(row.proconfig) == ["search_path=\"\""], row
+    acl = (await db.execute(text("select proacl::text from pg_proc where oid = to_regprocedure(:s)"), {"s": FUNCTION_SIG})).scalar_one()
+    grantees = {entry.split("=")[0] for entry in acl.strip("{}").split(",")}
+    assert "careflow_app" in grantees and "" not in grantees and not grantees & {"anon", "authenticated", "service_role"}, acl  # EXECUTE for careflow_app; none for PUBLIC or the API roles
+
+
+async def test_a_new_record_with_a_victims_token_leaves_the_victims_tokens_untouched_and_candidates_always_name_the_new_patient(db, direct_pipeline):
+    a, _, p = await seed(db)
+    victim = await ingest(db, direct_pipeline, p["fd_a"], a)
+    stolen = (await db.execute(text("select kind, token from mpi.identity_tokens where patient_id = :v and kind = 'name_dob'"), {"v": victim.patient_id})).one()
+    victim_tokens = (await db.execute(text("select kind, token from mpi.identity_tokens where patient_id = :v order by kind"), {"v": victim.patient_id})).all()
+    # what the function still permits: a NEW record that carries the victim's token. It gets its own row; nothing of the victim's is moved or duplicated onto it
+    fresh = await fn(db, p["worker_a"], a, kinds="array['name_dob']", tokens=f"array['\\x{bytes(stolen.token).hex()}'::bytea]", cands=f"[{candidate(victim.patient_id)}]")
+    assert isinstance(fresh, uuid.UUID) and fresh != victim.patient_id
+    assert (await db.execute(text("select kind, token from mpi.identity_tokens where patient_id = :v order by kind"), {"v": victim.patient_id})).all() == victim_tokens
+    assert (await db.execute(text("select patient_id from mpi.identity_tokens where patient_id <> :v and clinic_id = :c"), {"v": victim.patient_id, "c": a})).all() == [(fresh,)]
+    pairs = (await db.execute(text("select patient_id, candidate_patient_id, status from mpi.match_candidates where clinic_id = :c"), {"c": a})).all()
+    assert pairs == [(fresh, victim.patient_id, "pending")]  # the patient side is the NEW record, pending: never two existing patients, never already resolved
+
+
+async def test_a_replay_with_the_same_key_creates_nothing_more(db, pipeline):
+    a, _, p = await seed(db)
+    first = await fn(db, p["worker_a"], a, key="referral:doc-77")
+    assert isinstance(first, uuid.UUID)
+    snapshot = (await count(db, "mpi.patients", a), await count(db, "mpi.identity_tokens", a))
+    assert await fn(db, p["worker_a"], a, key="referral:doc-77") == "23505"  # the database refuses a second record under the key
+    assert (await count(db, "mpi.patients", a), await count(db, "mpi.identity_tokens", a)) == snapshot
+    created = await ingest(db, pipeline, p["worker_a"], a, idempotency_key="referral:doc-88")
+    replay = await ingest(db, pipeline, p["worker_a"], a, idempotency_key="referral:doc-88")  # the pipeline answers a replay before it ever calls the function
+    assert (replay.outcome, replay.patient_id) == ("replayed", created.patient_id) and await count(db, "mpi.patients", a) == snapshot[0] + 1
+
+
+async def test_only_a_worker_of_the_clinic_can_call_the_function(db):
+    a, b, p = await seed(db)
+    assert isinstance(await fn(db, p["worker_a"], a), uuid.UUID)  # positive control: the right caller works with these exact arguments
+    assert isinstance(await fn(db, p["worker_b"], b), uuid.UUID)
+    for who in ("fd_a", "nurse_a", "fd_b"):
+        assert await fn(db, p[who], a) == "42501", who
+    assert await fn(db, p["worker_b"], a) == "42501"  # a worker of ANOTHER clinic
+    assert await fn(db, _u(), a) == "42501"  # an account with no role at all
+    try:
+        async with db.begin_nested():  # no verified claims at all
+            await db.exec_driver_sql("set local role careflow_app")
+            await set_request_claims(db, {"role": "anon"})
+            await db.execute(text(call_sql()), {"c": str(a), "cands": "[]", "k": "anon-1", "o": "test"})
+        raise AssertionError("an unauthenticated call was accepted")
+    except DBAPIError as exc:
+        assert exc.orig.sqlstate == "42501"
+
+
+async def test_the_function_refuses_bad_candidates_and_bad_shapes(db, direct_pipeline):
+    a, b, p = await seed(db)
+    own = (await ingest(db, direct_pipeline, p["fd_a"], a)).patient_id
+    foreign = (await ingest(db, direct_pipeline, p["fd_b"], b)).patient_id
+    w = p["worker_a"]
+    assert isinstance(await fn(db, w, a, cands=f"[{candidate(own)}]"), uuid.UUID)  # positive control for every refusal below
+    assert await fn(db, w, a, cands=f"[{candidate(foreign)}]") == "22023"  # a patient of another clinic: a bad argument (22023), never reported as an authorisation failure (42501)
+    assert await fn(db, w, a, cands=f"[{candidate(_u())}]") == "22023"  # a patient that does not exist
+    assert await fn(db, w, a, cands=f"[{candidate(own)}]", origin="eval") == "22023"  # the candidate is an origin='test' record, the new one would be 'eval'
+    EMAIL_KIND, REPEATED_KIND = '["email"]', '["phone", "phone"]'
+    bad_shapes = {
+        "an unknown reason": f"[{candidate(own, reason='resolved')}]",
+        "no kinds": f"[{candidate(own, kinds='[]')}]",
+        "not an array": candidate(own),
+        "an element that is not an object": '["x"]',
+        "more than twenty": "[" + ",".join([candidate(own)] * 21) + "]",
+        "the same patient twice": f"[{candidate(own)},{candidate(own)}]",
+        "a kind outside the closed set": f"[{candidate(own, kinds=EMAIL_KIND)}]",
+        "a null kind": f"[{candidate(own, kinds='[null]')}]",
+        "a repeated kind": f"[{candidate(own, kinds=REPEATED_KIND)}]",
+        "a patient_id that is not a uuid": '[{"patient_id": "not-a-uuid", "kinds": ["phone"], "reason": "near_match"}]',
+    }
+    for label, cands in bad_shapes.items():
+        assert await fn(db, w, a, cands=cands) == "22023", label
+    assert await fn(db, w, a, kinds="array['name_dob','phone','email']", tokens="array['\\x01'::bytea,'\\x02'::bytea,'\\x03'::bytea]") == "22023"  # three tokens
+    assert await fn(db, w, a, kinds="array['name_dob','name_dob']", tokens="array['\\x01'::bytea,'\\x02'::bytea]") == "22023"  # duplicate kind
+    assert await fn(db, w, a, kinds="array['email']") == "22023"  # a kind outside the closed set
+    assert await fn(db, w, a, origin="prod") == "22023"
+    assert await fn(db, w, a, key="   ") == "22023"
+
+
+async def test_the_migrating_role_bypasses_rls_which_the_definer_function_relies_on(db):
+    # The function writes tables with FORCE ROW LEVEL SECURITY as its owner (the migrating role). If that role did not bypass RLS the function would fail closed with 42501 and look
+    # like an authorisation failure, so assert the assumption directly (the same check as tests/test_rls_msg_live.py for msg.record_screening).
+    owner = (await db.execute(text("select pg_get_userbyid(proowner) from pg_proc where oid = to_regprocedure(:s)"), {"s": FUNCTION_SIG})).scalar_one()
+    assert (await db.execute(text("select rolbypassrls or rolsuper from pg_roles where rolname = :r"), {"r": owner})).scalar_one() is True, owner
