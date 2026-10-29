@@ -28,6 +28,7 @@ missing.
 import asyncio
 import contextlib
 import logging
+import os
 import time
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterator
@@ -69,6 +70,7 @@ from careflow.checkpointer import CheckpointerError
 from careflow.crypto import CryptoError, DemographicVault
 from careflow.db import make_app_engine, set_request_claims
 from careflow.dead_letters import raise_dead_letter_tasks
+from careflow.demo_phase3 import refuse_demo_outside_demo
 from careflow.front_door import FrontDoorError, run_config
 from careflow.front_door_runner import TASK_TYPE as FRONT_DOOR_TASK
 from careflow.front_door_runner import (
@@ -1131,6 +1133,7 @@ def create_app(
                 await app.state.jwks.aclose()
 
     app = FastAPI(title="CareFlow", lifespan=lifespan)
+    refuse_demo_outside_demo(os.environ, resolve_profile())  # the demo Phase 3 placeholders may never be present outside profile=demo + data_policy=synthetic_only
     app.add_exception_handler(RequestValidationError, _validation_error_handler)  # type: ignore[arg-type]
     app.include_router(router)
     app.include_router(scheduling)
