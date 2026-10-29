@@ -34,6 +34,7 @@ from careflow.front_door import (
     initial_state,
     run_config,
 )
+from tests.needles import assert_not_leaked
 from tests.test_front_door import Holds, Proposer, Recorder, Retriever, Texts
 from tests.test_referral import CLINIC, DOC, GOOD, Conn, Engine, Extractor, Ingestor
 
@@ -324,8 +325,7 @@ async def test_nothing_in_the_stored_checkpoints_blobs_or_writes_holds_patient_t
     everything = b"".join(
         [v[2][1] + v[3][1] for v in w.store.checkpoints.values()] + [v[1][1] for v in w.store.blobs.values()] + [v[2][1] for v in w.store.writes.values()]
     )
-    for needle in (b"Asha", b"Rao", b"1980", b"98765", b"9876543210", b"SENTINEL-LETTER"):
-        assert needle not in everything, needle
+    assert_not_leaked(everything, label="the stored checkpoints, blobs and writes")
     assert everything  # the probe is not vacuous: something was stored
 
 

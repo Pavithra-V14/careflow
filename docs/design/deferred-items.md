@@ -9,6 +9,9 @@ Everything here is **known and intentionally not done yet**. Each line says what
 one, delete its line in the same change. Source of the first group: the msg / iam design review of 2026-10-23
 (`docs/design/msg-screening-binding-design.md`).
 
+## Test speed
+- **`tests/test_api_referrals_live.py` takes about 21 minutes in one file (1297 s for 27 tests, run 40719139488).** Find out why (fixture setup per test versus the worker ticks and the 14-identity grid) before Phase 3 adds more live tests. No change now.
+
 ## Planted tokens (pre-launch blocker 10)
 - **Revoking a mistaken identity confirmation (owner request 2026-10-28):** a confirmation is permanent today (append-only, one row per patient). Design only: `docs/design/identity-confirmation-revoke.md` (an append-only event log, latest event wins; front desk, one person, no step-up; the matcher treats the record as unverified again; a nurse review task lists what was linked meanwhile). Not built.
 - **Open item: step-up on confirm-identity.** Left out for now (a confirmation only makes a record match normally). REVISIT WITH THE CLINICAL SAFETY LEAD.

@@ -456,7 +456,7 @@ async def test_evaluate_and_escalate_with_no_usable_rule_records_unassessable_an
     message = await stored_message(db, w)
     evaluation, result = await act(db, w.worker, engine.evaluate_and_escalate, w.a, "test", "anything", message, profile="clinical")
     assert evaluation.outcome == "unassessable" and result.outcome == "unassessable"
-    (row,) = await rows(db, "select kind, priority, assigned_role, provenance from agents.review_tasks")
+    (row,) = await rows(db, "select kind, priority, assigned_role, provenance from agents.review_tasks where clinic_id = :c", c=w.a)  # scoped to this test's own clinic: the table is shared with the other shards
     assert tuple(row[:3]) == ("screening_unassessable", "standard", "nurse")
     assert row[3]["placeholder"] == rules.PLACEHOLDER and row[3]["priority_note"] == "pending clinical lead confirmation"
 

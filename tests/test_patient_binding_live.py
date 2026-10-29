@@ -185,7 +185,7 @@ def insert_sql(clinic, *, with_account=None, key=None):
 async def test_front_desk_cannot_insert_a_patient_with_an_account_id(db):
     w = await seed(db)
     assert await attempts(db, w["fd"], [insert_sql(w["a"]), insert_sql(w["a"], with_account=w["ok"])]) == ["ok:1", DENIED]
-    assert await db.fetchval("select count(*) from mpi.patients where account_id is not null") == 0
+    assert await db.fetchval("select count(*) from mpi.patients where account_id is not null and clinic_id = $1", w["a"]) == 0
 
 
 async def test_front_desk_cannot_update_account_id(db):
