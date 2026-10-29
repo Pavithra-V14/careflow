@@ -29,7 +29,10 @@ class Conn:
         return Result(self.rowcount)
 
 
-KW = dict(clinic_id=CLINIC, origin="test", actor_id=ACTOR, actor_role="front_desk", action="merge.propose", resource_type="merge", resource_id=RES, idempotency_key="audit:k-1")
+KW = {
+    "clinic_id": CLINIC, "origin": "test", "actor_id": ACTOR, "actor_role": "front_desk", "action": "merge.propose", "resource_type": "merge", "resource_id": RES,
+    "idempotency_key": "audit:k-1",
+}
 
 
 async def test_one_row_is_written_idempotently_as_the_actor_with_ids_and_closed_words_only():
