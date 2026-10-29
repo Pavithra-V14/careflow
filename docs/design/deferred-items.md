@@ -9,6 +9,9 @@ Everything here is **known and intentionally not done yet**. Each line says what
 one, delete its line in the same change. Source of the first group: the msg / iam design review of 2026-10-23
 (`docs/design/msg-screening-binding-design.md`).
 
+## Test speed
+- **`tests/test_api_referrals_live.py` takes about 21 minutes in one file (1297 s for 27 tests, run 40719139488).** Find out why (fixture setup per test versus the worker ticks and the 14-identity grid) before Phase 3 adds more live tests. No change now.
+
 ## Waiting for a real vision route (P2-4)
 - **Checklist for any real vision provider (none approved; the fakes stay):** (1) the owner's approval of the provider; (2) a key, kept out of the repository; (3) a registry row built with `careflow.adapters.vision.vlm_row`; (4) a data-flow-register entry and its register test; (5) an explicit `timeout_seconds` (required by `vlm_row`, no default).
 - **Extraction cache.** Crash-resume re-reads and re-bills vision; a persisted encrypted cache needs schema + privacy review. The in-process memo (bounded to 8 documents) stays until then.
