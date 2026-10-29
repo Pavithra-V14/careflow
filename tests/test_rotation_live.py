@@ -95,6 +95,17 @@ async def _conn():
         for table, script in SQL.items():
             if (await conn.execute(text("select to_regclass(:t) is null"), {"t": table})).scalar_one():
                 await raw(conn, script)
+        # Loud, read-only precondition (nothing is deleted). These tests rotate and count EVERY non-erased message still on key version 1, across all clinics, and sum the global
+        # rotation ledger for 1 -> 2; they insert their own messages inside a rolled-back transaction. A committed v1 message or ledger row from outside (for example left by a
+        # killed run) would make them wrong, so they refuse to run rather than pass or fail for the wrong reason.
+        outside = (await conn.execute(text("select count(*) from msg.messages where erased_at is null and body_key_version = 1"))).scalar_one()
+        ledger = (await conn.execute(text("select count(*) from msg.message_rotation_batches where from_version = 1 and to_version = 2"))).scalar_one()
+        if outside or ledger:
+            pytest.fail(
+                f"The rotation tests assume the database holds NO committed message on key version 1 and NO committed 1->2 rotation-ledger row (they rotate and count all of them); "
+                f"found {outside} message(s) and {ledger} ledger row(s) from outside this suite. Inspect read-only first (docs/design/ci-sharding.md, 'Leftover rows from killed runs'); "
+                f"do not delete append-only rows by hand."
+            )
         yield conn
     finally:
         await outer.rollback()

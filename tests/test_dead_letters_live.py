@@ -163,7 +163,7 @@ async def test_other_task_types_and_other_clinics_jobs_are_not_swept_and_the_err
     assert await sweep(db, w) == 1  # only the front_door_run job
     assert await sweep(db, w, uid="worker_b") == 0  # clinic B's worker sees none of clinic A's jobs
     ((_, _, _, _, provenance, _),) = await tasks(db, doc)
-    assert "SENTINEL" not in str(provenance) and job_id
+    assert "SENTINEL-ERROR-TEXT" not in str(provenance) and "patient name" not in str(provenance) and job_id
 
 
 async def test_the_nurse_of_the_clinic_can_see_the_task_front_desk_and_another_clinic_cannot(db):

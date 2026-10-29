@@ -193,7 +193,7 @@ async def test_the_idempotency_key_is_unique_per_clinic_not_across_clinics(db):
 async def test_the_status_is_registered_and_comes_from_the_database(db):
     w = await world(db)
     await db.execute(doc_sql(w.a, w.people["front_desk_a"]))
-    assert await db.fetchval("select status from docs.documents") == "registered"
+    assert await db.fetchval("select status from docs.documents where clinic_id = $1", w.a) == "registered"
     doc = _u()
     forged = (
         "insert into docs.documents (id, clinic_id, origin, kind, status, storage_path, content_type, size_bytes, sha256, registered_by, idempotency_key) "

@@ -65,8 +65,13 @@ def test_migrations_run_once_in_their_own_non_cancelling_group():
     assert not any("careflow.migrate" in step.get("run", "") for step in WORKFLOW["jobs"]["live"]["steps"])
 
 
-def test_a_newer_commit_on_the_same_branch_cancels_its_own_older_run():
-    assert WORKFLOW["concurrency"]["cancel-in-progress"] is True and "github.ref" in WORKFLOW["concurrency"]["group"]
+def test_a_newer_commit_cancels_its_own_older_pull_request_run_but_a_run_triggered_by_a_push_to_main_is_never_cancelled():
+    """A cancelled live job skips its teardown and leaves committed rows in the shared CI database (how PR #3's main run was killed). So the expression must be true ONLY for
+    pull requests: cancel-in-progress is exactly `github.event_name == 'pull_request'`, and the workflow still triggers on pushes to main."""
+    concurrency = WORKFLOW["concurrency"]
+    assert "github.ref" in concurrency["group"]
+    assert concurrency["cancel-in-progress"] == "${{ github.event_name == 'pull_request' }}"
+    assert WORKFLOW[True]["push"]["branches"] == ["main"] and "pull_request" in WORKFLOW[True]
 
 
 def test_the_required_check_named_test_passes_only_if_every_shard_did():
