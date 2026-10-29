@@ -251,7 +251,11 @@ def expected_me(ids, key):
         "account_id": str(account_id),
         "account_type": kind,
         "status": status,
-        "roles": sorted(({"clinic_id": str(c), "role": r} for c, r in grants), key=lambda g: (g["clinic_id"], g["role"])),
+        # each grant also names its clinic and that clinic's origin (the frontend shows them): the fixture's two clinics are "Matrix A" and "Matrix B", both origin 'test'
+        "roles": sorted(
+            ({"clinic_id": str(c), "role": r, "clinic_name": "Matrix A" if c == ids.clinic_a else "Matrix B", "clinic_origin": "test"} for c, r in grants),
+            key=lambda g: (g["clinic_id"], g["role"]),
+        ),
     }
 
 

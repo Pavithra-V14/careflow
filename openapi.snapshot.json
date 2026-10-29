@@ -599,6 +599,28 @@
             "title": "Clinic Id",
             "type": "string"
           },
+          "clinic_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clinic Name"
+          },
+          "clinic_origin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clinic Origin"
+          },
           "role": {
             "title": "Role",
             "type": "string"
@@ -606,7 +628,9 @@
         },
         "required": [
           "clinic_id",
-          "role"
+          "role",
+          "clinic_name",
+          "clinic_origin"
         ],
         "title": "RoleGrant",
         "type": "object"
