@@ -141,6 +141,10 @@ jobs:
       - name: Commit the migrator's SET membership of careflow_app
         run: uv run python scripts/ci_grant_set_role.py
 
+      # Read-only stop-gap for migration 0024: no live-origin account may hold queue_worker together with another role. The CI project's tagged origin='test' fixtures are not checked.
+      - name: Check that worker accounts hold queue_worker only
+        run: uv run python scripts/check_worker_accounts.py --origin live
+
   live:
     needs: migrate
     name: live shard ${{ matrix.shard }}
@@ -164,6 +168,7 @@ jobs:
               tests/test_api_read_message_live.py
               tests/test_patient_binding_live.py
               tests/test_rls_screenings_live.py
+              tests/test_staff_roles_concurrency_live.py
           - shard: 2  # about 41 min (35:25 measured + test_scheduling_live 5:27)
             files: >-
               tests/test_queue_live.py

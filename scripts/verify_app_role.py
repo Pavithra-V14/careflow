@@ -33,6 +33,7 @@ from sqlalchemy import text
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from careflow.db import make_app_engine
+from careflow.ops_checks import accounts_holding_worker_and_another_role
 
 SPIKE = "_careflow_spike"
 failures = 0
@@ -175,6 +176,9 @@ async def main() -> None:
             result(False, "user A inserted a row owned by B (WITH CHECK not enforced)")
         except Exception as e:
             result("row-level security" in str(e), "user A cannot insert a row owned by user B (WITH CHECK)")
+        print("\n[5] worker accounts hold queue_worker only (read-only stop-gap for migration 0024; docs/runbooks/staff-accounts.md)")
+        bad = await accounts_holding_worker_and_another_role(mig.fetch)
+        result(not bad, f"accounts holding queue_worker together with another role: {len(bad)}" + (f" ({', '.join(bad)})" if bad else ""))
     except Exception as e:
         result(False, f"setup/run failed: {type(e).__name__}: {str(e)[:200]}")
     finally:

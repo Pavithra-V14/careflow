@@ -860,6 +860,62 @@ def referral_review_cases(ids) -> list[tuple]:
     return cases
 
 
+# ---- POST /v1/staff/patients/{patient_id}/confirm-identity: front desk confirms a worker-created record (pre-launch blocker 10, option A) -----------------
+#
+# Front desk of the clinic confirms; every other identity is refused with a fixed body: those who can SEE the patient under row-level security (nurse, doctor, and `multi`, who is a
+# nurse here) get 403, those who cannot (admin, owner, auditor, patient, guardian, closed, suspended and invited accounts, front desk of ANOTHER clinic, an account-less token) get 404.
+# No step-up (unlike merges): a confirmation only makes a record match normally; it links, merges and erases nothing. The queue worker has no identity in this matrix; the worker's
+# refusal (it can read patients but has no INSERT policy on mpi.identity_confirmations) is in tests/test_rls_mpi_worker_live.py.
+
+CONFIRM = "/v1/staff/patients/{patient_id}/confirm-identity"
+
+
+async def _new_worker_patient(conn, clinic):
+    """A synthetic patient created the way the unattended worker creates one (registered_via = 'referral_worker'), written by the owner."""
+    pid = uuid.uuid4()
+    await conn.execute(
+        "insert into mpi.patients (id, clinic_id, name_ct, name_key_version, dob_ct, dob_key_version, origin, idempotency_key, registered_via) "
+        "values ($1, $2, $3, 1, $3, 1, 'test', $4, 'referral_worker')",
+        pid, clinic, b"x" * 40, f"matrix-w-{uuid.uuid4().hex}",
+    )
+    return pid
+
+
+def new_worker_patient(ids, *, clinic=None):
+    return _run(_owner(lambda conn: _new_worker_patient(conn, clinic or ids.clinic_a)))
+
+
+def _confirm_body(patient, replayed):
+    return lambda b: b == {"patient_id": str(patient), "confirmed": True, "replayed": replayed}
+
+
+def patient_confirm_cases(ids) -> list[tuple]:
+    fd = "front_desk_a"
+    ok, other, refused = new_worker_patient(ids), new_worker_patient(ids), new_worker_patient(ids)
+    path = lambda pid: CONFIRM.format(patient_id=pid)
+    key = _new_key()
+    cases = [
+        _case(ids, "front desk of the clinic confirms a worker-created patient", fd, 200, path(ok), key=key, body=_confirm_body(ok, False)),
+        _case(ids, "replaying the same key is a replay", fd, 200, path(ok), key=key, body=_confirm_body(ok, True)),
+        _case(ids, "an already confirmed patient under a new key is a replay in effect", fd, 200, path(ok), body=_confirm_body(ok, True)),
+        _case(ids, "a key already used for a different patient is refused", fd, 409, path(other), key=key,
+              body=lambda b: b == {"detail": "this idempotency key was already used by a different request"}),
+        _case(ids, "an unknown patient is not found", fd, 404, path(uuid.uuid4()), body=_fixed(404)),
+        _case(ids, "missing X-Idempotency-Key is rejected", fd, 422, path(refused), key=None, body=_fixed(422)),
+        _case(ids, "blank X-Idempotency-Key is rejected", fd, 422, path(refused), key="   ", body=_fixed(422)),
+        _case(ids, "a patient id that is not a uuid is rejected", fd, 422, path("nope"), body=_fixed(422)),
+    ]
+    visible_but_not_front_desk = {"nurse_a", "doctor_a", "multi"}
+    for person in [*ids.people, "no account"]:
+        if person == fd:
+            continue
+        status = 403 if person in visible_but_not_front_desk else 404
+        who = bearer(mint(ids.no_account)) if person == "no account" else person
+        cases.append(_case(ids, f"{person} is refused", who, status, path(refused), body=_fixed(status)))
+    cases += _unauthenticated(ids, path(refused), None)
+    return cases
+
+
 # One entry per route: add the new route's cases here in the same change that adds the route.
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
@@ -874,6 +930,7 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", MERGES): merge_propose_cases,
     ("POST", APPROVE): merge_approve_cases,
     ("POST", UNMERGE): merge_unmerge_cases,
+    ("POST", CONFIRM): patient_confirm_cases,
     ("GET", READ): message_read_cases,
     ("POST", RUN_REFERRAL): referral_run_cases,
     ("POST", REVIEW_REFERRAL): referral_review_cases,
