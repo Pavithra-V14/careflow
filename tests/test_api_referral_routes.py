@@ -71,6 +71,17 @@ def world(monkeypatch):
         w.enqueued.append((clinic_id, origin, task_type, payload, key))
         return EnqueueResult(uuid.UUID(int=7), replayed=len(w.enqueued) > 1)
 
+    w.audits = []
+
+    async def write_audit(conn, **kw):
+        w.audits.append(kw)
+        return True
+
+    async def acting_role(conn, claims, clinic_id, roles):
+        return roles[0]
+
+    monkeypatch.setattr(app_module, "write_audit", write_audit)
+    monkeypatch.setattr(app_module, "_acting_role", acting_role)
     monkeypatch.setattr(app_module, "_referral_document", referral_document)
     monkeypatch.setattr(app_module, "_holds_role", holds_role)
     monkeypatch.setattr(app_module.PostgresQueue, "enqueue", enqueue)
@@ -152,6 +163,9 @@ def test_review_resumes_the_paused_run_with_the_reviewer_from_the_token_and_the_
     assert payload.resume == {"decision": "approve", "reviewer_id": str(SUB)}
     assert config["configurable"]["thread_id"] == f"front_door:{DOC}" and config["configurable"]["clinic_id"] == str(CLINIC)
     assert world.roles_asked == ("nurse", "doctor")
+    (audit,) = world.audits  # one audit row, as the token's person, ids and a closed word only
+    assert (audit["actor_id"], audit["action"], audit["resource_id"], audit["details"]) == (SUB, "referral.review_decision", DOC, {"decision": "approve"})
+    assert audit["idempotency_key"] == f"audit:referral-review:{DOC}:k-1"
 
 
 def test_a_body_that_names_a_reviewer_or_an_unknown_decision_is_refused_and_nothing_is_resumed(world):
