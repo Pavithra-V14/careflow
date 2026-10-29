@@ -141,6 +141,10 @@ jobs:
       - name: Commit the migrator's SET membership of careflow_app
         run: uv run python scripts/ci_grant_set_role.py
 
+      # Read-only stop-gap for migration 0024: no live-origin account may hold queue_worker together with another role. The CI project's tagged origin='test' fixtures are not checked.
+      - name: Check that worker accounts hold queue_worker only
+        run: uv run python scripts/check_worker_accounts.py --origin live
+
   live:
     needs: migrate
     name: live shard ${{ matrix.shard }}
@@ -155,7 +159,7 @@ jobs:
         include:
           # Estimated minutes from the 2026-10-24 PR #3 run (shard 2 took 50:42 against the 60-minute limit, shard 3 11:39): about 33 minutes each. Every shard prints
           # per-file times (SHARD-TIME lines) so the next rebalance uses measurements. tests/test_ci_shards.py requires every live test file to appear in exactly one shard.
-          - shard: 1  # about 41 min (30:54 measured in run 40719139488 + test_rls_screenings_live 10:14)
+          - shard: 1  # about 40 min (50:11 measured in PR #6's run with test_rls_screenings_live, 10:04 of it; moved to shard 3 under the 50-minute rule)
             files: >-
               tests/test_api_role_matrix.py
               tests/test_identity_live.py
@@ -163,7 +167,7 @@ jobs:
               tests/test_api_screen_message_live.py
               tests/test_api_read_message_live.py
               tests/test_patient_binding_live.py
-              tests/test_rls_screenings_live.py
+              tests/test_staff_roles_concurrency_live.py
           - shard: 2  # about 41 min (35:25 measured + test_scheduling_live 5:27)
             files: >-
               tests/test_queue_live.py
@@ -182,9 +186,10 @@ jobs:
               tests/test_rls_checkpoints_live.py
               tests/test_triage_writers_live.py
               tests/test_scheduling_live.py
-          - shard: 3  # about 40 min (55:16 measured - screenings 10:14 - scheduling 5:27; the 200-booking test alone takes 5 to 10)
+          - shard: 3  # about 37 min (27:23 measured + test_rls_screenings_live 10:04)
             files: >-
               tests/test_rotation_live.py
+              tests/test_rls_screenings_live.py
               tests/test_rls_mpi_scheduling_live.py
               tests/test_scheduling_concurrency_live.py
               tests/test_api_referrals_live.py

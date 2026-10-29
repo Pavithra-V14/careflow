@@ -28,6 +28,7 @@ missing.
 import asyncio
 import contextlib
 import logging
+import os
 import time
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterator
@@ -35,6 +36,7 @@ from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
+from dotenv import dotenv_values
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -47,6 +49,7 @@ from fastapi import (
     Response,
 )
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from langgraph.types import Command
@@ -65,6 +68,7 @@ from careflow.auth import (
     verify_token,
 )
 from careflow.checkpointer import CheckpointerError
+from careflow.cors import middleware_kwargs, parse_origins
 from careflow.crypto import CryptoError, DemographicVault
 from careflow.db import make_app_engine, set_request_claims
 from careflow.dead_letters import raise_dead_letter_tasks
@@ -143,6 +147,9 @@ class Settings(BaseSettings):
     # code: which roles are launch-blocking is a deployment decision. Unset means "not configured", and a clinical deployment is then not ready.
     required_roles: str | None = Field(default=None, validation_alias=AliasChoices("CAREFLOW_REQUIRED_ROLES", "required_roles"))
 
+    # Browser origins allowed to call the API (careflow/cors.py): a comma-separated list of EXACT origins. Unset means none.
+    cors_allowed_origins: str | None = Field(default=None, validation_alias=AliasChoices("CORS_ALLOWED_ORIGINS", "cors_allowed_origins"))
+
     @property
     def issuer(self) -> str:
         return self.supabase_url.rstrip("/") + "/auth/v1"
@@ -203,6 +210,8 @@ router = APIRouter()
 class RoleGrant(BaseModel):
     clinic_id: uuid.UUID
     role: str
+    clinic_name: str | None  # None only if the clinic row is not visible to the caller (never expected for one's own grant)
+    clinic_origin: str | None
 
 
 class Me(BaseModel):
@@ -230,8 +239,9 @@ async def me(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) ->
         raise HTTPException(status_code=403, detail="no active account")
     grants = await conn.execute(
         text(
-            "select clinic_id, role from iam.staff_roles "
-            "where account_id = :i and revoked_at is null order by clinic_id, role"
+            "select sr.clinic_id, sr.role, c.name as clinic_name, c.origin as clinic_origin from iam.staff_roles sr "
+            "left join iam.clinics c on c.id = sr.clinic_id "
+            "where sr.account_id = :i and sr.revoked_at is null order by sr.clinic_id, sr.role"
         ),
         {"i": account_id},
     )
@@ -239,7 +249,7 @@ async def me(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) ->
         account_id=account.id,
         account_type=account.account_type,
         status=account.status,
-        roles=[RoleGrant(clinic_id=g.clinic_id, role=g.role) for g in grants],
+        roles=[RoleGrant(clinic_id=g.clinic_id, role=g.role, clinic_name=g.clinic_name, clinic_origin=g.clinic_origin) for g in grants],
     )
 
 
@@ -734,6 +744,38 @@ async def register_patient(
     return IngestOut(patient_id=result.patient_id, outcome=result.outcome, candidate_ids=list(result.candidate_ids))
 
 
+class ConfirmIdentityOut(_Out):
+    """Ids and a flag only."""
+
+    patient_id: uuid.UUID
+    confirmed: Literal[True]
+    replayed: bool
+
+
+@staff_patients.post("/{patient_id}/confirm-identity", response_model=ConfirmIdentityOut)
+async def confirm_patient_identity(
+    patient_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)
+) -> ConfirmIdentityOut:
+    """A front-desk person confirms a patient's identity. A record the unattended worker created is NOT auto-linked to by later referrals until this is done (a match on it goes
+    to a person); confirming it makes it match normally. A triage approval does NOT do this (owner decision). 404 if the patient is not visible to you (or erased), 403 if you
+    are not front desk of that clinic, 409 if the key was used for a different patient, 422 for a bad id or key."""
+    row = (await conn.execute(text("select clinic_id, origin from mpi.patients where id = :i and erased_at is null"), {"i": patient_id})).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    origin = await _front_desk_gate(conn, claims, row[0])
+    try:
+        result = await mpi.confirm_identity(
+            conn, clinic_id=row[0], origin=origin, patient_id=patient_id, confirmed_by=uuid.UUID(claims["sub"]), idempotency_key=idempotency_key
+        )
+    except mpi.PatientNotFound:
+        raise HTTPException(status_code=404, detail="not found") from None
+    except mpi.NotPermitted:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    except mpi.IdempotencyConflict:
+        raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request") from None
+    return ConfirmIdentityOut(patient_id=result.patient_id, confirmed=True, replayed=result.replayed)
+
+
 async def _validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     """FastAPI's default 422 body includes the offending INPUT. On a route that takes a name, a date of birth and a phone that would put them
     in an error response (and in anything that records responses), so every validation error is reduced to its type, location and
@@ -1092,6 +1134,11 @@ def create_app(
                 await app.state.jwks.aclose()
 
     app = FastAPI(title="CareFlow", lifespan=lifespan)
+    # CORS is decided when the app is BUILT, so a misconfigured deployment refuses to start (careflow/cors.py). Unset means no origin is allowed.
+    raw_origins = settings.cors_allowed_origins if settings is not None else (os.environ.get("CORS_ALLOWED_ORIGINS") or dotenv_values(".env").get("CORS_ALLOWED_ORIGINS"))
+    origins = parse_origins(raw_origins, resolve_profile())
+    if origins:
+        app.add_middleware(CORSMiddleware, **middleware_kwargs(origins))
     app.add_exception_handler(RequestValidationError, _validation_error_handler)  # type: ignore[arg-type]
     app.include_router(router)
     app.include_router(scheduling)

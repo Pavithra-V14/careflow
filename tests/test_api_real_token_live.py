@@ -99,7 +99,7 @@ def test_the_app_accepts_a_real_token_and_rejects_a_tampered_copy(real_user):
     with TestClient(app, raise_server_exceptions=False) as client:
         ok = client.get("/v1/iam/me", headers={"Authorization": f"Bearer {token}"})
         assert ok.status_code == 200, ok.text
-        assert ok.json() == {"account_id": str(user_id), "account_type": "staff", "status": "active", "roles": [{"clinic_id": str(clinic), "role": "nurse"}]}
+        assert ok.json() == {"account_id": str(user_id), "account_type": "staff", "status": "active", "roles": [{"clinic_id": str(clinic), "role": "nurse", "clinic_name": "Real Token Clinic", "clinic_origin": "test"}]}
         header, payload, signature = token.split(".")
         flipped = signature[:-2] + ("AA" if signature[-2:] != "AA" else "BB")
         assert client.get("/v1/iam/me", headers={"Authorization": f"Bearer {header}.{payload}.{flipped}"}).status_code == 401

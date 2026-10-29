@@ -38,6 +38,7 @@ from starlette.testclient import TestClient
 from careflow.app import Settings, create_app
 from careflow.auth import JWKSClient
 from careflow.crypto import DemographicVault
+from careflow.db import make_app_engine
 from careflow.front_door_runner import FrontDoorComponents
 from tests.bounds import bounded
 
@@ -207,10 +208,20 @@ async def _cleanup(ids, conn=None):
         for table in ("sched.bookings", "sched.holds", "sched.waitlist", "sched.slots", "sched.priority_levels",
                       "mpi.merges", "agents.review_tasks", "mpi.match_candidates", "mpi.identity_tokens", "mpi.patients", "sched.visit_types", "sched.providers",
                       "sched.locations"):
+            if table == "mpi.patients":
+                # A confirmed patient cannot be deleted: mpi.identity_confirmations is append-only (migration 0023, a trigger blocks the owner too) and references it. Such patients, and
+                # whatever references them (the confirming accounts, the clinics), stay behind, tagged origin='test'; nothing reads them and every other suite is scoped to its own clinic.
+                await conn.execute(
+                    "delete from mpi.patients p where p.clinic_id = any($1) and not exists (select 1 from mpi.identity_confirmations c where c.patient_id = p.id)", clinics
+                )
+                continue
             await conn.execute(f"delete from {table} where clinic_id = any($1)", clinics)
         await conn.execute("delete from iam.staff_roles where clinic_id = any($1)", [ids.clinic_a, ids.clinic_b])
-        await conn.execute("delete from iam.accounts where id = any($1)", accounts)
-        await conn.execute("delete from iam.clinics where id = any($1)", [ids.clinic_a, ids.clinic_b])
+        for statement, args in (("delete from iam.accounts where id = any($1)", accounts), ("delete from iam.clinics where id = any($1)", [ids.clinic_a, ids.clinic_b])):
+            try:
+                await conn.execute(statement, args)
+            except asyncpg.ForeignKeyViolationError:
+                pass  # still referenced by an append-only confirmation (see above): left behind on purpose
     finally:
         if own:
             await conn.close()
@@ -251,7 +262,11 @@ def expected_me(ids, key):
         "account_id": str(account_id),
         "account_type": kind,
         "status": status,
-        "roles": sorted(({"clinic_id": str(c), "role": r} for c, r in grants), key=lambda g: (g["clinic_id"], g["role"])),
+        # each grant also names its clinic and that clinic's origin (the frontend shows them): the fixture's two clinics are "Matrix A" and "Matrix B", both origin 'test'
+        "roles": sorted(
+            ({"clinic_id": str(c), "role": r, "clinic_name": "Matrix A" if c == ids.clinic_a else "Matrix B", "clinic_origin": "test"} for c, r in grants),
+            key=lambda g: (g["clinic_id"], g["role"]),
+        ),
     }
 
 
@@ -860,6 +875,62 @@ def referral_review_cases(ids) -> list[tuple]:
     return cases
 
 
+# ---- POST /v1/staff/patients/{patient_id}/confirm-identity: front desk confirms a worker-created record (pre-launch blocker 10, option A) -----------------
+#
+# Front desk of the clinic confirms; every other identity is refused with a fixed body: those who can SEE the patient under row-level security (nurse, doctor, and `multi`, who is a
+# nurse here) get 403, those who cannot (admin, owner, auditor, patient, guardian, closed, suspended and invited accounts, front desk of ANOTHER clinic, an account-less token) get 404.
+# No step-up (unlike merges): a confirmation only makes a record match normally; it links, merges and erases nothing. The queue worker has no identity in this matrix; the worker's
+# refusal (it can read patients but has no INSERT policy on mpi.identity_confirmations) is in tests/test_rls_mpi_worker_live.py.
+
+CONFIRM = "/v1/staff/patients/{patient_id}/confirm-identity"
+
+
+async def _new_worker_patient(conn, clinic):
+    """A synthetic patient created the way the unattended worker creates one (registered_via = 'referral_worker'), written by the owner."""
+    pid = uuid.uuid4()
+    await conn.execute(
+        "insert into mpi.patients (id, clinic_id, name_ct, name_key_version, dob_ct, dob_key_version, origin, idempotency_key, registered_via) "
+        "values ($1, $2, $3, 1, $3, 1, 'test', $4, 'referral_worker')",
+        pid, clinic, b"x" * 40, f"matrix-w-{uuid.uuid4().hex}",
+    )
+    return pid
+
+
+def new_worker_patient(ids, *, clinic=None):
+    return _run(_owner(lambda conn: _new_worker_patient(conn, clinic or ids.clinic_a)))
+
+
+def _confirm_body(patient, replayed):
+    return lambda b: b == {"patient_id": str(patient), "confirmed": True, "replayed": replayed}
+
+
+def patient_confirm_cases(ids) -> list[tuple]:
+    fd = "front_desk_a"
+    ok, other, refused = new_worker_patient(ids), new_worker_patient(ids), new_worker_patient(ids)
+    path = lambda pid: CONFIRM.format(patient_id=pid)
+    key = _new_key()
+    cases = [
+        _case(ids, "front desk of the clinic confirms a worker-created patient", fd, 200, path(ok), key=key, body=_confirm_body(ok, False)),
+        _case(ids, "replaying the same key is a replay", fd, 200, path(ok), key=key, body=_confirm_body(ok, True)),
+        _case(ids, "an already confirmed patient under a new key is a replay in effect", fd, 200, path(ok), body=_confirm_body(ok, True)),
+        _case(ids, "a key already used for a different patient is refused", fd, 409, path(other), key=key,
+              body=lambda b: b == {"detail": "this idempotency key was already used by a different request"}),
+        _case(ids, "an unknown patient is not found", fd, 404, path(uuid.uuid4()), body=_fixed(404)),
+        _case(ids, "missing X-Idempotency-Key is rejected", fd, 422, path(refused), key=None, body=_fixed(422)),
+        _case(ids, "blank X-Idempotency-Key is rejected", fd, 422, path(refused), key="   ", body=_fixed(422)),
+        _case(ids, "a patient id that is not a uuid is rejected", fd, 422, path("nope"), body=_fixed(422)),
+    ]
+    visible_but_not_front_desk = {"nurse_a", "doctor_a", "multi"}
+    for person in [*ids.people, "no account"]:
+        if person == fd:
+            continue
+        status = 403 if person in visible_but_not_front_desk else 404
+        who = bearer(mint(ids.no_account)) if person == "no account" else person
+        cases.append(_case(ids, f"{person} is refused", who, status, path(refused), body=_fixed(status)))
+    cases += _unauthenticated(ids, path(refused), None)
+    return cases
+
+
 # One entry per route: add the new route's cases here in the same change that adds the route.
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
@@ -874,6 +945,7 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", MERGES): merge_propose_cases,
     ("POST", APPROVE): merge_approve_cases,
     ("POST", UNMERGE): merge_unmerge_cases,
+    ("POST", CONFIRM): patient_confirm_cases,
     ("GET", READ): message_read_cases,
     ("POST", RUN_REFERRAL): referral_run_cases,
     ("POST", REVIEW_REFERRAL): referral_review_cases,
@@ -987,7 +1059,7 @@ def test_the_harness_catches_a_route_that_lets_everyone_in(ids):
 def test_a_caller_sees_only_their_own_grants_even_if_rls_would_let_an_admin_read_more(client, ids):
     """RLS lets a clinic admin SELECT every grant in their clinic; /me must still return only their own."""
     body = client.get("/v1/iam/me", headers=bearer(mint(ids.people["admin_a"][0]))).json()
-    assert body["roles"] == [{"clinic_id": str(ids.clinic_a), "role": "admin"}]
+    assert body["roles"] == [{"clinic_id": str(ids.clinic_a), "role": "admin", "clinic_name": "Matrix A", "clinic_origin": "test"}]
 
 
 def test_a_multi_clinic_account_gets_exactly_its_own_grants(client, ids):
@@ -1006,22 +1078,38 @@ def test_error_bodies_never_say_why_a_token_failed(client, ids):
     assert client.get("/v1/iam/me").headers["www-authenticate"] == "Bearer"
 
 
-def test_identity_never_leaks_between_pooled_requests(app, ids):
+POOL_TIMEOUT_SECONDS = 120  # the two forty-request pool tests below only: see _pool_test_app
+
+
+def _pool_test_app():
+    """An app for the two tests that send forty concurrent requests through a pool of five (+5 overflow). Their claim is isolation under a SMALL pool, so the pool stays 5+5 and all forty requests
+    are kept; only the pool's WAIT is longer than the app's 30 seconds. On the shared CI database a request can wait that long for a connection when the other two shards are busy (a pool
+    timeout, never a wrong row, failed this test twice in CI: runs 40521334349 and 40879700466). No app pool setting changes: this builds the test's own engine. The caller disposes it."""
+    engine = make_app_engine(APP_URL or "", pool_size=5, max_overflow=5, pool_pre_ping=True, pool_timeout=POOL_TIMEOUT_SECONDS)
+    settings = Settings(supabase_url=PROJECT, database_url_app=APP_URL or "", step_up_max_age_seconds=STEP_UP_WINDOW)
+    return create_app(settings, jwks=fake_jwks_client(), vault=TEST_VAULT, front_door=FrontDoorComponents(None, None, None, None, None, None, None, None, None), engine=engine), engine
+
+
+def test_identity_never_leaks_between_pooled_requests(ids):
     """Forty concurrent requests from six identities over a pool of five connections: each must get exactly
     its own profile back, which only holds if the claims are transaction-local and set before any query."""
     keys = ["front_desk_a", "nurse_a", "admin_a", "auditor_a", "patient", "front_desk_b"]
+    app, engine = _pool_test_app()
 
     async def run():
-        async with app.router.lifespan_context(app):
-            transport = httpx.ASGITransport(app=app)
-            async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+        try:
+            async with app.router.lifespan_context(app):
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
 
-                async def call(i):
-                    key = keys[i % len(keys)]
-                    r = await http.get("/v1/iam/me", headers=bearer(mint(ids.people[key][0])))
-                    return key, r.status_code, r.json()
+                    async def call(i):
+                        key = keys[i % len(keys)]
+                        r = await http.get("/v1/iam/me", headers=bearer(mint(ids.people[key][0])))
+                        return key, r.status_code, r.json()
 
-                return await bounded(asyncio.gather(*(call(i) for i in range(40))), "the forty concurrent requests")
+                    return await bounded(asyncio.gather(*(call(i) for i in range(40))), "the forty concurrent requests", seconds=2 * POOL_TIMEOUT_SECONDS)
+        finally:
+            await engine.dispose()
 
     for key, status, body in _run(run()):
         assert status == 200, key
@@ -1174,23 +1262,28 @@ def test_list_responses_carry_identifiers_only(client, ids):
             assert set(item) <= allowed, (route, set(item) - allowed)
 
 
-def test_concurrent_reads_from_different_identities_neither_mix_rows_nor_leak_connections(app, ids):
+def test_concurrent_reads_from_different_identities_neither_mix_rows_nor_leak_connections(ids):
     """Forty concurrent reads over a pool of five: clinic A readers see only clinic A rows, clinic B's front desk sees
     none, admin, auditor and a patient are refused, and every connection is back in the pool."""
     plan = [("front_desk_a", 200), ("nurse_a", 200), ("front_desk_b", 200), ("admin_a", 403), ("auditor_a", 403), ("patient", 403)]
+    app, engine = _pool_test_app()
 
     async def run():
-        async with app.router.lifespan_context(app):
-            transport = httpx.ASGITransport(app=app)
-            async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+        try:
+            async with app.router.lifespan_context(app):
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
 
-                async def read(i):
-                    who, _ = plan[i % len(plan)]
-                    route = ("slots", "bookings", "waitlist")[i % 3]
-                    r = await http.get(f"{PREFIX}/{route}?limit=5", headers=bearer(mint(ids.people[who][0])))
-                    return who, r.status_code, (r.json()["items"] if r.status_code == 200 else None)
+                    async def read(i):
+                        who, _ = plan[i % len(plan)]
+                        route = ("slots", "bookings", "waitlist")[i % 3]
+                        r = await http.get(f"{PREFIX}/{route}?limit=5", headers=bearer(mint(ids.people[who][0])))
+                        return who, r.status_code, (r.json()["items"] if r.status_code == 200 else None)
 
-                return await bounded(asyncio.gather(*(read(i) for i in range(40))), "the forty concurrent reads"), app.state.engine.pool.checkedout()
+                    done = await bounded(asyncio.gather(*(read(i) for i in range(40))), "the forty concurrent reads", seconds=2 * POOL_TIMEOUT_SECONDS)
+                    return done, app.state.engine.pool.checkedout()
+        finally:
+            await engine.dispose()
 
     results, checked_out = _run(run())
     assert checked_out == 0
