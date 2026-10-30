@@ -239,7 +239,7 @@
           },
           "candidates": {
             "items": {
-              "$ref": "#/components/schemas/careflow__app__CandidateOut__1"
+              "$ref": "#/components/schemas/CandidateOut"
             },
             "title": "Candidates",
             "type": "array"
@@ -261,6 +261,63 @@
           "replayed"
         ],
         "title": "CancelOut",
+        "type": "object"
+      },
+      "CandidateOut": {
+        "additionalProperties": false,
+        "properties": {
+          "joined_at": {
+            "format": "date-time",
+            "title": "Joined At",
+            "type": "string"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "priority_code": {
+            "title": "Priority Code",
+            "type": "string"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "waitlist_id": {
+            "format": "uuid",
+            "title": "Waitlist Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "waitlist_id",
+          "patient_id",
+          "priority_code",
+          "rank",
+          "joined_at"
+        ],
+        "title": "CandidateOut",
+        "type": "object"
+      },
+      "CardCandidateOut": {
+        "additionalProperties": false,
+        "description": "A protocol card the retrieval proposed: its id and version only.",
+        "properties": {
+          "card_id": {
+            "title": "Card Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "card_id",
+          "version"
+        ],
+        "title": "CardCandidateOut",
         "type": "object"
       },
       "ConfirmIdentityOut": {
@@ -1219,7 +1276,7 @@
           },
           "candidates": {
             "items": {
-              "$ref": "#/components/schemas/careflow__app__CandidateOut__2"
+              "$ref": "#/components/schemas/CardCandidateOut"
             },
             "title": "Candidates",
             "type": "array"
@@ -2672,63 +2729,6 @@
           "has_more"
         ],
         "title": "WaitlistList",
-        "type": "object"
-      },
-      "careflow__app__CandidateOut__1": {
-        "additionalProperties": false,
-        "properties": {
-          "joined_at": {
-            "format": "date-time",
-            "title": "Joined At",
-            "type": "string"
-          },
-          "patient_id": {
-            "format": "uuid",
-            "title": "Patient Id",
-            "type": "string"
-          },
-          "priority_code": {
-            "title": "Priority Code",
-            "type": "string"
-          },
-          "rank": {
-            "title": "Rank",
-            "type": "integer"
-          },
-          "waitlist_id": {
-            "format": "uuid",
-            "title": "Waitlist Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "waitlist_id",
-          "patient_id",
-          "priority_code",
-          "rank",
-          "joined_at"
-        ],
-        "title": "CandidateOut",
-        "type": "object"
-      },
-      "careflow__app__CandidateOut__2": {
-        "additionalProperties": false,
-        "description": "A protocol card the retrieval proposed: its id and version only.",
-        "properties": {
-          "card_id": {
-            "title": "Card Id",
-            "type": "string"
-          },
-          "version": {
-            "title": "Version",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "card_id",
-          "version"
-        ],
-        "title": "CandidateOut",
         "type": "object"
       },
       "careflow__app__HoldOut__1": {
