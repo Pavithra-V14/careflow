@@ -82,3 +82,18 @@ Grouped by the staff-console packages. None of these is a decision for the front
 
 ## Suggested order for the next backend packages (a recommendation, the owner decides)
 Items 8 and 9 (upload and a referral queue) unblock the Front Door screens; items 1, 2 and 3 unblock identity work; item 4 is small and unblocks scheduling forms; the rest follow the console packages.
+
+## Patient view: response shapes the frontend needs (added 2026-10-30; demo profile with synthetic data only)
+
+All of these answer **503** outside `CAREFLOW_PROFILE=demo` with `CAREFLOW_DATA_POLICY=synthetic_only`, and every response under `/v1/staff/patients` (errors included) carries `Cache-Control: no-store`: do not cache or persist them. The two per-user limits are required settings; the demo fills them from `config/demo-phase3.yaml` when `CAREFLOW_DEMO_PHASE3=1`, an explicit `CAREFLOW_PATIENT_VIEW_*` value wins, and while one is unset the matching routes answer 503.
+
+- **`POST /v1/staff/patients/search`** (front desk) returns `{items: [{patient_id, matched_kinds, verified, registered_via, label}], truncated, labels_withheld}`. `label` is `{patient_id, name, birth_year, phone_last4}` or `null`; it is `null` for a phone-only hit (matched on the number alone), outside the gate, and whenever `labels_withheld` is `true` (the per-user list-row budget is spent or not configured: show the hit with only its id and flags). `truncated` is `true` when more exact matches exist than one page holds (at most 25); there is no total count and no export.
+- **`POST /v1/staff/patients/labels`** `{clinic_id, patient_ids: [1..25 unique ids]}` returns `{items: [{patient_id, name, birth_year, phone_last4}]}`; an id you may not see, or that is in another clinic or erased, is simply absent. Front desk, nurse, doctor of that clinic. **422** for more ids than the page limit or a repeated id, **429** `{"detail": "too many list rows read; wait a moment"}` over the per-user row budget per minute (retry after a moment; the body is the same fixed words every time), **503** disabled/unconfigured, 403/404 as for the other clinic-scoped routes.
+- **`GET /v1/staff/patients/{id}/view`** returns `{patient_id, clinic_id, name, date_of_birth (ISO), phone}`: the ONE place the full date of birth and the full phone appear. Front desk, nurse, doctor of the clinic; anyone who cannot see the record gets the same 404 as for a missing one. **429** `{"detail": "too many records opened; wait a moment"}` over the per-user opens per minute; **503** `{"detail": "this record cannot be shown"}` if a stored value cannot be decrypted (nothing partial is returned), or disabled/unconfigured. Opening writes an audit row (who, role, patient id).
+- A list row never shows the full date of birth or the full phone: year of birth and the last four digits only.
+- **429** is now declared in the OpenAPI document next to 401, 403, 404, 409, 422 and 503; its body is `ErrorBody` (`{detail: string}`).
+- A 401 now exposes `WWW-Authenticate` to browser code (CORS `Access-Control-Expose-Headers: WWW-Authenticate`, exactly that header), so the step-up and token-expiry signals can be read.
+
+### For `docs/frontend-backend-requests.md`
+That file lives on the frontend session's branch (`frontend-f0`), which backend work does not edit. The block above is written to be pasted into it; the CORS expose-header and the frontend-only CI path ignore it asks for are in the next backend batch (they come first in it).
+

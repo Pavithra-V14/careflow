@@ -59,7 +59,15 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from careflow import identity, mpi, offers, openapi_errors, patient_view, review_tasks
+from careflow import (
+    demo_phase3,
+    identity,
+    mpi,
+    offers,
+    openapi_errors,
+    patient_view,
+    review_tasks,
+)
 from careflow.audit import write_audit
 from careflow.auth import (
     AuthError,
@@ -1637,7 +1645,8 @@ def patient_view_config(request: Request) -> patient_view.PatientViewConfig:
     if "config" not in cache:
         try:
             settings = patient_view.PatientViewSettings()
-            bad = False
+            fill = {k: v for k, v in demo_phase3.patient_view_placeholders(os.environ, resolve_profile()).items() if getattr(settings, k) is None}  # an explicit value always wins
+            settings, bad = settings.model_copy(update=fill), False
         except ValidationError:
             settings, bad = patient_view.PatientViewSettings.model_construct(max_opens_per_minute=None, max_label_rows_per_minute=None, page_limit=1), True  # inert values (no validation, no env): nothing is served while `misconfigured`
         opens = patient_view.OpenRateLimiter(settings.max_opens_per_minute) if settings.max_opens_per_minute is not None else None
