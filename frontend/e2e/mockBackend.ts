@@ -1,5 +1,6 @@
 import type { Page, Route } from '@playwright/test';
 import mock from './mock-env.json' with { type: 'json' };
+import { createConsoleApi, type ConsoleOptions } from './consoleApi';
 
 // MOCK ONLY. Fakes the Supabase Auth (GoTrue) host and the CareFlow API at the network layer so the REAL built app,
 // with the REAL supabase-js, runs end to end in Chromium without any account, key or network. The response shapes
@@ -17,6 +18,8 @@ export interface Scenario {
   roles?: Record<string, unknown>[];
   /** Override /v1/iam/me with an error status. */
   meStatus?: number;
+  /** Options for the fake console routes (the role they enforce is the first grant's role). */
+  console?: ConsoleOptions;
 }
 
 const b64url = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
@@ -34,6 +37,7 @@ export async function installMock(page: Page, scenario: Scenario = {}) {
   const session = (aal: 'aal1' | 'aal2') => ({ access_token: jwt(aal), token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 3600, refresh_token: 'mock-refresh', user: user() });
   let aal: 'aal1' | 'aal2' = 'aal1';
   const log: string[] = [];
+  const consoleApi = createConsoleApi(String((scenario.roles?.[0] as { role?: unknown } | undefined)?.role ?? 'front_desk'), scenario.console);
 
   const cors = (route: Route) => {
     const req = route.request();
@@ -53,6 +57,8 @@ export async function installMock(page: Page, scenario: Scenario = {}) {
     const url = new URL(req.url());
     const path = url.pathname.replace('/auth/v1', '');
     log.push(`${req.method()} ${path}`);
+    // The fake storage host: the signed upload URL the fake API hands out points here.
+    if (url.pathname.startsWith('/storage/')) return req.method() === 'PUT' ? route.fulfill({ status: 200, headers: cors(route), body: '' }) : reply(route, 404, {});
     const body = req.postData() ? (JSON.parse(req.postData() as string) as Record<string, string>) : {};
 
     if (req.method() === 'POST' && path === '/token' && url.searchParams.get('grant_type') === 'password') {
@@ -101,6 +107,8 @@ export async function installMock(page: Page, scenario: Scenario = {}) {
     const path = new URL(req.url()).pathname;
     log.push(`API ${req.method()} ${path}`);
     if (!req.headers()['authorization']?.startsWith('Bearer ')) return reply(route, 401, { detail: 'not authenticated' });
+    const handled = consoleApi(req.method(), path, new URL(req.url()).searchParams);
+    if (handled) return reply(route, handled[0], handled[1]);
     if (path === '/v1/iam/me') {
       if (scenario.meStatus) return reply(route, scenario.meStatus, { detail: 'nope' });
       return reply(route, 200, { account_id: '9d0a1c2d-3e4f-4a6b-8c1e-3f2b6a4d4e1b', account_type: 'staff', status: 'active', roles: scenario.roles ?? [{ clinic_id: '3f2b8c1e-6a4d-4e1b-9d0a-1c2d3e4f5a6b', role: 'front_desk' }] });

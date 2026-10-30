@@ -48,6 +48,39 @@ against the live grants in the database and used only to narrow. If adopted, pro
 Tracked in `docs/design/step-up-spike.md`. The frontend will decode a real access token's `aal` / `amr` / `iat` structure in
 code once F2 sign-in works, and report the structure only (values blanked) so it can be pasted to the backend session.
 
+### 5. F3 console: what the screens need that the snapshot does not give them yet
+
+None of these blocks the F3 screens (they handle the absence), but each leaves a screen showing less than it could, or
+depends on a guess. All F3 screens run only against mocks until a live backend is reachable.
+
+- **Patient search labels.** The search route returns ids, `verified`, `registered_via` and `matched_kinds` only. The screen also
+  understands `label` (per hit) and `labels_withheld` / `truncated` (on the response), as the per-row label read in
+  `docs/design/patient-view-fields.md` would add them. **Those three names are my guess, not a contract.** Please confirm
+  the names and types, or tell me what to read instead. Until then they are mock-only.
+- **Offer draft.** `GET /v1/staff/scheduling/offers/draft` returns an `Envelope` whose `data` is `object | array` and whose `reason`
+  is free text (it can name clinician-owned settings). The screen shows only the `status` word and marks candidate details and
+  sending "Coming soon". A typed `data` (the ranked candidates) and a closed vocabulary for `reason` would let it show more
+  without ever showing backend text.
+- **Scan status after the upload.** `scan` (`clean`, `not_scanned`, `not_checked`) comes back only from `documents/register`. The
+  referral list and detail do not carry it, so once the person leaves the upload screen the console cannot show it again.
+  Adding it to `ReferralOut` / `ReferralDetailOut` would let "not scanned yet" stay visible. The screen treats every word
+  except `clean` as not clean.
+- **A signed read URL** for the document a reviewer is looking at (item 10 in `frontend-contract.md`): the detail screen shows no
+  file today.
+- **Typed task provenance and kinds.** `kind` is a free string and `provenance` an untyped object. The inbox ships a
+  hard-coded list of the kinds the resolve route closes (`referral_hold`, `unmerge_review`, `referral_dead_letter`,
+  `identity_confirmation_revoked`) and of the urgent kinds (`red_flag`, `screening_unassessable`), copied from
+  `careflow/review_tasks.py` and the 0013 migration. If the backend exposed them (an enum, or a `resolvable` flag per task),
+  the copy could go. The backend still decides: a wrong copy only shows or hides a button.
+- **Resolve takes no reason.** The screen shows "PLACEHOLDER - clinician to define" where reason codes would go and sends none.
+  If a clinician decides a reason is required, the route needs a body field first.
+- **Closed words for translation.** `run_state` and the proposal `mode` are strings; the console shows them as given (humanised).
+  An enum in the schema would let each get a reviewed Tamil label.
+- **Upload storage origin.** The console refuses to send a file to any host other than the Supabase project origin
+  (`SUPABASE_URL`), and the CSP's `connect-src` allows only that and the API origin. If storage will live elsewhere, say so:
+  `csp.ts` and the check in `UploadPage.tsx` both change.
+- **Names.** Lists show short ids (patients, holds, tasks); names are item 1 of `frontend-contract.md`.
+
 ## Decisions recorded here for later readers
 
 - **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;

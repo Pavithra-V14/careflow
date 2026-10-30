@@ -53,6 +53,31 @@ Run one heavy tool at a time (build, then Playwright), not in parallel.
   and prints only the STRUCTURE of `aal`, `amr` and `iat` with values blanked, plus whether `amr` timestamps moved after a refresh.
   It never shows the token. The production bundle does not contain it (checked in `check:bundle`).
 
+## Console screens (F3)
+
+After sign-in the staff console has a role-aware navigation (`src/staff/sections.ts`) and four areas. **The navigation only hides
+links a role cannot use; the backend decides.** Every page still calls the API and shows "not available to your role" on a 403.
+The LIVE / TEST badge and the role stay visible on every screen.
+
+| Area | Screens | API routes it calls (all in `openapi.snapshot.json` on `main`) |
+|---|---|---|
+| Referrals | queue, referral detail, document upload | `GET /v1/staff/referrals`, `GET /v1/staff/referrals/{id}`, `POST /v1/staff/documents/uploads` and `/register` |
+| Tasks | inbox, task detail (acknowledge, resolve) | `GET /v1/staff/review-tasks`, `GET .../{id}`, `POST .../{id}/acknowledge` and `/resolve` |
+| Patients | search, record, confirm identity | `POST /v1/staff/patients/search`, `GET .../{id}`, `POST .../{id}/confirm-identity` |
+| Scheduling | providers, locations, visit types, priority levels (read-only), holds (release), offers (read-only draft) | `GET /v1/staff/scheduling/{providers,locations,visit-types,priority-levels,holds,offers/draft}`, `POST .../holds/{id}/release` |
+
+Rules every screen follows: loading, empty, error and "not available to your role" states; fixed messages per problem kind and
+never the backend's text (`src/staff/apiState.ts`); one idempotency key per intent, reused on a retry after a network, 429 or
+5xx failure and dropped after an answer that will not change (`src/staff/hooks.ts`); nothing is written before a confirmation;
+nothing is pre-selected; no clinical, consent or legal wording (marked placeholders instead).
+
+- **Active-role header:** `SEND_ACTIVE_ROLE_HEADER` in `src/staff/featureFlags.ts` is `false`, pinned by a test. The backend does
+  not read the header yet (`docs/design/active-role.md` is a proposal) and production CORS does not allow it.
+- **Tamil:** all new strings are on `TAMIL-UNREVIEWED.md` (generated; CI fails if it is stale). The clinical task kinds stay in English.
+- **Everything is mock-only until a live backend is reachable.** Unit tests use a fake backend (`tests/helpers/console.tsx`); browser
+  tests use fake Supabase and API hosts (`e2e/mockBackend.ts`, `e2e/consoleApi.ts`). Fields the snapshot lacks (patient search
+  `label`, `labels_withheld`, `truncated`) are mock-only guesses; see `../docs/frontend-backend-requests.md` item 5.
+
 ### Remaining prerequisites for a LIVE sign-in test against the dev project
 
 1. `frontend/.env.local` in place with `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` and `CAREFLOW_API_BASE_URL` (you create it).

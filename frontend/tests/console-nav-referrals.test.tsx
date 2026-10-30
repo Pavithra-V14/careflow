@@ -218,10 +218,13 @@ describe('document upload', () => {
     await user.click(screen.getByRole('button', { name: 'Upload' }));
     const status = (await screen.findByText('Scan status')).nextElementSibling as HTMLElement;
     expect(status).toHaveTextContent(label);
+    const box = status.closest('.state') as HTMLElement;
     if (scan === 'clean') {
       expect(status.querySelector('.pill-ok')).not.toBeNull();
+      expect(box).toHaveClass('state-ok');
     } else {
       expect(status.querySelector('.pill-ok')).toBeNull();
+      expect(box).not.toHaveClass('state-ok'); // a file that is not scanned must not look like a success
       expect(status).not.toHaveTextContent(/^Clean$/);
       expect(screen.getByText(scan === 'not_scanned' ? 'This file has not been scanned yet.' : 'This file was not checked.')).toBeInTheDocument();
     }

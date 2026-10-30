@@ -116,7 +116,7 @@ export function UploadPage() {
       </p>
 
       {result ? (
-        <div role="status" className="state state-ok">
+        <div role="status" className={result.scan === 'clean' ? 'state state-ok' : 'state'}>
           <h2>{t('upload.done')}</h2>
           <dl className="facts">
             <dt>{t('referrals.col.document')}</dt>
