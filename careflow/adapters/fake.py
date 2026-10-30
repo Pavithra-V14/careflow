@@ -193,6 +193,30 @@ class FakeUpload(_Fake):
         self.deleted.append(path)
 
 
+EICAR = b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"  # the industry's harmless test string: any scanner must flag it
+
+
+class FakeScanner(_Fake):
+    """Stands in for the malware scanner (no scanner is installed or approved to run anywhere). A document containing the EICAR test string, or a marker in `infected_markers`, is `infected`;
+    bytes containing a marker in `unscannable_markers` are `not_scanned` (as an encrypted or oversized file would be for a real scanner); everything else is `clean`. `fail_next` makes it raise,
+    which the caller must treat as `not_scanned`. Deterministic, no network; never returns `clean` for empty input."""
+
+    def __init__(self, name: str = "fake-scanner", *, infected_markers: tuple[bytes, ...] = (), unscannable_markers: tuple[bytes, ...] = (), **kw) -> None:
+        super().__init__(name, **kw)
+        self.infected_markers, self.unscannable_markers, self.scanned = (EICAR, *infected_markers), unscannable_markers, []
+
+    async def scan(self, content: bytes):
+        from careflow.malware import ScanResult
+
+        await self._enter()
+        self.scanned.append(hashlib.sha256(content).hexdigest())
+        if not content or any(m in content for m in self.unscannable_markers):
+            return ScanResult("not_scanned", self.name, "fake-1")
+        if any(m in content for m in self.infected_markers):
+            return ScanResult("infected", self.name, "fake-1")
+        return ScanResult("clean", self.name, "fake-1")
+
+
 class FakeVectorStore(_Fake):
     """An in-memory card index: exact cosine, pre-filtered by scope. Stands in for Qdrant (no client, no network, no data)."""
 

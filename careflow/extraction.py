@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from typing import Final, Literal, Protocol
 
 from careflow.budget import BudgetExceeded
+from careflow.documents import DocumentHeld
 from careflow.gateway import AllRoutesFailed, NoApprovedRoute, SpendCeilingReached
 from careflow.ports import (
     LayoutPort,
@@ -392,7 +393,10 @@ class PipelineTextSource:
         lock = self._locks.setdefault(document_id, asyncio.Lock())
         async with lock:
             if document_id not in self._memo:
-                content, content_type, clinic_id = await self._loader(document_id)
+                try:
+                    content, content_type, clinic_id = await self._loader(document_id)
+                except DocumentHeld as held:  # not scanned, or flagged: nothing is read; a person is shown the document (the existing manual outcome)
+                    raise ExtractionNeedsManual((held.reason,)) from None
                 self._memo[document_id] = await self._pipeline.run(
                     content, content_type, clinic_id=clinic_id
                 )

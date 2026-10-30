@@ -6,7 +6,7 @@ import uuid
 import pytest
 from sqlalchemy.exc import DBAPIError
 
-from careflow.adapters.fake import FakeUpload
+from careflow.adapters.fake import FakeScanner, FakeUpload
 from careflow.documents import (
     ALLOWED_TYPES,
     DocumentIntake,
@@ -288,7 +288,7 @@ async def test_outside_the_demo_profile_uploads_are_disabled_for_both_steps_and_
 async def test_demo_is_enabled_and_a_configured_scanner_enables_the_clinical_profile():
     assert DocumentIntake(FakeUpload(), profile=" DEMO ").enabled
     assert not DocumentIntake(FakeUpload(), profile="clinical").enabled
-    assert DocumentIntake(FakeUpload(), profile="clinical", scanner_configured=True).enabled
+    assert DocumentIntake(FakeUpload(), profile="clinical", scanner=FakeScanner()).enabled
 
 
 # ---- the pure verifier and the no-leak rule ------------------------------------------------------------------------------------------------------
