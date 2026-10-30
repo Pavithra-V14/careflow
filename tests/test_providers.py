@@ -523,3 +523,16 @@ async def test_a_stream_or_header_fault_is_a_failed_route_and_a_slow_drip_is_cut
 
 def test_the_provider_client_ignores_proxy_and_ca_settings_from_the_environment():
     assert provider_http.new_client(5)._trust_env is False
+
+
+def test_jev_is_refused_outside_the_demo_profile_and_its_output_is_never_evidence():
+    from careflow.adapters.decision import NOT_EVIDENCE_ENGINES, counts_as_evidence
+    from careflow.ports import DecisionResult
+
+    for profile in ("clinical", "staging", "", "production"):
+        env = good_env(CAREFLOW_PROFILE=profile)
+        got = build_providers(env, profile=profile)
+        assert got.gateway is None and "jev" in got.unavailable, profile  # no decision row, no Jev adapter, anywhere but demo + synthetic_only
+    assert "jev" in NOT_EVIDENCE_ENGINES
+    jev = DecisionResult("a", {"a": 0.9, "b": 0.1}, 0.9, "jev")
+    assert counts_as_evidence(jev) is False and counts_as_evidence(DecisionResult("a", {"a": 0.9, "b": 0.1}, 0.9, "laya")) is True

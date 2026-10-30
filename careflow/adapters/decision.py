@@ -147,6 +147,16 @@ def _to_jev_payload(request: DecisionRequest) -> dict[str, object]:
     return {"task": "choice", "question": request.question_type, "input": request.text, "options": list(request.options)}
 
 
+# Engines whose output is NEVER evidence: Jev is a router whose downstream model is not pinned and changes per request (owner decision 2026-10-30), so nothing it says may be used as evidence for an
+# acceptance check, a gold set, a calibration table or a golden-input comparison. It is a synthetic-only convenience engine for the demo.
+NOT_EVIDENCE_ENGINES: Final = frozenset({"jev"})
+
+
+def counts_as_evidence(result: DecisionResult) -> bool:
+    """False for an engine in NOT_EVIDENCE_ENGINES. Acceptance, gold-set and calibration code must filter on this before it counts a decision."""
+    return result.engine not in NOT_EVIDENCE_ENGINES
+
+
 @dataclass
 class JevAdapter:
     client: JevClient
