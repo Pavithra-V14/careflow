@@ -18,6 +18,8 @@ ORIGIN_RE = re.compile(r"^(https?)://([A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1"})
 ALLOW_METHODS = ("GET", "POST", "OPTIONS")
 ALLOW_HEADERS = ("Authorization", "Content-Type", "X-Idempotency-Key")
+# Response headers a browser script may read: a 401 carries WWW-Authenticate (the step-up and token-expiry signals), which the browser hides from cross-origin code unless it is exposed.
+EXPOSE_HEADERS = ("WWW-Authenticate",)
 MAX_AGE_SECONDS = 600
 
 
@@ -58,5 +60,6 @@ def middleware_kwargs(origins: Sequence[str]) -> dict:
         "allow_credentials": False,
         "allow_methods": list(ALLOW_METHODS),
         "allow_headers": list(ALLOW_HEADERS),
+        "expose_headers": list(EXPOSE_HEADERS),
         "max_age": MAX_AGE_SECONDS,
     }
