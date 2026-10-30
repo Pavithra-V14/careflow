@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
-// The production policy (csp.ts) against the real production build. Stage 1 serves it Report-Only; any
-// violation the pages cause fails here, before the policy is enforced.
+// The production policy (csp.ts) against the real production build, ENFORCED through a <meta> tag in each
+// page (stage 2; it was validated Report-Only first, see the commit history). Any violation fails here.
 
 const policy = () => readFileSync(resolve(import.meta.dirname, '../dist-e2e/csp-policy.txt'), 'utf8').trim();
 
@@ -19,9 +19,16 @@ async function collectViolations(page: Page) {
 }
 const violations = (page: Page) => page.evaluate(() => (window as unknown as { __csp: string[] }).__csp);
 
-test('the production policy ships as csp-policy.txt and is what the server sends (stage 1: report-only)', async ({ page }) => {
-  const response = await page.goto('/patient/');
-  expect(response?.headers()['content-security-policy-report-only']).toBe(policy());
+test('every built page carries the policy as its first head element, and it matches csp-policy.txt', async () => {
+  const dist = resolve(import.meta.dirname, '../dist-e2e');
+  const pages = ['patient/index.html', 'patient/sign-in/index.html', 'patient/sign-up/index.html', 'patient/privacy/index.html', 'staff/index.html'];
+  for (const p of pages) {
+    const html = readFileSync(resolve(dist, p), 'utf8');
+    const m = /<head>\s*<meta http-equiv="Content-Security-Policy" content="([^"]+)"/.exec(html);
+    expect(m?.[1], p).toBe(policy());
+    expect(html, `${p} has an inline script`).not.toMatch(/<script(?![^>]*\ssrc=)[^>]*>/);
+    expect(html, `${p} has an inline style`).not.toMatch(/<style|\sstyle=/);
+  }
   expect(policy()).toContain('https://mock-project.supabase.invalid');
 });
 
@@ -38,7 +45,7 @@ for (const path of PAGES) {
   });
 }
 
-test('negative control: a deliberately injected inline script IS reported, so the collector works', async ({ page }) => {
+test('enforcement: a deliberately injected inline script is reported AND does not run', async ({ page }) => {
   await collectViolations(page);
   await page.goto('/patient/');
   await page.evaluate(() => {
@@ -47,4 +54,13 @@ test('negative control: a deliberately injected inline script IS reported, so th
     document.head.append(s);
   });
   await expect.poll(() => violations(page)).toEqual([expect.stringContaining('script-src')]);
+  expect(await page.evaluate(() => (window as unknown as { __ran?: boolean }).__ran)).toBeUndefined();
+});
+
+test('enforcement: a request to an origin outside connect-src is blocked', async ({ page }) => {
+  await collectViolations(page);
+  await page.goto('/patient/');
+  const outcome = await page.evaluate(() => fetch('https://not-allowed.invalid/x').then(() => 'sent', () => 'blocked'));
+  expect(outcome).toBe('blocked');
+  expect(await violations(page)).toEqual([expect.stringContaining('connect-src')]);
 });

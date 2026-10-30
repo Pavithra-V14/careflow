@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { CONFIG_GLOBAL, pickExposedEnv } from './env-allowlist.ts';
-import { buildCsp } from './csp.ts';
+import { buildCsp, injectCspMeta } from './csp.ts';
 
 // Two entry points (patient, staff), one token package, one i18n setup, one API client.
 export default defineConfig(({ mode }) => {
@@ -15,9 +15,11 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       {
-        // Production build only (apply: 'build'): the policy also ships as dist/csp-policy.txt for a host that sets headers.
+        // Production build only (apply: 'build'), ENFORCED: the policy is a <meta> tag in every built page and also
+        // ships as dist/csp-policy.txt for a host that can send it as a header (frame-ancestors, report-uri).
         name: 'careflow-csp-policy',
         apply: 'build',
+        transformIndexHtml: { order: 'post', handler: (html: string) => injectCspMeta(html, csp) },
         generateBundle() {
           this.emitFile({ type: 'asset', fileName: 'csp-policy.txt', source: csp + '\n' });
         },
@@ -37,9 +39,6 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
-    // Stage 1 of the CSP rollout: the production policy is served REPORT-ONLY by `vite preview`, and
-    // e2e/csp.spec.ts fails on any violation. Stage 2 enforces it in the built HTML.
-    preview: { headers: { 'Content-Security-Policy-Report-Only': csp } },
     server: {
       // Development only: same-origin calls to the API avoid CORS. Production CORS is a backend matter
       // (docs/frontend-backend-requests.md).
