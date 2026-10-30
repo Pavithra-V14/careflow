@@ -968,7 +968,7 @@ async def test_front_desk_cannot_select_a_red_flag_task_through_a_screening_join
 def _task_insert(w, kind, *, key=None, source="merge:1", role="nurse", status="open"):
     return (
         "insert into agents.review_tasks (clinic_id, origin, kind, priority, assigned_role, source_message_id, provenance, idempotency_key, status) "
-        f"values ('{w.a}', 'test', '{kind}', 'immediate', '{role}', '{source}', '{{}}', '{key or 'ti-' + _u()}', '{status}')"
+        f"values ('{w.a}', 'test', '{kind}', 'immediate', '{role}', '{source}', '{{}}', '{key or f'ti-{_u()}'}', '{status}')"
     )
 
 
