@@ -2,7 +2,9 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { RESOURCES } from '../src/shared/i18n';
-import reviewed from '../src/shared/i18n/ta-reviewed.json';
+import reviewedFile from '../src/shared/i18n/ta-reviewed.json';
+
+const reviewed: { reviewed: string[] } = reviewedFile;
 
 type Tree = { [k: string]: string | Tree };
 const flatten = (tree: Tree, prefix = ''): [string, string][] => Object.entries(tree).flatMap(([k, v]) => (typeof v === 'string' ? [[prefix + k, v] as [string, string]] : flatten(v, `${prefix}${k}.`)));
