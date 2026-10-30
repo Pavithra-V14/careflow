@@ -2145,7 +2145,7 @@ class ReferralOut(_Out):
     decided: bool | None
 
 
-class HoldOut(_Out):
+class ReferralHoldOut(_Out):
     task_id: uuid.UUID
     assigned_role: Literal["nurse", "doctor", "front_desk"]
     status: Literal["open", "acknowledged", "resolved"]
@@ -2169,7 +2169,7 @@ class ProposalOut(_Out):
 
 
 class ReferralDetailOut(ReferralOut):
-    holds: list[HoldOut]
+    holds: list[ReferralHoldOut]
     proposal: ProposalOut | None  # None when there is none OR when proposal_visible is False
 
 
@@ -2250,7 +2250,7 @@ async def open_referral(document_id: uuid.UUID, conn: TxConn, claims: dict[str, 
                 proposal_id=p.id, patient_id=p.patient_id, abstained=p.abstained, mode=p.mode, review_task_id=p.review_task_id, created_at=p.created_at,
                 candidates=[CardCandidateOut(card_id=str(c["card_id"]), version=int(c["version"])) for c in p.candidates],
             )
-    return ReferralDetailOut(**_referral_fields(r), holds=[HoldOut(task_id=h.id, assigned_role=h.assigned_role, status=h.status) for h in holds], proposal=proposal)
+    return ReferralDetailOut(**_referral_fields(r), holds=[ReferralHoldOut(task_id=h.id, assigned_role=h.assigned_role, status=h.status) for h in holds], proposal=proposal)
 
 
 def create_app(
