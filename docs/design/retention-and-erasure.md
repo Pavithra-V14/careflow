@@ -1,4 +1,6 @@
-**Design note only (owner request 2026-10-29). No code, no migration. Waits for the owner's OK before any code.**
+**SHAPE APPROVED (owner, 2026-10-30). Retention periods are NOT decided** (a clinician and the owner decide): when the retention job is built they are REQUIRED settings with no defaults, and the 90-day, 30-day and 8-year figures below stay the spec's starting values, not configuration. **The purge role and function are a new privilege: no code until a separate design with exact grants and an rls-security-reviewer pass exists and the owner has signed off the grants.**
+
+**(Original note, 2026-10-29.) Design note only. No code, no migration.**
 
 # Retention and erasure of agent working state and review tasks
 

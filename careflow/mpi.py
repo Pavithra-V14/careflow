@@ -584,3 +584,73 @@ async def revoke_identity(
         if getattr(exc.orig, "sqlstate", None) != "23505":  # a duplicate task for this revoke event is a replay; anything else rolls the revoke back
             raise
     return RevokeResult(patient_id, False, "raised")
+
+
+# ---- patient lookup and the verified-status read (owner package 2026-10-30) ----------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class LookupHit:
+    patient_id: uuid.UUID
+    matched_kinds: tuple[str, ...]
+    verified: bool
+    registered_via: str
+
+
+@dataclass(frozen=True)
+class PatientStatus:
+    patient_id: uuid.UUID
+    clinic_id: uuid.UUID
+    origin: str
+    registered_via: str
+    verified: bool
+    latest_event: Literal["confirm", "revoke"] | None
+    latest_event_at: datetime | None
+    merged_into: uuid.UUID | None
+
+
+async def lookup_patients(
+    pipeline: "PatientIngestionPipeline", conn: AsyncConnection, *, clinic_id: uuid.UUID, origin: Origin, name: str, dob: str, phone: str | None
+) -> list[LookupHit]:
+    """EXACT lookup, no writes, no decryption: the same canonicalisation, the same keyed tokens and the same `_find` as registration, so what a person finds here is exactly what a registration
+    of the same details would match. It returns ids, the kinds of identifier that agreed, and whether each record is verified (front-desk created, or confirmed and not revoked). It does NOT
+    return names, dates of birth or phones: a caller who has typed them already knows them, and showing a stored one is a separate decision. An erased record never matches. A subordinate of an
+    active merge is reported as its master (as the matcher treats it)."""
+    if origin not in ORIGINS:
+        raise ValueError(f"origin must be one of {ORIGINS}, got {origin!r}")
+    if not isinstance(name, str) or not name.strip():
+        raise MissingRequiredField("name is required")
+    name = " ".join(name.split())
+    dob_iso = parse_date_of_birth(dob).isoformat()
+    phone_c = None if phone is None else canonicalize_phone(phone)
+    tokens = derive_tokens(pipeline._vault, name=name, dob_iso=dob_iso, phone_canonical=phone_c, key_version=pipeline._kv)
+    hits, unverified = await pipeline._find(conn, clinic_id, origin, tokens)
+    if not hits:
+        return []
+    sources = {
+        r[0]: r[1]
+        for r in await conn.execute(text("select id, registered_via from mpi.patients where clinic_id = :c and id = any(cast(:ids as uuid[]))"), {"c": clinic_id, "ids": list(hits)})
+    }
+    return [LookupHit(pid, tuple(sorted(kinds)), pid not in unverified, sources.get(pid, "unknown")) for pid, kinds in sorted(hits.items(), key=lambda kv: str(kv[0]))]
+
+
+async def patient_status(conn: AsyncConnection, patient_id: uuid.UUID) -> PatientStatus:
+    """Whether a record is verified, from what the caller can read (row-level security: front desk, nurse and doctor of the clinic). Raises PatientNotFound for an invisible or erased record.
+    Uses the matcher's own rule (the LATEST confirm/revoke event of the record the matcher would use: the master, for a subordinate of an active merge)."""
+    row = (
+        await conn.execute(
+            text("select p.clinic_id, p.origin, p.registered_via, m.master_patient_id from mpi.patients p left join mpi.merges m on m.subordinate_patient_id = p.id and m.status = 'active' where p.id = :i and p.erased_at is null"),
+            {"i": patient_id},
+        )
+    ).first()
+    if row is None:
+        raise PatientNotFound("not found")
+    clinic_id, origin, via, master = row
+    effective = master or patient_id
+    master_via = via
+    if master is not None:
+        found = (await conn.execute(text("select registered_via from mpi.patients where id = :i and erased_at is null"), {"i": master})).first()
+        master_via = found[0] if found is not None else "unknown"
+    latest = await _latest_event(conn, effective)
+    verified = (latest[0] == "confirm") if latest is not None else (master_via == "front_desk")
+    return PatientStatus(patient_id, clinic_id, origin, via, verified, latest[0] if latest else None, latest[2] if latest else None, master)  # type: ignore[arg-type]

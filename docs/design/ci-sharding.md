@@ -223,3 +223,10 @@ Decision: keep the test-only 120 s pool wait; the `POOL-DIAG` lines stay (one li
 
 ## 2026-10-30 (PR #9)
 `tests/test_api_offers_live.py` (about 1 minute, never-committed transaction) joins shard 3. PR #9's first run measured shards 39:48, 41:10 and 36:25 (with a failing shard 1 that stopped early on the rotation precondition, so its true time is longer): shard 1 is now the one to watch; the role matrix grows with every route. Rebalance in the next change if any shard passes 50 minutes.
+
+## 2026-10-30 (batch 4): four shards, the role matrix split in two parts
+Measured in PR #9's run (41012450176): shard 1 47:00 (role matrix 1792 s of it), shard 2 46:56, shard 3 38:32; total about 133 minutes of live tests, and the matrix grows with every route (this batch adds about fourteen route case-sets). Three shards could not stay under 50 minutes, so:
+- **Four shards** (`tests/test_ci_shards.py` now expects 1 to 4). Targets from the measured per-file seconds: shard 1 about 38 min, shard 2 about 37, shard 3 about 37, shard 4 about 31. Re-measure on the first run of this batch; if any shard passes 45 minutes, move a file.
+- **The role matrix is split in two parts** with `CAREFLOW_MATRIX_PART=i/2` (a matrix include key `matrix_part`); the root `conftest.py` keeps only the tests whose stable hash (crc32 of the test id) falls in the part, so the parts together run every matrix test exactly once (checked: 40 + 38 of 78 today). Each part is its own pytest process and seeds its own clinics. `tests/test_ci_shards.py` requires the matrix to appear as complete parts 1..n exactly once, and every other live file in exactly one shard.
+- A hash split is even by count, not by cost; if one part runs much longer than the other, change the key in `matrix_part_of` or give the heavy route families an explicit part.
+- Database connections: four shards at once raise the peak (three shards peaked at 31 to 32 of 60). The PEAK-CONNECTIONS line of the first four-shard run must be read; the limit is 60.

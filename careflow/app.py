@@ -74,6 +74,14 @@ from careflow.crypto import CryptoError, DemographicVault
 from careflow.db import make_app_engine, set_request_claims
 from careflow.dead_letters import raise_dead_letter_tasks
 from careflow.demo_phase3 import refuse_demo_outside_demo, scheduling_settings_for
+from careflow.documents import (
+    DocumentIntake,
+    UploadRejected,
+    UploadsDisabled,
+    UploadUnavailable,
+)
+from careflow.documents import IdempotencyConflict as DocumentIdempotencyConflict
+from careflow.documents import NotPermitted as DocumentNotPermitted
 from careflow.front_door import FrontDoorError, run_config
 from careflow.front_door_runner import TASK_TYPE as FRONT_DOOR_TASK
 from careflow.front_door_runner import (
@@ -101,6 +109,7 @@ from careflow.rules import NotPermitted as ScreeningNotPermitted
 from careflow.rules import RedFlagEngine, resolve_profile
 from careflow.scheduling import (
     BookingNotFound,
+    HoldNotFound,
     IdempotencyConflict,
     InvalidTransition,
     NotPermitted,
@@ -347,7 +356,7 @@ def _scheduling_errors() -> Iterator[None]:
     """Turn the scheduling module's refusals into clean client errors. The transaction rolls back with them."""
     try:
         yield
-    except (SlotNotFound, BookingNotFound):
+    except (SlotNotFound, BookingNotFound, HoldNotFound):
         raise HTTPException(status_code=404, detail="not found") from None
     except UnknownReference as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from None
@@ -546,6 +555,107 @@ async def list_waitlist(
         for r in rows[:limit]
     ]
     return WaitlistList(items=items, limit=limit, has_more=len(rows) > limit)
+
+
+# ---- scheduling reference lists: providers, locations, visit types, priority levels (the booking forms' dropdowns) -------------------------------------------------
+#
+# Reads only, under the existing `select` policies and grants; the same readers as the other scheduling reads (front desk, nurse, doctor). Names are clinic setup data (a provider's display name,
+# a room, a visit type), never patient data. `active` is returned so a screen can hide retired entries; inactive ones are listed only with `include_inactive=true`.
+
+
+class ProviderOut(_Out):
+    provider_id: uuid.UUID
+    clinic_id: uuid.UUID
+    display_name: str
+    active: bool
+
+
+class LocationOut(_Out):
+    location_id: uuid.UUID
+    clinic_id: uuid.UUID
+    name: str
+    active: bool
+
+
+class VisitTypeOut(_Out):
+    visit_type_id: uuid.UUID
+    clinic_id: uuid.UUID
+    name: str
+    duration_minutes: int
+    active: bool
+
+
+class PriorityLevelOut(_Out):
+    clinic_id: uuid.UUID
+    code: str
+    label: str
+    rank: int  # 1 is served first
+    active: bool
+
+
+class ProviderList(_Out):
+    items: list[ProviderOut]
+    limit: int
+    has_more: bool
+
+
+class LocationList(_Out):
+    items: list[LocationOut]
+    limit: int
+    has_more: bool
+
+
+class VisitTypeList(_Out):
+    items: list[VisitTypeOut]
+    limit: int
+    has_more: bool
+
+
+class PriorityLevelList(_Out):
+    items: list[PriorityLevelOut]
+    limit: int
+    has_more: bool
+
+
+async def _reference_rows(conn: AsyncConnection, claims: dict[str, Any], sql: str, include_inactive: bool, limit: int):
+    clinics = await _readable_clinics(conn, claims)
+    return (await conn.execute(text(sql.format(active="" if include_inactive else " and active")), {"c": clinics, "n": limit + 1})).all()
+
+
+@scheduling.get("/providers", response_model=ProviderList)
+async def list_providers(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), include_inactive: bool = False, limit: Limit = 100) -> ProviderList:
+    """Providers of the clinics you may read, by display name."""
+    rows = await _reference_rows(
+        conn, claims, "select id, clinic_id, display_name, active from sched.providers where clinic_id = any(cast(:c as uuid[])){active} order by display_name, id limit :n", include_inactive, limit
+    )
+    return ProviderList(items=[ProviderOut(provider_id=r.id, clinic_id=r.clinic_id, display_name=r.display_name, active=r.active) for r in rows[:limit]], limit=limit, has_more=len(rows) > limit)
+
+
+@scheduling.get("/locations", response_model=LocationList)
+async def list_locations(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), include_inactive: bool = False, limit: Limit = 100) -> LocationList:
+    """Locations (rooms, sites) of the clinics you may read, by name."""
+    rows = await _reference_rows(conn, claims, "select id, clinic_id, name, active from sched.locations where clinic_id = any(cast(:c as uuid[])){active} order by name, id limit :n", include_inactive, limit)
+    return LocationList(items=[LocationOut(location_id=r.id, clinic_id=r.clinic_id, name=r.name, active=r.active) for r in rows[:limit]], limit=limit, has_more=len(rows) > limit)
+
+
+@scheduling.get("/visit-types", response_model=VisitTypeList)
+async def list_visit_types(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), include_inactive: bool = False, limit: Limit = 100) -> VisitTypeList:
+    """Visit types of the clinics you may read, by name, with their scheduling length."""
+    rows = await _reference_rows(
+        conn, claims, "select id, clinic_id, name, duration_minutes, active from sched.visit_types where clinic_id = any(cast(:c as uuid[])){active} order by name, id limit :n", include_inactive, limit
+    )
+    return VisitTypeList(
+        items=[VisitTypeOut(visit_type_id=r.id, clinic_id=r.clinic_id, name=r.name, duration_minutes=r.duration_minutes, active=r.active) for r in rows[:limit]], limit=limit, has_more=len(rows) > limit
+    )
+
+
+@scheduling.get("/priority-levels", response_model=PriorityLevelList)
+async def list_priority_levels(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), include_inactive: bool = False, limit: Limit = 100) -> PriorityLevelList:
+    """The clinic's clinical priority levels, rank 1 first. The levels themselves are clinician-approved data (sched.priority_levels); this only reads them."""
+    rows = await _reference_rows(
+        conn, claims, "select clinic_id, code, label, rank, active from sched.priority_levels where clinic_id = any(cast(:c as uuid[])){active} order by clinic_id, rank, code limit :n", include_inactive, limit
+    )
+    return PriorityLevelList(items=[PriorityLevelOut(clinic_id=r.clinic_id, code=r.code, label=r.label, rank=r.rank, active=r.active) for r in rows[:limit]], limit=limit, has_more=len(rows) > limit)
 
 
 # ---- staff messages: red-flag screening of a stored message (BUILD-SPEC.md §5.2, §12.1; CLAUDE.md rules 2, 3, 5, 7, 8) --------------
@@ -1048,6 +1158,117 @@ async def send_offer_route(
     )
 
 
+# ---- documents: begin an upload, register it (careflow/documents.py; docs/design/uploads-supabase-storage.md) -------------------------------------------------
+#
+# Two steps, both by a front-desk person or a nurse of the clinic. BEGIN hands the browser a short-lived signed URL for a path THE SERVER chose (derived from the clinic and the idempotency key).
+# The browser PUTs the file. REGISTER (the SAME `X-Idempotency-Key`) makes the server read the stored object back and check its size, type and magic number before one row is written; a row exists
+# only for an object the server itself accepted. Uploads are disabled outside profile `demo` until a malware scanner is wired (503); with no storage adapter configured they answer 503 too (no real
+# storage adapter exists yet: it needs the bucket policy, an owner decision). The file name, bytes, path and hash never appear in a response error.
+
+staff_documents = APIRouter(prefix="/v1/staff/documents", tags=["staff documents"])
+UPLOAD_ROLES: Final = ("front_desk", "nurse")
+DocumentKind = Literal["referral", "report", "other"]
+UploadContentType = Literal["application/pdf", "image/jpeg", "image/png"]
+
+
+class BeginUploadIn(_Body):
+    clinic_id: uuid.UUID
+    kind: DocumentKind
+    content_type: UploadContentType
+    size_hint: int | None = Field(default=None, gt=0, le=1_000_000_000)  # the browser's own claim; the server re-checks the stored size
+
+
+class BeginUploadOut(_Out):
+    """Where to PUT the file, once. The path is the server's and is not returned."""
+
+    document_id: uuid.UUID
+    upload_url: str
+    expires_at: datetime
+    replayed_ticket: bool = False
+
+
+class RegisterIn(_Body):
+    clinic_id: uuid.UUID
+    kind: DocumentKind
+
+
+class RegisteredOut(_Out):
+    document_id: uuid.UUID
+    kind: DocumentKind
+    content_type: UploadContentType
+    size_bytes: int
+    replayed: bool
+    scan: Literal["clean", "not_scanned", "not_checked"]  # not_scanned: registered but HELD for a person; not_checked: demo, no scanner wired
+
+
+def _document_intake(request: Request) -> DocumentIntake:
+    intake: DocumentIntake | None = request.app.state.document_intake
+    if intake is None:
+        log.error("uploads are unavailable: no document intake is configured (no storage adapter)")
+        raise HTTPException(status_code=503, detail="uploads are unavailable: not configured")
+    return intake
+
+
+async def _upload_gate(conn: AsyncConnection, claims: dict[str, Any], clinic_id: uuid.UUID) -> str:
+    """The clinic's origin after checking the caller is active front desk or nurse there: 404 if the clinic is invisible, 403 if visible but not one of those."""
+    clinic = (await conn.execute(text("select origin from iam.clinics where id = :c"), {"c": clinic_id})).first()
+    if clinic is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _holds_role(conn, claims, clinic_id, UPLOAD_ROLES):
+        raise HTTPException(status_code=403, detail="your role may not upload documents")
+    return clinic[0]
+
+
+@contextmanager
+def _document_errors() -> Iterator[None]:
+    try:
+        yield
+    except UploadsDisabled:
+        raise HTTPException(status_code=503, detail="uploads are disabled in this profile") from None
+    except UploadUnavailable:
+        raise HTTPException(status_code=503, detail="storage is unavailable; try again") from None
+    except UploadRejected as exc:
+        raise HTTPException(status_code=422, detail=exc.code) from None  # a fixed word: invalid_request, type_not_allowed, empty, too_large, not_found, content_mismatch, malware_detected
+    except DocumentNotPermitted:
+        raise HTTPException(status_code=403, detail="your role may not upload documents") from None
+    except DocumentIdempotencyConflict:
+        raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request") from None
+
+
+@staff_documents.post("/uploads", response_model=BeginUploadOut)
+async def begin_document_upload(
+    body: BeginUploadIn, idempotency_key: IdempotencyKey, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims)
+) -> BeginUploadOut:
+    """Step 1: a signed URL to PUT one file to. 404 for a clinic you cannot see, 403 unless you are front desk or a nurse there, 422 for a type or size not allowed, 503 if uploads are disabled
+    or storage is not configured. Writes nothing (no row exists until step 2), so there is no audit row."""
+    intake = _document_intake(request)
+    await _upload_gate(conn, claims, body.clinic_id)
+    with _document_errors():
+        ticket = await intake.begin(body.clinic_id, body.kind, body.content_type, idempotency_key, size_hint=body.size_hint)
+    return BeginUploadOut(document_id=ticket.document_id, upload_url=ticket.signed.url, expires_at=ticket.signed.expires_at)
+
+
+@staff_documents.post("/register", response_model=RegisteredOut)
+async def register_document(
+    body: RegisterIn, idempotency_key: IdempotencyKey, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims)
+) -> RegisteredOut:
+    """Step 2, with the SAME idempotency key as step 1: the server reads the stored object back, verifies it, and writes one row. 422 with a fixed word if the object is missing, empty, too large,
+    of a type not allowed, not what its type says, or flagged by the scanner (then it is deleted); 409 if the key was used for a different request; 503 as for step 1."""
+    intake = _document_intake(request)
+    origin = await _upload_gate(conn, claims, body.clinic_id)
+    actor = uuid.UUID(claims["sub"])
+    with _document_errors():
+        done = await intake.register(conn, body.clinic_id, origin, body.kind, actor, idempotency_key)
+    await write_audit(
+        conn, clinic_id=body.clinic_id, origin=origin, actor_id=actor, actor_role=await _acting_role(conn, claims, body.clinic_id, UPLOAD_ROLES),
+        action="document.register", resource_type="document", resource_id=done.document_id, details={"kind": done.kind, "scan": done.scan, "replayed": done.replayed},
+        idempotency_key=f"audit:document-register:{done.document_id}:{idempotency_key}",
+    )
+    return RegisteredOut(
+        document_id=done.document_id, kind=done.kind, content_type=done.content_type, size_bytes=done.size_bytes, replayed=done.replayed, scan=done.scan  # type: ignore[arg-type]
+    )
+
+
 async def _validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     """FastAPI's default 422 body includes the offending INPUT. On a route that takes a name, a date of birth and a phone that would put them
     in an error response (and in anything that records responses), so every validation error is reduced to its type, location and
@@ -1394,10 +1615,417 @@ def _load_vault() -> DemographicVault | None:
         return None
 
 
+# ---- patient lookup and the verified-status read (mpi.lookup_patients, mpi.patient_status) ---------------------------------------------------------------------
+#
+# SEARCH is an exact, read-only lookup by the same keyed tokens registration uses: the caller types a name and date of birth (and optionally a phone) and gets ids, the kinds of identifier that
+# agreed and whether each record is verified. It returns NO name, date of birth or phone (what the caller typed they already know; showing a stored value is a separate decision), writes
+# nothing, and writes ONE audit row per search: who, role, the kind of search and the result count, never the query text or the results. Front desk only (they register). STATUS tells a front-desk person, nurse
+# or doctor whether one record is verified and why; the confirm and revoke buttons need it.
+
+
+class PatientSearchIn(_Body):
+    clinic_id: uuid.UUID
+    name: str = Field(min_length=1, max_length=200)
+    dob: str = Field(min_length=1, max_length=40)
+    phone: str | None = Field(default=None, max_length=40)
+
+
+class PatientHitOut(_Out):
+    patient_id: uuid.UUID
+    matched_kinds: list[Literal["name_dob", "phone"]]
+    verified: bool
+    registered_via: Literal["front_desk", "referral_worker"]
+
+
+class PatientSearchOut(_Out):
+    items: list[PatientHitOut]
+
+
+class PatientStatusOut(_Out):
+    patient_id: uuid.UUID
+    clinic_id: uuid.UUID
+    registered_via: Literal["front_desk", "referral_worker"]
+    verified: bool
+    latest_identity_event: Literal["confirm", "revoke"] | None
+    latest_identity_event_at: datetime | None
+    merged_into: uuid.UUID | None  # set when this record is the subordinate of an ACTIVE merge: act on that record
+
+
+@staff_patients.post("/search", response_model=PatientSearchOut)
+async def search_patients(body: PatientSearchIn, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims)) -> PatientSearchOut:
+    """Find existing records for exactly these details. 404 for a clinic you cannot see, 403 unless you are front desk there, 422 for an invalid date of birth or phone (named, never echoed), 503 if
+    the encryption keys are not configured. Read-only."""
+    vault: DemographicVault | None = request.app.state.vault
+    key_version = _active_key_version(request) if vault is not None else None
+    if vault is None or key_version is None:
+        log.error("patient search is unavailable: no usable encryption key is configured (deployment fault)")
+        raise HTTPException(status_code=503, detail="patient search is unavailable: encryption keys are not configured")
+    origin = await _front_desk_gate(conn, claims, body.clinic_id)
+    try:
+        hits = await mpi.lookup_patients(
+            PatientIngestionPipeline(vault, key_version=key_version), conn, clinic_id=body.clinic_id, origin=origin, name=body.name, dob=body.dob, phone=body.phone
+        )
+    except mpi.InvalidDateOfBirth:
+        raise HTTPException(status_code=422, detail="date of birth must be a real past date in YYYY-MM-DD form") from None
+    except mpi.InvalidPhone:
+        raise HTTPException(status_code=422, detail="phone must be a valid Indian mobile number") from None
+    except mpi.IngestionError:
+        raise HTTPException(status_code=422, detail="a required field is missing or blank") from None
+    except UnicodeError:
+        raise HTTPException(status_code=422, detail="the name contains characters that cannot be stored") from None
+    # One audit row per search: who, role, the KIND of search and how many results. Never the query text and never the results (owner decision 2026-10-30).
+    await write_audit(
+        conn, clinic_id=body.clinic_id, origin=origin, actor_id=uuid.UUID(claims["sub"]), actor_role="front_desk", action="patient.search", resource_type="clinic", resource_id=body.clinic_id,
+        details={"kind": "name_dob_phone" if body.phone else "name_dob", "results": len(hits)}, idempotency_key=f"audit:patient-search:{uuid.uuid4()}",
+    )
+    return PatientSearchOut(
+        items=[PatientHitOut(patient_id=h.patient_id, matched_kinds=list(h.matched_kinds), verified=h.verified, registered_via=h.registered_via) for h in hits]  # type: ignore[arg-type]
+    )
+
+
+@staff_patients.get("/{patient_id}", response_model=PatientStatusOut)
+async def patient_status_route(patient_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> PatientStatusOut:
+    """Whether this record is verified and why (its source and its latest confirm or revoke). 404 if you cannot see it (the same as a missing or erased one), 403 unless you are front desk,
+    nurse or doctor somewhere."""
+    await _referral_reader(conn, claims)
+    try:
+        s = await mpi.patient_status(conn, patient_id)
+    except mpi.PatientNotFound:
+        raise HTTPException(status_code=404, detail="not found") from None
+    return PatientStatusOut(
+        patient_id=s.patient_id, clinic_id=s.clinic_id, registered_via=s.registered_via, verified=s.verified,  # type: ignore[arg-type]
+        latest_identity_event=s.latest_event, latest_identity_event_at=s.latest_event_at, merged_into=s.merged_into,
+    )
+
+
+# ---- identity lists: possible duplicates and merges (reads only) ---------------------------------------------------------------------------------------------
+#
+# What the merge screens show before anyone proposes, approves or breaks a link. Reads only, under the existing `select` policies (possible duplicates: front desk; merges: front desk, nurse,
+# doctor). They live OUTSIDE `/v1/staff/merges` on purpose: that router requires a second factor for every route, which is right for the three write steps and wrong for reading a list.
+# Ids, closed words and times only: no name, date of birth or phone.
+
+staff_identity = APIRouter(prefix="/v1/staff/identity", tags=["staff identity"])
+DUPLICATE_READERS: Final = ("front_desk",)
+MERGE_READERS: Final = ("front_desk", "nurse", "doctor")
+
+
+class DuplicateOut(_Out):
+    candidate_id: uuid.UUID
+    clinic_id: uuid.UUID
+    patient_id: uuid.UUID  # the record just created
+    candidate_patient_id: uuid.UUID  # the existing record it resembles
+    matched_kinds: list[Literal["name_dob", "phone"]]
+    reason: Literal["near_match", "ambiguous"]
+    status: Literal["pending", "resolved"]
+    created_at: datetime
+    resolved_at: datetime | None
+
+
+class DuplicateList(_Out):
+    items: list[DuplicateOut]
+    limit: int
+    has_more: bool
+
+
+class MergeDetailOut(_Out):
+    merge_id: uuid.UUID
+    clinic_id: uuid.UUID
+    master_patient_id: uuid.UUID
+    subordinate_patient_id: uuid.UUID
+    candidate_id: uuid.UUID
+    status: Literal["awaiting_second_approval", "active", "unmerged"]
+    proposed_by: uuid.UUID
+    second_approved_by: uuid.UUID | None
+    activated_at: datetime | None
+    unmerged_at: datetime | None
+    unmerged_by: uuid.UUID | None
+    created_at: datetime
+
+
+class MergeList(_Out):
+    items: list[MergeDetailOut]
+    limit: int
+    has_more: bool
+
+
+async def _staff_reader(conn: AsyncConnection, claims: dict[str, Any], roles: tuple[str, ...]) -> None:
+    held = (
+        await conn.execute(
+            text(
+                "select 1 from iam.staff_roles sr join iam.accounts a on a.id = sr.account_id where sr.account_id = :u and sr.revoked_at is null "
+                "and sr.role = any(cast(:r as text[])) and a.status = 'active' and a.account_type = 'staff' limit 1"
+            ),
+            {"u": uuid.UUID(claims["sub"]), "r": list(roles)},
+        )
+    ).first()
+    if held is None:
+        raise HTTPException(status_code=403, detail="your role may not read this")
+
+
+def _merge_detail_out(r: Any) -> MergeDetailOut:
+    return MergeDetailOut(
+        merge_id=r.id, clinic_id=r.clinic_id, master_patient_id=r.master_patient_id, subordinate_patient_id=r.subordinate_patient_id, candidate_id=r.candidate_id, status=r.status,
+        proposed_by=r.approved_by, second_approved_by=r.second_approved_by, activated_at=r.activated_at, unmerged_at=r.unmerged_at, unmerged_by=r.unmerged_by, created_at=r.created_at,
+    )
+
+
+_MERGE_COLUMNS = "id, clinic_id, master_patient_id, subordinate_patient_id, candidate_id, status, approved_by, second_approved_by, activated_at, unmerged_at, unmerged_by, created_at"
+
+
+@staff_identity.get("/possible-duplicates", response_model=DuplicateList)
+async def list_possible_duplicates(
+    conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), status: Literal["pending", "resolved"] | None = "pending", limit: Limit = 100
+) -> DuplicateList:
+    """Records the matcher queued for a person to compare (newest first; `pending` by default, `status` filters). Front desk only. 403 otherwise."""
+    await _staff_reader(conn, claims, DUPLICATE_READERS)
+    rows = (
+        await conn.execute(
+            text(
+                "select id, clinic_id, patient_id, candidate_patient_id, matched_kinds, reason, status, created_at, resolved_at from mpi.match_candidates "
+                "where (cast(:s as text) is null or status = :s) order by created_at desc, id limit :n"
+            ),
+            {"s": status, "n": limit + 1},
+        )
+    ).all()
+    items = [
+        DuplicateOut(
+            candidate_id=r.id, clinic_id=r.clinic_id, patient_id=r.patient_id, candidate_patient_id=r.candidate_patient_id, matched_kinds=list(r.matched_kinds), reason=r.reason,
+            status=r.status, created_at=r.created_at, resolved_at=r.resolved_at,
+        )
+        for r in rows[:limit]
+    ]
+    return DuplicateList(items=items, limit=limit, has_more=len(rows) > limit)
+
+
+@staff_identity.get("/merges", response_model=MergeList)
+async def list_merges(
+    conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), status: Literal["awaiting_second_approval", "active", "unmerged"] | None = None, limit: Limit = 100
+) -> MergeList:
+    """Merges of the clinics you may read, newest first. Front desk, nurse and doctor. 403 otherwise."""
+    await _staff_reader(conn, claims, MERGE_READERS)
+    rows = (
+        await conn.execute(
+            text(f"select {_MERGE_COLUMNS} from mpi.merges where (cast(:s as text) is null or status = :s) order by created_at desc, id limit :n"), {"s": status, "n": limit + 1}
+        )
+    ).all()
+    return MergeList(items=[_merge_detail_out(r) for r in rows[:limit]], limit=limit, has_more=len(rows) > limit)
+
+
+@staff_identity.get("/merges/{merge_id}", response_model=MergeDetailOut)
+async def open_merge(merge_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> MergeDetailOut:
+    """One merge. 404 if you cannot see it (the same as a missing one), 403 unless you hold front desk, nurse or doctor somewhere."""
+    await _staff_reader(conn, claims, MERGE_READERS)
+    r = (await conn.execute(text(f"select {_MERGE_COLUMNS} from mpi.merges where id = :i"), {"i": merge_id})).first()
+    if r is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return _merge_detail_out(r)
+
+
+# ---- holds: list, and release one on purpose (SlotManager.release_hold) ----------------------------------------------------------------------------------------
+#
+# A hold otherwise lives until its time runs out. Front desk may give the slot back at once (the existing front-desk update on `sched.holds` and on the slot, no new grant). Listing is for the
+# same readers as the other scheduling reads. Releasing needs the idempotency key and writes one audit row; a hold that is already released is a replay in effect; a hold that was booked
+# (`converted`) or has `expired` is a 409, never silently reopened.
+
+
+class HoldRowOut(_Out):
+    hold_id: uuid.UUID
+    clinic_id: uuid.UUID
+    slot_id: uuid.UUID
+    patient_id: uuid.UUID | None
+    status: Literal["active", "released", "expired", "converted"]
+    created_at: datetime
+    expires_at: datetime
+
+
+class HoldRowList(_Out):
+    items: list[HoldRowOut]
+    limit: int
+    has_more: bool
+
+
+class ReleaseOut(_Out):
+    hold_id: uuid.UUID
+    slot_id: uuid.UUID
+    status: Literal["released"]
+    replayed: bool
+
+
+@scheduling.get("/holds", response_model=HoldRowList)
+async def list_holds(
+    conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), status: Literal["active", "released", "expired", "converted"] | None = "active", limit: Limit = 100
+) -> HoldRowList:
+    """Holds of the clinics you may read, soonest to expire first (`active` by default; `status` filters)."""
+    clinics = await _readable_clinics(conn, claims)
+    rows = (
+        await conn.execute(
+            text(
+                "select id, clinic_id, slot_id, patient_id, status, created_at, expires_at from sched.holds "
+                "where clinic_id = any(cast(:c as uuid[])) and (cast(:s as text) is null or status = :s) order by expires_at, id limit :n"
+            ),
+            {"c": clinics, "s": status, "n": limit + 1},
+        )
+    ).all()
+    items = [
+        HoldRowOut(hold_id=r.id, clinic_id=r.clinic_id, slot_id=r.slot_id, patient_id=r.patient_id, status=r.status, created_at=r.created_at, expires_at=r.expires_at)
+        for r in rows[:limit]
+    ]
+    return HoldRowList(items=items, limit=limit, has_more=len(rows) > limit)
+
+
+@scheduling.post("/holds/{hold_id}/release", response_model=ReleaseOut)
+async def release_hold_route(hold_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> ReleaseOut:
+    """Give a held slot back now. 404 if you cannot see the hold, 403 unless you are front desk of its clinic, 409 if it was booked or has expired."""
+    row = (await conn.execute(text("select clinic_id, origin from sched.holds where id = :h"), {"h": hold_id})).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _holds_role(conn, claims, row.clinic_id, ("front_desk",)):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    with _scheduling_errors():
+        released = await _slots.release_hold(conn, hold_id)
+    actor = uuid.UUID(claims["sub"])
+    await write_audit(
+        conn, clinic_id=row.clinic_id, origin=row.origin, actor_id=actor, actor_role="front_desk", action="hold.release", resource_type="hold", resource_id=hold_id,
+        details={"slot_id": released.slot_id, "replayed": released.replayed}, idempotency_key=f"audit:hold-release:{hold_id}:{idempotency_key}",
+    )
+    return ReleaseOut(hold_id=released.hold_id, slot_id=released.slot_id, status="released", replayed=released.replayed)
+
+
+# ---- the referral queue: list and open (what a reviewer sees BEFORE deciding) --------------------------------------------------------------------------
+#
+# Reads only, under the caller's own row-level security. A role sees only what its policies show: front desk cannot read triage proposals (migration 0018), so for front desk `proposal_visible` is
+# FALSE and the proposal fields are null, which means "you cannot see", never "there is none". `run_state` is the latest Front Door job for the document (every reader role can see the queue).
+# `holds` are the open `referral_hold` tasks YOU may see (front desk sees its own; a nurse-assigned hold is invisible to front desk).
+
+RunState = Literal["unclaimed", "claimed", "completed", "dead_lettered"]
+
+
+class ReferralOut(_Out):
+    document_id: uuid.UUID
+    clinic_id: uuid.UUID
+    content_type: UploadContentType
+    size_bytes: int
+    created_at: datetime
+    registered_by: uuid.UUID
+    run_state: RunState | None  # None: no run has been started
+    open_holds: int  # open referral_hold tasks you may see
+    proposal_visible: bool  # False: your role cannot read triage proposals, so the next two fields are unknown, not empty
+    proposal_id: uuid.UUID | None
+    decided: bool | None
+
+
+class ReferralHoldOut(_Out):
+    task_id: uuid.UUID
+    assigned_role: Literal["nurse", "doctor", "front_desk"]
+    status: Literal["open", "acknowledged", "resolved"]
+
+
+class CardCandidateOut(_Out):
+    """A protocol card the retrieval proposed: its id and version only."""
+
+    card_id: str
+    version: int
+
+
+class ProposalOut(_Out):
+    proposal_id: uuid.UUID
+    patient_id: uuid.UUID
+    abstained: bool
+    mode: Literal["shadow", "assisted", "autonomous"]
+    candidates: list[CardCandidateOut]
+    review_task_id: uuid.UUID
+    created_at: datetime
+
+
+class ReferralDetailOut(ReferralOut):
+    holds: list[ReferralHoldOut]
+    proposal: ProposalOut | None  # None when there is none OR when proposal_visible is False
+
+
+class ReferralList(_Out):
+    items: list[ReferralOut]
+    limit: int
+    has_more: bool
+
+
+REFERRAL_READERS: Final = ("front_desk", "nurse", "doctor")
+_REFERRAL_SELECT = """
+    select d.id as document_id, d.clinic_id, d.content_type, d.size_bytes, d.created_at, d.registered_by,
+           (select q.state from ops.queue q where q.task_type = :tt and q.payload ->> 'document_id' = d.id::text order by q.created_at desc, q.id limit 1) as run_state,
+           (select count(*) from agents.review_tasks t where t.kind = 'referral_hold' and t.source_message_id = 'document:' || d.id::text and t.status <> 'resolved') as open_holds,
+           iam.has_clinic_role(d.clinic_id, array['nurse', 'doctor']) as proposal_visible,
+           case when iam.has_clinic_role(d.clinic_id, array['nurse', 'doctor'])
+                then (select p.id from agents.triage_proposals p where p.document_id = d.id and p.clinic_id = d.clinic_id) end as proposal_id,
+           case when iam.has_clinic_role(d.clinic_id, array['nurse', 'doctor'])
+                then exists (select 1 from agents.review_decisions rd join agents.triage_proposals p2 on p2.id = rd.proposal_id where p2.document_id = d.id and p2.clinic_id = d.clinic_id) end as decided
+    from docs.documents d where d.kind = 'referral'
+"""
+
+
+async def _referral_reader(conn: AsyncConnection, claims: dict[str, Any]) -> None:
+    held = (
+        await conn.execute(
+            text(
+                "select 1 from iam.staff_roles sr join iam.accounts a on a.id = sr.account_id where sr.account_id = :u and sr.revoked_at is null "
+                "and sr.role = any(cast(:r as text[])) and a.status = 'active' and a.account_type = 'staff' limit 1"
+            ),
+            {"u": uuid.UUID(claims["sub"]), "r": list(REFERRAL_READERS)},
+        )
+    ).first()
+    if held is None:
+        raise HTTPException(status_code=403, detail="your role may not read this")
+
+
+def _referral_fields(r: Any) -> dict[str, Any]:
+    return {
+        "document_id": r.document_id, "clinic_id": r.clinic_id, "content_type": r.content_type, "size_bytes": r.size_bytes, "created_at": r.created_at, "registered_by": r.registered_by,
+        "run_state": r.run_state, "open_holds": r.open_holds, "proposal_visible": r.proposal_visible, "proposal_id": r.proposal_id, "decided": r.decided,
+    }
+
+
+@staff_referrals.get("", response_model=ReferralList)
+async def list_referrals(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 100) -> ReferralList:
+    """The referral documents you may see, newest first, with the state of their run. 403 unless you hold front desk, nurse or doctor somewhere."""
+    await _referral_reader(conn, claims)
+    rows = (await conn.execute(text(_REFERRAL_SELECT + " order by d.created_at desc, d.id limit :n"), {"tt": FRONT_DOOR_TASK, "n": limit + 1})).all()
+    return ReferralList(items=[ReferralOut(**_referral_fields(r)) for r in rows[:limit]], limit=limit, has_more=len(rows) > limit)
+
+
+@staff_referrals.get("/{document_id}", response_model=ReferralDetailOut)
+async def open_referral(document_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> ReferralDetailOut:
+    """One referral with the holds you may see and, for a nurse or doctor, the triage proposal to review (card ids and versions only). 404 if you cannot see it, 403 unless you hold a reader role."""
+    await _referral_reader(conn, claims)
+    r = (await conn.execute(text(_REFERRAL_SELECT + " and d.id = :d"), {"tt": FRONT_DOOR_TASK, "d": document_id})).first()
+    if r is None:
+        raise HTTPException(status_code=404, detail="not found")
+    holds = (
+        await conn.execute(
+            text(
+                "select id, assigned_role, status from agents.review_tasks where kind = 'referral_hold' and source_message_id = :s order by created_at, id"
+            ),
+            {"s": f"document:{document_id}"},
+        )
+    ).all()
+    proposal = None
+    if r.proposal_visible:
+        p = (
+            await conn.execute(
+                text("select id, patient_id, candidates, abstained, mode, review_task_id, created_at from agents.triage_proposals where document_id = :d and clinic_id = :c"),
+                {"d": document_id, "c": r.clinic_id},
+            )
+        ).first()
+        if p is not None:
+            proposal = ProposalOut(
+                proposal_id=p.id, patient_id=p.patient_id, abstained=p.abstained, mode=p.mode, review_task_id=p.review_task_id, created_at=p.created_at,
+                candidates=[CardCandidateOut(card_id=str(c["card_id"]), version=int(c["version"])) for c in p.candidates],
+            )
+    return ReferralDetailOut(**_referral_fields(r), holds=[ReferralHoldOut(task_id=h.id, assigned_role=h.assigned_role, status=h.status) for h in holds], proposal=proposal)
+
+
 def create_app(
     settings: Settings | None = None, *, jwks: JWKSClient | None = None, engine: AsyncEngine | None = None,
     vault: DemographicVault | None = None, clock: Callable[[], float] = time.time, front_door: FrontDoorComponents | None = None,
-    front_door_session_for: Callable[..., Any] = worker_session,
+    front_door_session_for: Callable[..., Any] = worker_session, document_intake: DocumentIntake | None = None,
 ) -> FastAPI:
     """Build the app. `jwks`, `engine`, `vault` and `clock` (for the step-up window) can be injected (tests do); otherwise they come from
     settings / the environment. `front_door` holds the Front Door's stand-in components; with None the run and review routes answer 503 and no handler is registered."""
@@ -1417,6 +2045,7 @@ def create_app(
         app.state.wired_adapters = frozenset()  # (provider, model_id) pairs with a wired adapter: none yet
         app.state.malware_scanner_configured = False  # nothing sets it: no scanner exists (BUILD-SPEC.md 11.5); clinical stays not ready
         app.state.front_door = front_door
+        app.state.document_intake = document_intake  # None until a storage adapter exists (needs the bucket policy: an owner decision): the upload routes answer 503
         app.state.poker = Poker()  # routes that enqueue call `app.state.poker.poke()` after their transaction commits (7.4)
         handlers = {FRONT_DOOR_TASK: front_door_handler(front_door, session_for=front_door_session_for)} if front_door is not None else {}
         sweeps = [lambda conn: raise_dead_letter_tasks(conn, front_door.dead_letters)] if front_door is not None else []  # a dead-lettered run is never silent
@@ -1458,6 +2087,8 @@ def create_app(
     app.include_router(staff_merges)
     app.include_router(staff_referrals)
     app.include_router(staff_review_tasks)
+    app.include_router(staff_documents)
+    app.include_router(staff_identity)
     app.include_router(health)
     return app
 

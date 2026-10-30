@@ -24,20 +24,50 @@ def shard_files(shard: dict) -> list[str]:
 # ---- (1) every live test file is in exactly one shard ----------------------------------------------------------------------------------------
 
 
-def test_every_live_test_file_is_in_exactly_one_shard():
-    listed = [f for shard in shards() for f in shard_files(shard)]
-    missing = sorted(set(LIVE_FILES) - set(listed))
+MATRIX = "tests/test_api_role_matrix.py"
+
+
+def test_every_live_test_file_is_in_exactly_one_shard_except_the_split_matrix_which_is_in_complete_parts():
+    listed = [f for shard in shards() for f in shard_files(shard) if f != MATRIX]
+    missing = sorted(set(LIVE_FILES) - set(listed) - {MATRIX})
     twice = sorted({f for f in listed if listed.count(f) > 1})
     unknown = sorted(set(listed) - set(LIVE_FILES))
     assert not missing, f"live test files that no shard runs (they would never run in CI): {missing}"
     assert not twice, f"live test files listed in more than one shard: {twice}"
     assert not unknown, f"shard entries that are not live test files (or do not exist): {unknown}"
     assert all((ROOT / f).is_file() for f in listed)
+    # The matrix: in every shard that names it a `matrix_part` "i/n", with the same n, and the parts 1..n each exactly once (so every matrix test runs exactly once).
+    parts = [shard["matrix_part"] for shard in shards() if MATRIX in shard_files(shard)]
+    assert parts, "the role matrix is in no shard"
+    n = {int(p.split("/")[1]) for p in parts}
+    assert len(n) == 1 and sorted(int(p.split("/")[0]) for p in parts) == list(range(1, n.pop() + 1)), f"matrix parts must be 1..n exactly once, got {parts}"
+    assert all(not shard.get("matrix_part") for shard in shards() if MATRIX not in shard_files(shard)), "a shard without the matrix must not set matrix_part"
 
 
-def test_there_are_three_numbered_shards_and_none_is_empty():
-    assert [s["shard"] for s in shards()] == [1, 2, 3]
-    assert all(shard_files(s) for s in shards())
+def test_the_matrix_part_is_passed_to_pytest_in_every_shard():
+    step = next(s for s in WORKFLOW["jobs"]["live"]["steps"] if "Live tests" in s.get("name", ""))
+    assert step["env"]["CAREFLOW_MATRIX_PART"] == "${{ matrix.matrix_part }}"
+
+
+def test_the_root_conftest_partitions_the_matrix_into_disjoint_complete_stable_parts():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("root_conftest", ROOT / "conftest.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    ids = [f"tests/test_api_role_matrix.py::test_role_matrix[{m}-/v1/staff/x{i}]" for i, m in enumerate(["GET", "POST"] * 150)]
+    for total in (2, 3):
+        owner = {i: module.matrix_part_of(i, total) for i in ids}
+        assert set(owner.values()) == set(range(1, total + 1)) and all(module.matrix_part_of(i, total) == owner[i] for i in ids)  # complete, stable
+        sizes = [list(owner.values()).count(p) for p in range(1, total + 1)]
+        assert max(sizes) - min(sizes) < len(ids) * 0.25, sizes  # roughly even
+    assert module.parse_matrix_part("") is None and module.parse_matrix_part("2/3") == (2, 3)
+    for bad in ("0/2", "3/2", "x", "1/", "1/2/3"):
+        try:
+            module.parse_matrix_part(bad)
+        except ValueError:
+            continue
+        raise AssertionError(bad)
 
 
 def test_the_offline_job_runs_everything_the_shards_do_not():

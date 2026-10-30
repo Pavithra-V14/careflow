@@ -17,8 +17,12 @@ a successful insert can leave an object with no row; a periodic reconciliation o
 open item. A replay (same clinic and key) returns the original and touches nothing in storage; a replay with different parameters is a conflict.
 
 REAL UPLOADS ARE DISABLED OUTSIDE THE DEMO PROFILE. BUILD-SPEC §11.5: malware scanning on uploads is required before real use, and Supabase Storage has
-none. Unless a scanner is explicitly configured (`scanner_configured=True`, which nothing sets yet) any profile other than `demo` (an unrecognised one
-counts as clinical) refuses both steps with `UploadsDisabled`.
+none. Unless a scanner PORT is wired (`scanner=` a `MalwareScannerPort`; none is wired anywhere yet, only the fake exists) any profile other than `demo` (an unrecognised
+one counts as clinical) refuses both steps with `UploadsDisabled`.
+
+WITH A SCANNER WIRED: registration scans the stored bytes (`infected` -> the object is deleted and the upload is refused as `malware_detected`; `not_scanned` -> the document is
+registered but HELD) and every read for use (`read_verified`, after the re-hash) scans again, because signatures change. A verdict other than an explicit `clean` raises
+`DocumentHeld` and the bytes are never returned. In `demo` with no scanner the documents are synthetic only and are read unscanned (`scan` is reported as `not_checked`).
 
 Nothing here logs. Error codes are short fixed words; no file name, content, path, hash or size ever appears in an exception message.
 """
@@ -33,6 +37,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from careflow.malware import MalwareScannerPort, hold_reason, scan_or_hold
 from careflow.ports import SignedUpload, StoredObject, TransientError, UploadPort
 
 # Content type -> the magic numbers its bytes must start with. Anything not here is refused.
@@ -79,6 +84,15 @@ class DocumentNotFound(DocumentError):
     """No registered document with this id is visible to the caller, or its object is gone from storage."""
 
 
+class DocumentHeld(DocumentError):
+    """The scanner did not say `clean` (it found something, or it could not examine the file): the document is held for a person and its bytes are NOT returned. `reason` is a
+    fixed word: `malware_suspected` or `not_scanned`."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
 class ContentChanged(DocumentError):
     """The stored bytes no longer match the size and sha256 recorded at registration. The bytes are NOT returned."""
 
@@ -102,6 +116,7 @@ class RegisteredDocument:
     size_bytes: int
     sha256: str
     replayed: bool = False
+    scan: str = "not_checked"  # clean | not_scanned (registered but held) | not_checked (demo, no scanner wired)
 
 
 @dataclass(frozen=True)
@@ -151,16 +166,20 @@ def verify_stored(obj: StoredObject, *, max_bytes: int) -> str | None:
 
 class DocumentIntake:
     def __init__(
-        self, uploads: UploadPort, *, profile: str, scanner_configured: bool = False, max_bytes: int = MAX_UPLOAD_BYTES,
+        self, uploads: UploadPort, *, profile: str, scanner: MalwareScannerPort | None = None, max_bytes: int = MAX_UPLOAD_BYTES,
         expires_in_seconds: int = SIGNED_URL_SECONDS,
     ) -> None:
-        self._uploads, self._max, self._expires = uploads, max_bytes, expires_in_seconds
+        self._uploads, self._scanner, self._max, self._expires = uploads, scanner, max_bytes, expires_in_seconds
         # Only `demo` is allowed without a scanner; anything else, an unrecognised name included, is treated as clinical.
-        self._enabled = (profile or "").strip().lower() == "demo" or scanner_configured
+        self._enabled = (profile or "").strip().lower() == "demo" or scanner is not None
 
     @property
     def enabled(self) -> bool:
         return self._enabled
+
+    @property
+    def scanner_configured(self) -> bool:
+        return self._scanner is not None
 
     def _require_enabled(self) -> None:
         if not self._enabled:
@@ -228,6 +247,9 @@ class DocumentIntake:
         problem = verify_stored(stored, max_bytes=self._max)
         if problem is not None:
             raise UploadRejected(problem, cleanup_failed=not await self._cleanup(path))
+        scan = await self._scan_stored(path)
+        if scan == "infected":
+            raise UploadRejected("malware_detected", cleanup_failed=not await self._cleanup(path))
 
         try:
             async with conn.begin_nested():
@@ -253,7 +275,7 @@ class DocumentIntake:
             if not cleaned:
                 exc.add_note("the stored object could not be removed")  # no content in the note; the caller's error handling sees the DB error
             raise
-        return RegisteredDocument(document_id, kind, stored.content_type, stored.size, stored.sha256)
+        return RegisteredDocument(document_id, kind, stored.content_type, stored.size, stored.sha256, scan=scan)
 
     # ---- step 3: any worker that is about to USE the document ----------------------------------------------------------------------------
 
@@ -278,9 +300,26 @@ class DocumentIntake:
             raise DocumentNotFound("no such document")
         if len(content) != row.size_bytes or not hmac.compare_digest(hashlib.sha256(content).hexdigest(), row.sha256):
             raise ContentChanged("the stored content no longer matches what was registered")
+        if self._scanner is not None:  # signatures change, so every read for use is scanned, and only an explicit `clean` returns the bytes
+            verdict = await scan_or_hold(self._scanner, content)
+            if not verdict.clean:
+                raise DocumentHeld(hold_reason(verdict))
         return VerifiedDocument(row.id, row.clinic_id, row.content_type, content)
 
     # ---- helpers -----------------------------------------------------------------------------------------------------------------------------
+
+    async def _scan_stored(self, path: str) -> str:
+        """`clean`, `infected`, `not_scanned`, or `not_checked` (no scanner wired). A storage failure while fetching the bytes is `not_scanned`: never a pass."""
+        if self._scanner is None:
+            return "not_checked"
+        try:
+            content = await self._uploads.read(path)
+        except TransientError:
+            return "not_scanned"
+        if content is None:
+            return "not_scanned"
+        return (await scan_or_hold(self._scanner, content)).verdict
+
 
     @staticmethod
     async def _existing(conn: AsyncConnection, clinic_id: uuid.UUID, key: str):

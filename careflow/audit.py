@@ -31,6 +31,9 @@ ACTIONS: Final = frozenset(
         "patient.revoke_identity",
         "review_task.acknowledge",
         "review_task.resolve",
+        "document.register",  # a front-desk person or nurse registered an uploaded document (careflow/documents.py)
+        "patient.search",  # a front-desk person searched for a patient: the KIND of search and the result count only, never the query or the results
+        "hold.release",  # a front-desk person gave a held slot back before its time ran out
         "offer.send",  # a front-desk person sent an offer: the slot hold and the offer message (careflow/offers.py)
         "clinical.tool_call",  # a call on the clinical read-only MCP server (careflow/mcp_kit.py `audited`): tool name and outcome only
     }

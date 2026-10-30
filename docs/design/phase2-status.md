@@ -1,54 +1,63 @@
 # Phase 2 status (BUILD-SPEC.md Appendix D). Phase 2 ACCEPTANCE IS NOT MET.
 
-Updated 2026-10-24. Branch stack: next-backend (PR #2, CI green) <- p2-3-docs <- p2-8-graph. Migrations 0017 to 0021 are on the stack, NOT merged, NOT applied to dev
-(`python -m careflow.migrate --check` against dev on 2026-10-24: 0017 and 0018 pending, ledger intact; 0019 to 0021 did not exist yet). Apply to dev only after merge and review.
+Updated 2026-10-30. Main holds everything through PR #8 (migrations 0001 to 0024; the CI project is migrated by the migrate job, the dev project is NOT migrated past 0022 and nothing live runs there).
+PR #9 (CI running) adds 0025, the review-task routes and Phase 3 slice 2. Nothing here has run against a real model, a real document or a real patient.
+
+## Phase 2 acceptance checklist (Appendix D, Phase 2, and the 14.3 gates it touches)
+
+Met means a real, running check in CI. Each unmet item names what it is blocked on: **D** an owner decision, **C** a clinician, **P** a provider approval, **S** a spike or sample.
+
+| # | Acceptance item | Status | Evidence / blocked on |
+|---|---|---|---|
+| 1 | Document upload and the extraction pipeline (10.4) | **Partly met** | Built and tested on synthetic PDFs with a fake vision role (`careflow/extraction.py`, `adapters/pdf.py`). Uploads work only in `demo`. Unmet: the malware scanner **D** (`malware-scanner-options.md`); the real-PDF spike **S** (samples from the owner, `real-pdf-spike.md`); a real vision route **P**; the layout tier **D** (empty by decision) |
+| 2 | The `decision` tier with the three-adapter contract test (5.2; 14.3 hard gate) | **Not met** | Built with fakes and the contract harness against fakes. The gate is "the three engines answer": needs real engines, **P** (nothing hosted is approved; owner is answering separately for synthetic demo only) |
+| 3 | Tiered grounding checks (11.2) | **Met in code** | `careflow/grounding.py`, tests green. Thresholds that are clinical values are unset **C** |
+| 4 | Protocol-card retrieval with its own gold set and CI gate (10) | **Not met** | Retrieval built in pure code with a fake vector store. Unmet: cards, gold set and thresholds **C**; real embedding and Qdrant adapters **P/D** plus their Appendix B spikes **S** |
+| 5 | The Front Door graph, with the structural no-side-effect-across-a-pause test as a hard CI gate (7.2) | **Met** | `tests/test_front_door_structure.py` gate runs in CI and fails closed; crash-resume and, since PR #8, a pooler test with real commits (checkpoints, hold task, acknowledgement read back over a second connection). A drill that kills and restarts a real process is not done |
+| 6 | Clinic isolation, double-booking and idempotency tests pass (14.3) | **Met** | Role matrix covers every served route (guard test), concurrency suites, 699 live tests green in PR #8's run |
+| 7 | Red-flag recall = 100% and urgent-case recall = 100% (14.3) | **Not met** | Mechanism built; no clinician-authored rule exists **C** (a stub row only) |
+| 8 | No unverified fact reaches a rule (14.3) | **Met in code** | Grounding plus the referral-to-identity path (rules before any model on every path); needs real extractions to be measured **S/P** |
+| 9 | No injected text changes a priority or extracted value undetected (14.3) | **Partly met** | Prompt scan and grounding exist; the adversarial set needs clinician-reviewed content **C** |
+| 10 | Every human decision is audited | **Met** | `audit.log` rows (PR #8); more routes in PR #9 |
+| 11 | No run ends silently | **Met** | `hold_for_human`, dead-letter tasks, review-task routes to close holds (PR #9) |
+| 12 | Worker cannot forge identity links | **Met in code** | 0022 to 0024 merged; planted-token residual closed by unverified records; revoke in PR #9 needs the owner's policy sign-off **D** |
+| 13 | Retention / erasure procedure for working state | **Not met** | Design note only; needs the owner's OK and a new purge role **D**, retention periods **C/D** |
+| 14 | Review console (12) | **Not met** (Phase 4) | The routes the frontend needs exist after PR #9; the console itself is frontend work |
+| 15 | Spend ledger durable for reply interpretation | **Not met** | Options and recommendation written; decision **D** |
+| 16 | Clinician-owned values and wording | **Not met** | 25 items on `clinician-sheet.md`, all unanswered **C** |
 
 ## Done (code, offline tests, reviewed)
-- The live run, on stand-ins for the external engines: the worker job handler for the Front Door graph (`careflow/front_door_runner.py`), `POST /v1/staff/referrals/{id}/run` (enqueue) and `/review` (resume as the signed-in reviewer), each with its role-matrix case in the dedicated live harness `tests/test_api_referrals_live.py` (NEVER RUN yet: it first runs in CI on PR #3).
+- The live run, on stand-ins for the external engines: the worker job handler for the Front Door graph (`careflow/front_door_runner.py`), `POST /v1/staff/referrals/{id}/run` (enqueue) and `/review` (resume as the signed-in reviewer), each with its role-matrix case in the dedicated live harness `tests/test_api_referrals_live.py`.
 - P2-1 runner, budgets, tick; P2-2 decision tier with fakes and the three-adapter contract harness (against fakes only).
 - P2-3 documents: signed upload service, server-side re-verification, registration, `read_verified` re-hash, uploads disabled outside demo, clinical readiness needs a scanner (0017).
-- P2-5 tiered grounding (plain code; Guardrails AI not needed).
-- P2-6 pure-code retrieval: structured-field text, BM25, RRF, version-checked join, abstention with no default threshold, fake vector store.
-- P2-7 referral to identity: rules before any model on every path; verified facts only into mpi.
-- P2-8 the Front Door graph: structural no-side-effect-across-a-pause hard CI gate (fails closed), topology and agent-inventory pins, crash-resume tests, tracing refused.
-  Postgres checkpointer: our own asyncpg saver on 0021 (forced RLS, append-only history), conformance with LangGraph's InMemorySaver, restart-durability test over the in-memory store (and a single rolled-back transaction against the real tables): NOT yet proven across a real process restart and commit. The production session factories exist (`front_door_runner.worker_session`, `request_session`) and are unit-tested with fakes, but nothing has run them against the real pooler.
-- P2-9 triage: 0018 (proposal and human-only decision tables), routing policy with no clinical values, SQL writers.
-- No run ends silently: `hold_for_human` raises a `referral_hold` review task (0020: front desk can see and resolve its own).
-- The queue worker can register patients from a verified referral (0019: INSERT plus the reads matching needs; no UPDATE/DELETE; merges stay human and two-person).
-- P2-10 offline end-to-end with stand-ins at the edges.
+- P2-4 extraction (pypdf native tier, layout slot, vision through a port with fakes only, manual fallback, worker-only). Unstructured light mode is impossible without torch and was NOT installed (`p2-4-extraction.md`).
+- P2-5 tiered grounding; P2-6 pure-code retrieval; P2-7 referral to identity; P2-8 the Front Door graph and our own asyncpg checkpointer (0021); P2-9 triage (0018); P2-10 offline end-to-end.
+- Worker registration only through the definer function (0022); unverified worker-created records and front-desk confirmation (0023); a worker holds no other role (0024); audit rows; CORS and `/me` clinic fields.
 
-## Buildable now
-- A LIVE end-to-end run against the real database. The policies now allow the worker to run the whole clean path (0017 to 0021), but no such run has happened yet and the new live tests have never been executed.
-- Retention/erasure procedure for checkpoints (history is append-only; deletion is refused today).
-
-## Blocked on clinicians (see docs/design/clinician-decisions.md)
-- Card content, card attributes, scope keys, the retrieval gold set and the thresholds (so the retrieval gate and correct-abstention cannot be measured).
-- Red-flag rules; the review-task priorities; who reviews triage; reason codes; auto-approval policy; deadlines.
+## Blocked on clinicians (see `clinician-sheet.md`, 25 items)
+Card content and attributes, the retrieval gold set and thresholds, red-flag rules, review-task priorities, who reviews triage, reason codes, auto-approval policy, deadlines, the revoke reason list and task role/urgency, and what closes a red-flag task.
 
 ## Blocked on the owner
-- LLM provider and accounts for the real-engine contract tests (Laya/Jev/LLM): the three-engine hard gate stays OPEN until real engines answer. No hosted account may be added without approval.
-- Step-up claim shape (real tokens), Priya's STRONG_IDENTIFIERS sign-off.
-- The real embedding, Qdrant and storage adapters (each needs its data-flow entry and an Appendix B spike: signed-upload overwrite, Qdrant access control).
-
-## Parked for RAM
-- P2-4 extraction: BUILT on branch p2-4-extraction (pypdf native tier, layout slot, vision through a port with fakes only, manual fallback, worker-only); Unstructured light mode is impossible without torch and was NOT installed. See p2-4-extraction.md.
-
-## Not done and gating real use
-Real-engine contract tests; retrieval gold-set gate; the route/worker to run the graph; the review console; the malware scanner; audit.log rows for the human decisions.
+Provider approvals (vision, decision, translation) for synthetic demo use, the spend-ledger option, the malware scanner option, the retention/erasure design, the real-PDF samples, the 0025 review-tasks policy clause, the production key store and hosting region, Priya's `STRONG_IDENTIFIERS` sign-off, the step-up claim spike, key rotation after the `.env.cli` exposure.
 
 ## PRE-LAUNCH BLOCKERS (recorded decisions; nothing here blocks the merge, all of it blocks real patient data)
 1. **Worker token-attach and pending-duplicate forgery (0019 residual risk 4).** INSERT on `mpi.identity_tokens` and `mpi.match_candidates` lets a queue worker attach an identity token to ANY existing patient of its clinic, or forge a pending possible-duplicate between two patients; a wrongly attached token would make a later referral link to the wrong person. The owner decided (2026-10-24) NOT to build the SECURITY DEFINER ingestion function now, and to accept the risk while the worker is a trusted, synthetic-data-only identity. It must be closed (a function that touches only the record it just created) or explicitly re-accepted before any real patient data.
-   **STATUS (2026-10-28): fix written, not merged.** Migration 0022 adds `mpi.register_patient_from_referral` (SECURITY DEFINER) as the worker's only write path and drops its three INSERT policies; branch `blocker1-worker-registration-fn`; design `docs/design/blocker1-worker-token-forgery.md`. The blocker closes when 0022 is merged and the live tests pass in CI.
+   **STATUS (2026-10-30): CLOSED in code.** Merged (PR #6) and passing in CI. Migration 0022 adds `mpi.register_patient_from_referral` (SECURITY DEFINER) as the worker's only write path and drops its three INSERT policies; branch `blocker1-worker-registration-fn`; design `docs/design/blocker1-worker-token-forgery.md`. The blocker closes when 0022 is merged and the live tests pass in CI.
 2. The malware scanner (uploads are disabled outside demo; clinical readiness needs one).
 3. Priya's `STRONG_IDENTIFIERS` sign-off; `identity_refused` routing confirmed by the clinic.
-4. A retention/erasure procedure for checkpoints and review tasks (history is append-only today).
-5. audit.log rows for human clinical decisions.
+4. A retention/erasure procedure for checkpoints and review tasks (history is append-only today). **Design note written 2026-10-29 (`retention-and-erasure.md`); no code until the owner's OK.**
+5. (DONE 2026-10-29, PR #8, CI green) audit.log rows for human clinical decisions: referral review decisions, merge propose/approve/unmerge, confirm-identity (and, in PR #9, revoke-identity, review-task acknowledge/resolve, offer send). Not covered: none remaining that has a route.
 6. (DONE 2026-10-27) A dead-lettered `front_door_run` job now raises a nurse's `referral_dead_letter` review task (careflow/dead_letters.py, run by the tick's sweep); its priority is a required placeholder (clinician-decisions item 15).
 7. (CONFIRMED 2026-10-27, on the owner's two conditions, both met and enforced by tests) The dedicated-harness role-matrix exception for the two referral routes: every one of the 14 identities has its own case on each route in the dedicated harness (`tests/test_api_referrals_live.py`; the split guard requires every required role on both routes and a driving test parametrized over exactly them), and `test_every_route_is_in_the_matrix` fails when any route in the served OpenAPI document is covered by neither the main matrix nor a dedicated harness (and when a case is stale).
-8. (WRITTEN 2026-10-29, closes when its CI run is green) The graph now runs through the real pooler engine with real commits: `tests/test_pooler_graph_live.py` (app engine as in the lifespan, request-shaped enqueue as front desk, `run_tick` as the worker, the production `worker_session`, committed checkpoints, hold task and acknowledgement read back over a separate connection; claims are transaction-local on recycled backends; no sequential prepared-statement names).
+8. (DONE 2026-10-30: PR #8's CI run was green on all shards) The graph now runs through the real pooler engine with real commits: `tests/test_pooler_graph_live.py` (app engine as in the lifespan, request-shaped enqueue as front desk, `run_tick` as the worker, the production `worker_session`, committed checkpoints, hold task and acknowledgement read back over a separate connection; claims are transaction-local on recycled backends; no sequential prepared-statement names).
 9. **Real-world PDF spike (P2-4).** pypdf and the image reader were tried only on synthetic PDFs. Run real scanner output (JBIG2, CMYK, odd fonts, inline images, encrypted files) through the pipeline. Failures already route to a nurse as `image_unreadable` / `document_unreadable`, which is the safe behaviour; the spike measures how often that happens. Images in annotation appearance streams, tiling patterns and Type3 glyph procedures are accepted DOCUMENTED LIMITS (owner decision 2026-10-27). **No real referral is processed until the real-PDF spike has cleared this.** Until then the `data_policy` must stay `synthetic_only` for the referral path (no registry row on that path may be `phi_approved`).
-10. **A worker-created record can carry a token for a person who is not registered yet (planted token).** The worker computes tokens itself; migration 0022 stops attach-to-an-existing-patient but not this. When that person's real referral arrives the matcher would find exactly one record agreeing on both strong identifiers and link it confidently and silently. It BLOCKS REAL IDENTITY MATCHING and sits next to the `STRONG_IDENTIFIERS` sign-off (clinician-decisions item 13). Option A SIGNED OFF 2026-10-28 and written on branch `optionA-unverified-worker-records` (not merged): worker-created records are unverified and never auto-linked; a front-desk confirm-identity action verifies them (migration 0023); a queue_worker account holds no other role (0024). The blocker closes when 0022-0024 are merged and their live tests pass in CI; option C (one record per registered document) is deferred.
+10. **A worker-created record can carry a token for a person who is not registered yet (planted token).** The worker computes tokens itself; migration 0022 stops attach-to-an-existing-patient but not this. When that person's real referral arrives the matcher would find exactly one record agreeing on both strong identifiers and link it confidently and silently. It BLOCKS REAL IDENTITY MATCHING and sits next to the `STRONG_IDENTIFIERS` sign-off (clinician-decisions item 13). Option A SIGNED OFF 2026-10-28 and written on branch `optionA-unverified-worker-records` (not merged): worker-created records are unverified and never auto-linked; a front-desk confirm-identity action verifies them (migration 0023); a queue_worker account holds no other role (0024). **STATUS (2026-10-30): 0022 to 0024 are merged and their live tests pass in CI, so the blocker is CLOSED in code; the revoke (0025, PR #9) lets a mistaken confirmation be taken back.** option C (one record per registered document) is deferred.
 
 11. **Owner confirms no pre-0023 patient row is worker-created before launch.** Migration 0023 defaults every existing row to `front_desk` (verified), and the schema cannot say who created an older row; a worker-created row from before 0022 would still auto-link. Run read-only on the target project BEFORE launch (worker-created referral rows carry the idempotency key `referral:<document id>`): `select clinic_id, origin, count(*) from mpi.patients where registered_via = 'front_desk' and idempotency_key like 'referral:%' group by 1, 2;` Any row counted was written by the Front Door worker (or an identical key by hand) and must be reviewed by a person, or demoted by a reviewed one-off, before real data.
 
 12. **Rotate every key that was in `.env.cli` (exposed in the `Careflow.zip` upload) before any real data.** `.env.cli` holds the CI project's values, so the CI project's secrets (database logins, the Supabase secret key, any signing or API keys) count as exposed. No other action is taken now: the CI project holds synthetic data only. Rotation (new database passwords for the app and migrator logins, a new Supabase secret key, new GitHub Actions secrets) is a pre-launch item, not a merge gate.
+
+13. **Spend ledger for reply interpretation** is a hard blocker for any real reply-interpretation call; options and a recommendation in `spend-ledger-options.md`.
+14. **Malware scanner:** options in `malware-scanner-options.md`; nothing is added until the owner chooses.
+15. **Real-PDF spike:** tooling and the sample request are ready (`real-pdf-spike.md`); waiting for dummy-document samples the owner makes (never redacted real documents).
+16. **A key-squatting hole to close:** the 0013 `unmerge_review` insert clause for front desk can pre-insert a task carrying another writer's predictable idempotency key (recorded by the 0025 review; the new revoke clause is bound to a real event, the old one is not).

@@ -1,5 +1,7 @@
 # Phase 1 status (BUILD-SPEC.md Appendix D)
 
+**Updated 2026-10-30 to the current truth.** Phase 1 is STILL NOT COMPLETE; what changed since the 2026-10-24 audit: PR #1 and the later PRs (#2 to #8) are merged; main's migrations run to 0024 (0025 is in PR #9); the live suites that were "not yet run in CI" now run and pass on every shard (PR #8's run: 224 + 318 + 157 = 699 live tests, plus 1257 offline); every route in the served OpenAPI document has its role-matrix case; human decisions write `audit.log` rows; the staff-account runbook, `/v1/iam/me` clinic fields and CORS exist for the frontend. What still blocks completion is unchanged in kind: the patient portal backend, Priya's `STRONG_IDENTIFIERS` sign-off, the step-up claim spike, clinician-authored red-flag rules, hosting and an India region, and a key-store decision for production. See the "Update 2026-10-30" section at the end.
+
 Owner decisions of 2026-10-24, recorded against the Phase 1 close-out audit (a read-only spec-compliance review of the repository on branch
 `ci-fixes-d3-d4`, PR #1, CI green with 967 live tests and 0 skipped). **Phase 1 is not complete.** Each item below is one of: **built**,
 **accepted** (a deviation the owner accepted, with the reason), **moved** (to a named later package), **blocked** (waiting on a person), or
@@ -14,12 +16,12 @@ gold-set regression tests; the transactional outbox and the Postgres-backed queu
 | Item | Status | Evidence or next step |
 |---|---|---|
 | Slots, holds, GiST exclusion, idempotent booking, waitlist (backend) | **Built** | `careflow/scheduling.py`, migrations 0002 and 0004, `tests/test_scheduling_live.py`, `tests/test_rls_mpi_scheduling_live.py` |
-| Staff API routes | **Built** | `/v1/staff/scheduling/*`, role-matrix covered |
+| Staff API routes | **Built** | `/v1/staff/scheduling/*`, role-matrix covered; draft/send offer routes are in PR #9 |
 | Staff console (frontend) | **Open**, approved in principle | Frontend packages F0 to F5, in that order, local development only. No package is installed until the owner approves an exact list |
 | Minimal patient portal | **Blocked** on a backend package | Needs patient-facing routes and RLS policies, the `iam` consent, activation and grievance tables, guardian binding, and the SMS provider path (Appendix B, MSG91 Send-SMS-Hook). Frontend F6 to F9 wait for it. Scheduling of that package is the owner's decision |
-| 200 concurrent bookings of one slot resolve to exactly one (BUILD-SPEC 21; 14.3 hard gate) | **Built** (not yet run in CI) | `tests/test_scheduling_concurrency_live.py` |
-| Concurrent duplicate hold and booking retries replay the original | **Built** (not yet run in CI) | same file |
-| Clinic isolation for child tables | **Built** (not yet run in CI); the finding it made is **fixed** by migration 0014 | `tests/test_rls_child_tables_live.py`; see "Finding: unpinned foreign keys" below |
+| 200 concurrent bookings of one slot resolve to exactly one (BUILD-SPEC 21; 14.3 hard gate) | **Built, run in CI (green)** | `tests/test_scheduling_concurrency_live.py` |
+| Concurrent duplicate hold and booking retries replay the original | **Built, run in CI (green)** | same file |
+| Clinic isolation for child tables | **Built, run in CI (green)**; the finding it made is **fixed** by migration 0014 | `tests/test_rls_child_tables_live.py`; see "Finding: unpinned foreign keys" below |
 | Slot sweep and waitlist backfill running on their own | **Moved** to P2-1 | They need the tick (see Queue) |
 
 ## Identity (MPI)
@@ -80,3 +82,11 @@ Step-up claim spike; `STRONG_IDENTIFIERS` sign-off; LLM provider; hosting and In
 inputs (red-flag rules, emergency reply template, `unassessable` task priority and resolution path, real priority levels, protocol cards,
 a clinician-reviewed referral gold set, counsel on advertising, privacy notice and under-18 rules); the owner's own clean-up (`Careflow.zip`
 and the `.env.cli` keys, scratch files) and merging PR #1.
+
+## Update 2026-10-30 (what is true now)
+
+- **Merged to main (PRs #1 to #8):** scheduling, MPI, rules mechanism, queue and ceilings, the Phase 2 stack (extraction, grounding, retrieval, decision tier with fakes, the Front Door graph, triage), blocker 1 (0022), planted-token option A (0023, 0024), CORS and `/v1/iam/me` clinic fields, audit rows for human decisions, the pooler graph test, Phase 3 slice 1 (mechanism only), demo placeholders.
+- **In PR #9 (CI running):** identity-confirmation revoke (0025), review-task routes, Phase 3 slice 2 (mechanism only).
+- **CI facts:** three live shards (60 min limit; PR #8: 37, 46 and 47 minutes), serialised per shard on the one shared CI database; every route has a role-matrix case; the migration ledger is checksummed and checked in the migrate job.
+- **Phase 1 items still open, unchanged in cause:** minimal patient portal (backend package not scheduled); `STRONG_IDENTIFIERS` sign-off; step-up claim shape spike; clinician-authored red-flag rules and the 100% recall gate; emergency reply wording; hosting and an India region; production key store (env variables accepted for now); labeled-pair merge gate (Phase 5); the production secret manager.
+- **New pre-launch items since the audit** live in `phase2-status.md` (pre-launch blockers 1 to 12).

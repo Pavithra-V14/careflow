@@ -190,3 +190,7 @@ Proposed reading of spec 16.5 ("models that touch patient data run locally"), fo
 - Every hosted row in the model registry must therefore be `data_policy: synthetic_only`, and the gateway refuses it outside profile `demo`.
 - A free-tier hosted row is `synthetic_only` by definition (free tiers may retain or train on inputs).
 - Until the owner approves a provider for synthetic demo use, the registry keeps fakes only and no adapter is built. If approved: adapters sit behind the gateway, each row has an explicit timeout through `vlm_row`, its own data-flow-register entry and test, keys are read only from the env names in `.env.example`, and each role has a spend ceiling.
+
+## Documents routes (batch4)
+- The upload routes (`/v1/staff/documents/uploads`, `/register`) and the referral queue are built and role-matrix covered; **there is still no real `UploadPort` adapter**: it needs the Supabase Storage bucket and its `storage.objects` policy (an owner decision; stop-and-ask per CLAUDE.md) and the Appendix B signed-upload spike. Until then `document_intake` is None in the real app and the upload routes answer 503.
+- Test residue: `docs.documents` is append-only for every role, so the clinics a role-matrix run registers documents in cannot be deleted (the teardown leaves them, like confirmed patients). Nothing reads them; every suite is scoped to its own clinic.
