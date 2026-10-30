@@ -31,7 +31,15 @@ And one field at the top level of the response (or on `/readyz`, whichever fits 
 
 `/readyz` currently documents an empty response schema, so nothing there can be generated into the client either.
 
-### 3. Step-up claim shape (not a code change: a spike)
+### 3. The active role must reach the server for least privilege to be real
+
+The staff shell makes a person with several role grants pick ONE active role (BUILD-SPEC 19.3), but today that choice only
+changes what the frontend shows: the API still evaluates all of the account's grants on every request. For the choice to
+limit what the person can do, the backend would need to accept the chosen grant (for example a request header naming the
+clinic and role) and authorise against only that grant. The frontend sends nothing until the backend defines this; please
+decide the mechanism. Until then "active role" is a display and navigation choice, not a permission boundary.
+
+### 4. Step-up claim shape (not a code change: a spike)
 
 Tracked in `docs/design/step-up-spike.md`. The frontend will decode a real access token's `aal` / `amr` / `iat` structure in
 code once F2 sign-in works, and report the structure only (values blanked) so it can be pasted to the backend session.
