@@ -36,7 +36,15 @@ export function App({ port, apiBaseUrl }: { port: AuthPort | null; apiBaseUrl: s
   const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false } } }));
   return (
     <>
-      <a className="skip-link" href="#main">
+      {/* The staff app routes by URL hash, so the skip link focuses <main> itself instead of navigating to #main. */}
+      <a
+        className="skip-link"
+        href="#main"
+        onClick={(e) => {
+          e.preventDefault();
+          document.getElementById('main')?.focus();
+        }}
+      >
         {t('common.skipToContent')}
       </a>
       <header className="staff-header">

@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import en from '../src/shared/i18n/en.json';
-import ta from '../src/shared/i18n/ta.json';
+import { RESOURCES, initI18n, setLanguage } from '../src/shared/i18n';
 import { formatDate, formatNumber } from '../src/shared/i18n/format';
-import { initI18n, setLanguage } from '../src/shared/i18n';
 
 type Tree = { [k: string]: string | Tree };
 
@@ -18,8 +16,9 @@ function flatten(tree: Tree, prefix = ''): Record<string, string> {
 const vars = (s: string) => [...s.matchAll(/\{\{\s*(\w+)\s*\}\}/g)].map((m) => m[1]).sort();
 
 describe('translations', () => {
-  const E = flatten(en as Tree);
-  const T = flatten(ta as Tree);
+  // Both files per language, merged exactly as the app merges them.
+  const E = flatten(RESOURCES.en as Tree);
+  const T = flatten(RESOURCES.ta as Tree);
 
   it('have identical key sets in English and Tamil', () => {
     expect(Object.keys(T).sort()).toEqual(Object.keys(E).sort());

@@ -1,0 +1,277 @@
+/* Console screens (F3). Colours come only from tokens.css, so tests/tokens.test.ts covers the contrast of every pair used. */
+.main-nav ul,
+.sub-nav ul,
+.home-links,
+.plain {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.main-nav {
+  margin-bottom: var(--space-3);
+  border-bottom: 2px solid var(--color-border);
+}
+
+.main-nav ul,
+.sub-nav ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+}
+
+.main-nav a,
+.sub-nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-min);
+  padding: 0 var(--space-3);
+  color: var(--color-text);
+  font-weight: 700;
+  text-decoration: none;
+  border-bottom: 4px solid transparent;
+}
+
+/* The current page is marked by a thick underline AND aria-current, not by colour alone. */
+.main-nav a[aria-current='page'],
+.sub-nav a[aria-current='page'] {
+  border-bottom-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.sub-nav {
+  margin-bottom: var(--space-2);
+}
+
+.home-links li {
+  margin-block: var(--space-2);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-block: var(--space-2);
+}
+
+.toolbar button,
+.toolbar .button {
+  margin: 0;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-min);
+  padding: 0 var(--space-3);
+  border: 2px solid var(--color-primary);
+  border-radius: var(--radius);
+  color: var(--color-primary);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.button.primary {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.segmented {
+  display: inline-flex;
+}
+
+.segmented button {
+  margin: 0;
+  border-radius: 0;
+}
+
+.segmented button[aria-pressed='true'] {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-block: var(--space-2);
+}
+
+th,
+td {
+  padding: var(--space-1) var(--space-2);
+  text-align: start;
+  vertical-align: top;
+  border-bottom: 1px solid var(--color-border);
+}
+
+thead th {
+  background: var(--color-surface);
+  border-bottom: 2px solid var(--color-border);
+}
+
+/* Narrow screens: the table scrolls inside its own box instead of pushing the page sideways. */
+main {
+  overflow-x: auto;
+}
+
+.short-id {
+  font-size: 0.95em;
+}
+
+.pill {
+  display: inline-block;
+  padding: 0 var(--space-2);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  font-size: 0.9em;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pill-neutral {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.pill-ok {
+  background: var(--color-live-bg);
+  color: var(--color-live-text);
+}
+
+.pill-warn {
+  background: var(--color-test-bg);
+  color: var(--color-test-text);
+}
+
+.pill-urgent {
+  background: var(--color-danger);
+  color: var(--color-on-primary);
+}
+
+.pill-soon {
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 2px dashed var(--color-text);
+}
+
+/* An urgent task: a thick bar on its first cell, bold text, and the "Urgent" word in the row. */
+tr.task-urgent > th,
+tr.task-urgent > td {
+  background: var(--color-surface);
+  font-weight: 700;
+}
+
+tr.task-urgent > th:first-child {
+  box-shadow: inset 6px 0 0 var(--color-danger);
+  padding-inline-start: var(--space-3);
+}
+
+.urgent-banner {
+  padding: var(--space-2);
+  border: 2px solid var(--color-danger);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+.state {
+  margin-block: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+.state > p {
+  margin: 0;
+}
+
+.state-error {
+  border-color: var(--color-danger);
+}
+
+.state-forbidden {
+  border-style: dashed;
+}
+
+.state-ok {
+  border-color: var(--color-live-bg);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: minmax(8rem, max-content) 1fr;
+  gap: var(--space-1) var(--space-3);
+}
+
+.facts dt {
+  font-weight: 700;
+}
+
+.facts dd {
+  margin: 0;
+}
+
+.facts .fact-row {
+  display: contents;
+}
+
+@media (max-width: 36rem) {
+  .facts {
+    grid-template-columns: 1fr;
+  }
+}
+
+.placeholder {
+  margin: var(--space-2) 0;
+  padding: var(--space-2);
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+dialog.confirm {
+  width: min(32rem, calc(100vw - 2rem));
+  padding: var(--space-3);
+  border: 2px solid var(--color-text);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+dialog.confirm::backdrop {
+  background: rgb(20 32 46 / 0.6);
+}
+
+.dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.dialog-actions button {
+  margin: 0;
+}
+
+select,
+input[type='text'],
+input[type='date'],
+input[type='tel'],
+input[type='file'] {
+  display: block;
+  margin-top: var(--space-1);
+  max-width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+main form > label:not(.choice) {
+  display: block;
+  margin-top: var(--space-3);
+  font-weight: 700;
+}

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { useQueryClient } from '@tanstack/react-query';
 import { createApi, type Api } from '../../shared/api/client';
 import { StepUpDialog } from '../components/StepUpDialog';
+import { SEND_ACTIVE_ROLE_HEADER } from '../featureFlags';
 import type { AuthPort, TotpEnrolment } from './port';
 
 // Where the staff user is in sign-in. The server decides the second factor is required (the verified
@@ -19,6 +20,8 @@ interface AuthContextValue {
   verifyCode(factorId: string | null, code: string): Promise<boolean>;
   signOut(): Promise<void>;
   port: AuthPort;
+  /** Tells the API client which grant is active. Sent as a header only if SEND_ACTIVE_ROLE_HEADER is on (it is off). */
+  setActiveRole: (value: string | null) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -91,9 +94,16 @@ export function AuthProvider({ port, apiBaseUrl, children }: { port: AuthPort; a
   // One prompt at a time: concurrent step-up 401s share the same dialog and the same answer.
   const requestStepUp = useMemo(() => createStepUpGate(port, setStepUp), [port]);
 
+  // A tiny mutable cell (not React state): the API client reads it at request time. Created once.
+  const [activeRole] = useState(() => {
+    let current: string | null = null;
+    return { get: () => current, set: (v: string | null) => (current = v) };
+  });
+
   const api = useMemo(
     () =>
       createApi({
+        activeRole: { enabled: SEND_ACTIVE_ROLE_HEADER, get: activeRole.get },
         baseUrl: apiBaseUrl,
         getAccessToken: () => port.getAccessToken(),
         onStepUp: requestStepUp,
@@ -102,7 +112,7 @@ export function AuthProvider({ port, apiBaseUrl, children }: { port: AuthPort; a
           void port.signOut().then(() => endSession(true));
         },
       }),
-    [apiBaseUrl, port, requestStepUp, endSession],
+    [apiBaseUrl, port, requestStepUp, endSession, activeRole],
   );
 
   const value = useMemo<AuthContextValue>(
@@ -111,6 +121,7 @@ export function AuthProvider({ port, apiBaseUrl, children }: { port: AuthPort; a
       sessionEnded,
       api,
       port,
+      setActiveRole: (v) => void activeRole.set(v),
       async signIn(email, password) {
         const ok = await port.signInWithPassword(email, password);
         if (!ok) return false;
@@ -131,7 +142,7 @@ export function AuthProvider({ port, apiBaseUrl, children }: { port: AuthPort; a
         endSession(false);
       },
     }),
-    [phase, sessionEnded, api, port, factorId, settle, endSession],
+    [phase, sessionEnded, api, port, factorId, settle, endSession, activeRole],
   );
 
   return (

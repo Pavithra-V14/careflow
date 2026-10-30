@@ -2,6 +2,22 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import en from './en.json';
 import ta from './ta.json';
+import consoleEn from './console.en.json';
+import consoleTa from './console.ta.json';
+
+type Tree = { [key: string]: string | Tree };
+
+/** Merges nested string trees; a key in `extra` extends (never replaces) a group already in `base`. */
+export function mergeTrees(base: Tree, extra: Tree): Tree {
+  const out: Tree = { ...base };
+  for (const [k, v] of Object.entries(extra)) {
+    const existing = out[k];
+    out[k] = typeof v === 'object' && existing !== undefined && typeof existing === 'object' ? mergeTrees(existing, v) : v;
+  }
+  return out;
+}
+
+export const RESOURCES = { en: mergeTrees(en as Tree, consoleEn as Tree), ta: mergeTrees(ta as Tree, consoleTa as Tree) };
 
 export const LANGUAGES = ['en', 'ta'] as const;
 export type Language = (typeof LANGUAGES)[number];
@@ -39,7 +55,7 @@ export function setLanguage(lng: Language): Promise<unknown> {
 export function initI18n(initial: Language = readStoredLanguage()): typeof i18n {
   if (!i18n.isInitialized) {
     void i18n.use(initReactI18next).init({
-      resources: { en: { translation: en }, ta: { translation: ta } },
+      resources: { en: { translation: RESOURCES.en }, ta: { translation: RESOURCES.ta } },
       lng: initial,
       fallbackLng: 'en',
       supportedLngs: [...LANGUAGES],

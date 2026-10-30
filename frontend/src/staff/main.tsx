@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import '../shared/tokens/tokens.css';
 import '../shared/tokens/base.css';
 import './staff.css';
+import './console.css';
 import { readConfig } from '../shared/config';
 import { initI18n, i18n } from '../shared/i18n';
 import { App } from './App';
