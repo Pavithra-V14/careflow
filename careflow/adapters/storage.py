@@ -17,6 +17,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import logging
 import re
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final
@@ -26,14 +27,19 @@ import httpx
 
 from careflow.ports import PermanentError, SignedUpload, StoredObject, TransientError
 
+DOCUMENT_BUCKET: Final = "careflow-documents"  # the one bucket the storage policies (docs/design/proposed-migrations/0027) protect; the wiring refuses any other name
 # The only path shape a document ever has (careflow/documents.py `storage_path`). Anything else is refused BEFORE a request is built.
-PATH_RE: Final = re.compile(r"^clinic/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/doc/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
-BUCKET_RE: Final = re.compile(r"^[a-z0-9][a-z0-9_-]{2,62}$")
+PATH_RE: Final = re.compile(r"\Aclinic/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/doc/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
+BUCKET_RE: Final = re.compile(r"\A[a-z0-9][a-z0-9_-]{2,62}\Z")
 # Explicit timeouts (BUILD-SPEC 16.1 sets one for every outbound call): short to connect, bounded to move 20 MiB, and a hard ceiling on one whole download.
 TIMEOUT: Final = httpx.Timeout(connect=5.0, read=30.0, write=30.0, pool=5.0)
 WHOLE_CALL_SECONDS: Final = 60.0
 DEFAULT_MAX_OBJECT_BYTES: Final = 20 * 1024 * 1024
-ASSUMED_SIGNED_URL_SECONDS: Final = 2 * 60 * 60  # used ONLY if the signed token cannot be read; an assumption to be confirmed by the spike
+ASSUMED_SIGNED_URL_SECONDS: Final = 2 * 60 * 60  # used when the signed token cannot be read, and as the CEILING of a lifetime the browser is told: an assumption to be confirmed by the spike
+
+# httpx logs every request URL at INFO and httpcore may log headers at DEBUG: this module logs nothing itself, so keep the transport quiet too (the key is a header).
+for _noisy in ("httpx", "httpcore"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 
 def _fail(response: httpx.Response) -> Exception:
@@ -46,10 +52,22 @@ def _fail(response: httpx.Response) -> Exception:
 
 
 def _missing(response: httpx.Response) -> bool:
-    """Supabase answers a missing object with 404, or with 400 and a body that says so."""
+    """A missing OBJECT: 404, or 400 whose JSON says the object was not found. A missing BUCKET ("Bucket not found") is a misconfiguration, never "no object" (it would make delete a silent no-op)."""
+    text = response.text.lower()[:400]
+    if "bucket" in text and "not found" in text:
+        return False
     if response.status_code == 404:
-        return True
-    return response.status_code == 400 and "not found" in response.text.lower()[:400]
+        return "bucket" not in text
+    if response.status_code != 400:
+        return False
+    try:
+        body = response.json()
+    except ValueError:
+        return False
+    if not isinstance(body, dict):
+        return False
+    message = f"{body.get('error', '')} {body.get('message', '')}".lower()
+    return "object not found" in message or (str(body.get("statusCode")) == "404" and "not_found" in message.replace(" ", "_"))
 
 
 def _token_expiry(token: str) -> datetime | None:
@@ -70,7 +88,7 @@ class SupabaseUploadAdapter:
         parts = urlsplit(base_url)
         if parts.scheme != "https" and not (parts.scheme == "http" and parts.hostname in ("localhost", "127.0.0.1")):
             raise ValueError("the storage base URL must be https")
-        if not secret_key or not BUCKET_RE.match(bucket or ""):
+        if not secret_key or not BUCKET_RE.fullmatch(bucket or ""):
             raise ValueError("a secret key and a valid bucket name are required")
         self._base = base_url.rstrip("/") + "/storage/v1"
         self._host = parts.netloc
@@ -79,7 +97,10 @@ class SupabaseUploadAdapter:
         self._now = now or (lambda: datetime.now(UTC))
         # The `apikey` header is what the platform's gateway reads; a legacy JWT-format key is also sent as a bearer token.
         self._headers = {"apikey": secret_key, **({"Authorization": f"Bearer {secret_key}"} if secret_key.startswith("eyJ") else {})}
-        self._http = http or httpx.AsyncClient(timeout=TIMEOUT)
+        if http is not None and http.follow_redirects:
+            raise ValueError("the storage client must not follow redirects (the apikey header would travel to another host)")
+        self._http = http or httpx.AsyncClient(timeout=TIMEOUT, follow_redirects=False)
+        self._scheme = parts.scheme
 
     def __repr__(self) -> str:  # never the key
         return f"SupabaseUploadAdapter(bucket={self._bucket!r})"
@@ -90,7 +111,7 @@ class SupabaseUploadAdapter:
     # ---- helpers ------------------------------------------------------------------------------------------------------------------------------
 
     def _check(self, path: str) -> str:
-        if not isinstance(path, str) or not PATH_RE.match(path):
+        if not isinstance(path, str) or not PATH_RE.fullmatch(path):
             raise PermanentError("storage path is not a document path")
         return quote(path, safe="/")
 
@@ -117,11 +138,15 @@ class SupabaseUploadAdapter:
         except (ValueError, KeyError, TypeError):
             raise PermanentError("storage answered with an unexpected shape") from None
         absolute = relative if relative.startswith(("https://", "http://")) else self._base + (relative if relative.startswith("/") else "/" + relative)
-        if urlsplit(absolute).netloc != self._host:
-            raise PermanentError("storage answered with a URL for another host")  # the browser is never handed a URL we did not build for our own project
+        target = urlsplit(absolute)
+        if target.netloc != self._host or target.scheme != self._scheme or not target.path.startswith(f"/storage/v1/object/upload/sign/{self._bucket}/"):
+            raise PermanentError("storage answered with a URL that is not a signed upload for our own bucket")  # the browser is never handed a URL we did not expect
         found = re.search(r"[?&]token=([^&]+)", absolute)
         token = str(body.get("token") or (found.group(1) if found else ""))
-        expires_at = _token_expiry(token) or self._now() + timedelta(seconds=ASSUMED_SIGNED_URL_SECONDS)
+        now = self._now()
+        claimed = _token_expiry(token)
+        # The token's `exp` is read, not verified (it is our own request's answer over TLS): it only informs what the browser is TOLD, so it is clamped to a moment after now and no later than the assumed ceiling.
+        expires_at = min(claimed, now + timedelta(seconds=ASSUMED_SIGNED_URL_SECONDS)) if claimed is not None and claimed > now else now + timedelta(seconds=ASSUMED_SIGNED_URL_SECONDS)
         return SignedUpload(absolute, path, expires_at)
 
     async def _download(self, path: str) -> tuple[bytes, str, bool] | None:
@@ -163,6 +188,6 @@ class SupabaseUploadAdapter:
     async def delete(self, path: str) -> None:
         self._check(path)
         response = await self._request("DELETE", f"{self._base}/object/{self._bucket}", json={"prefixes": [path]})
-        if response.status_code in (200, 404) or _missing(response):
+        if response.status_code == 200 or _missing(response):
             return  # already gone is the same as deleted
         raise _fail(response)

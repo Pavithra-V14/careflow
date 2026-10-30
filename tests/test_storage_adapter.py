@@ -234,7 +234,7 @@ def _wiring(monkeypatch, **env):
     return _intake_from_environment(BASE)
 
 
-ALL = {"CAREFLOW_STORAGE_BUCKET": BUCKET, "CAREFLOW_STORAGE_VERIFIED": "2026-11-02", "SUPABASE_SECRET_KEY": KEY, "CAREFLOW_PROFILE": "demo", "CAREFLOW_DATA_POLICY": "synthetic_only"}
+ALL = {"CAREFLOW_STORAGE_BUCKET": BUCKET, "CAREFLOW_STORAGE_VERIFIED": "2026-10-29", "SUPABASE_SECRET_KEY": KEY, "CAREFLOW_PROFILE": "demo", "CAREFLOW_DATA_POLICY": "synthetic_only"}
 
 
 def test_the_real_storage_is_built_only_when_the_bucket_the_spike_date_the_demo_gate_and_the_key_are_all_present(monkeypatch):
@@ -253,3 +253,66 @@ def test_an_unrecorded_or_malformed_spike_date_keeps_the_real_storage_off(monkey
 @pytest.mark.parametrize(("profile", "policy"), [("clinical", "synthetic_only"), ("demo", "phi_approved"), ("demo", ""), ("", "synthetic_only")])
 def test_outside_the_demo_profile_with_synthetic_data_the_real_storage_is_never_built(monkeypatch, profile, policy):
     assert _wiring(monkeypatch, **{**ALL, "CAREFLOW_PROFILE": profile, "CAREFLOW_DATA_POLICY": policy}) == (None, None)
+
+
+# ---- the reviewer's findings (2026-10-30) -------------------------------------------------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_missing_bucket_is_a_misconfiguration_never_no_object_so_a_delete_cannot_silently_do_nothing():
+    for response in (httpx.Response(400, json={"statusCode": "404", "error": "Bucket not found", "message": "Bucket not found"}), httpx.Response(404, json={"error": "Bucket not found"})):
+        for call in ("describe", "read", "delete"):
+            storage, _ = adapter(lambda r, x=response: x)
+            with pytest.raises(PermanentError):
+                await getattr(storage, call)(PATH)
+
+
+@pytest.mark.asyncio
+async def test_a_400_without_an_object_not_found_message_is_not_a_missing_object():
+    storage, _ = adapter(lambda r: httpx.Response(400, json={"error": "InvalidRequest", "message": "something else"}))
+    with pytest.raises(PermanentError):
+        await storage.describe(PATH)
+    storage, _ = adapter(lambda r: httpx.Response(400, text="Object not found but not json"))
+    with pytest.raises(PermanentError):
+        await storage.describe(PATH)
+
+
+@pytest.mark.asyncio
+async def test_a_path_with_a_trailing_newline_or_a_trailing_space_never_reaches_a_request():
+    storage, mock = adapter(lambda r: httpx.Response(200, json={"url": "/x"}))
+    for bad in (PATH + "\n", PATH + " ", "\n" + PATH):
+        for call in (storage.describe(bad), storage.delete(bad)):
+            with pytest.raises(PermanentError):
+                await call
+    assert mock.requests == []
+
+
+@pytest.mark.asyncio
+async def test_a_signed_url_must_keep_our_scheme_host_and_the_signed_upload_path_of_our_bucket():
+    good = f"/object/upload/sign/{BUCKET}/{PATH}?token=t"
+    for hostile in (f"http://abcd.supabase.test/storage/v1{good}", f"{BASE}/storage/v1/object/upload/sign/other-bucket/{PATH}?token=t", f"{BASE}/storage/v1/object/{BUCKET}/{PATH}", f"{BASE}/elsewhere?token=t"):
+        storage, _ = adapter(lambda r, u=hostile: httpx.Response(200, json={"url": u}))
+        with pytest.raises(PermanentError):
+            await storage.create_signed_upload(path=PATH, content_type="application/pdf", max_bytes=1, expires_in_seconds=1)
+    storage, _ = adapter(lambda r: httpx.Response(200, json={"url": good}))
+    assert (await storage.create_signed_upload(path=PATH, content_type="application/pdf", max_bytes=1, expires_in_seconds=1)).url.startswith(f"{BASE}/storage/v1/object/upload/sign/{BUCKET}/")
+
+
+def test_a_client_that_follows_redirects_is_refused_because_the_apikey_header_would_travel_with_it_and_the_default_client_does_not():
+    with pytest.raises(ValueError):
+        SupabaseUploadAdapter(BASE, KEY, BUCKET, http=httpx.AsyncClient(follow_redirects=True))
+    assert SupabaseUploadAdapter(BASE, KEY, BUCKET)._http.follow_redirects is False
+
+
+@pytest.mark.asyncio
+async def test_the_lifetime_the_browser_is_told_is_clamped_after_now_and_never_beyond_the_assumed_ceiling():
+    for exp, expected in ((int(NOW.timestamp()) + 99 * 3600, ASSUMED_SIGNED_URL_SECONDS), (int(NOW.timestamp()) - 5, ASSUMED_SIGNED_URL_SECONDS), (int(NOW.timestamp()) + 60, 60)):
+        storage, _ = adapter(lambda r, e=exp: httpx.Response(200, json={"url": f"/object/upload/sign/{BUCKET}/{PATH}?token={jwt_with_exp(e)}"}))
+        signed = await storage.create_signed_upload(path=PATH, content_type="application/pdf", max_bytes=1, expires_in_seconds=1)
+        assert (signed.expires_at - NOW).total_seconds() == expected, exp
+
+
+def test_the_wiring_accepts_only_the_protected_bucket_name_and_no_date_in_the_future(monkeypatch):
+    assert _wiring(monkeypatch, **{**ALL, "CAREFLOW_STORAGE_BUCKET": "some-other-bucket"}) == (None, None)
+    assert _wiring(monkeypatch, **{**ALL, "CAREFLOW_STORAGE_VERIFIED": "2999-01-01"}) == (None, None)
+    assert _wiring(monkeypatch, **ALL)[0] is not None

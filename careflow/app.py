@@ -33,7 +33,7 @@ import time
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager, contextmanager
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated, Any, Final, Literal
 
 from dotenv import dotenv_values
@@ -68,7 +68,7 @@ from careflow import (
     patient_view,
     review_tasks,
 )
-from careflow.adapters.storage import SupabaseUploadAdapter
+from careflow.adapters.storage import DOCUMENT_BUCKET, SupabaseUploadAdapter
 from careflow.audit import write_audit
 from careflow.auth import (
     AuthError,
@@ -2261,9 +2261,14 @@ def _intake_from_environment(supabase_url: str) -> tuple[DocumentIntake | None, 
     bucket = (os.environ.get("CAREFLOW_STORAGE_BUCKET") or "").strip()
     if not bucket:
         return None, None
+    if bucket != DOCUMENT_BUCKET:
+        log.error("CAREFLOW_STORAGE_BUCKET must be %s: the storage policies protect that bucket only; uploads stay unavailable", DOCUMENT_BUCKET)
+        return None, None
     verified = (os.environ.get("CAREFLOW_STORAGE_VERIFIED") or "").strip()
     try:
-        date.fromisoformat(verified)
+        recorded = date.fromisoformat(verified)
+        if recorded > datetime.now(UTC).date():
+            raise ValueError("a spike cannot have been recorded in the future")
     except ValueError:
         log.error("storage is configured but CAREFLOW_STORAGE_VERIFIED is not a date: uploads stay unavailable until the real-service spike is recorded")
         return None, None

@@ -108,8 +108,8 @@ calls:
     data_class: patient_plaintext
     data_policy: synthetic_only
     permitted_in_clinical: false
-    approved_by: null
-    approved_on: null
+    approved_by: "the project owner (instruction of 2026-10-30)"
+    approved_on: "2026-10-30"
     status: approved
     appendix_b: "Supabase Storage signed-upload behaviour: endpoints and response shapes, overwrite while the signed URL is valid, URL lifetime, bucket size and type limits, private bucket refusing unauthenticated reads (NOT YET CONFIRMED against the real service: scripts/storage_spike.py; the application does not build the adapter until CAREFLOW_STORAGE_VERIFIED records the date)"
     notes: "APPROVED by the owner on 2026-10-30 for the DEV and CI projects with SYNTHETIC data only (data_policy synthetic_only). Not permitted in clinical: no real patient document until a separate decision on region (production must be an India region, 16.5) and the privacy owner's written confirmation (a pre-launch blocker). The scanner port runs before a document is shown as clean, and unscanned means held for a person (careflow/malware.py). The storage.objects policies are a proposed migration that is NOT applied until the owner agrees (docs/design/uploads-supabase-storage.md)."
