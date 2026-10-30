@@ -488,6 +488,96 @@
         "title": "HoldIn",
         "type": "object"
       },
+      "HoldRowList": {
+        "additionalProperties": false,
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HoldRowOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "limit",
+          "has_more"
+        ],
+        "title": "HoldRowList",
+        "type": "object"
+      },
+      "HoldRowOut": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "hold_id": {
+            "format": "uuid",
+            "title": "Hold Id",
+            "type": "string"
+          },
+          "patient_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Id"
+          },
+          "slot_id": {
+            "format": "uuid",
+            "title": "Slot Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "released",
+              "expired",
+              "converted"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "hold_id",
+          "clinic_id",
+          "slot_id",
+          "patient_id",
+          "status",
+          "created_at",
+          "expires_at"
+        ],
+        "title": "HoldRowOut",
+        "type": "object"
+      },
       "IngestIn": {
         "additionalProperties": false,
         "properties": {
@@ -1587,6 +1677,38 @@
           "scan"
         ],
         "title": "RegisteredOut",
+        "type": "object"
+      },
+      "ReleaseOut": {
+        "additionalProperties": false,
+        "properties": {
+          "hold_id": {
+            "format": "uuid",
+            "title": "Hold Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "slot_id": {
+            "format": "uuid",
+            "title": "Slot Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "released",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "hold_id",
+          "slot_id",
+          "status",
+          "replayed"
+        ],
+        "title": "ReleaseOut",
         "type": "object"
       },
       "ReviewIn": {
@@ -4278,6 +4400,143 @@
           }
         ],
         "summary": "Cancel Booking",
+        "tags": [
+          "staff scheduling"
+        ]
+      }
+    },
+    "/v1/staff/scheduling/holds": {
+      "get": {
+        "description": "Holds of the clinics you may read, soonest to expire first (`active` by default; `status` filters).",
+        "operationId": "list_holds_v1_staff_scheduling_holds_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "active",
+                    "released",
+                    "expired",
+                    "converted"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": "active",
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldRowList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Holds",
+        "tags": [
+          "staff scheduling"
+        ]
+      }
+    },
+    "/v1/staff/scheduling/holds/{hold_id}/release": {
+      "post": {
+        "description": "Give a held slot back now. 404 if you cannot see the hold, 403 unless you are front desk of its clinic, 409 if it was booked or has expired.",
+        "operationId": "release_hold_route_v1_staff_scheduling_holds__hold_id__release_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "hold_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Hold Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Release Hold Route",
         "tags": [
           "staff scheduling"
         ]

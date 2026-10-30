@@ -109,6 +109,7 @@ from careflow.rules import NotPermitted as ScreeningNotPermitted
 from careflow.rules import RedFlagEngine, resolve_profile
 from careflow.scheduling import (
     BookingNotFound,
+    HoldNotFound,
     IdempotencyConflict,
     InvalidTransition,
     NotPermitted,
@@ -355,7 +356,7 @@ def _scheduling_errors() -> Iterator[None]:
     """Turn the scheduling module's refusals into clean client errors. The transaction rolls back with them."""
     try:
         yield
-    except (SlotNotFound, BookingNotFound):
+    except (SlotNotFound, BookingNotFound, HoldNotFound):
         raise HTTPException(status_code=404, detail="not found") from None
     except UnknownReference as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from None
@@ -1813,6 +1814,76 @@ async def open_merge(merge_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] =
     if r is None:
         raise HTTPException(status_code=404, detail="not found")
     return _merge_detail_out(r)
+
+
+# ---- holds: list, and release one on purpose (SlotManager.release_hold) ----------------------------------------------------------------------------------------
+#
+# A hold otherwise lives until its time runs out. Front desk may give the slot back at once (the existing front-desk update on `sched.holds` and on the slot, no new grant). Listing is for the
+# same readers as the other scheduling reads. Releasing needs the idempotency key and writes one audit row; a hold that is already released is a replay in effect; a hold that was booked
+# (`converted`) or has `expired` is a 409, never silently reopened.
+
+
+class HoldRowOut(_Out):
+    hold_id: uuid.UUID
+    clinic_id: uuid.UUID
+    slot_id: uuid.UUID
+    patient_id: uuid.UUID | None
+    status: Literal["active", "released", "expired", "converted"]
+    created_at: datetime
+    expires_at: datetime
+
+
+class HoldRowList(_Out):
+    items: list[HoldRowOut]
+    limit: int
+    has_more: bool
+
+
+class ReleaseOut(_Out):
+    hold_id: uuid.UUID
+    slot_id: uuid.UUID
+    status: Literal["released"]
+    replayed: bool
+
+
+@scheduling.get("/holds", response_model=HoldRowList)
+async def list_holds(
+    conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), status: Literal["active", "released", "expired", "converted"] | None = "active", limit: Limit = 100
+) -> HoldRowList:
+    """Holds of the clinics you may read, soonest to expire first (`active` by default; `status` filters)."""
+    clinics = await _readable_clinics(conn, claims)
+    rows = (
+        await conn.execute(
+            text(
+                "select id, clinic_id, slot_id, patient_id, status, created_at, expires_at from sched.holds "
+                "where clinic_id = any(cast(:c as uuid[])) and (cast(:s as text) is null or status = :s) order by expires_at, id limit :n"
+            ),
+            {"c": clinics, "s": status, "n": limit + 1},
+        )
+    ).all()
+    items = [
+        HoldRowOut(hold_id=r.id, clinic_id=r.clinic_id, slot_id=r.slot_id, patient_id=r.patient_id, status=r.status, created_at=r.created_at, expires_at=r.expires_at)
+        for r in rows[:limit]
+    ]
+    return HoldRowList(items=items, limit=limit, has_more=len(rows) > limit)
+
+
+@scheduling.post("/holds/{hold_id}/release", response_model=ReleaseOut)
+async def release_hold_route(hold_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> ReleaseOut:
+    """Give a held slot back now. 404 if you cannot see the hold, 403 unless you are front desk of its clinic, 409 if it was booked or has expired."""
+    row = (await conn.execute(text("select clinic_id, origin from sched.holds where id = :h"), {"h": hold_id})).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _holds_role(conn, claims, row.clinic_id, ("front_desk",)):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    with _scheduling_errors():
+        released = await _slots.release_hold(conn, hold_id)
+    actor = uuid.UUID(claims["sub"])
+    await write_audit(
+        conn, clinic_id=row.clinic_id, origin=row.origin, actor_id=actor, actor_role="front_desk", action="hold.release", resource_type="hold", resource_id=hold_id,
+        details={"slot_id": released.slot_id, "replayed": released.replayed}, idempotency_key=f"audit:hold-release:{hold_id}:{idempotency_key}",
+    )
+    return ReleaseOut(hold_id=released.hold_id, slot_id=released.slot_id, status="released", replayed=released.replayed)
 
 
 # ---- the referral queue: list and open (what a reviewer sees BEFORE deciding) --------------------------------------------------------------------------

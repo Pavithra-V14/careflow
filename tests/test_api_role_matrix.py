@@ -1583,6 +1583,87 @@ def merge_open_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(mid), None)
 
 
+# ---- /v1/staff/scheduling/holds (list) and /holds/{id}/release ------------------------------------------------------------------------------------------------
+#
+# List: the same readers as the other scheduling reads (front desk, nurse, doctor), a reader of another clinic sees none of this clinic's. Release: front desk of the clinic only; nurse, doctor and
+# admin can SEE a hold and are refused with 403; everyone else gets the same 404 as a missing hold. A hold that was booked or has expired is a 409; an already released one is a replay.
+
+HOLDS = PREFIX + "/holds"
+HOLD_RELEASE = PREFIX + "/holds/{hold_id}/release"
+HOLD_VISIBLE_NOT_FRONT_DESK = {"nurse_a": 403, "doctor_a": 403, "admin_a": 403, "multi": 403}
+
+
+def new_hold(ids, status="active", patient=None):
+    """A synthetic hold on a fresh matrix slot, written by the owner (the slot is 'held' while the hold is active)."""
+
+    async def make(conn):
+        slot = ids.pools["extra"].pop()
+        hid = uuid.uuid4()
+        await conn.execute(
+            "insert into sched.holds (id, clinic_id, slot_id, patient_id, expires_at, origin, idempotency_key, status) values ($1, $2, $3, $4, now() + interval '1 hour', 'test', $5, $6)",
+            hid, ids.clinic_a, slot, patient, f"matrix-hold-{hid}", status,
+        )
+        if status == "active":
+            await conn.execute("update sched.slots set status = 'held' where id = $1", slot)
+        return hid, slot
+
+    return _run(_owner(make))
+
+
+def hold_list_cases(ids) -> list[tuple]:
+    active, _ = new_hold(ids)
+    released, _ = new_hold(ids, "released")
+    has = lambda hid, want: (lambda items: (str(hid) in {i["hold_id"] for i in items}) is want)
+    readers = ("front_desk_a", "nurse_a", "doctor_a", "multi")
+    cases = [
+        _case(ids, f"{who} lists the active holds by default", who, 200, HOLDS, key=None,
+              body=_page(ids, clinic_only=ids.clinic_a, non_empty=True, check=lambda items: has(active, True)(items) and has(released, False)(items) and all(i["status"] == "active" for i in items)))
+        for who in readers
+    ]
+    cases += [
+        _case(ids, "status=released lists the released ones", "front_desk_a", 200, HOLDS + "?status=released", key=None,
+              body=_page(ids, clinic_only=ids.clinic_a, non_empty=True, check=lambda items: has(released, True)(items) and has(active, False)(items))),
+        _case(ids, "a hold carries ids, a status and times only", "nurse_a", 200, HOLDS, key=None,
+              body=_page(ids, check=lambda items: all(set(i) == {"hold_id", "clinic_id", "slot_id", "patient_id", "status", "created_at", "expires_at"} for i in items))),
+        _case(ids, "a reader of another clinic sees none of this clinic's holds", "front_desk_b", 200, HOLDS, key=None, body=_page(ids, check=lambda items: items == [])),
+        _case(ids, "an unknown status is rejected", "front_desk_a", 422, HOLDS + "?status=bogus", key=None, body=_fixed(422)),
+        _case(ids, "limit=0 is rejected", "front_desk_a", 422, HOLDS + "?limit=0", key=None, body=_fixed(422)),
+    ]
+    denied = [p for p in ids.people if p not in (*readers, "front_desk_b")]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, HOLDS, key=None, body=lambda b: b == {"detail": "your role may not read this"}) for p in denied]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, HOLDS, key=None, body=lambda b: b == {"detail": "your role may not read this"}))
+    return cases + _unauthenticated(ids, HOLDS, None)
+
+
+def hold_release_cases(ids) -> list[tuple]:
+    ok, _ = new_hold(ids)
+    booked, _ = new_hold(ids, "converted")
+    expired, _ = new_hold(ids, "expired")
+    refused, _ = new_hold(ids)
+    path = lambda h: HOLD_RELEASE.format(hold_id=h)
+    key = _new_key()
+    released = lambda hid, replayed: (lambda b: b["hold_id"] == str(hid) and b["status"] == "released" and b["replayed"] is replayed)
+    cases = [
+        _case(ids, "front desk releases an active hold", "front_desk_a", 200, path(ok), key=key, body=released(ok, False)),
+        _case(ids, "replaying the same key is a replay", "front_desk_a", 200, path(ok), key=key, body=released(ok, True)),
+        _case(ids, "a released hold under a new key is a replay in effect", "front_desk_a", 200, path(ok), body=released(ok, True)),
+        _case(ids, "a hold that was booked is a conflict, never reopened", "front_desk_a", 409, path(booked), body=lambda b: b == {"detail": "hold is converted"}),
+        _case(ids, "a hold that has expired is a conflict", "front_desk_a", 409, path(expired), body=lambda b: b == {"detail": "hold is expired"}),
+        _case(ids, "an unknown hold is not found", "front_desk_a", 404, path(uuid.uuid4()), body=_fixed(404)),
+        _case(ids, "front desk of another clinic gets the same 404", "front_desk_b", 404, path(refused), body=_fixed(404)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "front_desk_a", 422, path(refused), key=None, body=_fixed(422)),
+        _case(ids, "blank X-Idempotency-Key is rejected", "front_desk_a", 422, path(refused), key="   ", body=_fixed(422)),
+        _case(ids, "a hold id that is not a uuid is rejected", "front_desk_a", 422, path("nope"), body=_fixed(422)),
+    ]
+    for p in [*ids.people, "no account"]:
+        if p in ("front_desk_a", "front_desk_b"):
+            continue
+        status = HOLD_VISIBLE_NOT_FRONT_DESK.get(p, 404)
+        who = bearer(mint(ids.no_account)) if p == "no account" else p
+        cases.append(_case(ids, f"{p} is refused", who, status, path(refused), body=_fixed(status)))
+    return cases + _unauthenticated(ids, path(refused), None)
+
+
 # One entry per route: add the new route's cases here in the same change that adds the route.
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
@@ -1616,6 +1697,8 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", DUPLICATES): duplicate_list_cases,
     ("GET", MERGE_LIST): merge_list_cases,
     ("GET", MERGE_OPEN): merge_open_cases,
+    ("GET", HOLDS): hold_list_cases,
+    ("POST", HOLD_RELEASE): hold_release_cases,
     ("POST", PATIENT_SEARCH): patient_search_cases,
     ("GET", PATIENT_STATUS): patient_status_cases,
     ("GET", READ): message_read_cases,
@@ -2371,6 +2454,23 @@ def test_a_registered_person_is_found_by_exact_details_with_flags_only_and_a_wor
     assert pid not in [i["patient_id"] for i in nobody.json()["items"]]
     status = client.get(PATIENT_STATUS.format(patient_id=pid), headers=headers)
     assert status.status_code == 200 and status.json()["verified"] is True and status.json()["registered_via"] == "front_desk"
+
+
+def test_releasing_a_hold_reopens_its_slot_writes_one_audit_row_and_the_slot_can_be_held_again(client, ids):
+    fd = ids.people["front_desk_a"][0]
+    hold, slot = new_hold(ids)
+    key = _new_key()
+    done = client.post(HOLD_RELEASE.format(hold_id=hold), headers={**bearer(mint(fd)), "X-Idempotency-Key": key})
+    assert done.status_code == 200 and done.json()["replayed"] is False
+    assert client.post(HOLD_RELEASE.format(hold_id=hold), headers={**bearer(mint(fd)), "X-Idempotency-Key": key}).json()["replayed"] is True
+    assert _run(_fetch("select status from sched.slots where id = $1", slot))[0]["status"] == "open"
+    assert _run(_fetch("select status from sched.holds where id = $1", hold))[0]["status"] == "released"
+    audit = _run(_fetch("select actor_id, actor_role, details, clinic_id from audit.log where resource_type = 'hold' and resource_id = $1 and action = 'hold.release'", str(hold)))
+    assert len(audit) == 1 and (audit[0]["actor_id"], audit[0]["actor_role"], audit[0]["clinic_id"]) == (fd, "front_desk", ids.clinic_a)
+    again = client.post(f"{PREFIX}/slots/{slot}/hold", headers={**bearer(mint(fd)), "X-Idempotency-Key": _new_key()}, json={"duration_minutes": 15})
+    assert again.status_code == 200  # the slot is free to be held again
+    refused = client.post(HOLD_RELEASE.format(hold_id=again.json()["hold_id"]), headers={**bearer(mint(ids.people["nurse_a"][0])), "X-Idempotency-Key": _new_key()})
+    assert refused.status_code == 403 and _run(_fetch("select status from sched.holds where id = $1", uuid.UUID(again.json()["hold_id"])))[0]["status"] == "active"
 
 
 # ---- message reads: the committed half's behaviour -----------------------------------------------------------------------------------------
