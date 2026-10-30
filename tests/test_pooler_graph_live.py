@@ -49,6 +49,9 @@ pytestmark = [
     pytest.mark.asyncio(loop_scope="module"),
     pytest.mark.skipif(not (MIGRATOR and APP_URL), reason="DATABASE_URL_MIGRATOR and DATABASE_URL_APP are required"),
 ]
+# The production tick budget is 40 s (BUILD-SPEC 7.3). This test is about commits through the pooler, not about that budget, and in CI the pooler round trip is about 0.5 s per statement with other shards
+# running at once (the 2026-10-30 main run hit the 40 s deadline and left the job for retry). A larger deadline here changes no assertion; the budget itself is tested in tests/test_budget.py and tests/test_tick.py.
+TICK_SECONDS = 180.0
 LETTER = "Referral. Patient: Asha Rao, DOB 5 March 1980, Mobile 98765 43210. Please see this patient."
 
 
@@ -150,7 +153,7 @@ async def test_a_referral_runs_through_the_real_pooler_and_every_step_is_really_
 
     handlers = {TASK_TYPE: front_door_handler(components())}  # the PRODUCTION worker_session (the default)
     async with Sampler(w.owner) as sampler:
-        result = await run_tick(w.engine, PostgresQueue(), handlers, worker_account_id=w.worker, worker_id="pooler-test", tick_seconds=40.0)
+        result = await run_tick(w.engine, PostgresQueue(), handlers, worker_account_id=w.worker, worker_id="pooler-test", tick_seconds=TICK_SECONDS)
     assert result.completed == 1 and result.dead_lettered == 0 and result.left_for_retry == 0 and result.job_ids == [queued.job_id]
 
     # everything below is read over a SEPARATE connection, so it is only true if the transactions really committed
@@ -164,7 +167,7 @@ async def test_a_referral_runs_through_the_real_pooler_and_every_step_is_really_
     assert (await w.owner.fetchval("select count(*) from mpi.patients where clinic_id = $1", w.clinic)) == 0  # nothing was created from an unassessed letter
 
     # a second tick is a no-op: nothing to claim, no second task, no new checkpoint
-    again = await run_tick(w.engine, PostgresQueue(), handlers, worker_account_id=w.worker, worker_id="pooler-test", tick_seconds=40.0)
+    again = await run_tick(w.engine, PostgresQueue(), handlers, worker_account_id=w.worker, worker_id="pooler-test", tick_seconds=TICK_SECONDS)
     assert again.processed == 0
     assert (await w.owner.fetchval("select count(*) from agents.review_tasks where clinic_id = $1 and source_message_id = $2", w.clinic, f"document:{doc}")) == 1
     assert (await w.owner.fetchval("select count(*) from agents.graph_checkpoints where clinic_id = $1 and thread_id = $2", w.clinic, thread)) == checkpoints
