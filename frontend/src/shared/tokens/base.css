@@ -1,0 +1,75 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-base);
+  /* Tamil and long English words must wrap rather than overflow. */
+  overflow-wrap: anywhere;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+}
+
+a {
+  color: var(--color-link);
+  text-underline-offset: 0.2em;
+}
+
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  min-height: var(--target-min);
+}
+
+.skip-link {
+  position: absolute;
+  left: var(--space-2);
+  top: -4rem;
+  background: var(--color-bg);
+  color: var(--color-text);
+  padding: var(--space-1) var(--space-2);
+  border: 2px solid var(--color-text);
+  z-index: 10;
+}
+
+.skip-link:focus {
+  top: var(--space-2);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
