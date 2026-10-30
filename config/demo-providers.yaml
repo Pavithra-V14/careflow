@@ -1,0 +1,50 @@
+# DEMO ONLY - SYNTHETIC DATA, PRICES TO BE CONFIRMED (Appendix B).
+#
+# The registry rows for the three hosted providers approved by the owner on 2026-10-30 for SYNTHETIC DEMO use only: Gemini 2.5 Flash (vlm), Jev via OpenRouter (decision), Sarvam (translation).
+# EVERY row is `data_policy: synthetic_only`. A hosted row is never `phi_approved`: BUILD-SPEC.md 16.5 forbids it without a new decision, and careflow/provider_setup.py refuses to load a file that says
+# otherwise. A free-tier row is synthetic_only by definition.
+#
+# The timeouts are the spec's starting budgets (16.1: hosted LLM 20 s, vision per page 60 s, Sarvam 5 s). The PRICES below are placeholders so cost per outcome can be computed and a spend ceiling can bite;
+# they are not quotes: confirm them against each provider's pricing page before relying on them (Appendix B). They are not clinical values.
+#
+# LOADS ONLY WHEN CAREFLOW_PROFILE=demo AND CAREFLOW_DATA_POLICY=synthetic_only, never under CI (careflow/provider_setup.py). The API keys, the verified dates and the per-role spend ceilings are
+# environment values (names in .env.example); the ceilings have no default and the owner sets them.
+
+label: "DEMO ONLY - SYNTHETIC DATA, PRICES TO BE CONFIRMED (Appendix B)"
+
+rows:
+  - role: vlm
+    provider: gemini
+    model_id: gemini-2.5-flash
+    data_policy: synthetic_only
+    priority: 1
+    timeout_seconds: 60
+    free_tier: true
+    price_in_per_1k: "0"
+    price_out_per_1k: "0"
+    shadow_in_per_1k: "0.0003"
+    shadow_out_per_1k: "0.0025"
+    label: "DEMO ONLY - SYNTHETIC DATA, PRICES TO BE CONFIRMED (Appendix B)"
+
+  - role: decision
+    provider: jev
+    model_id: typesafe/jev-router
+    data_policy: synthetic_only
+    priority: 2
+    timeout_seconds: 20
+    free_tier: false
+    price_in_per_1k: "0.0005"
+    price_out_per_1k: "0.0015"
+    shadow_in_per_1k: "0.0005"
+    shadow_out_per_1k: "0.0015"
+    label: "DEMO ONLY - SYNTHETIC DATA, PRICES TO BE CONFIRMED (Appendix B)"
+
+# Translation is not a gateway role (no registry row): the Sarvam adapter is a TranslationPort with its own ceiling. Price is USD per 1,000 CHARACTERS (the provider bills per character).
+translation:
+  provider: sarvam
+  model_id: "mayura:v1"
+  data_policy: synthetic_only
+  timeout_seconds: 5
+  free_tier: false
+  price_per_1k_chars_usd: "0.06"
+  label: "DEMO ONLY - SYNTHETIC DATA, PRICES TO BE CONFIRMED (Appendix B)"

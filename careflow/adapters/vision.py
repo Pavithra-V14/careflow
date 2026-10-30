@@ -13,11 +13,13 @@ from careflow.ports import DataClass, PermanentError, VisionRequest, VisionResul
 
 
 class GatewayVision:
-    def __init__(self, gateway: Gateway) -> None:
+    def __init__(self, gateway: Gateway, *, data_class: DataClass = DataClass.PHI) -> None:
+        """`data_class` is PHI unless the deployment is demo with data_policy synthetic_only (careflow.provider_setup): only then is a page offered as SYNTHETIC, to a synthetic_only row."""
         self._gateway = gateway
+        self._data_class = data_class
 
     async def read(self, request: VisionRequest) -> VisionResult:
-        outcome = await self._gateway.call("vlm", request, data_class=DataClass.PHI, clinic_id=request.clinic_id)
+        outcome = await self._gateway.call("vlm", request, data_class=self._data_class, clinic_id=request.clinic_id)
         value = outcome.value
         if not isinstance(value, VisionResult):  # a mis-registered adapter fails the page, it does not produce text
             raise PermanentError("the vlm route did not return a VisionResult")

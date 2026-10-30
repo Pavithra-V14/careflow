@@ -166,7 +166,13 @@ class JevAdapter:
         if not isinstance(probabilities, Mapping):
             raise PermanentError("jev's reply has no probabilities")
         probs = _validated(request.options, probabilities)  # type: ignore[arg-type]
-        return AdapterResult(_decide_from(probs, engine=self.name, calibrated=False, route="jev"), Usage(max(1, len(request.text.split())), 1))
+        reported = reply.get("usage")  # a real client reports the tokens the provider counted; without it the words of the input are the (low) estimate
+        usage = Usage(max(1, len(request.text.split())), 1)
+        if isinstance(reported, Mapping):
+            used_in, used_out = reported.get("input_tokens"), reported.get("output_tokens")
+            if isinstance(used_in, int) and isinstance(used_out, int) and not isinstance(used_in, bool) and not isinstance(used_out, bool) and used_in >= 0 and used_out >= 0:
+                usage = Usage(used_in, used_out)
+        return AdapterResult(_decide_from(probs, engine=self.name, calibrated=False, route="jev"), usage)
 
 
 # ---- the general LLM fallback ---------------------------------------------------------------------------------------------------------------

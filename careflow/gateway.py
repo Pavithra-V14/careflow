@@ -217,6 +217,36 @@ class SpendLimits:
             raise ValueError("spend ceilings cannot be negative")
 
 
+class RoleDailyCeilings:
+    """A required, per-ROLE daily spend ceiling in USD, kept IN MEMORY (owner decision: the durable ledger is a separate sign-off). `ceilings` has NO default: a role missing from it has no ceiling to
+    check, so a caller that wants the check names every role it uses. The day is India time like the ledger's. Totals include every call class (safety spend is real spend and is counted), but only an ORDINARY
+    call is ever refused by it: the safety class is never budget-limited (§6.1). A process restart resets the totals; that is the stated limit of the in-memory ledger."""
+
+    def __init__(self, ceilings: Mapping[str, Decimal], today: Callable[[], date] = lambda: datetime.now(IST).date()) -> None:
+        for role, amount in ceilings.items():
+            if role not in ROLES and role != "translation":
+                raise ValueError(f"unknown role {role!r}")
+            if not isinstance(amount, Decimal) or not amount.is_finite() or amount < 0:
+                raise ValueError("a spend ceiling is a finite, non-negative Decimal")
+        self._ceilings, self._today = dict(ceilings), today
+        self._spent: dict[tuple[date, str], Decimal] = {}
+
+    def has(self, role: str) -> bool:
+        return role in self._ceilings
+
+    def spent_today(self, role: str) -> Decimal:
+        return self._spent.get((self._today(), role), Decimal(0))
+
+    def would_exceed(self, role: str, estimate: Decimal) -> bool:
+        """True if an ordinary call costing about `estimate` would pass the role's ceiling. A role with no ceiling is not limited by this object."""
+        ceiling = self._ceilings.get(role)
+        return ceiling is not None and self.spent_today(role) + estimate > ceiling
+
+    def add(self, role: str, actual: Decimal) -> None:
+        key = (self._today(), role)
+        self._spent[key] = self._spent.get(key, Decimal(0)) + actual
+
+
 class CircuitBreaker:
     """Closed -> open after `failures` consecutive failures; after `probe_after` seconds ONE probe is allowed (half-open): a success closes
     the breaker, a failure re-opens it for another `probe_after`. One breaker per external dependency (§16.1)."""
@@ -259,6 +289,7 @@ class Gateway:
     adapters: Mapping[tuple[str, str], Adapter]
     ledger: SpendLedger
     limits: SpendLimits
+    role_ceilings: RoleDailyCeilings | None = None  # a required per-role daily ceiling for the ORDINARY class (owner decision 2026-10-30); in memory
     origin: str = "live"  # the deployment's origin tag: spend is read and written under it (BUILD-SPEC §0)
     clock: Callable[[], float] = time.monotonic
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
@@ -288,6 +319,9 @@ class Gateway:
         if row.price_in_per_1k == 0 and row.price_out_per_1k == 0:
             return False
         est = row.cost(estimate)[0] if estimate is not None else Decimal(0)
+        ceilings = self.role_ceilings
+        if ceilings is not None and ceilings.has(row.role) and (ceilings.would_exceed(row.role, est) or (estimate is None and ceilings.would_exceed(row.role, Decimal("1E-9")))):
+            return True  # a stop is a visible hold for the caller (SpendCeilingReached), never a silent skip
         spent = await self.ledger.spent_today(clinic_id, self.origin)
         if est > self.limits.per_request_usd or spent + est > self.limits.clinic_daily_usd:
             return True
@@ -363,6 +397,8 @@ class Gateway:
                     SpendEntry(clinic_id, row.role, row.provider, row.model_id, call_class.value, actual, shadow, self.origin, f"gw-{uuid.uuid4()}")
                 )
                 attempts.append(RouteAttempt(row.provider, row.model_id, "ok", calls))
+                if self.role_ceilings is not None:
+                    self.role_ceilings.add(row.role, actual)  # every class is counted; only ordinary calls are ever refused by it
                 if budget is not None:
                     budget.add_cost(float(actual), call_class)
                 return GatewayResult(out.value, row.provider, row.model_id, out.usage, actual, shadow, tuple(attempts))
