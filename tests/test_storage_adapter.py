@@ -316,3 +316,18 @@ def test_the_wiring_accepts_only_the_protected_bucket_name_and_no_date_in_the_fu
     assert _wiring(monkeypatch, **{**ALL, "CAREFLOW_STORAGE_BUCKET": "some-other-bucket"}) == (None, None)
     assert _wiring(monkeypatch, **{**ALL, "CAREFLOW_STORAGE_VERIFIED": "2999-01-01"}) == (None, None)
     assert _wiring(monkeypatch, **ALL)[0] is not None
+
+
+def test_a_document_path_is_only_clinic_and_document_ids_and_the_register_entry_says_synthetic_only_and_not_for_clinical():
+    import uuid as _uuid
+    from pathlib import Path as _Path
+
+    import yaml as _yaml
+
+    from careflow.adapters.storage import PATH_RE as _PATH_RE
+    from careflow.documents import storage_path
+
+    path = storage_path(_uuid.uuid4(), _uuid.uuid4())
+    assert _PATH_RE.fullmatch(path) and path.count("/") == 3  # clinic/<id>/doc/<id>: no file name, no patient text, no person's id
+    entry = next(c for c in _yaml.safe_load((_Path(__file__).resolve().parent.parent / "data-flow-register.yaml").read_text(encoding="utf-8"))["calls"] if c["id"] == "supabase-storage")
+    assert entry["data_policy"] == "synthetic_only" and entry["permitted_in_clinical"] is False and entry["status"] == "approved" and entry["approved_by"]
