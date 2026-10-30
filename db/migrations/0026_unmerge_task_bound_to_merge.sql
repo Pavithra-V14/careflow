@@ -12,7 +12,11 @@
 --   * Nurse, doctor and queue_worker keep their unrestricted insert (unchanged), and the 0025 revoke clause is reproduced exactly.
 --   * review_tasks_select and review_tasks_update are untouched. No grant, no role.
 --
--- RESIDUAL. The nurse/doctor/worker clause is still any kind with any key (those roles are trusted to write review tasks); this migration narrows front desk only.
+-- The link must have been ACTIVE (`activated_at` is set only on activation; the code raises a task only for a link that had been active, none for a cancelled proposal), so a cancelled proposal
+-- cannot be used to mint a nurse task.
+--
+-- RESIDUAL. (1) The task's `provenance` JSON is written by the inserting role and is not constrained by row-level security (the real writer builds it; front desk could put any JSON in its own
+-- task). (2) The nurse/doctor/worker clause is still any kind with any key (those roles are trusted to write review tasks); this migration narrows front desk only.
 
 drop policy review_tasks_insert on agents.review_tasks;
 create policy review_tasks_insert on agents.review_tasks for insert to careflow_app
@@ -23,7 +27,7 @@ create policy review_tasks_insert on agents.review_tasks for insert to careflow_
             and status = 'open' and acknowledged_by is null
             and exists (
                 select 1 from mpi.merges m
-                where m.status = 'unmerged' and m.clinic_id = review_tasks.clinic_id and m.origin = review_tasks.origin and m.unmerged_by = auth.uid()
+                where m.status = 'unmerged' and m.activated_at is not null and m.clinic_id = review_tasks.clinic_id and m.origin = review_tasks.origin and m.unmerged_by = auth.uid()
                   and review_tasks.idempotency_key = 'unmerge-review:' || m.id::text
                   and review_tasks.source_message_id = 'merge:' || m.id::text
             )

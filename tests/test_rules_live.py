@@ -523,7 +523,7 @@ async def test_only_the_clinics_own_staff_and_workers_see_the_task(db, engine):
         assert await act(db, who, count()) == 0, who
 
 
-async def test_front_desk_still_sees_and_inserts_unmerge_review_tasks(db):
+async def test_front_desk_still_sees_unmerge_review_tasks_and_inserts_none_that_is_not_bound_to_an_unmerge(db):
     w = await world(db)
     insert = (
         "insert into agents.review_tasks (clinic_id, origin, kind, priority, assigned_role, source_message_id, provenance, idempotency_key) "
@@ -537,8 +537,8 @@ async def test_front_desk_still_sees_and_inserts_unmerge_review_tasks(db):
     async def front_desk_insert(conn, kind):
         await conn.execute(text(insert), {"c": w.a, "k": kind, "ik": f"x-{_u()}"})
 
-    await act(db, w.fd, front_desk_insert, "unmerge_review")
-    for kind in ("red_flag", "screening_unassessable", "anything_new"):
+    # Since 0026 front desk inserts an unmerge_review task only for a real unmerge it wrote (the bound positive case is in tests/test_rls_screenings_live.py): an unbound one is refused.
+    for kind in ("unmerge_review", "red_flag", "screening_unassessable", "anything_new"):
         with pytest.raises(DBAPIError, match="row-level security"):
             await act(db, w.fd, front_desk_insert, kind)
 

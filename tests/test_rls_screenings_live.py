@@ -972,7 +972,7 @@ def _task_insert(w, kind, *, key=None, source="merge:1", role="nurse", status="o
     )
 
 
-async def add_unmerged(conn, w, by, clinic=None):
+async def add_unmerged(conn, w, by, clinic=None, *, activated=True):
     """An UNMERGED link written by the owner: two patients, the candidate row that put them in front of a person, and the merge. Returns the merge id."""
     clinic = clinic or w.a
     pa, pb, cand, merge = _u(), _u(), _u(), _u()
@@ -988,7 +988,7 @@ async def add_unmerged(conn, w, by, clinic=None):
     await conn.execute(
         "insert into mpi.merges (id, clinic_id, master_patient_id, subordinate_patient_id, candidate_id, status, approved_by, second_approved_by, activated_at, unmerged_at, unmerged_by, "
         "origin, idempotency_key, unmerge_idempotency_key) "
-        f"values ('{merge}', '{clinic}', '{pa}', '{pb}', '{cand}', 'unmerged', '{w.people['admin_a']}', '{w.people['nurse_a']}', now(), now(), '{by}', '{w.origin}', 'm-{merge}', 'u-{merge}')"
+        f"values ('{merge}', '{clinic}', '{pa}', '{pb}', '{cand}', 'unmerged', '{w.people['admin_a']}', {repr(str(w.people['nurse_a'])) if activated else 'null'}, {'now()' if activated else 'null'}, now(), '{by}', '{w.origin}', 'm-{merge}', 'u-{merge}')"
     )
     return merge
 
@@ -996,6 +996,7 @@ async def add_unmerged(conn, w, by, clinic=None):
 async def test_front_desk_can_insert_only_the_task_of_its_own_unmerge_clinical_staff_any_kind_and_admin_nothing(db):
     w = await seed(db)
     mine, someone_elses = await add_unmerged(db, w, w.people["fd_a"]), await add_unmerged(db, w, w.people["nurse_a"])
+    cancelled = await add_unmerged(db, w, w.people["fd_a"], activated=False)
     bound = lambda merge, **o: _task_insert(w, "unmerge_review", key=f"unmerge-review:{merge}", source=f"merge:{merge}", **o)
     out = await attempts(
         db, w.people["fd_a"],
@@ -1005,12 +1006,13 @@ async def test_front_desk_can_insert_only_the_task_of_its_own_unmerge_clinical_s
             _task_insert(w, "unmerge_review", key="redflag:squat", source=f"merge:{mine}"),  # a predictable key of another writer (key squatting)
             bound(someone_elses),  # a real unmerge, but by somebody else
             bound(_u()),  # no such merge
+            bound(cancelled),  # a cancelled proposal that was never active raised no task in the real writer
             bound(mine, role="doctor"),  # only a nurse
             bound(mine, status="resolved"),  # a new task is open
             _task_insert(w, "red_flag"), _task_insert(w, "screening_unassessable"), _task_insert(w, "anything_new"),
         ],
     )
-    assert out == ["ok:1", "err:42501", "err:42501", "err:42501", "err:42501", "err:42501", "err:42501", "err:42501", "err:42501", "err:42501"]
+    assert out == ["ok:1"] + ["err:42501"] * 10
     # admin can read unmerge reviews but never creates one, even naming a merge it supposedly unmerged
     admin_merge = await add_unmerged(db, w, w.people["admin_a"])
     assert await attempts(db, w.people["admin_a"], [bound(admin_merge), _task_insert(w, "unmerge_review")]) == ["err:42501", "err:42501"]

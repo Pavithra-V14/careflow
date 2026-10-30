@@ -29,6 +29,7 @@ def test_front_desks_unmerge_clause_needs_an_unmerged_link_it_wrote_with_the_key
     clause = squash(C26.split("kind = 'unmerge_review'")[1].split("kind = 'identity_confirmation_revoked'")[0])
     assert "assigned_role='nurse'andstatus='open'andacknowledged_byisnull" in clause
     assert "frommpi.mergesmwherem.status='unmerged'" in clause and "m.unmerged_by=auth.uid()" in clause
+    assert "m.activated_atisnotnull" in clause  # the link was active: a cancelled proposal raised no task in the real writer
     assert "m.clinic_id=review_tasks.clinic_idandm.origin=review_tasks.origin" in clause
     assert "review_tasks.idempotency_key='unmerge-review:'||m.id::text" in clause and "review_tasks.source_message_id='merge:'||m.id::text" in clause
     identity = (MIGRATIONS.parent.parent / "careflow" / "identity.py").read_text(encoding="utf-8")
