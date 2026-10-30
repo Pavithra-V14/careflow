@@ -21,8 +21,22 @@ export interface ApiOptions {
   baseUrl: string;
   /** Supplies the current access token, or null when signed out. Never logged. */
   getAccessToken: () => Promise<string | null> | string | null;
-  /** Transport. Defaults to the global fetch; tests and the 401 layer wrap it. */
+  /** Transport. Defaults to the global fetch; tests wrap it. */
   fetch?: typeof fetch;
+  /**
+   * Called when the API answers 401 with `WWW-Authenticate: step-up`. Resolves true only if the user just
+   * completed a fresh second-factor verification; the request is then retried ONCE with the new token and the
+   * same idempotency key. Resolving false (cancelled, failed) returns the original 401 to the caller.
+   */
+  onStepUp?: () => Promise<boolean>;
+  /** Called for every other 401. It receives no reason on purpose: the UI must not reveal one. */
+  onUnauthorized?: () => void;
+}
+
+/** True only for the exact step-up challenge the backend sends. Anything else is an ordinary 401. */
+export function isStepUpChallenge(res: Response): boolean {
+  if (res.status !== 401) return false;
+  return (res.headers.get('www-authenticate') ?? '').trim().split(/[\s,]/)[0]?.toLowerCase() === 'step-up';
 }
 
 export interface WriteOptions {
@@ -37,9 +51,26 @@ export function createApi(options: ApiOptions) {
   const client = createClient<paths>({
     baseUrl: options.baseUrl,
     fetch: async (request: Request) => {
-      const token = await options.getAccessToken();
-      if (token) request.headers.set('Authorization', `Bearer ${token}`);
-      return transport(request);
+      // Cloned before the first send: a request body can be read only once, and the retry needs it.
+      const retry = options.onStepUp ? request.clone() : null;
+      const authorize = async (r: Request) => {
+        const token = await options.getAccessToken();
+        if (token) r.headers.set('Authorization', `Bearer ${token}`);
+      };
+      await authorize(request);
+      const first = await transport(request);
+      if (first.status !== 401) return first;
+
+      if (isStepUpChallenge(first) && options.onStepUp && retry) {
+        if (!(await options.onStepUp())) return first;
+        await authorize(retry); // the token minted by the fresh verification
+        const second = await transport(retry);
+        // One retry only. A second step-up challenge is returned to the caller, never looped on.
+        if (second.status === 401 && !isStepUpChallenge(second)) options.onUnauthorized?.();
+        return second;
+      }
+      options.onUnauthorized?.();
+      return first;
     },
   });
   const key = (o?: WriteOptions): string => o?.idempotencyKey ?? newKey();
