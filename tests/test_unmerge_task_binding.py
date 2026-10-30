@@ -21,7 +21,7 @@ C26, C25 = code("0026_unmerge_task_bound_to_merge.sql"), code("0025_identity_con
 
 def test_it_replaces_exactly_one_policy_and_adds_no_grant_role_or_function():
     assert C26.count("drop policy") == 1 and C26.count("create policy") == 1 and "review_tasks_insert" in C26
-    assert not re.search(r"grant|revoke (all|select|insert|update)|create role\b|\balter role\b|\bsecurity definer\b|\bcreate function\b|\balter table\b", C26)
+    assert not re.search(r"grant|revoke (all|select|insert|update)|create role|alter role|security definer|create function|alter table", C26)
 
 
 def test_front_desks_unmerge_clause_needs_an_unmerged_link_it_wrote_with_the_key_and_source_the_code_writes():
