@@ -1664,6 +1664,63 @@ def hold_release_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(refused), None)
 
 
+# ---- /v1/staff/audit (the audit-log reader) --------------------------------------------------------------------------------------------------------------------
+#
+# Auditor of the clinic only (the existing select policy); every other identity is refused with 403 before any query. Newest first, keyset paging, filters on closed columns. `reason` is never
+# returned. The cases write their own probe rows as the owner (audit.log is append-only, so they stay; nothing reads an action named `matrix.probe`).
+
+AUDIT = "/v1/staff/audit"
+
+
+def _probe_rows(ids, n):
+    async def make(conn):
+        marks = []
+        for _ in range(n):
+            mark = uuid.uuid4().hex
+            await conn.execute(
+                "insert into audit.log (origin, clinic_id, actor_id, actor_role, action, resource_type, resource_id, details, idempotency_key) "
+                "values ('test', $1, $2, 'front_desk', 'matrix.probe', 'probe', $3, '{\"n\": 1}'::jsonb, $4)",
+                ids.clinic_a, ids.people["front_desk_a"][0], mark, f"matrix-probe-{mark}",
+            )
+            marks.append(mark)
+        return marks
+
+    return _run(_owner(make))
+
+
+def audit_reader_cases(ids) -> list[tuple]:
+    marks = _probe_rows(ids, 3)
+    fd = str(ids.people["front_desk_a"][0])
+    only = lambda items, n: len(items) == n and all(i["action"] == "matrix.probe" for i in items)
+    shape = {"audit_id", "occurred_at", "origin", "clinic_id", "actor_id", "actor_role", "action", "resource_type", "resource_id", "details"}
+    cases = [
+        _case(ids, "the auditor lists the probe rows by action, newest first, with closed columns only", "auditor_a", 200, AUDIT + "?action=matrix.probe", key=None,
+              body=_page_audit(lambda b: only(b["items"], 3) and [i["resource_id"] for i in b["items"]] == marks[::-1] and all(set(i) == shape for i in b["items"]) and all(i["clinic_id"] == str(ids.clinic_a) for i in b["items"]))),
+        _case(ids, "filter by resource id", "auditor_a", 200, AUDIT + f"?resource_id={marks[1]}", key=None, body=_page_audit(lambda b: [i["resource_id"] for i in b["items"]] == [marks[1]])),
+        _case(ids, "filter by actor", "auditor_a", 200, AUDIT + f"?action=matrix.probe&actor_id={fd}", key=None, body=_page_audit(lambda b: only(b["items"], 3))),
+        _case(ids, "filter by another actor finds nothing", "auditor_a", 200, AUDIT + f"?action=matrix.probe&actor_id={uuid.uuid4()}", key=None, body=_page_audit(lambda b: b["items"] == [])),
+        _case(ids, "a window in the future finds nothing", "auditor_a", 200, AUDIT + "?action=matrix.probe&since=2999-01-01T00:00:00Z", key=None, body=_page_audit(lambda b: b["items"] == [])),
+        _case(ids, "a window ending before the rows finds nothing", "auditor_a", 200, AUDIT + "?action=matrix.probe&until=2000-01-01T00:00:00Z", key=None, body=_page_audit(lambda b: b["items"] == [])),
+        _case(ids, "limit=2 returns two rows, says there are more and names the next page", "auditor_a", 200, AUDIT + "?action=matrix.probe&limit=2", key=None,
+              body=_page_audit(lambda b: len(b["items"]) == 2 and b["has_more"] is True and b["next_before_id"] == b["items"][-1]["audit_id"])),
+        _case(ids, "nobody is written to by reading: an unknown action finds nothing", "auditor_a", 200, AUDIT + "?action=no.such.action", key=None, body=_page_audit(lambda b: b["items"] == [])),
+        _case(ids, "an action with capital letters is rejected", "auditor_a", 422, AUDIT + "?action=Bad%20Action", key=None, body=_fixed(422)),
+        _case(ids, "before_id=0 is rejected", "auditor_a", 422, AUDIT + "?before_id=0", key=None, body=_fixed(422)),
+        _case(ids, "an actor id that is not a uuid is rejected", "auditor_a", 422, AUDIT + "?actor_id=nope", key=None, body=_fixed(422)),
+        _case(ids, "a time that is not a time is rejected", "auditor_a", 422, AUDIT + "?since=yesterday", key=None, body=_fixed(422)),
+        _case(ids, "limit=0 is rejected", "auditor_a", 422, AUDIT + "?limit=0", key=None, body=_fixed(422)),
+    ]
+    denied = [p for p in ids.people if p != "auditor_a"]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, AUDIT, key=None, body=READ_403_BODY) for p in denied]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, AUDIT, key=None, body=READ_403_BODY))
+    return cases + _unauthenticated(ids, AUDIT, None)
+
+
+def _page_audit(check):
+    """The paging envelope of the audit list is well formed (items, limit, has_more, next_before_id) and `check(body)` holds."""
+    return lambda b: set(b) == {"items", "limit", "has_more", "next_before_id"} and isinstance(b["items"], list) and check(b)
+
+
 # One entry per route: add the new route's cases here in the same change that adds the route.
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
@@ -1697,6 +1754,7 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", DUPLICATES): duplicate_list_cases,
     ("GET", MERGE_LIST): merge_list_cases,
     ("GET", MERGE_OPEN): merge_open_cases,
+    ("GET", AUDIT): audit_reader_cases,
     ("GET", HOLDS): hold_list_cases,
     ("POST", HOLD_RELEASE): hold_release_cases,
     ("POST", PATIENT_SEARCH): patient_search_cases,

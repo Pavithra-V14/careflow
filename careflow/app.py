@@ -1891,6 +1891,67 @@ async def release_hold_route(hold_id: uuid.UUID, idempotency_key: IdempotencyKey
     return ReleaseOut(hold_id=released.hold_id, slot_id=released.slot_id, status="released", replayed=released.replayed)
 
 
+# ---- the audit-log reader (auditor only) -----------------------------------------------------------------------------------------------------------------------
+#
+# Reads `audit.log` under the existing policy `log_select_auditor` (an auditor of the row's clinic; system rows with no clinic are invisible to the application role). Newest first, keyset paging by
+# the row id (`before_id`), filters on the closed columns only. Rows hold ids and closed words by the writer's rule (careflow/audit.py refuses free text); `reason` (the break-glass free-text column)
+# is NOT returned. Reading the log is not itself logged (it would be a row per read of the log).
+
+staff_audit = APIRouter(prefix="/v1/staff/audit", tags=["staff audit"])
+
+
+class AuditRowOut(_Out):
+    audit_id: int
+    occurred_at: datetime
+    origin: Literal["live", "test", "eval", "canary"]
+    clinic_id: uuid.UUID | None
+    actor_id: uuid.UUID | None
+    actor_role: str | None
+    action: str
+    resource_type: str | None
+    resource_id: str | None
+    details: dict[str, Any]
+
+
+class AuditList(_Out):
+    items: list[AuditRowOut]
+    limit: int
+    has_more: bool
+    next_before_id: int | None  # pass as `before_id` for the next (older) page
+
+
+_TOKEN_PATTERN = r"^[a-z0-9_:.\-]{1,64}$"
+
+
+@staff_audit.get("", response_model=AuditList)
+async def read_audit_log(
+    conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), action: Annotated[str | None, Query(pattern=_TOKEN_PATTERN)] = None,
+    resource_type: Annotated[str | None, Query(pattern=_TOKEN_PATTERN)] = None, resource_id: Annotated[str | None, Query(max_length=64, pattern=r"^[A-Za-z0-9_:.\-]+$")] = None,
+    actor_id: uuid.UUID | None = None, since: datetime | None = None, until: datetime | None = None, before_id: Annotated[int | None, Query(ge=1)] = None, limit: Limit = 100,
+) -> AuditList:
+    """Audit rows of the clinics you audit, newest first. 403 unless you are an auditor of some clinic."""
+    await _staff_reader(conn, claims, ("auditor",))
+    rows = (
+        await conn.execute(
+            text(
+                "select id, occurred_at, origin, clinic_id, actor_id, actor_role, action, resource_type, resource_id, details from audit.log "
+                "where (cast(:a as text) is null or action = :a) and (cast(:rt as text) is null or resource_type = :rt) and (cast(:ri as text) is null or resource_id = :ri) "
+                "and (cast(:u as uuid) is null or actor_id = :u) and (cast(:s as timestamptz) is null or occurred_at >= :s) and (cast(:e as timestamptz) is null or occurred_at < :e) "
+                "and (cast(:b as bigint) is null or id < :b) order by id desc limit :n"
+            ),
+            {"a": action, "rt": resource_type, "ri": resource_id, "u": actor_id, "s": since, "e": until, "b": before_id, "n": limit + 1},
+        )
+    ).all()
+    items = [
+        AuditRowOut(
+            audit_id=r.id, occurred_at=r.occurred_at, origin=r.origin, clinic_id=r.clinic_id, actor_id=r.actor_id, actor_role=r.actor_role, action=r.action,
+            resource_type=r.resource_type, resource_id=r.resource_id, details=dict(r.details),
+        )
+        for r in rows[:limit]
+    ]
+    return AuditList(items=items, limit=limit, has_more=len(rows) > limit, next_before_id=items[-1].audit_id if len(rows) > limit and items else None)
+
+
 # ---- the referral queue: list and open (what a reviewer sees BEFORE deciding) --------------------------------------------------------------------------
 #
 # Reads only, under the caller's own row-level security. A role sees only what its policies show: front desk cannot read triage proposals (migration 0018), so for front desk `proposal_visible` is
@@ -2089,6 +2150,7 @@ def create_app(
     app.include_router(staff_review_tasks)
     app.include_router(staff_documents)
     app.include_router(staff_identity)
+    app.include_router(staff_audit)
     app.include_router(health)
     return app
 
