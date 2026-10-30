@@ -1692,6 +1692,129 @@ async def patient_status_route(patient_id: uuid.UUID, conn: TxConn, claims: dict
     )
 
 
+# ---- identity lists: possible duplicates and merges (reads only) ---------------------------------------------------------------------------------------------
+#
+# What the merge screens show before anyone proposes, approves or breaks a link. Reads only, under the existing `select` policies (possible duplicates: front desk; merges: front desk, nurse,
+# doctor). They live OUTSIDE `/v1/staff/merges` on purpose: that router requires a second factor for every route, which is right for the three write steps and wrong for reading a list.
+# Ids, closed words and times only: no name, date of birth or phone.
+
+staff_identity = APIRouter(prefix="/v1/staff/identity", tags=["staff identity"])
+DUPLICATE_READERS: Final = ("front_desk",)
+MERGE_READERS: Final = ("front_desk", "nurse", "doctor")
+
+
+class DuplicateOut(_Out):
+    candidate_id: uuid.UUID
+    clinic_id: uuid.UUID
+    patient_id: uuid.UUID  # the record just created
+    candidate_patient_id: uuid.UUID  # the existing record it resembles
+    matched_kinds: list[Literal["name_dob", "phone"]]
+    reason: Literal["near_match", "ambiguous"]
+    status: Literal["pending", "resolved"]
+    created_at: datetime
+    resolved_at: datetime | None
+
+
+class DuplicateList(_Out):
+    items: list[DuplicateOut]
+    limit: int
+    has_more: bool
+
+
+class MergeDetailOut(_Out):
+    merge_id: uuid.UUID
+    clinic_id: uuid.UUID
+    master_patient_id: uuid.UUID
+    subordinate_patient_id: uuid.UUID
+    candidate_id: uuid.UUID
+    status: Literal["awaiting_second_approval", "active", "unmerged"]
+    proposed_by: uuid.UUID
+    second_approved_by: uuid.UUID | None
+    activated_at: datetime | None
+    unmerged_at: datetime | None
+    unmerged_by: uuid.UUID | None
+    created_at: datetime
+
+
+class MergeList(_Out):
+    items: list[MergeDetailOut]
+    limit: int
+    has_more: bool
+
+
+async def _staff_reader(conn: AsyncConnection, claims: dict[str, Any], roles: tuple[str, ...]) -> None:
+    held = (
+        await conn.execute(
+            text(
+                "select 1 from iam.staff_roles sr join iam.accounts a on a.id = sr.account_id where sr.account_id = :u and sr.revoked_at is null "
+                "and sr.role = any(cast(:r as text[])) and a.status = 'active' and a.account_type = 'staff' limit 1"
+            ),
+            {"u": uuid.UUID(claims["sub"]), "r": list(roles)},
+        )
+    ).first()
+    if held is None:
+        raise HTTPException(status_code=403, detail="your role may not read this")
+
+
+def _merge_detail_out(r: Any) -> MergeDetailOut:
+    return MergeDetailOut(
+        merge_id=r.id, clinic_id=r.clinic_id, master_patient_id=r.master_patient_id, subordinate_patient_id=r.subordinate_patient_id, candidate_id=r.candidate_id, status=r.status,
+        proposed_by=r.approved_by, second_approved_by=r.second_approved_by, activated_at=r.activated_at, unmerged_at=r.unmerged_at, unmerged_by=r.unmerged_by, created_at=r.created_at,
+    )
+
+
+_MERGE_COLUMNS = "id, clinic_id, master_patient_id, subordinate_patient_id, candidate_id, status, approved_by, second_approved_by, activated_at, unmerged_at, unmerged_by, created_at"
+
+
+@staff_identity.get("/possible-duplicates", response_model=DuplicateList)
+async def list_possible_duplicates(
+    conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), status: Literal["pending", "resolved"] | None = "pending", limit: Limit = 100
+) -> DuplicateList:
+    """Records the matcher queued for a person to compare (newest first; `pending` by default, `status` filters). Front desk only. 403 otherwise."""
+    await _staff_reader(conn, claims, DUPLICATE_READERS)
+    rows = (
+        await conn.execute(
+            text(
+                "select id, clinic_id, patient_id, candidate_patient_id, matched_kinds, reason, status, created_at, resolved_at from mpi.match_candidates "
+                "where (cast(:s as text) is null or status = :s) order by created_at desc, id limit :n"
+            ),
+            {"s": status, "n": limit + 1},
+        )
+    ).all()
+    items = [
+        DuplicateOut(
+            candidate_id=r.id, clinic_id=r.clinic_id, patient_id=r.patient_id, candidate_patient_id=r.candidate_patient_id, matched_kinds=list(r.matched_kinds), reason=r.reason,
+            status=r.status, created_at=r.created_at, resolved_at=r.resolved_at,
+        )
+        for r in rows[:limit]
+    ]
+    return DuplicateList(items=items, limit=limit, has_more=len(rows) > limit)
+
+
+@staff_identity.get("/merges", response_model=MergeList)
+async def list_merges(
+    conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), status: Literal["awaiting_second_approval", "active", "unmerged"] | None = None, limit: Limit = 100
+) -> MergeList:
+    """Merges of the clinics you may read, newest first. Front desk, nurse and doctor. 403 otherwise."""
+    await _staff_reader(conn, claims, MERGE_READERS)
+    rows = (
+        await conn.execute(
+            text(f"select {_MERGE_COLUMNS} from mpi.merges where (cast(:s as text) is null or status = :s) order by created_at desc, id limit :n"), {"s": status, "n": limit + 1}
+        )
+    ).all()
+    return MergeList(items=[_merge_detail_out(r) for r in rows[:limit]], limit=limit, has_more=len(rows) > limit)
+
+
+@staff_identity.get("/merges/{merge_id}", response_model=MergeDetailOut)
+async def open_merge(merge_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> MergeDetailOut:
+    """One merge. 404 if you cannot see it (the same as a missing one), 403 unless you hold front desk, nurse or doctor somewhere."""
+    await _staff_reader(conn, claims, MERGE_READERS)
+    r = (await conn.execute(text(f"select {_MERGE_COLUMNS} from mpi.merges where id = :i"), {"i": merge_id})).first()
+    if r is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return _merge_detail_out(r)
+
+
 # ---- the referral queue: list and open (what a reviewer sees BEFORE deciding) --------------------------------------------------------------------------
 #
 # Reads only, under the caller's own row-level security. A role sees only what its policies show: front desk cannot read triage proposals (migration 0018), so for front desk `proposal_visible` is
@@ -1889,6 +2012,7 @@ def create_app(
     app.include_router(staff_referrals)
     app.include_router(staff_review_tasks)
     app.include_router(staff_documents)
+    app.include_router(staff_identity)
     app.include_router(health)
     return app
 

@@ -1510,6 +1510,79 @@ def reference_cases(ids, route) -> list[tuple]:
     return cases + _unauthenticated(ids, path, None)
 
 
+# ---- /v1/staff/identity/possible-duplicates, /merges, /merges/{id} (reads only; outside the step-up router on purpose) --------------------------------------------
+#
+# Possible duplicates: front desk only (the existing select policy). Merges: front desk, nurse and doctor. A reader of ANOTHER clinic gets an empty list / the same 404 as a missing record;
+# everyone else is refused with 403 before any query. No step-up (it protects the three write steps, not reading a list).
+
+DUPLICATES = "/v1/staff/identity/possible-duplicates"
+MERGE_LIST = "/v1/staff/identity/merges"
+MERGE_OPEN = "/v1/staff/identity/merges/{merge_id}"
+READ_403_BODY = lambda b: b == {"detail": "your role may not read this"}
+
+
+def duplicate_list_cases(ids) -> list[tuple]:
+    _, _, pending = new_pair(ids)
+    _, _, other = new_pair(ids)
+    _run(_owner(lambda c: c.execute("update mpi.match_candidates set status = 'resolved', resolved_at = now(), resolved_by = $2 where id = $1", other, ids.fd2)))
+    has = lambda cid, want: (lambda items: (str(cid) in {i["candidate_id"] for i in items}) is want)
+    cases = [
+        _case(ids, "front desk lists the pending duplicates by default", "front_desk_a", 200, DUPLICATES, key=None, body=_page(ids, clinic_only=ids.clinic_a, non_empty=True, check=lambda items: has(pending, True)(items) and has(other, False)(items) and all(i["status"] == "pending" for i in items))),
+        _case(ids, "status=resolved lists the resolved ones", "front_desk_a", 200, DUPLICATES + "?status=resolved", key=None, body=_page(ids, clinic_only=ids.clinic_a, non_empty=True, check=lambda items: has(other, True)(items) and has(pending, False)(items))),
+        _case(ids, "an item carries ids, kinds and closed words only", "front_desk_a", 200, DUPLICATES, key=None,
+              body=_page(ids, check=lambda items: all(set(i) == {"candidate_id", "clinic_id", "patient_id", "candidate_patient_id", "matched_kinds", "reason", "status", "created_at", "resolved_at"} for i in items))),
+        _case(ids, "a reader of another clinic sees none of this clinic's", "front_desk_b", 200, DUPLICATES, key=None, body=_page(ids, check=lambda items: items == [])),
+        _case(ids, "limit=1 returns one row and says there are more", "front_desk_a", 200, DUPLICATES + "?limit=1", key=None, body=lambda b: len(b["items"]) == 1 and b["has_more"] is True),
+        _case(ids, "an unknown status is rejected", "front_desk_a", 422, DUPLICATES + "?status=bogus", key=None, body=_fixed(422)),
+        _case(ids, "limit=0 is rejected", "front_desk_a", 422, DUPLICATES + "?limit=0", key=None, body=_fixed(422)),
+    ]
+    denied = [p for p in ids.people if p not in ("front_desk_a", "front_desk_b")]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, DUPLICATES, key=None, body=READ_403_BODY) for p in denied]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, DUPLICATES, key=None, body=READ_403_BODY))
+    return cases + _unauthenticated(ids, DUPLICATES, None)
+
+
+def merge_list_cases(ids) -> list[tuple]:
+    awaiting, _, _ = new_merge(ids)
+    active, _, _ = new_merge(ids, "active")
+    has = lambda mid, want: (lambda items: (str(mid) in {i["merge_id"] for i in items}) is want)
+    readers = ("front_desk_a", "nurse_a", "doctor_a", "multi")
+    cases = [
+        _case(ids, f"{who} lists both merges", who, 200, MERGE_LIST, key=None, body=_page(ids, clinic_only=ids.clinic_a, non_empty=True, check=lambda items: has(awaiting, True)(items) and has(active, True)(items)))
+        for who in readers
+    ]
+    cases += [
+        _case(ids, "status=active lists only the active ones", "front_desk_a", 200, MERGE_LIST + "?status=active", key=None,
+              body=_page(ids, clinic_only=ids.clinic_a, non_empty=True, check=lambda items: has(active, True)(items) and has(awaiting, False)(items) and all(i["status"] == "active" for i in items))),
+        _case(ids, "a merge carries ids, statuses and times only", "nurse_a", 200, MERGE_LIST, key=None,
+              body=_page(ids, check=lambda items: all(set(i) == {"merge_id", "clinic_id", "master_patient_id", "subordinate_patient_id", "candidate_id", "status", "proposed_by", "second_approved_by", "activated_at", "unmerged_at", "unmerged_by", "created_at"} for i in items))),
+        _case(ids, "a reader of another clinic sees none of this clinic's", "front_desk_b", 200, MERGE_LIST, key=None, body=_page(ids, check=lambda items: items == [])),
+        _case(ids, "an unknown status is rejected", "front_desk_a", 422, MERGE_LIST + "?status=bogus", key=None, body=_fixed(422)),
+        _case(ids, "limit=501 is rejected", "front_desk_a", 422, MERGE_LIST + "?limit=501", key=None, body=_fixed(422)),
+    ]
+    denied = [p for p in ids.people if p not in (*readers, "front_desk_b")]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, MERGE_LIST, key=None, body=READ_403_BODY) for p in denied]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, MERGE_LIST, key=None, body=READ_403_BODY))
+    return cases + _unauthenticated(ids, MERGE_LIST, None)
+
+
+def merge_open_cases(ids) -> list[tuple]:
+    mid, master, sub = new_merge(ids, "active")
+    path = lambda m: MERGE_OPEN.format(merge_id=m)
+    shape = lambda b: b["merge_id"] == str(mid) and b["master_patient_id"] == str(master) and b["subordinate_patient_id"] == str(sub) and b["status"] == "active" and b["second_approved_by"] == str(ids.fd2)
+    readers = ("front_desk_a", "nurse_a", "doctor_a", "multi")
+    cases = [_case(ids, f"{who} opens the merge", who, 200, path(mid), key=None, body=shape) for who in readers]
+    cases += [
+        _case(ids, "a reader of another clinic gets the same 404 as a missing merge", "front_desk_b", 404, path(mid), key=None, body=_fixed(404)),
+        _case(ids, "an unknown merge is not found", "nurse_a", 404, path(uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "a merge id that is not a uuid is rejected", "nurse_a", 422, path("nope"), key=None, body=_fixed(422)),
+    ]
+    denied = [p for p in ids.people if p not in (*readers, "front_desk_b")]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path(mid), key=None, body=READ_403_BODY) for p in denied]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, path(mid), key=None, body=READ_403_BODY))
+    return cases + _unauthenticated(ids, path(mid), None)
+
+
 # One entry per route: add the new route's cases here in the same change that adds the route.
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
@@ -1540,6 +1613,9 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", DOC_REGISTER): document_register_cases,
     ("GET", REFERRALS): referral_list_cases,
     ("GET", REFERRAL): referral_open_cases,
+    ("GET", DUPLICATES): duplicate_list_cases,
+    ("GET", MERGE_LIST): merge_list_cases,
+    ("GET", MERGE_OPEN): merge_open_cases,
     ("POST", PATIENT_SEARCH): patient_search_cases,
     ("GET", PATIENT_STATUS): patient_status_cases,
     ("GET", READ): message_read_cases,

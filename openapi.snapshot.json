@@ -290,6 +290,115 @@
         "title": "ConfirmIdentityOut",
         "type": "object"
       },
+      "DuplicateList": {
+        "additionalProperties": false,
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DuplicateOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "limit",
+          "has_more"
+        ],
+        "title": "DuplicateList",
+        "type": "object"
+      },
+      "DuplicateOut": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_id": {
+            "format": "uuid",
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "candidate_patient_id": {
+            "format": "uuid",
+            "title": "Candidate Patient Id",
+            "type": "string"
+          },
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "matched_kinds": {
+            "items": {
+              "enum": [
+                "name_dob",
+                "phone"
+              ],
+              "type": "string"
+            },
+            "title": "Matched Kinds",
+            "type": "array"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "near_match",
+              "ambiguous"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "resolved"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "clinic_id",
+          "patient_id",
+          "candidate_patient_id",
+          "matched_kinds",
+          "reason",
+          "status",
+          "created_at",
+          "resolved_at"
+        ],
+        "title": "DuplicateOut",
+        "type": "object"
+      },
       "Envelope": {
         "additionalProperties": false,
         "description": "The result of every tool. `data` holds ids, numbers and closed words only; a degraded or unavailable result says so in `status` and `reason` (a fixed word).",
@@ -546,6 +655,146 @@
           "roles"
         ],
         "title": "Me",
+        "type": "object"
+      },
+      "MergeDetailOut": {
+        "additionalProperties": false,
+        "properties": {
+          "activated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activated At"
+          },
+          "candidate_id": {
+            "format": "uuid",
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "master_patient_id": {
+            "format": "uuid",
+            "title": "Master Patient Id",
+            "type": "string"
+          },
+          "merge_id": {
+            "format": "uuid",
+            "title": "Merge Id",
+            "type": "string"
+          },
+          "proposed_by": {
+            "format": "uuid",
+            "title": "Proposed By",
+            "type": "string"
+          },
+          "second_approved_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Second Approved By"
+          },
+          "status": {
+            "enum": [
+              "awaiting_second_approval",
+              "active",
+              "unmerged"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subordinate_patient_id": {
+            "format": "uuid",
+            "title": "Subordinate Patient Id",
+            "type": "string"
+          },
+          "unmerged_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unmerged At"
+          },
+          "unmerged_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unmerged By"
+          }
+        },
+        "required": [
+          "merge_id",
+          "clinic_id",
+          "master_patient_id",
+          "subordinate_patient_id",
+          "candidate_id",
+          "status",
+          "proposed_by",
+          "second_approved_by",
+          "activated_at",
+          "unmerged_at",
+          "unmerged_by",
+          "created_at"
+        ],
+        "title": "MergeDetailOut",
+        "type": "object"
+      },
+      "MergeList": {
+        "additionalProperties": false,
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MergeDetailOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "limit",
+          "has_more"
+        ],
+        "title": "MergeList",
         "type": "object"
       },
       "MergeOut": {
@@ -2607,6 +2856,199 @@
         "summary": "Begin Document Upload",
         "tags": [
           "staff documents"
+        ]
+      }
+    },
+    "/v1/staff/identity/merges": {
+      "get": {
+        "description": "Merges of the clinics you may read, newest first. Front desk, nurse and doctor. 403 otherwise.",
+        "operationId": "list_merges_v1_staff_identity_merges_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "awaiting_second_approval",
+                    "active",
+                    "unmerged"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MergeList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Merges",
+        "tags": [
+          "staff identity"
+        ]
+      }
+    },
+    "/v1/staff/identity/merges/{merge_id}": {
+      "get": {
+        "description": "One merge. 404 if you cannot see it (the same as a missing one), 403 unless you hold front desk, nurse or doctor somewhere.",
+        "operationId": "open_merge_v1_staff_identity_merges__merge_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "merge_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Merge Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MergeDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Open Merge",
+        "tags": [
+          "staff identity"
+        ]
+      }
+    },
+    "/v1/staff/identity/possible-duplicates": {
+      "get": {
+        "description": "Records the matcher queued for a person to compare (newest first; `pending` by default, `status` filters). Front desk only. 403 otherwise.",
+        "operationId": "list_possible_duplicates_v1_staff_identity_possible_duplicates_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "pending",
+                    "resolved"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": "pending",
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicateList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Possible Duplicates",
+        "tags": [
+          "staff identity"
         ]
       }
     },
