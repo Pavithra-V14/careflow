@@ -45,7 +45,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 | `landing.account` | Account | கணக்கு |
 | `landing.departments.heading` | Departments and doctors | துறைகள் மற்றும் மருத்துவர்கள் |
 | `landing.emergencyLabel` | Emergency information | அவசரகாலத் தகவல் |
-| `landing.faq.a1` | Choose Sign up and enter your mobile number. We will send a one-time code to confirm it. | பதிவு செய்க என்பதைத் தேர்ந்தெடுத்து உங்கள் கைபேசி எண்ணை உள்ளிடுங்கள். அதை உறுதிப்படுத்த ஒருமுறைக் குறியீடு அனுப்புவோம். |
+| `landing.faq.a1` | Patient sign-up is not available yet. When it opens, you will enter your mobile number and we will send a one-time code to confirm it. | நோயாளர் பதிவு இன்னும் கிடைக்கவில்லை. அது தொடங்கும்போது, உங்கள் கைபேசி எண்ணை உள்ளிடுவீர்கள்; அதை உறுதிப்படுத்த ஒருமுறைக் குறியீடு அனுப்புவோம். |
 | `landing.faq.a2` | Yes. Use the language menu at the top of any page to switch between English and Tamil. | ஆம். எந்தப் பக்கத்தின் மேலேயும் உள்ள மொழி தேர்வைப் பயன்படுத்தி ஆங்கிலம், தமிழ் இடையே மாறலாம். |
 | `landing.faq.heading` | Frequently asked questions | அடிக்கடி கேட்கப்படும் கேள்விகள் |
 | `landing.faq.q1` | How do I create an account? | கணக்கை எவ்வாறு உருவாக்குவது? |

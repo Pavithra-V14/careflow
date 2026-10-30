@@ -81,6 +81,22 @@ depends on a guess. All F3 screens run only against mocks until a live backend i
   `csp.ts` and the check in `UploadPage.tsx` both change.
 - **Names.** Lists show short ids (patients, holds, tasks); names are item 1 of `frontend-contract.md`.
 
+### 6. Type `Envelope.data` for tasks and offers, and name the reason words (requested by the owner)
+
+The backend should give the console typed shapes instead of free text, so the UI never has to treat them as strings:
+
+- **`Envelope.data`** (currently `object | array | null`) should be a typed schema per route: for the offer draft, the ranked
+  candidates and the draft message; for review tasks, a typed `provenance` per task kind (the document id of a referral hold,
+  the rule id of a red flag, and so on) in place of the untyped object.
+- **`Envelope.reason`** (currently free text, for example `not_configured: ...` plus the names of missing clinician-owned settings)
+  should be a closed set of reason words, listed as an enum in the schema, with any setting names in a separate typed field.
+  Each word then gets a reviewed English and Tamil label in the console, and the console shows no backend text.
+- **`kind`** on review tasks (and on holds and merges where applicable) should be an enum, so the console can label each kind
+  and stop carrying its own copy of which kinds can be resolved or are urgent.
+
+Until then the console shows only the `status` word of an envelope, never `reason` or `data`, and marks candidate details and
+sending "Coming soon".
+
 ## Decisions recorded here for later readers
 
 - **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;

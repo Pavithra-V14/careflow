@@ -1,15 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import { PATHS } from '../paths';
-import { FEATURES } from '../features';
+import { FAQ_ITEMS, FEATURES, HOW_STEPS } from '../features';
 import { Placeholder } from '../components/Placeholder';
 
-const STEPS = ['step1', 'step2', 'step3'] as const;
-const FAQ = [
-  { q: 'q1', a: 'a1' },
-  { q: 'q2', a: 'a2' },
-  { q: 'q3', placeholder: 'faqGrievance' },
-  { q: 'q4', placeholder: 'faqPrivacy' },
-] as const;
 
 // Section order follows BUILD-SPEC 19.2. The emergency banner and header are rendered by the page frame.
 // Every section here is static: there is no data to load, so "empty" is a visible placeholder, and there
@@ -43,10 +36,15 @@ export function Landing() {
       <section aria-labelledby="how-heading">
         <h2 id="how-heading">{t('landing.how.heading')}</h2>
         <ol className="steps">
-          {STEPS.map((s) => (
-            <li key={s}>
-              <h3>{t(`landing.how.${s}Title`)}</h3>
-              <p>{t(`landing.how.${s}Body`)}</p>
+          {HOW_STEPS.map((s) => (
+            <li key={s.key} data-unbuilt={s.status === 'soon' ? '' : undefined}>
+              <h3>{t(`landing.how.${s.key}Title`)}</h3>
+              {s.status === 'soon' && (
+                <p>
+                  <span className="badge">{t('common.comingSoon')}</span>
+                </p>
+              )}
+              <p>{t(`landing.how.${s.key}Body`)}</p>
             </li>
           ))}
         </ol>
@@ -80,9 +78,12 @@ export function Landing() {
 
       <section aria-labelledby="faq-heading">
         <h2 id="faq-heading">{t('landing.faq.heading')}</h2>
-        {FAQ.map((item) => (
-          <details key={item.q}>
-            <summary>{t(`landing.faq.${item.q}`)}</summary>
+        {FAQ_ITEMS.map((item) => (
+          <details key={item.q} data-unbuilt={item.status === 'soon' ? '' : undefined}>
+            <summary>
+              {t(`landing.faq.${item.q}`)}
+              {item.status === 'soon' && <span className="badge">{t('common.comingSoon')}</span>}
+            </summary>
             {'a' in item ? <p>{t(`landing.faq.${item.a}`)}</p> : <Placeholder>{t(`placeholder.${item.placeholder}`)}</Placeholder>}
           </details>
         ))}
