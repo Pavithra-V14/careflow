@@ -129,3 +129,104 @@ Step A makes that unnecessary). A file added to no shard can never go unrun.
 **Not recommended: shrinking the 200-attempt count.** It is the spec's number (BUILD-SPEC §21); it gets its own shard budget instead.
 
 Needs your decision: Step A first (I would do it on `next-backend`, run serially in CI, then Step B), or Step B with only two shards now.
+
+## Rebalance of 2026-10-27 (owner decision), from the first PR #3 run
+
+Measured on run 40113599668 (the committed workflow at that commit; hosted-database latency varies from run to run):
+
+| Shard | Tests | pytest time | Wall time of the job | PEAK-CONNECTIONS (total / careflow_app / other) |
+|---|---|---|---|---|
+| 1 | 193 | 31:13 | about 31 min | 31 / 16 / 15 |
+| 2 | 372 | **50:42** (limit 60) | about 51 min | 20 / 10 / 12 |
+| 3 | 80 | 11:26 | about 12 min | 31 / 16 / 15 |
+
+Shard 2 had grown with every new live file (ai_registry, spend, docs, triage, worker, hold, checkpoints) while shard 3 stayed small. The averages per test were 9.7 s (shard 1), 8.2 s
+(shard 2) and 8.6 s (shard 3, whose time is dominated by two concurrency tests: the 200-booking test 296 s and the concurrent-holds test 75 s; its other 78 tests averaged 4 s).
+Only the 25 slowest calls are in the log, so per-FILE times were estimated from the earlier per-file table above (screenings 9.4 min for 89 tests, rotation 4.9 min for 24 tests, scaled by
+about 1.17 for today's latency) and from test counts.
+
+**Change: `test_rls_screenings_live.py` and `test_rotation_live.py` move from shard 2 to shard 3.** Both are safe next to shard 3's files: the partition gate (`tests/test_ci_shards.py`) still
+holds (every live file in exactly one shard, and no whole-table count of a table another file commits), `msg.*` and the rules table are never committed, and rotation is the only file that commits
+`ops.key_rotation_batches`.
+
+| Shard | Files | Estimated |
+|---|---|---|
+| 1 | role matrix (now with the committed half of the referral routes), identity, rules, screen message, read message, patient binding | about 33 min |
+| 2 | queue, msg, mpi, iam_audit, migrate, real_token, child_tables, ai_registry, spend, docs, triage, mpi_worker, referral_hold, checkpoints, triage_writers | about 34 min |
+| 3 | screenings, rotation, scheduling, rls_mpi_scheduling, scheduling_concurrency, api_referrals, dead_letters | about 33 min |
+
+**So that the next rebalance does not guess:** every shard now writes `--junitxml=shard-times.xml` and prints `SHARD-TIMES` / `SHARD-TIME` lines (seconds, test count and file, slowest first) from
+`scripts/ci_shard_times.py` in a step that runs even when tests fail. Compare the estimate above with those lines after the next run and move files again if a shard is over 40 minutes.
+
+
+**Measured after the rebalance (run 40529226066, all green, total about 47 min):** shard 1 24:54, shard 2 42:21, shard 3 46:44 (pytest time). Shard 3 and shard 2 are now over the 40-minute line the previous paragraph set; the next rebalance should start from the `SHARD-TIME` lines of that run.
+
+**One-off timing failure, recorded:** `test_concurrent_reads_from_different_identities_neither_mix_rows_nor_leak_connections` failed once with `QueuePool limit of size 5 overflow 5 reached ... timeout 30.00` (run 40521334349, shard 1: 40 concurrent reads queued behind a slow pooler) and passed unchanged in run 40529226066. No change was made to the test or to the app pool settings; if it recurs, check what the 40 requests wait on before changing anything.
+
+**Timeout headroom (checked 2026-10-27):** every live shard has `timeout-minutes: 60`. In run 40529226066 the shard JOBS took 25:07, 42:32 and 46:55, so the slowest has about 13 minutes of headroom (more than the 10-minute line the owner set). No rebalance was made; the next one is due when a shard's headroom falls under 10 minutes (job over 50 minutes) or after the next set of `SHARD-TIME` lines.
+
+## Leftover rows from killed runs (2026-10-28)
+
+**What happened.** Run 40693737334 failed in shards 1 and 2 on tests that read a whole shared table (`agents.review_tasks`, `ops.queue`, `ops.outbox`) and expected exactly the rows they had just made. The most likely cause (not proven: nobody has inspected the CI database) is that the `main` run for the PR #3 merge was cancelled mid-test; a cancelled job skips its teardown and leaves committed rows behind. The workflow now never cancels a run triggered by a push to main (only pull-request runs are superseded).
+
+**After the sweep, which tests can still be polluted?** Every live test now reads its own clinic's rows (random clinic ids). What is still global BY DESIGN:
+- `tests/test_rotation_live.py` rotates and counts EVERY non-erased message at key version 1 across all clinics (`message_version_usage(db)` and `rotate_message_bodies(db, ...)` without `clinic_id`), and sums the global rotation ledger `where from_version = 1 and to_version = 2`. A committed message still on key version 1 in any clinic would break it. No live test commits messages today, so this needs an outside leftover to bite.
+- The red-flag-rule precondition in `test_rules_live`, `test_api_screen_message_live`, `test_api_referrals_live` and `test_rls_screenings_live`: `kb` is not clinic-scoped, and the tests REFUSE TO RUN (a loud precondition, not a wrong pass) if a committed approved `origin = 'test'` rule with criteria exists.
+- Committed fixtures of `tests/test_api_role_matrix.py` (clinics, accounts, patients, all `origin = 'test'` with random ids): tagged and harmless to the scoped tests; they accumulate if a run is killed before its teardown.
+Not affected: advisory locks and open transactions die with the killed runner's connections.
+
+**How to look, by hand, read-only** (a migrator connection to the CI project, never the dev project):
+```sql
+-- the one global dependency of the rotation tests: messages still on key version 1
+select clinic_id, origin, count(*) from msg.messages where erased_at is null and body_key_version = 1 group by 1, 2;
+-- approved test-origin rules with criteria (the loud precondition)
+select count(*) from kb.red_flag_rules where origin = 'test' and status = 'approved' and (cardinality(phrases) > 0 or cardinality(patterns) > 0);
+-- how much committed test data is lying around
+select 'clinics' as t, count(*) from iam.clinics where origin = 'test'
+union all select 'accounts', count(*) from iam.accounts where origin = 'test'
+union all select 'queue', count(*) from ops.queue where origin = 'test'
+union all select 'review_tasks', count(*) from agents.review_tasks where origin = 'test';
+```
+**How to clean it safely.** Do NOT delete rows by hand: most of these tables are append-only on purpose (triggers refuse `DELETE`, `UPDATE` and `TRUNCATE` even for the owner), so cleaning them means disabling those triggers, which is exactly what the guards exist to prevent. Order of preference: (1) do nothing; the scoped tests ignore other clinics' rows. (2) If the first query above returns rows (the rotation tests' only global dependency), the CI project needs those messages gone or rotated: ask before touching anything. (3) Last resort: recreate the CI Supabase project (it is separate from dev) and let the migrate job rebuild the schema from the migrations, then re-enter its connection secrets. No automatic delete is added to CI, by decision.
+
+## Rebalance of 2026-10-29 (owner decision), from PR #5's first run (40719139488)
+
+**Measured (job time / pytest time):** shard 1 30:54 / 30:40, shard 2 35:25 / 35:12, **shard 3 55:16 / 55:05** against the 60-minute `timeout-minutes`: under 5 minutes of headroom, so the shard had to be rebalanced. Shard 3 was slower than in the previous green run (46:55), partly from the new referral tests.
+
+**Per-file seconds in shard 3:** test_api_referrals_live 1297 (27 tests), test_rls_screenings_live 614, test_scheduling_concurrency_live 608 (the 200-booking test alone 430), test_rotation_live 332, test_scheduling_live 327, test_rls_mpi_scheduling_live 70, test_dead_letters_live 55.
+
+**Moves:** `test_rls_screenings_live.py` (614 s) shard 3 -> shard 1; `test_scheduling_live.py` (327 s) shard 3 -> shard 2. The `test_ci_shards` gate accepted both pairs; every live file is still in exactly one shard.
+
+| Shard | Before | After (estimate) |
+|---|---|---|
+| 1 | 30:54 | about 41 min |
+| 2 | 35:25 | about 41 min |
+| 3 | 55:16 | about 40 min |
+
+**The headroom rule (standing):** every live shard job must finish with at least 10 minutes of headroom against its 60-minute timeout. If any shard job takes more than 50 minutes in a green-or-red run, rebalance in the next change, before adding more live tests to that shard. Re-measure from the `SHARD-TIME` lines after the first run on the new split.
+
+## Rebalance of 2026-10-29 (standing rule applied), from PR #6's run (40857011070)
+
+Shard 1 took 50:11 (the role matrix alone 1428 s, test_rls_screenings_live 604 s); shard 2 39:07; shard 3 27:23. Shard 1 passed 50 minutes, so by the standing rule (a shard job over 50 minutes is rebalanced in the next change) `test_rls_screenings_live.py` moves from shard 1 to shard 3. Estimates after the move: shard 1 about 40, shard 2 about 39, shard 3 about 37 minutes. The `test_ci_shards` gate accepts the pairs. Note the spread: the same shard varied by 10 minutes between runs of the same code (30:54 to 50:11), so the headroom rule is applied to the worst run seen, not the average.
+
+## Rebalance of 2026-10-29 (second), from PR #7's last run (40886609546)
+
+Shard 3 took 49:21 (job time; 49:10 pytest) after `test_rls_screenings_live` moved in; shard 1 26:15; shard 2 42:00. Shard 3 was a minute under the 50-minute line, so the rule did not fire, but it had under 11 minutes of headroom and shard 1 had 34. `test_rotation_live.py` (about 4 to 5 minutes) moves from shard 3 to shard 1. The rotation tests count every key-version-1 message and refuse to run beside a committed one (their loud precondition), so they share a shard with suites that commit no messages. Estimates: shard 1 about 32, shard 2 about 42, shard 3 about 44 minutes.
+
+## POOL-DIAG results (PR #8, run 40895463696, shard 1; owner accepted 2026-10-29)
+What the forty concurrent requests in the two pool tests wait on: queueing behind per-statement latency, not app behaviour.
+- A bare `select 1` transaction and a `set_config` transaction each take about 0.51 s (min = p50 = max over five samples): the round trip from the CI runner to the Tokyo pooler.
+- A request holds its connection for about 1.0 s (identity, then the query: two round trips). Longest hold 5.1 s = connections opened during the burst.
+- Forty requests over the small pool: latency min 1.5-1.7 s, p50 3.9-4.7 s, p95 6.5-6.6 s, max about 6.6 s.
+- Peak `careflow_app` backends in shard 1: 16 (all logins 30 of `max_connections` 60).
+Decision: keep the test-only 120 s pool wait; the `POOL-DIAG` lines stay (one line per test, observation only, cheap).
+
+## 2026-10-30 (PR #9)
+`tests/test_api_offers_live.py` (about 1 minute, never-committed transaction) joins shard 3. PR #9's first run measured shards 39:48, 41:10 and 36:25 (with a failing shard 1 that stopped early on the rotation precondition, so its true time is longer): shard 1 is now the one to watch; the role matrix grows with every route. Rebalance in the next change if any shard passes 50 minutes.
+
+## 2026-10-30 (batch 4): four shards, the role matrix split in two parts
+Measured in PR #9's run (41012450176): shard 1 47:00 (role matrix 1792 s of it), shard 2 46:56, shard 3 38:32; total about 133 minutes of live tests, and the matrix grows with every route (this batch adds about fourteen route case-sets). Three shards could not stay under 50 minutes, so:
+- **Four shards** (`tests/test_ci_shards.py` now expects 1 to 4). Targets from the measured per-file seconds: shard 1 about 38 min, shard 2 about 37, shard 3 about 37, shard 4 about 31. Re-measure on the first run of this batch; if any shard passes 45 minutes, move a file.
+- **The role matrix is split in two parts** with `CAREFLOW_MATRIX_PART=i/2` (a matrix include key `matrix_part`); the root `conftest.py` keeps only the tests whose stable hash (crc32 of the test id) falls in the part, so the parts together run every matrix test exactly once (checked: 40 + 38 of 78 today). Each part is its own pytest process and seeds its own clinics. `tests/test_ci_shards.py` requires the matrix to appear as complete parts 1..n exactly once, and every other live file in exactly one shard.
+- A hash split is even by count, not by cost; if one part runs much longer than the other, change the key in `matrix_part_of` or give the heavy route families an explicit part.
+- Database connections: four shards at once raise the peak (three shards peaked at 31 to 32 of 60). The PEAK-CONNECTIONS line of the first four-shard run must be read; the limit is 60.

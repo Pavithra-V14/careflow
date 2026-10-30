@@ -27,6 +27,10 @@ from careflow.ports import (
     TranslationRequest,
     TranslationResult,
     Usage,
+    VectorHit,
+    VectorPoint,
+    VisionRequest,
+    VisionResult,
 )
 
 
@@ -143,3 +147,130 @@ class FakeSms(_FakeSink):
 
     async def send(self, to: str, body: str, *, idempotency_key: str) -> SendResult:
         return await self._record({"to": to, "body": body}, idempotency_key)
+
+
+class FakeUpload(_Fake):
+    """An in-memory object store behind `UploadPort`. `client_put` plays the BROWSER: it stores whatever it is given, at any path, with whatever
+    type it claims and no limit enforced (a hostile client), because the server must re-verify and never rely on a signature's limits."""
+
+    def __init__(self, name: str = "fake-upload", *, now=None) -> None:
+        super().__init__(name)
+        import datetime as dt
+
+        self._now = now or (lambda: dt.datetime.now(dt.UTC))
+        self.objects: dict[str, tuple[bytes, str]] = {}
+        self.deleted: list[str] = []
+        self.signed: list[dict] = []
+
+    def client_put(self, path: str, content: bytes, content_type: str) -> None:
+        self.objects[path] = (content, content_type)
+
+    async def create_signed_upload(self, *, path: str, content_type: str, max_bytes: int, expires_in_seconds: int):
+        import datetime as dt
+
+        from careflow.ports import SignedUpload
+
+        await self._enter()
+        self.signed.append({"path": path, "content_type": content_type, "max_bytes": max_bytes, "expires_in_seconds": expires_in_seconds})
+        return SignedUpload(f"fake://upload/{path}", path, self._now() + dt.timedelta(seconds=expires_in_seconds))
+
+    async def describe(self, path: str):
+        from careflow.ports import StoredObject
+
+        await self._enter()
+        if path not in self.objects:
+            return None
+        content, ctype = self.objects[path]
+        return StoredObject(path, len(content), ctype, content[:16], hashlib.sha256(content).hexdigest())
+
+    async def read(self, path: str):
+        await self._enter()
+        return self.objects[path][0] if path in self.objects else None
+
+    async def delete(self, path: str) -> None:
+        await self._enter()
+        self.objects.pop(path, None)
+        self.deleted.append(path)
+
+
+EICAR = b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"  # the industry's harmless test string: any scanner must flag it
+
+
+class FakeScanner(_Fake):
+    """Stands in for the malware scanner (no scanner is installed or approved to run anywhere). A document containing the EICAR test string, or a marker in `infected_markers`, is `infected`;
+    bytes containing a marker in `unscannable_markers` are `not_scanned` (as an encrypted or oversized file would be for a real scanner); everything else is `clean`. `fail_next` makes it raise,
+    which the caller must treat as `not_scanned`. Deterministic, no network; never returns `clean` for empty input."""
+
+    def __init__(self, name: str = "fake-scanner", *, infected_markers: tuple[bytes, ...] = (), unscannable_markers: tuple[bytes, ...] = (), **kw) -> None:
+        super().__init__(name, **kw)
+        self.infected_markers, self.unscannable_markers, self.scanned = (EICAR, *infected_markers), unscannable_markers, []
+
+    async def scan(self, content: bytes):
+        from careflow.malware import ScanResult
+
+        await self._enter()
+        self.scanned.append(hashlib.sha256(content).hexdigest())
+        if not content or any(m in content for m in self.unscannable_markers):
+            return ScanResult("not_scanned", self.name, "fake-1")
+        if any(m in content for m in self.infected_markers):
+            return ScanResult("infected", self.name, "fake-1")
+        return ScanResult("clean", self.name, "fake-1")
+
+
+class FakeVectorStore(_Fake):
+    """An in-memory card index: exact cosine, pre-filtered by scope. Stands in for Qdrant (no client, no network, no data)."""
+
+    def __init__(self, name: str = "fake-vector-store", **kw) -> None:
+        super().__init__(name, **kw)
+        self.points: dict[str, VectorPoint] = {}
+
+    async def upsert(self, points: list[VectorPoint]) -> None:
+        await self._enter()
+        for p in points:
+            self.points[p.card_id] = p
+
+    async def delete(self, card_ids: list[str]) -> None:
+        await self._enter()
+        for c in card_ids:
+            self.points.pop(c, None)
+
+    async def search(self, vector: tuple[float, ...], *, limit: int, scope: dict[str, str]) -> list[VectorHit]:
+        await self._enter()
+        if not scope:
+            raise ValueError("a vector search needs a scope (10.7): it never defaults to searching everything")
+        norm_q = math.sqrt(sum(x * x for x in vector)) or 1.0
+        hits = []
+        for p in self.points.values():
+            if any(p.scope.get(k) != v for k, v in scope.items()):
+                continue
+            norm_p = math.sqrt(sum(x * x for x in p.vector)) or 1.0
+            hits.append(VectorHit(p.card_id, p.version, sum(a * b for a, b in zip(vector, p.vector, strict=True)) / (norm_q * norm_p)))
+        hits.sort(key=lambda h: (-h.similarity, h.card_id))
+        return hits[:limit]
+
+
+class FakeVision(_Fake):
+    """Stands in for the vision role (no hosted service is approved). Returns a fixed transcription per page number, or a default tagged with the page; records the pages it was asked
+    for so a test can prove the 15.3 cascade (vision only for pages that failed the earlier tiers)."""
+
+    def __init__(self, name: str = "fake-vision", *, script: dict[int, str] | None = None, **kw) -> None:
+        super().__init__(name, **kw)
+        self.script, self.pages = script or {}, []
+
+    async def read(self, request: VisionRequest) -> VisionResult:
+        await self._enter()
+        self.pages.append(request.page)
+        return VisionResult(self.script.get(request.page, f"Transcribed text of the scanned page {request.page}: findings are as described in the attached letter."))
+
+
+class FakeLayout(_Fake):
+    """Stands in for the layout tier. `script` maps a page number to its text; a page not in it returns None (the layout tier did not help)."""
+
+    def __init__(self, name: str = "fake-layout", *, script: dict[int, str] | None = None, **kw) -> None:
+        super().__init__(name, **kw)
+        self.script, self.pages = script or {}, []
+
+    async def read_page(self, content: bytes, page: int) -> str | None:
+        await self._enter()
+        self.pages.append(page)
+        return self.script.get(page)

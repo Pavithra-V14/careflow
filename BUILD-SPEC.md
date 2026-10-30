@@ -168,6 +168,8 @@ Three engines answer the same typed-decision questions (`choice`, `score`, `noul
 
 **Absolute rule: the red-flag deterministic rules run first, on every path, before any `decision` engine call. A `decision` engine's safety-net opinion can only escalate a case, never de-escalate one the rules already flagged.**
 
+**Narrow carve-out (confirmed by the owner, 2026-10-27).** The deterministic rules read text, so a scanned page or photograph cannot be screened until it is text. Transcription of an image into text (the `vlm` vision role, §10.4) is the ONLY model call that may precede the red-flag rules, and only for pages, or parts of a page (a large image beside a text layer), that cannot be screened as text. No other tier counts: a layout-analysis tier (§10.4 step 2) that uses a model is NOT covered by this carve-out and must be brought back to the owner before it is wired in. Its output is quoted data, not a decision: it is screened by the deterministic rules before ANY other model call (the `decision` engine, fact extraction, triage, summarisation, retrieval embedding), and a transcription that fails, is empty, or is unavailable is never treated as clear: the document holds for a human, who is shown the image. No other model call is covered by this carve-out.
+
 ### 5.3 Deprecation handling
 
 Model IDs pinned exactly. A scheduled job calls each provider's model-listing endpoint, compares against pinned IDs, auto-disables a vanished model, and alerts. Verify each provider's listing endpoint shape at build.
@@ -345,6 +347,8 @@ Tiered, cheapest-first, heavy work in the worker never the request path:
 2. **Unstructured.io** for layout-aware partitioning — tables, multi-column labs, complex reports. Runs locally (self-hosted is acceptable per the resource rule in §17.7).
 3. Any element with no text layer, plus every embedded image and scanned page → **Gemini 2.5 Flash** for extraction (external call — see §2 profile table).
 4. Merge results back in document order, carrying page/element provenance so a citation still points at a physical page.
+
+*Ordering note (confirmed by the owner, 2026-10-27; see the narrow carve-out in §5.2).* Step 3 is a model call that precedes the red-flag rules, because the rules need text. It is the only one that may. Its transcription is screened by the deterministic rules before any other model call, and a failed, empty or unavailable transcription holds the document for a human instead of being treated as clear.
 
 ### 10.5 Embeddings
 
@@ -1015,6 +1019,8 @@ message might).
 - **The actual latency between a patient finishing a concerning sentence in a `voice_live` session and the deterministic-rule interrupt landing (§11.6)** — this is the honest gap named in the voice guardrail design, and it must be measured, not assumed, before voice ships past Phase 8 (Appendix D).
 - Google AI Studio's exact Gemini Live free-tier rate limits (requests/concurrent-sessions/minutes) in production, and whether they're sufficient for expected clinic volume before this needs a paid Vertex AI tier.
 - Whether Gemini Live supports updating a session's system instructions mid-conversation, which the scope-restriction design in §23.2 assumes is possible per workflow (a booking-reply session and an intake-question session should each be scoped only to their own task).
+
+- Whether a Supabase Storage **signed upload URL can overwrite an existing object**, and **for how long it stays valid** (the P2-3 service issues a 600 s URL and records the sha256 observed at registration; an overwrite inside that window would change the bytes after they were verified). Must be confirmed with a real call before the `UploadPort` adapter exists.
 
 ---
 

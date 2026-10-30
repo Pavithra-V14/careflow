@@ -9,6 +9,24 @@ Everything here is **known and intentionally not done yet**. Each line says what
 one, delete its line in the same change. Source of the first group: the msg / iam design review of 2026-10-23
 (`docs/design/msg-screening-binding-design.md`).
 
+## Test speed
+- **`tests/test_api_referrals_live.py` takes about 21 minutes in one file (1297 s for 27 tests, run 40719139488).** Find out why (fixture setup per test versus the worker ticks and the 14-identity grid) before Phase 3 adds more live tests. No change now.
+
+## Planted tokens (pre-launch blocker 10)
+- **Revoking a mistaken identity confirmation (owner request 2026-10-28):** a confirmation is permanent today (append-only, one row per patient). Design only: `docs/design/identity-confirmation-revoke.md` (an append-only event log, latest event wins; front desk, one person, no step-up; the matcher treats the record as unverified again; a nurse review task lists what was linked meanwhile). Not built.
+- **Open item: step-up on confirm-identity.** Left out for now (a confirmation only makes a record match normally). REVISIT WITH THE CLINICAL SAFETY LEAD.
+- **Option C (later):** the registration function takes the id of a registered `docs.documents` row of the clinic and refuses a second patient from the same document: bounds a worker to one record per human-registered document and gives every worker-created record an audit anchor. Not needed for option A; revisit with the review console.
+- **Option B (rejected, 2026-10-28):** the database derives the tokens. Reasons: the HMAC key and the plaintext name, date of birth and phone would cross into SQL (logs, `pg_stat_statements`, error text); key rotation and the per-field subkeys would have to be duplicated in SQL; it contradicts "the database holds only ciphertext and keyed tokens".
+- **A console for confirm-identity:** until a review console exists, a repeat referral for a worker-created patient goes to review (accepted workload).
+
+## Waiting for a real vision route (P2-4)
+- **Checklist for any real vision provider (none approved; the fakes stay):** (1) the owner's approval of the provider; (2) a key, kept out of the repository; (3) a registry row built with `careflow.adapters.vision.vlm_row`; (4) a data-flow-register entry and its register test; (5) an explicit `timeout_seconds` (required by `vlm_row`, no default).
+- **Extraction cache.** Crash-resume re-reads and re-bills vision; a persisted encrypted cache needs schema + privacy review. The in-process memo (bounded to 8 documents) stays until then.
+- **Tier 2 (layout).** Stays an empty port; revisit after the real-PDF spike. (A model-based layout tier is not covered by the confirmed carve-out and must return to the owner first.)
+- **Vision timeout.** BUILD-SPEC 16.1 gives vision a per-page limit (worker only). It is the registry row's `timeout_seconds`; a real `vlm` row must be built with `careflow.adapters.vision.vlm_row`, where `timeout_seconds` is REQUIRED (no default). The value is the approver's decision. Also needed with a real route: the approval, a key, a data-flow-register entry and its test.
+- **Large-image threshold.** `IMAGE_COVERAGE_THRESHOLD = 0.20` (careflow/extraction.py) is a conservative technical setting, PENDING OWNER CONFIRMATION.
+- **Narrow rules-first carve-out** for image-to-text transcription (BUILD-SPEC 5.2/10.4, CLAUDE.md rule 2): CONFIRMED by the owner on 2026-10-27 (commits 91d5289, 2df1ec9). Nothing else may precede the rules; a model-based layout tier is not covered.
+
 ## Waiting for the patient portal phase
 - **Claim function**: the database enforces the BUILD-SPEC 17.2 rule (verified contact AND date of birth match) when an
   account claims a patient record. Migration 0013 only protects an existing binding.
@@ -39,6 +57,12 @@ one, delete its line in the same change. Source of the first group: the msg / ia
   clinician-reviewed labels.
 - **Minute tick, immediate poke and the 12/25/40/40 s ceilings** (BUILD-SPEC 7.3, 7.4): moved to Phase 2 package P2-1 and built there
   (`careflow/budget.py`, `careflow/tick.py`). Still open: no route calls the poke after enqueueing, and no handler exists.
+- **Documents (P2-3)**: no HTTP routes yet (the signed-upload hand-out and the register call need `/v1/staff/documents/...` routes, each with its own
+  role-matrix case in the same change, when a console or the extraction worker consumes them); a periodic reconciliation of storage against
+  `docs.documents` (an object can be orphaned only if the caller's own transaction fails to commit after a successful insert); erasure of a
+  document (DPDP) is not designed; no `audit.log` row is written on registration; the real Supabase Storage adapter, its bucket policies on
+  `storage.objects`, and a malware scanner (a pre-launch blocker, `docs/design/uploads-supabase-storage.md`). Privacy decisions flagged to the owner:
+  front desk can read every document of its clinic (it keys referral facts in by hand without a model route), and a doctor can read but not register.
 - **Per-clinic daily spend**: persisted in `ops.spend_ledger` (migration 0016) and read per origin by `careflow.spend.PostgresSpendLedger`;
   the daily ceiling has no default and arrives by configuration (owner). Still open: a ledger cannot be corrected (append-only, no negative
   amounts), so a mistaken entry needs the migrator; a reversal mechanism is a later change. The gateway is not yet constructed with the Postgres
@@ -140,3 +164,33 @@ the **thread** row, not the message row, so key rotation can never stall an esca
   carry no real data, but they appear in any dev query that does not filter on origin.
 - `audit.log` is append-only for every role (including the table owner), so any `audit.log` rows written by tests or
   scripts against a database can never be cleaned up; keep audit-writing tests inside rolled-back transactions.
+
+## P2-7 referral to identity (added with careflow/referral.py)
+- Role split for escalate vs identity insert, and a review-task path for an unassessable document screening: see docs/design/p2-7-referral-identity.md.
+- No route yet (and so no role-matrix case yet); add both in the same change when the route is built.
+
+## From the P2-3/5/6/7 spec-compliance review (2026-10-24)
+- P2-3 TOCTOU: a signed upload URL stays valid up to 600 s after `begin()`. If Supabase signed uploads can OVERWRITE an existing object, bytes could change after the verified sha256 was recorded. Unspiked (not in Appendix B yet; the owner owns BUILD-SPEC.md, so it is listed here): spike the overwrite behaviour with a real call before the adapter exists; consider single-use paths, and a re-hash in P2-4 before extraction.
+- P2-3 readiness: the design said a clinical deployment without a scanner should report not-ready. Not built (the block is inside `DocumentIntake`, fail-closed, `scanner_configured` is set by nothing). Add the readiness check when the scanner or the route lands.
+- P2-3 route design: force `registered_by` to the caller's `auth.uid()`; otherwise `register()` could delete the object at the clinic-derived path on a 42501.
+- P2-5: the wiring package (P2-8) must read facts only through `rule_value()`/`usable_by_rules` (`GroundedFact.value` is readable directly); add an end-to-end gate then. Tier 2 offers two options (`supported`/`not_supported`), not accept/verify/reject.
+- P2-6: scope keys (clinic/status) are not enforced beyond non-empty; define them with the card schema. Re-verify scope at the join (Postgres truth does not take it yet). The BM25-only version check is fixed (16782ae).
+- P2-7: extractor data-flow entry and gateway data class when the extractor is wired.
+
+## Owner decisions of 2026-10-24 on those items
+- DONE: `DocumentIntake.read_verified` re-hashes (size and sha256) before any worker gets the bytes and refuses `ContentChanged` (covers the overwrite window). Every future reader of a document MUST go through it.
+- DONE: `check_readiness(..., malware_scanner_configured=False)`: clinical (and any unrecognised profile) is not ready without a scanner; `/readyz` passes `app.state.malware_scanner_configured`, which nothing sets.
+- STAYS on the future-route list: force `registered_by` to the caller's `auth.uid()`.
+- Appendix B now lists the signed-upload overwrite/validity spike (appended, no existing text changed).
+- Retrieval scope keys: wait for the card schema.
+
+## Hosted model providers: DRAFT wording only (2026-10-29; owner has not yet answered; nothing real is built, nothing in BUILD-SPEC.md or CLAUDE.md is edited)
+Proposed reading of spec 16.5 ("models that touch patient data run locally"), for the owner to accept or change:
+- A hosted model row (any model served by a third party: a hosted vision model, a decision model reached through a router, a hosted translation service) can NEVER be `data_policy: phi_approved` without a new, written owner decision that names the provider and the data it may see.
+- Every hosted row in the model registry must therefore be `data_policy: synthetic_only`, and the gateway refuses it outside profile `demo`.
+- A free-tier hosted row is `synthetic_only` by definition (free tiers may retain or train on inputs).
+- Until the owner approves a provider for synthetic demo use, the registry keeps fakes only and no adapter is built. If approved: adapters sit behind the gateway, each row has an explicit timeout through `vlm_row`, its own data-flow-register entry and test, keys are read only from the env names in `.env.example`, and each role has a spend ceiling.
+
+## Documents routes (batch4)
+- The upload routes (`/v1/staff/documents/uploads`, `/register`) and the referral queue are built and role-matrix covered; **there is still no real `UploadPort` adapter**: it needs the Supabase Storage bucket and its `storage.objects` policy (an owner decision; stop-and-ask per CLAUDE.md) and the Appendix B signed-upload spike. Until then `document_intake` is None in the real app and the upload routes answer 503.
+- Test residue: `docs.documents` is append-only for every role, so the clinics a role-matrix run registers documents in cannot be deleted (the teardown leaves them, like confirmed patients). Nothing reads them; every suite is scoped to its own clinic.

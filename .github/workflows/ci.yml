@@ -30,7 +30,9 @@ on:
 # origin='test' rows behind in the CI project (they are tagged and harmless, and never deleted automatically).
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Pull-request runs are superseded by a newer push to the same PR. A run triggered by a push to main is NEVER cancelled: cancelling one mid-test skips the live tests' teardown
+  # and leaves committed rows in the shared CI database (how PR #3's main run was killed, and why its successors failed on tables they assumed were empty).
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -139,6 +141,10 @@ jobs:
       - name: Commit the migrator's SET membership of careflow_app
         run: uv run python scripts/ci_grant_set_role.py
 
+      # Read-only stop-gap for migration 0024: no live-origin account may hold queue_worker together with another role. The CI project's tagged origin='test' fixtures are not checked.
+      - name: Check that worker accounts hold queue_worker only
+        run: uv run python scripts/check_worker_accounts.py --origin live
+
   live:
     needs: migrate
     name: live shard ${{ matrix.shard }}
@@ -151,8 +157,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Estimated minutes at the pace of the 2026-10-24 runs. tests/test_ci_shards.py requires every live test file to appear in exactly one shard.
-          - shard: 1  # about 32 min
+          # Four shards since 2026-10-30 (PR #9's run measured 47:00, 46:56 and 38:32 with the role matrix at 30 minutes in shard 1, and the matrix grows with every route). The role matrix is the
+          # one file split across shards: `matrix_part` is "i/n", and the root conftest.py keeps only the tests of that part (a stable hash of the test id), so the two parts together run
+          # every matrix test exactly once. Each part seeds its own clinics. Every shard prints per-file times (SHARD-TIME lines) so the next rebalance uses measurements; the targets below
+          # are seconds from that run (matrix parts estimated at half of a matrix grown by this batch's routes). tests/test_ci_shards.py requires every live test file to appear in
+          # exactly one shard, except the matrix, which must appear as complete parts.
+          - shard: 1  # about 38 min: matrix part 1 (about 1200 s) + identity 393 + rotation 260 + rules 177 + read 98 + screen 97 + binding 35 + staff roles 16
+            matrix_part: "1/2"
             files: >-
               tests/test_api_role_matrix.py
               tests/test_identity_live.py
@@ -160,24 +171,41 @@ jobs:
               tests/test_api_screen_message_live.py
               tests/test_api_read_message_live.py
               tests/test_patient_binding_live.py
-          - shard: 2  # about 31 min
+              tests/test_staff_roles_concurrency_live.py
+              tests/test_rotation_live.py
+          - shard: 2  # about 37 min: matrix part 2 (about 1200 s) + queue 370 + spend 362 + scheduling 299
+            matrix_part: "2/2"
+            files: >-
+              tests/test_api_role_matrix.py
+              tests/test_queue_live.py
+              tests/test_rls_spend_and_approval_live.py
+              tests/test_scheduling_live.py
+          - shard: 3  # about 37 min: referrals 1097 + mpi worker 298 + triage 206 + checkpoints 204 + docs 194 + msg 193
+            matrix_part: ""
+            files: >-
+              tests/test_api_referrals_live.py
+              tests/test_rls_mpi_worker_live.py
+              tests/test_rls_triage_live.py
+              tests/test_rls_checkpoints_live.py
+              tests/test_rls_docs_live.py
+              tests/test_rls_msg_live.py
+          - shard: 4  # about 31 min: screenings 495 + scheduling concurrency 492 + ai registry 199 + mpi 145 + iam audit 112 + referral hold 95 + pooler 76 + migrate 58 + mpi scheduling 58 + the small ones
+            matrix_part: ""
             files: >-
               tests/test_rls_screenings_live.py
-              tests/test_queue_live.py
-              tests/test_rotation_live.py
-              tests/test_rls_msg_live.py
+              tests/test_scheduling_concurrency_live.py
+              tests/test_rls_ai_registry_live.py
               tests/test_mpi_live.py
               tests/test_rls_iam_audit_live.py
+              tests/test_rls_referral_hold_live.py
+              tests/test_pooler_graph_live.py
               tests/test_migrate_live.py
-              tests/test_api_real_token_live.py
-              tests/test_rls_child_tables_live.py
-              tests/test_rls_ai_registry_live.py
-              tests/test_rls_spend_and_approval_live.py
-          - shard: 3  # about 25 min (the 200-booking test alone may take 6 to 15)
-            files: >-
-              tests/test_scheduling_live.py
               tests/test_rls_mpi_scheduling_live.py
-              tests/test_scheduling_concurrency_live.py
+              tests/test_dead_letters_live.py
+              tests/test_api_offers_live.py
+              tests/test_triage_writers_live.py
+              tests/test_rls_child_tables_live.py
+              tests/test_api_real_token_live.py
     env:
       CAREFLOW_ENV: ci
       CAREFLOW_PROFILE: demo
@@ -203,12 +231,14 @@ jobs:
       # faulthandler_timeout (pyproject.toml) dumps all stacks if one test runs over 300 s. A skipped test is a failure here.
       # scripts/ci_peak_connections.py samples the database's backend connections in the background and prints one PEAK-CONNECTIONS line.
       - name: "Live tests, shard ${{ matrix.shard }} (a skipped test is a failure - it means a credential or migration is missing)"
+        env:
+          CAREFLOW_MATRIX_PART: ${{ matrix.matrix_part }}
         run: |
           set -o pipefail
           uv run python scripts/ci_peak_connections.py --label "shard-${{ matrix.shard }}" > peak.out 2>&1 &
           sampler=$!
           status=0
-          uv run pytest -v -rs --durations=25 -p no:cacheprovider ${{ matrix.files }} 2>&1 | tee pytest.out || status=$?
+          uv run pytest -v -rs --durations=25 --junitxml=shard-times.xml -p no:cacheprovider ${{ matrix.files }} 2>&1 | tee pytest.out || status=$?
           kill -TERM "$sampler" 2>/dev/null || true
           wait "$sampler" 2>/dev/null || true
           cat peak.out
@@ -218,18 +248,38 @@ jobs:
             exit 1
           fi
 
+      # The PEAK-CONNECTIONS line is printed inside the test step above on pass or fail. This step repeats it in the job SUMMARY on every outcome (including a cancelled or timed-out
+      # step, where the first print is never reached), so a passed shard's number is visible without opening the log. It never fails the shard.
+      - name: "Peak connections, shard ${{ matrix.shard }}"
+        if: always()
+        run: |
+          if [ -s peak.out ]; then
+            cat peak.out
+            { echo "### Peak connections, shard ${{ matrix.shard }}"; echo; echo '```'; cat peak.out; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "no PEAK-CONNECTIONS line was produced (the sampler did not run or was killed before it printed)"
+            echo "PEAK-CONNECTIONS label=shard-${{ matrix.shard }} NOT-CAPTURED" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Seconds per test FILE, from the JUnit XML, so the next rebalance of the shards starts from measurements (scripts/ci_shard_times.py; it never fails the shard).
+      - name: "Per-file times, shard ${{ matrix.shard }}"
+        if: always()
+        run: uv run python scripts/ci_shard_times.py shard-times.xml --label "shard-${{ matrix.shard }}"
+
   # The single required check. It is named `test`, as before, so branch protection does not change: it passes only if EVERY shard passed.
   test:
     if: always()
-    needs: [migrate, live]
+    needs: [secret-scan, offline, migrate, live]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Every shard must have succeeded (a cancelled or skipped shard is a failure)
+      - name: Every job must have succeeded (a cancelled or skipped job is a failure)
         run: |
+          echo "secret-scan: ${{ needs.secret-scan.result }}"
+          echo "offline (lint, structural gate, offline tests): ${{ needs.offline.result }}"
           echo "migrate: ${{ needs.migrate.result }}"
           echo "live shards: ${{ needs.live.result }}"
-          if [ "${{ needs.migrate.result }}" != "success" ] || [ "${{ needs.live.result }}" != "success" ]; then
-            echo "::error::the live gate did not fully succeed"
+          if [ "${{ needs.secret-scan.result }}" != "success" ] || [ "${{ needs.offline.result }}" != "success" ] || [ "${{ needs.migrate.result }}" != "success" ] || [ "${{ needs.live.result }}" != "success" ]; then
+            echo "::error::a required job did not succeed"
             exit 1
           fi

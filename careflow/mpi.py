@@ -35,12 +35,15 @@ Safety properties
 """
 
 import hashlib
+import json
 import re
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Final, Literal
 
+from pydantic import AliasChoices, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
@@ -156,15 +159,21 @@ def parse_date_of_birth(raw: str, *, today: date | None = None) -> date:
     return parsed
 
 
-def classify(hits: dict[uuid.UUID, set[str]]) -> tuple[Literal["match", "review", "none"], dict[uuid.UUID, str]]:
+def classify(
+    hits: dict[uuid.UUID, set[str]], unverified: frozenset[uuid.UUID] | set[uuid.UUID] = frozenset()
+) -> tuple[Literal["match", "review", "none"], dict[uuid.UUID, str]]:
     """Decide from the token kinds that agreed per existing record.
 
     Returns ("match", {id: ...}) for exactly one confident record; ("review", {id: reason}) when any
     record agrees partially or more than one agrees fully; ("none", {}) when nothing agrees.
+
+    An UNVERIFIED record (created by the unattended worker and not yet confirmed by a front-desk person; migration 0023) is never a confident match, however fully it agrees: a
+    person decides (it is reported as a near match). This is what stops a planted record, which carries a token for someone not yet registered, from capturing that person's
+    real referral silently (pre-launch blocker 10).
     """
     if not hits:
         return "none", {}
-    confident = [pid for pid, kinds in hits.items() if STRONG_IDENTIFIERS <= kinds]
+    confident = [pid for pid, kinds in hits.items() if STRONG_IDENTIFIERS <= kinds and pid not in unverified]
     if len(confident) == 1:
         return "match", {confident[0]: "match"}
     reasons = {pid: ("ambiguous" if pid in confident else "near_match") for pid in hits}
@@ -188,12 +197,21 @@ def _lock_key(clinic_id: uuid.UUID, kind: str, token: bytes) -> int:
     return int.from_bytes(digest[:8], "big", signed=True)
 
 
+Registrar = Literal["direct", "function"]
+
+
 class PatientIngestionPipeline:
-    def __init__(self, vault: DemographicVault, *, key_version: int) -> None:
+    def __init__(self, vault: DemographicVault, *, key_version: int, registrar: Registrar = "direct") -> None:
         if key_version not in vault.key_versions:
             raise ValueError(f"key_version {key_version} is not loaded in the vault {vault.key_versions}")
+        if registrar not in ("direct", "function"):
+            raise ValueError("registrar must be 'direct' or 'function'")
         self._vault = vault
         self._kv = key_version
+        # "direct": the front-desk route inserts the three tables under its own row-level-security policies (a person's authenticated request).
+        # "function": the unattended queue worker (the Front Door graph) registers through mpi.register_patient_from_referral (migration 0022), the only way it may write
+        # them: that function creates one new patient and can attach tokens or candidates to that patient only (pre-launch blocker 1).
+        self._registrar = registrar
 
     async def ingest(
         self,
@@ -247,61 +265,23 @@ class PatientIngestionPipeline:
         # 4. Look the tokens up (clinic- and origin-scoped; erased records never match) and decide. A subordinate
         #    of an ACTIVE merge counts as its master, and the identifiers of both pool together, so a merged person
         #    never looks like two confident matches (which would be "ambiguous").
-        hits = await self._find(conn, clinic_id, origin, tokens)
-        decision, reasons = classify(hits)
+        hits, unverified = await self._find(conn, clinic_id, origin, tokens)
+        decision, reasons = classify(hits, unverified)
         if decision == "match":
             return IngestResult("matched", next(iter(reasons)))
 
         # 5. Create the record, its tokens and any review rows in one savepoint.
         try:
             async with conn.begin_nested():
-                pid = (
-                    await conn.execute(
-                        text(
-                            """insert into mpi.patients
-                                   (clinic_id, name_ct, name_key_version, dob_ct, dob_key_version,
-                                    phone_ct, phone_key_version, origin, idempotency_key)
-                               values (:clinic, :name_ct, :kv, :dob_ct, :kv, :phone_ct, :phone_kv, :origin, :idem)
-                               returning id"""
-                        ),
-                        {
-                            "clinic": clinic_id,
-                            "name_ct": self._vault.encrypt(name, field="name", key_version=self._kv),
-                            "dob_ct": self._vault.encrypt(dob_iso, field="dob", key_version=self._kv),
-                            "phone_ct": None
-                            if phone_c is None
-                            else self._vault.encrypt(phone_c, field="phone", key_version=self._kv),
-                            "kv": self._kv,
-                            "phone_kv": None if phone_c is None else self._kv,
-                            "origin": origin,
-                            "idem": idempotency_key,
-                        },
+                if self._registrar == "function":
+                    pid = await self._register_via_function(
+                        conn, clinic_id=clinic_id, origin=origin, name=name, dob_iso=dob_iso, phone_c=phone_c,
+                        idempotency_key=idempotency_key, tokens=tokens, reasons=reasons, hits=hits,
                     )
-                ).scalar_one()
-                for kind, tok in tokens.items():
-                    await conn.execute(
-                        text(
-                            """insert into mpi.identity_tokens (patient_id, clinic_id, kind, token, key_version, origin)
-                               values (:p, :c, :kind, :tok, :kv, :origin)"""
-                        ),
-                        {"p": pid, "c": clinic_id, "kind": kind, "tok": tok, "kv": self._kv, "origin": origin},
-                    )
-                for other, reason in reasons.items():
-                    await conn.execute(
-                        text(
-                            """insert into mpi.match_candidates
-                                   (clinic_id, patient_id, candidate_patient_id, matched_kinds, reason, origin, idempotency_key)
-                               values (:c, :p, :other, :kinds, :reason, :origin, :idem)"""
-                        ),
-                        {
-                            "c": clinic_id,
-                            "p": pid,
-                            "other": other,
-                            "kinds": sorted(hits[other]),
-                            "reason": reason,
-                            "origin": origin,
-                            "idem": f"cand:{idempotency_key}:{other}",
-                        },
+                else:
+                    pid = await self._register_directly(
+                        conn, clinic_id=clinic_id, origin=origin, name=name, dob_iso=dob_iso, phone_c=phone_c,
+                        idempotency_key=idempotency_key, tokens=tokens, reasons=reasons, hits=hits,
                     )
         except IntegrityError as exc:
             if "idempotency_key" in str(exc.orig):
@@ -309,13 +289,84 @@ class PatientIngestionPipeline:
             raise
         except DBAPIError as exc:
             if getattr(exc.orig, "sqlstate", None) == "42501":
-                raise NotPermitted("only front desk of this clinic may register patients") from exc
+                raise NotPermitted("this role may not register patients in this clinic") from exc
             raise
         return IngestResult("review" if reasons else "created", pid, tuple(reasons))
 
+    async def _register_directly(self, conn, *, clinic_id, origin, name, dob_iso, phone_c, idempotency_key, tokens, reasons, hits) -> uuid.UUID:
+        pid = (
+            await conn.execute(
+                text(
+                    """insert into mpi.patients
+                           (clinic_id, name_ct, name_key_version, dob_ct, dob_key_version,
+                            phone_ct, phone_key_version, origin, idempotency_key)
+                       values (:clinic, :name_ct, :kv, :dob_ct, :kv, :phone_ct, :phone_kv, :origin, :idem)
+                       returning id"""
+                ),
+                self._patient_params(clinic_id, origin, name, dob_iso, phone_c, idempotency_key),
+            )
+        ).scalar_one()
+        for kind, tok in tokens.items():
+            await conn.execute(
+                text(
+                    """insert into mpi.identity_tokens (patient_id, clinic_id, kind, token, key_version, origin)
+                       values (:p, :c, :kind, :tok, :kv, :origin)"""
+                ),
+                {"p": pid, "c": clinic_id, "kind": kind, "tok": tok, "kv": self._kv, "origin": origin},
+            )
+        for other, reason in reasons.items():
+            await conn.execute(
+                text(
+                    """insert into mpi.match_candidates
+                           (clinic_id, patient_id, candidate_patient_id, matched_kinds, reason, origin, idempotency_key)
+                       values (:c, :p, :other, :kinds, :reason, :origin, :idem)"""
+                ),
+                {
+                    "c": clinic_id,
+                    "p": pid,
+                    "other": other,
+                    "kinds": sorted(hits[other]),
+                    "reason": reason,
+                    "origin": origin,
+                    "idem": f"cand:{idempotency_key}:{other}",
+                },
+            )
+        return pid
+
+    async def _register_via_function(self, conn, *, clinic_id, origin, name, dob_iso, phone_c, idempotency_key, tokens, reasons, hits) -> uuid.UUID:
+        """One call to mpi.register_patient_from_referral (migration 0022): the same values the direct path inserts, handed over together so the database can bind the tokens and
+        the candidates to the one patient it creates."""
+        params = self._patient_params(clinic_id, origin, name, dob_iso, phone_c, idempotency_key)
+        kinds = list(tokens)
+        candidates = [{"patient_id": str(other), "kinds": sorted(hits[other]), "reason": reason} for other, reason in reasons.items()]
+        return (
+            await conn.execute(
+                text(
+                    """select mpi.register_patient_from_referral(
+                           :clinic, :origin, :name_ct, cast(:kv as smallint), :dob_ct, cast(:kv as smallint), :phone_ct, cast(:phone_kv as smallint),
+                           :idem, cast(:kinds as text[]), cast(:toks as bytea[]), cast(:kv as smallint), cast(:cands as jsonb))"""
+                ),
+                {**params, "kinds": kinds, "toks": [tokens[k] for k in kinds], "cands": json.dumps(candidates)},
+            )
+        ).scalar_one()
+
+    def _patient_params(self, clinic_id, origin, name, dob_iso, phone_c, idempotency_key) -> dict:
+        return {
+            "clinic": clinic_id,
+            "name_ct": self._vault.encrypt(name, field="name", key_version=self._kv),
+            "dob_ct": self._vault.encrypt(dob_iso, field="dob", key_version=self._kv),
+            "phone_ct": None if phone_c is None else self._vault.encrypt(phone_c, field="phone", key_version=self._kv),
+            "kv": self._kv,
+            "phone_kv": None if phone_c is None else self._kv,
+            "origin": origin,
+            "idem": idempotency_key,
+        }
+
     async def _find(
         self, conn: AsyncConnection, clinic_id: uuid.UUID, origin: str, tokens: dict[str, bytes]
-    ) -> dict[uuid.UUID, set[str]]:
+    ) -> tuple[dict[uuid.UUID, set[str]], set[uuid.UUID]]:
+        """The existing records whose tokens agree, with the kinds that agreed, and which of them are UNVERIFIED (worker-created and not confirmed by front desk). A subordinate of an
+        active merge counts as its master, and so does its verification status."""
         clauses = ["(t.kind = 'name_dob' and t.token = :nd)"]
         params: dict = {"clinic": clinic_id, "kv": self._kv, "origin": origin, "nd": tokens[NAME_DOB]}
         if PHONE in tokens:
@@ -323,10 +374,13 @@ class PatientIngestionPipeline:
             params["ph"] = tokens[PHONE]
         rows = await conn.execute(
             text(
-                f"""select coalesce(mg.master_patient_id, t.patient_id) as patient_id, array_agg(distinct t.kind) as kinds
+                f"""select coalesce(mg.master_patient_id, t.patient_id) as patient_id, array_agg(distinct t.kind) as kinds,
+                           bool_or(coalesce(le.kind = 'confirm', pm.registered_via = 'front_desk')) as verified
                     from mpi.identity_tokens t
                     join mpi.patients p on p.id = t.patient_id and p.clinic_id = t.clinic_id
                     left join mpi.merges mg on mg.subordinate_patient_id = t.patient_id and mg.status = 'active'
+                    join mpi.patients pm on pm.id = coalesce(mg.master_patient_id, t.patient_id) and pm.clinic_id = t.clinic_id
+                    left join lateral (select e.kind from mpi.identity_confirmations e where e.patient_id = pm.id order by e.seq desc limit 1) le on true
                     where t.clinic_id = :clinic and t.key_version = :kv
                       and p.origin = :origin and p.erased_at is null
                       and ({' or '.join(clauses)})
@@ -334,4 +388,269 @@ class PatientIngestionPipeline:
             ),
             params,
         )
-        return {r[0]: set(r[1]) for r in rows}
+        hits: dict[uuid.UUID, set[str]] = {}
+        unverified: set[uuid.UUID] = set()
+        for pid, kinds, verified in rows:
+            hits[pid] = set(kinds)
+            if not verified:
+                unverified.add(pid)
+        return hits, unverified
+
+
+# ---- front-desk confirmation of a worker-created record (migration 0023; pre-launch blocker 10) ----------------------------------------------
+
+
+class PatientNotFound(IngestionError):
+    """No such live patient is visible to the caller (an invisible one is the same as a missing one)."""
+
+
+@dataclass(frozen=True)
+class ConfirmResult:
+    patient_id: uuid.UUID
+    replayed: bool
+
+
+async def _lock_patient_events(conn: AsyncConnection, patient_id: uuid.UUID) -> None:
+    """Serialise the confirm and revoke events of ONE patient (so `seq` order is event order and two clicks cannot interleave). Released at commit or rollback."""
+    await conn.execute(text("select pg_advisory_xact_lock(hashtextextended('identity-confirmation:' || cast(:p as text), 0))"), {"p": str(patient_id)})
+
+
+async def _latest_event(conn: AsyncConnection, patient_id: uuid.UUID) -> tuple[str, uuid.UUID, datetime] | None:
+    row = (await conn.execute(text("select kind, id, created_at from mpi.identity_confirmations where patient_id = :p order by seq desc limit 1"), {"p": patient_id})).first()
+    return None if row is None else (row[0], row[1], row[2])
+
+
+async def _event_by_key(conn: AsyncConnection, key: str) -> tuple[uuid.UUID, uuid.UUID, str] | None:
+    row = (await conn.execute(text("select patient_id, clinic_id, kind from mpi.identity_confirmations where idempotency_key = :k"), {"k": key})).first()
+    return None if row is None else (row[0], row[1], row[2])
+
+
+class RecordIsMerged(IngestionError):
+    """The patient is the subordinate of an ACTIVE merge: the matcher takes verification from the master, so an event on this record would change nothing. Act on the master."""
+
+
+async def _refuse_if_merged(conn: AsyncConnection, patient_id: uuid.UUID) -> None:
+    merged = (await conn.execute(text("select 1 from mpi.merges where subordinate_patient_id = :p and status = 'active'"), {"p": patient_id})).first()
+    if merged is not None:
+        raise RecordIsMerged("this record is merged into another; act on that record")
+
+
+def _check_write_arguments(origin: Origin, idempotency_key: str) -> None:
+    if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+        raise MissingRequiredField("an idempotency key is required on every write")
+    if origin not in ORIGINS:
+        raise ValueError(f"origin must be one of {ORIGINS}, got {origin!r}")
+
+
+async def confirm_identity(
+    conn: AsyncConnection, *, clinic_id: uuid.UUID, origin: Origin, patient_id: uuid.UUID, confirmed_by: uuid.UUID, idempotency_key: str
+) -> ConfirmResult:
+    """Record that a front-desk person confirmed this patient's identity. After this, a match on the record (if it was created by the unattended worker) is a confident match again.
+    Append-only and idempotent: the same key replays; a patient whose LATEST event is already a confirmation answers as a replay (under any key); a key used for a different patient, or
+    for a revoke, is an IdempotencyConflict. After a revoke a new confirmation is a new event (migration 0025). Row-level security (front desk of the clinic, confirmed_by = the caller)
+    is what permits the insert."""
+    _check_write_arguments(origin, idempotency_key)
+    await _lock_patient_events(conn, patient_id)
+    by_key = await _event_by_key(conn, idempotency_key)
+    if by_key is not None:
+        if by_key[0] != patient_id or by_key[1] != clinic_id or by_key[2] != "confirm":
+            raise IdempotencyConflict("this idempotency key was used for a different request")
+        return ConfirmResult(patient_id, True)
+    live = (await conn.execute(text("select 1 from mpi.patients where id = :p and clinic_id = :c and erased_at is null"), {"p": patient_id, "c": clinic_id})).first()
+    if live is None:
+        raise PatientNotFound("not found")
+    await _refuse_if_merged(conn, patient_id)
+    latest = await _latest_event(conn, patient_id)
+    if latest is not None and latest[0] == "confirm":
+        return ConfirmResult(patient_id, True)  # already confirmed: a replay in effect
+    try:
+        async with conn.begin_nested():
+            await conn.execute(
+                text(
+                    """insert into mpi.identity_confirmations (clinic_id, patient_id, confirmed_by, origin, idempotency_key, kind)
+                       values (:c, :p, :u, :o, :k, 'confirm')"""
+                ),
+                {"c": clinic_id, "p": patient_id, "u": confirmed_by, "o": origin, "k": idempotency_key},
+            )
+    except DBAPIError as exc:
+        state = getattr(exc.orig, "sqlstate", None)
+        if state == "42501":
+            raise NotPermitted("this role may not confirm identities in this clinic") from exc
+        if state == "23505":  # the key is held by a row this role cannot see (another clinic's): the same answer as a key used for a different request
+            raise IdempotencyConflict("this idempotency key was used for a different request") from exc
+        raise
+    return ConfirmResult(patient_id, False)
+
+
+# ---- revoking a mistaken confirmation (migration 0025; docs/design/identity-confirmation-revoke.md) ------------------------------------------------
+
+REVOKE_REASONS: Final = ("wrong_person", "planted_or_suspect", "mistaken_click")  # a CLOSED operational vocabulary (no free text); listed in docs/design/clinician-sheet.md
+REVOKE_TASK_KIND: Final = "identity_confirmation_revoked"
+TaskStatus = Literal["raised", "not_configured", "on_record"]
+
+
+class InvalidRevokeReason(IngestionError):
+    """The reason is not one of REVOKE_REASONS."""
+
+
+class RevokeTaskSettings(BaseSettings):
+    """The nurse review task a revoke raises. Both values are CLINICIAN-OWNED: `# CLINICAL-PLACEHOLDER: needs clinician sign-off` (docs/design/clinician-sheet.md). None = NOT
+    CONFIGURED, there is no default: the revoke itself is still recorded (it only moves the record towards 'a person decides'), the response and the audit row say the task was NOT
+    raised, and nobody is told that a re-check was queued when it was not."""
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", populate_by_name=True)
+
+    # CLINICAL-PLACEHOLDER: needs clinician sign-off  (the review task's priority: 'immediate' or 'standard')
+    priority: Literal["immediate", "standard"] | None = Field(default=None, validation_alias=AliasChoices("CAREFLOW_REVOKE_TASK_PRIORITY", "priority"))
+    # CLINICAL-PLACEHOLDER: needs clinician sign-off  (who re-checks what was linked meanwhile: 'nurse' or 'doctor')
+    assigned_role: Literal["nurse", "doctor"] | None = Field(default=None, validation_alias=AliasChoices("CAREFLOW_REVOKE_TASK_ROLE", "assigned_role"))
+
+    @property
+    def configured(self) -> bool:
+        return self.priority is not None and self.assigned_role is not None
+
+
+@dataclass(frozen=True)
+class RevokeResult:
+    patient_id: uuid.UUID
+    replayed: bool
+    review_task: TaskStatus
+
+
+async def revoke_identity(
+    conn: AsyncConnection, *, clinic_id: uuid.UUID, origin: Origin, patient_id: uuid.UUID, revoked_by: uuid.UUID, reason: str, idempotency_key: str,
+    task: RevokeTaskSettings | None = None,
+) -> RevokeResult:
+    """Record that a front-desk person revokes this patient's identity confirmation (or demotes a front-desk-created record): the record is UNVERIFIED again, so a full match on it is a
+    review, never an automatic link. Nothing already decided is undone. One person, as themselves, no step-up: a revoke only moves a record towards 'a person decides'.
+    Append-only and idempotent: the same key replays; a record that is already unverified (latest event a revoke, or a worker-created record with no confirmation) answers as a replay in
+    effect and writes nothing. Raises ONE review task for a nurse or doctor listing the patient and the window, when the task settings are configured (ids and closed words only)."""
+    _check_write_arguments(origin, idempotency_key)
+    if reason not in REVOKE_REASONS:
+        raise InvalidRevokeReason("the reason must be one of the listed words")
+    await _lock_patient_events(conn, patient_id)
+    by_key = await _event_by_key(conn, idempotency_key)
+    if by_key is not None:
+        if by_key[0] != patient_id or by_key[1] != clinic_id or by_key[2] != "revoke":
+            raise IdempotencyConflict("this idempotency key was used for a different request")
+        return RevokeResult(patient_id, True, "on_record")
+    row = (await conn.execute(text("select registered_via from mpi.patients where id = :p and clinic_id = :c and erased_at is null"), {"p": patient_id, "c": clinic_id})).first()
+    if row is None:
+        raise PatientNotFound("not found")
+    await _refuse_if_merged(conn, patient_id)
+    latest = await _latest_event(conn, patient_id)
+    verified = (latest[0] == "confirm") if latest is not None else (row[0] == "front_desk")
+    if not verified:
+        return RevokeResult(patient_id, True, "on_record")  # already unverified: nothing to revoke
+    confirmed_at = latest[2] if latest is not None else None
+    event_id = uuid.uuid4()
+    try:
+        async with conn.begin_nested():
+            await conn.execute(
+                text(
+                    """insert into mpi.identity_confirmations (id, clinic_id, patient_id, confirmed_by, origin, idempotency_key, kind, reason)
+                       values (:i, :c, :p, :u, :o, :k, 'revoke', :r)"""
+                ),
+                {"i": event_id, "c": clinic_id, "p": patient_id, "u": revoked_by, "o": origin, "k": idempotency_key, "r": reason},
+            )
+    except DBAPIError as exc:
+        state = getattr(exc.orig, "sqlstate", None)
+        if state == "42501":
+            raise NotPermitted("this role may not revoke identities in this clinic") from exc
+        if state == "23505":
+            raise IdempotencyConflict("this idempotency key was used for a different request") from exc
+        raise
+    settings = task or RevokeTaskSettings()
+    if not settings.configured:
+        return RevokeResult(patient_id, False, "not_configured")
+    provenance = {
+        "patient_id": str(patient_id), "revoke_event_id": str(event_id), "reason": reason,
+        "confirmed_at": confirmed_at.isoformat() if confirmed_at is not None else None, "record_created_by": row[0],
+    }
+    try:
+        # NO `returning` and NO `on conflict`: front desk may insert this kind of task but cannot read it, and both of those need the SELECT policy.
+        async with conn.begin_nested():
+            await conn.execute(
+                text(
+                    """insert into agents.review_tasks (id, clinic_id, origin, kind, priority, assigned_role, source_message_id, provenance, idempotency_key)
+                       values (:i, :c, :o, :kind, :pr, :role, :src, cast(:p as jsonb), :k)"""
+                ),
+                {
+                    "i": uuid.uuid4(), "c": clinic_id, "o": origin, "kind": REVOKE_TASK_KIND, "pr": settings.priority, "role": settings.assigned_role,
+                    "src": f"identity-revoke:{event_id}", "p": json.dumps(provenance, sort_keys=True), "k": f"identity-revoke-review:{event_id}",
+                },
+            )
+    except DBAPIError as exc:
+        if getattr(exc.orig, "sqlstate", None) != "23505":  # a duplicate task for this revoke event is a replay; anything else rolls the revoke back
+            raise
+    return RevokeResult(patient_id, False, "raised")
+
+
+# ---- patient lookup and the verified-status read (owner package 2026-10-30) ----------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class LookupHit:
+    patient_id: uuid.UUID
+    matched_kinds: tuple[str, ...]
+    verified: bool
+    registered_via: str
+
+
+@dataclass(frozen=True)
+class PatientStatus:
+    patient_id: uuid.UUID
+    clinic_id: uuid.UUID
+    origin: str
+    registered_via: str
+    verified: bool
+    latest_event: Literal["confirm", "revoke"] | None
+    latest_event_at: datetime | None
+    merged_into: uuid.UUID | None
+
+
+async def lookup_patients(
+    pipeline: "PatientIngestionPipeline", conn: AsyncConnection, *, clinic_id: uuid.UUID, origin: Origin, name: str, dob: str, phone: str | None
+) -> list[LookupHit]:
+    """EXACT lookup, no writes, no decryption: the same canonicalisation, the same keyed tokens and the same `_find` as registration, so what a person finds here is exactly what a registration
+    of the same details would match. It returns ids, the kinds of identifier that agreed, and whether each record is verified (front-desk created, or confirmed and not revoked). It does NOT
+    return names, dates of birth or phones: a caller who has typed them already knows them, and showing a stored one is a separate decision. An erased record never matches. A subordinate of an
+    active merge is reported as its master (as the matcher treats it)."""
+    if origin not in ORIGINS:
+        raise ValueError(f"origin must be one of {ORIGINS}, got {origin!r}")
+    if not isinstance(name, str) or not name.strip():
+        raise MissingRequiredField("name is required")
+    name = " ".join(name.split())
+    dob_iso = parse_date_of_birth(dob).isoformat()
+    phone_c = None if phone is None else canonicalize_phone(phone)
+    tokens = derive_tokens(pipeline._vault, name=name, dob_iso=dob_iso, phone_canonical=phone_c, key_version=pipeline._kv)
+    hits, unverified = await pipeline._find(conn, clinic_id, origin, tokens)
+    if not hits:
+        return []
+    sources = {
+        r[0]: r[1]
+        for r in await conn.execute(text("select id, registered_via from mpi.patients where clinic_id = :c and id = any(cast(:ids as uuid[]))"), {"c": clinic_id, "ids": list(hits)})
+    }
+    return [LookupHit(pid, tuple(sorted(kinds)), pid not in unverified, sources.get(pid, "unknown")) for pid, kinds in sorted(hits.items(), key=lambda kv: str(kv[0]))]
+
+
+async def patient_status(conn: AsyncConnection, patient_id: uuid.UUID) -> PatientStatus:
+    """Whether a record is verified, from what the caller can read (row-level security: front desk, nurse and doctor of the clinic). Raises PatientNotFound for an invisible or erased record.
+    Uses the matcher's own rule (the LATEST confirm/revoke event of the record the matcher would use: the master, for a subordinate of an active merge)."""
+    row = (
+        await conn.execute(
+            text("select p.clinic_id, p.origin, p.registered_via, m.master_patient_id from mpi.patients p left join mpi.merges m on m.subordinate_patient_id = p.id and m.status = 'active' where p.id = :i and p.erased_at is null"),
+            {"i": patient_id},
+        )
+    ).first()
+    if row is None:
+        raise PatientNotFound("not found")
+    clinic_id, origin, via, master = row
+    effective = master or patient_id
+    master_via = via
+    if master is not None:
+        found = (await conn.execute(text("select registered_via from mpi.patients where id = :i and erased_at is null"), {"i": master})).first()
+        master_via = found[0] if found is not None else "unknown"
+    latest = await _latest_event(conn, effective)
+    verified = (latest[0] == "confirm") if latest is not None else (master_via == "front_desk")
+    return PatientStatus(patient_id, clinic_id, origin, via, verified, latest[0] if latest else None, latest[2] if latest else None, master)  # type: ignore[arg-type]

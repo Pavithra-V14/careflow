@@ -185,7 +185,7 @@ def insert_sql(clinic, *, with_account=None, key=None):
 async def test_front_desk_cannot_insert_a_patient_with_an_account_id(db):
     w = await seed(db)
     assert await attempts(db, w["fd"], [insert_sql(w["a"]), insert_sql(w["a"], with_account=w["ok"])]) == ["ok:1", DENIED]
-    assert await db.fetchval("select count(*) from mpi.patients where account_id is not null") == 0
+    assert await db.fetchval("select count(*) from mpi.patients where account_id is not null and clinic_id = $1", w["a"]) == 0
 
 
 async def test_front_desk_cannot_update_account_id(db):
@@ -222,7 +222,8 @@ async def test_has_column_privilege_matrix(db):
     for c in cols:
         can_insert = await db.fetchval("select has_column_privilege('careflow_app', 'mpi.patients', $1, 'INSERT')", c)
         can_update = await db.fetchval("select has_column_privilege('careflow_app', 'mpi.patients', $1, 'UPDATE')", c)
-        assert can_insert == (c != "account_id"), ("INSERT", c)
+        # account_id (0012) and registered_via (0023) are written only by the database: the registration function and the column default; the application role has no INSERT on either
+        assert can_insert == (c not in ("account_id", "registered_via")), ("INSERT", c)
         assert can_update == (c in ALLOWED_UPDATE), ("UPDATE", c)
     assert set(NEVER_UPDATE) <= set(cols)
 

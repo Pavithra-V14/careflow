@@ -53,6 +53,10 @@ class SlotNotFound(SchedulingError):
     """No such slot, or the caller's role cannot see it."""
 
 
+class HoldNotFound(SchedulingError):
+    """No such hold, or the caller's role cannot see it."""
+
+
 class BookingNotFound(SchedulingError):
     """No such booking, or the caller's role cannot see it."""
 
@@ -79,6 +83,13 @@ class UnknownReference(SchedulingError):
 
 class NotPermitted(SchedulingError):
     """Row-level security refused the write: the caller's role may not do this."""
+
+
+@dataclass(frozen=True)
+class ReleaseResult:
+    hold_id: uuid.UUID
+    slot_id: uuid.UUID
+    replayed: bool = False
 
 
 @dataclass(frozen=True)
@@ -228,6 +239,42 @@ class SlotManager:
             self._raise_for_dbapi(exc)
             raise
         return HoldResult(row.id, slot_id, row.expires_at)
+
+    # ---- release a hold on purpose -----------------------------------------------------------------
+
+    async def release_hold(self, conn: AsyncConnection, hold_id: uuid.UUID) -> ReleaseResult:
+        """Give a slot back before its hold runs out. An ACTIVE hold becomes `released` and its slot reopens (unless another live hold exists, which the one-active-hold index forbids). A hold
+        that is already `released` answers as a replay in effect and writes nothing; a hold that was `converted` (booked) or has `expired` is an InvalidTransition, never silently reopened.
+        Row-level security decides who may do this (front desk of the clinic); a hold the caller cannot see is HoldNotFound."""
+        row = (await conn.execute(text("select slot_id from sched.holds where id = :h"), {"h": hold_id})).first()
+        if row is None:
+            raise HoldNotFound("hold not found")
+        await self._lock_slot(conn, row.slot_id)
+        await self._settle_expired_holds(conn, row.slot_id)  # a stale hold becomes `expired` first, so it cannot be released as if it were live
+        hold = (await conn.execute(text("select status from sched.holds where id = :h"), {"h": hold_id})).first()
+        if hold is None:
+            raise HoldNotFound("hold not found")
+        if hold.status == "released":
+            return ReleaseResult(hold_id, row.slot_id, replayed=True)
+        if hold.status != "active":
+            raise InvalidTransition(f"hold is {hold.status}")
+        try:
+            async with conn.begin_nested():
+                changed = (await conn.execute(text("update sched.holds set status = 'released' where id = :h and status = 'active'"), {"h": hold_id})).rowcount
+                if changed == 0:  # row-level security hid it from the update (this role may not change holds)
+                    raise NotPermitted("only front desk of the clinic may release a hold")
+                await conn.execute(
+                    text(
+                        """update sched.slots s set status = 'open'
+                           where s.id = :s and s.status = 'held'
+                             and not exists (select 1 from sched.holds h where h.slot_id = s.id and h.status = 'active')"""
+                    ),
+                    {"s": row.slot_id},
+                )
+        except DBAPIError as exc:
+            self._raise_for_dbapi(exc)
+            raise
+        return ReleaseResult(hold_id, row.slot_id)
 
     # ---- book --------------------------------------------------------------------------------------
 

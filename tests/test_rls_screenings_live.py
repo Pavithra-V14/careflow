@@ -719,8 +719,12 @@ async def test_the_function_and_trigger_lock_the_thread_row_and_use_no_advisory_
 
 async def test_record_screening_leaves_no_advisory_lock_held(db):
     w = await seed(db)
+    # Count around the CALL: seeding staff roles in this transaction takes one advisory transaction lock per account (migration 0024's trigger), held until the transaction ends. The claim
+    # under test is that record_screening itself leaves none.
+    held = "select count(*) from pg_locks where locktype = 'advisory' and pid = pg_backend_pid()"
+    before = await db.fetchval(held)
     await record(db, w, "nurse_a", w.messages["care"])
-    assert await db.fetchval("select count(*) from pg_locks where locktype = 'advisory' and pid = pg_backend_pid()") == 0
+    assert await db.fetchval(held) == before
 
 
 async def test_a_held_advisory_lock_does_not_affect_a_screening(db):
@@ -937,9 +941,13 @@ async def test_the_review_task_policy_set_is_exactly_the_expected_one(db):
     rows_ = await db.fetch("select policyname, cmd, qual, with_check from pg_policies where schemaname = 'agents' and tablename = 'review_tasks' order by policyname")
     assert [r["policyname"] for r in rows_] == ["review_tasks_insert", "review_tasks_select", "review_tasks_update"]
     for r in rows_:
-        if r["policyname"] != "review_tasks_update":
+        if r["policyname"] == "review_tasks_select":
             expr = (r["qual"] or r["with_check"]).lower()
-            assert "unmerge_review" in expr and "queue_worker" in expr and "front_desk" in expr and "admin" in expr
+            assert "unmerge_review" in expr and "queue_worker" in expr and "front_desk" in expr and "admin" in expr  # admin still READS unmerge reviews
+        if r["policyname"] == "review_tasks_insert":
+            expr = (r["qual"] or r["with_check"]).lower()
+            assert "unmerge_review" in expr and "queue_worker" in expr and "front_desk" in expr and "mpi.merges" in expr  # front desk's clause is bound to a real unmerge (0026)
+            assert "'admin'" not in expr  # admin never creates a task
 
 
 async def test_front_desk_and_admin_cannot_read_message_sourced_tasks_but_clinical_staff_and_workers_can(db):
@@ -957,27 +965,73 @@ async def test_front_desk_cannot_select_a_red_flag_task_through_a_screening_join
     assert len(seen) == 1 and seen[0]["review_task_id"] is not None and seen[0]["kind"] is None  # the id is visible, the task is not
 
 
-def _task_insert(w, kind):
+def _task_insert(w, kind, *, key=None, source="merge:1", role="nurse", status="open"):
     return (
-        "insert into agents.review_tasks (clinic_id, origin, kind, priority, assigned_role, source_message_id, provenance, idempotency_key) "
-        f"values ('{w.a}', 'test', '{kind}', 'immediate', 'nurse', 'merge:1', '{{}}', 'ti-{_u()}')"
+        "insert into agents.review_tasks (clinic_id, origin, kind, priority, assigned_role, source_message_id, provenance, idempotency_key, status) "
+        f"values ('{w.a}', 'test', '{kind}', 'immediate', '{role}', '{source}', '{{}}', '{key or f'ti-{_u()}'}', '{status}')"
     )
 
 
-async def test_front_desk_and_admin_can_insert_only_unmerge_review_and_clinical_staff_any_kind(db):
+async def add_unmerged(conn, w, by, clinic=None, *, activated=True):
+    """An UNMERGED link written by the owner: two patients, the candidate row that put them in front of a person, and the merge. Returns the merge id."""
+    clinic = clinic or w.a
+    pa, pb, cand, merge = _u(), _u(), _u(), _u()
+    for pid in (pa, pb):
+        await conn.execute(
+            "insert into mpi.patients (id, clinic_id, name_ct, name_key_version, dob_ct, dob_key_version, origin, idempotency_key) "
+            f"values ('{pid}', '{clinic}', {CT}, 1, {CT}, 1, '{w.origin}', 'p-{pid}')"
+        )
+    await conn.execute(
+        "insert into mpi.match_candidates (id, clinic_id, patient_id, candidate_patient_id, matched_kinds, reason, origin, idempotency_key) "
+        f"values ('{cand}', '{clinic}', '{pa}', '{pb}', array['phone'], 'near_match', '{w.origin}', 'c-{cand}')"
+    )
+    await conn.execute(
+        "insert into mpi.merges (id, clinic_id, master_patient_id, subordinate_patient_id, candidate_id, status, approved_by, second_approved_by, activated_at, unmerged_at, unmerged_by, "
+        "origin, idempotency_key, unmerge_idempotency_key) "
+        f"values ('{merge}', '{clinic}', '{pa}', '{pb}', '{cand}', 'unmerged', '{w.people['admin_a']}', {repr(str(w.people['nurse_a'])) if activated else 'null'}, {'now()' if activated else 'null'}, now(), '{by}', '{w.origin}', 'm-{merge}', 'u-{merge}')"
+    )
+    return merge
+
+
+async def test_front_desk_can_insert_only_the_task_of_its_own_unmerge_clinical_staff_any_kind_and_admin_nothing(db):
     w = await seed(db)
-    for who in ("fd_a", "admin_a"):
-        out = await attempts(db, w.people[who], [_task_insert(w, "unmerge_review"), _task_insert(w, "red_flag"), _task_insert(w, "screening_unassessable"), _task_insert(w, "anything_new")])
-        assert out == ["ok:1", "err:42501", "err:42501", "err:42501"], who
+    mine, someone_elses = await add_unmerged(db, w, w.people["fd_a"]), await add_unmerged(db, w, w.people["nurse_a"])
+    cancelled = await add_unmerged(db, w, w.people["fd_a"], activated=False)
+    bound = lambda merge, **o: _task_insert(w, "unmerge_review", key=f"unmerge-review:{merge}", source=f"merge:{merge}", **o)
+    out = await attempts(
+        db, w.people["fd_a"],
+        [
+            bound(mine),  # the shape careflow/identity.py writes, for a merge this person unmerged
+            _task_insert(w, "unmerge_review"),  # any other key: not bound to a merge
+            _task_insert(w, "unmerge_review", key="redflag:squat", source=f"merge:{mine}"),  # a predictable key of another writer (key squatting)
+            bound(someone_elses),  # a real unmerge, but by somebody else
+            bound(_u()),  # no such merge
+            bound(cancelled),  # a cancelled proposal that was never active raised no task in the real writer
+            bound(mine, role="doctor"),  # only a nurse
+            bound(mine, status="resolved"),  # a new task is open
+            _task_insert(w, "red_flag"), _task_insert(w, "screening_unassessable"), _task_insert(w, "anything_new"),
+        ],
+    )
+    assert out == ["ok:1"] + ["err:42501"] * 10
+    # admin can read unmerge reviews but never creates one, even naming a merge it supposedly unmerged
+    admin_merge = await add_unmerged(db, w, w.people["admin_a"])
+    assert await attempts(db, w.people["admin_a"], [bound(admin_merge), _task_insert(w, "unmerge_review")]) == ["err:42501", "err:42501"]
     for who in ("nurse_a", "doctor_a", "worker_a"):
         assert await attempts(db, w.people[who], [_task_insert(w, "anything_new")]) == ["ok:1"], who
-    assert await attempts(db, w.people["auditor_a"], [_task_insert(w, "unmerge_review")]) == ["err:42501"]
+    assert await attempts(db, w.people["auditor_a"], [bound(mine)]) == ["err:42501"]
+    # front desk of ANOTHER clinic cannot use this clinic's merge
+    assert await attempts(db, w.people["fd_b"], [bound(mine)]) == ["err:42501"]
 
 
 async def test_insert_returning_works_for_each_role_after_the_policy_swap(db):
     w = await seed(db)
-    for who, kind in (("nurse_a", "red_flag"), ("doctor_a", "red_flag"), ("worker_a", "red_flag"), ("fd_a", "unmerge_review"), ("admin_a", "unmerge_review")):
-        assert await attempts(db, w.people[who], [_task_insert(w, kind) + " returning id, kind"]) == ["ok:1"], who
+    mine = await add_unmerged(db, w, w.people["fd_a"])
+    returning = " returning id, kind"
+    for who, sql in (
+        ("nurse_a", _task_insert(w, "red_flag")), ("doctor_a", _task_insert(w, "red_flag")), ("worker_a", _task_insert(w, "red_flag")),
+        ("fd_a", _task_insert(w, "unmerge_review", key=f"unmerge-review:{mine}", source=f"merge:{mine}")),
+    ):
+        assert await attempts(db, w.people[who], [sql + returning]) == ["ok:1"], who
 
 
 # =====================================================================================================================

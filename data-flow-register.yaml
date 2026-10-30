@@ -67,3 +67,35 @@ calls:
     status: proposed
     appendix_b: "Session-mode pooler holds a session-level advisory lock: RESOLVED from a developer machine and from a GitHub-hosted runner (GitHub Actions run 36845835671, commit 6da1ca5, 2026-10-01), as BUILD-SPEC.md Appendix B records"
     notes: "Refuses the transaction-mode port (6543) because the advisory lock needs one backend across statements."
+
+  # langgraph pulls in langsmith, a hosted-tracing client. It is present on disk and MUST stay off: careflow/front_door.py refuses to build the graph, and refuses
+  # to run any node, if LANGSMITH_TRACING or LANGCHAIN_TRACING_V2 is on, and pins both to "false" when unset.
+  - id: langsmith-tracing-disabled
+    service: LangSmith (hosted tracing, a transitive dependency of langgraph)
+    host: "api.smith.langchain.com (never called)"
+    source: careflow/front_door.py
+    data_sent: "Nothing, while tracing is off. If it were on, every graph input and output (ids and statuses in our design) would leave the process."
+    data_class: none
+    data_policy: synthetic_only
+    permitted_in_clinical: false
+    approved_by: null
+    approved_on: null
+    status: retired
+    appendix_b: null
+    notes: "Not a service we use. Listed so nobody turns it on: refused at build time and at every node (tests/test_front_door.py, tests/test_front_door_structure.py)."
+
+  # The official MCP Python SDK (approved 2026-10-27/28: pinned, in-process only, no network transport). It ships HTTP/SSE/stdio transports and a server stack (starlette, uvicorn,
+  # sse-starlette, python-multipart) that this project NEVER constructs: servers are called through the in-memory transport (`mcp.client.Client(server)`) in the same process.
+  - id: mcp-sdk-in-process-only
+    service: MCP Python SDK (in-process tool servers; no transport is opened)
+    host: "none (in-memory streams inside the process)"
+    source: careflow/mcp_kit.py
+    data_sent: "Nothing leaves the process. Tool arguments and results (ids and closed words) pass through memory streams between the client and the server objects."
+    data_class: none
+    data_policy: synthetic_only
+    permitted_in_clinical: false
+    approved_by: null
+    approved_on: null
+    status: retired
+    appendix_b: null
+    notes: "Not an external call. Listed so a network transport is never wired by accident: tests/test_scheduling_agent.py::test_calling_a_server_in_process_opens_no_socket and the spike's tripwire test (docs/design/phase3-mcp-spike.md) pin it."

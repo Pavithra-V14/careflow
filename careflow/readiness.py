@@ -53,14 +53,18 @@ def check_readiness(
     required_roles: Collection[str] | None,
     *,
     wired: Collection[tuple[str, str]] | None = None,
+    malware_scanner_configured: bool = False,
 ) -> Readiness:
-    """`registry` is None when it could not be read. `wired` (optional) is the set of (provider, model_id) that have an adapter."""
+    """`registry` is None when it could not be read. `wired` (optional) is the set of (provider, model_id) that have an adapter.
+    `malware_scanner_configured` is False unless a scanner is really wired (BUILD-SPEC.md 11.5): `clinical` is NOT ready without one, whatever the
+    registry says. Uploads are separately refused outside `demo` by careflow.documents; this makes the same fact visible to the platform probe."""
     if profile == "demo":
         return Readiness(True, "demo")
-    if profile != "clinical":
-        profile_note = "unrecognised profile treated as clinical"
-        return _clinical(registry, required_roles, wired, extra=(profile_note,))
-    return _clinical(registry, required_roles, wired)
+    extra = () if profile == "clinical" else ("unrecognised profile treated as clinical",)
+    result = _clinical(registry, required_roles, wired, extra=extra)
+    if malware_scanner_configured:
+        return result
+    return Readiness(False, "clinical", result.missing_roles, (*result.reasons, "no malware scanner is configured for uploads"))
 
 
 def _clinical(registry, required_roles, wired, extra: tuple[str, ...] = ()) -> Readiness:
