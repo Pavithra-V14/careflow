@@ -112,6 +112,7 @@ ROUTES = {
     "resolve_review_task": "review_task.resolve",
     "send_offer_route": "offer.send",
     "release_hold_route": "hold.release",
+    "search_patients": "patient.search",
     "register_document": "document.register",
 }
 

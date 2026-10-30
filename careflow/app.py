@@ -1619,7 +1619,7 @@ def _load_vault() -> DemographicVault | None:
 #
 # SEARCH is an exact, read-only lookup by the same keyed tokens registration uses: the caller types a name and date of birth (and optionally a phone) and gets ids, the kinds of identifier that
 # agreed and whether each record is verified. It returns NO name, date of birth or phone (what the caller typed they already know; showing a stored value is a separate decision), writes
-# nothing, and is not audited (existence only; the owner may want search reads logged: noted in the frontend contract). Front desk only (they register). STATUS tells a front-desk person, nurse
+# nothing, and writes ONE audit row per search: who, role, the kind of search and the result count, never the query text or the results. Front desk only (they register). STATUS tells a front-desk person, nurse
 # or doctor whether one record is verified and why; the confirm and revoke buttons need it.
 
 
@@ -1673,6 +1673,11 @@ async def search_patients(body: PatientSearchIn, conn: TxConn, request: Request,
         raise HTTPException(status_code=422, detail="a required field is missing or blank") from None
     except UnicodeError:
         raise HTTPException(status_code=422, detail="the name contains characters that cannot be stored") from None
+    # One audit row per search: who, role, the KIND of search and how many results. Never the query text and never the results (owner decision 2026-10-30).
+    await write_audit(
+        conn, clinic_id=body.clinic_id, origin=origin, actor_id=uuid.UUID(claims["sub"]), actor_role="front_desk", action="patient.search", resource_type="clinic", resource_id=body.clinic_id,
+        details={"kind": "name_dob_phone" if body.phone else "name_dob", "results": len(hits)}, idempotency_key=f"audit:patient-search:{uuid.uuid4()}",
+    )
     return PatientSearchOut(
         items=[PatientHitOut(patient_id=h.patient_id, matched_kinds=list(h.matched_kinds), verified=h.verified, registered_via=h.registered_via) for h in hits]  # type: ignore[arg-type]
     )

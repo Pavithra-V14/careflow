@@ -2454,6 +2454,14 @@ def test_a_registered_person_is_found_by_exact_details_with_flags_only_and_a_wor
     assert pid not in [i["patient_id"] for i in nobody.json()["items"]]
     status = client.get(PATIENT_STATUS.format(patient_id=pid), headers=headers)
     assert status.status_code == 200 and status.json()["verified"] is True and status.json()["registered_via"] == "front_desk"
+    # one audit row per search that reached the lookup: who, role, the KIND of search and the result count; never the query text or the results
+    rows = _run(_fetch("select actor_id, actor_role, details, resource_id from audit.log where action = 'patient.search' and clinic_id = $1 order by id", ids.clinic_a))
+    assert len(rows) >= 3 and all((r["actor_id"], r["actor_role"]) == (fd, "front_desk") for r in rows)
+    parsed = [json.loads(r["details"]) if isinstance(r["details"], str) else r["details"] for r in rows]
+    assert {"kind": "name_dob_phone", "results": 1} in parsed and {"kind": "name_dob", "results": 1} in parsed and {"kind": "name_dob_phone", "results": 0} in parsed
+    assert all(set(d) == {"kind", "results"} for d in parsed)
+    blob = json.dumps([[str(r["resource_id"]), d] for r, d in zip(rows, parsed, strict=True)])
+    assert person["name"] not in blob and person["dob"] not in blob and person["phone"] not in blob and pid not in blob
 
 
 def test_releasing_a_hold_reopens_its_slot_writes_one_audit_row_and_the_slot_can_be_held_again(client, ids):
