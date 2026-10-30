@@ -97,6 +97,28 @@ The backend should give the console typed shapes instead of free text, so the UI
 Until then the console shows only the `status` word of an envelope, never `reason` or `data`, and marks candidate details and
 sending "Coming soon".
 
+### 7. F4: questions the referral decision, revoke and merge screens raised
+
+All three screens are built to the snapshot; these are the places where the schema does not say enough.
+
+- **What "edit" records.** `POST /v1/staff/referrals/{id}/review` takes only `decision` (`approve`, `edit`, `reject`). The console
+  records the word and nothing else: there is no field for what was edited or why. If "edit" is meant to carry content, the
+  route needs a body for it first. No reason is collected or sent (a clinician defines reason codes; the screen shows
+  "PLACEHOLDER - clinician to define").
+- **What `review_task: on_record` means.** The revoke response is `raised`, `not_configured` or `on_record`. The console shows
+  "A review task was raised.", "No review task was raised: the task settings are not configured yet." and "A review task is
+  already on record." The third wording is my reading of the word; please confirm it.
+- **The revoke reasons are not final.** The route accepts `wrong_person`, `planted_or_suspect`, `mistaken_click`
+  (`docs/design/identity-confirmation-revoke.md` leaves the list open). The console shows them as given, in English in both
+  languages, with a marked placeholder saying the wording is not final.
+- **Merge approve and unmerge are built but OFF.** `mergeActions` is a compile-time flag that is false in every build except
+  `--mode e2e` (the mock browser build), pinned by tests. It stays off until the `aal` / `amr` claim shape has been seen in a
+  real token (`docs/design/step-up-spike.md`). Turning it on is a one-line change in `vite.config.ts` plus the test that pins it.
+- **Unmerge result.** `decisions_flagged` is shown as a count ("N earlier decisions were flagged for review."). Please confirm
+  that is what it counts, since the wording appears to staff.
+- **No propose-merge screen.** `POST /v1/staff/merges` exists but F4 does not build it (not asked for). A proposal made
+  elsewhere appears in the merge list as "Awaiting second approval".
+
 ## Decisions recorded here for later readers
 
 - **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;

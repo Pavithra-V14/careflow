@@ -17,21 +17,23 @@ export const DECISIONS: readonly ReviewDecision[] = ['approve', 'edit', 'reject'
  * A reviewer's decision on a triage proposal (nurse and doctor). Nothing is chosen for the person, nothing is written
  * until they confirm, and the reasons the clinician will eventually define appear only as a marked placeholder: the
  * route takes a decision and nothing else, so no reason is collected or sent.
+ *
+ * The result is reported through `onDone`: once recorded the referral reads as decided and the page stops rendering this form,
+ * so a message held in here would vanish with it.
  */
-export function ReferralReview({ documentId }: { documentId: string }) {
+export function ReferralReview({ documentId, onDone }: { documentId: string; onDone: () => void }) {
   const { t } = useTranslation();
   const { api } = useAuth();
   const queryClient = useQueryClient();
   const id = useId();
   const [choice, setChoice] = useState<ReviewDecision | null>(null);
   const [confirming, setConfirming] = useState(false);
-  const [done, setDone] = useState(false);
 
   const record = useIdempotentWrite(
     (decision: ReviewDecision, key) => unwrap(api.reviewReferral(documentId, decision, { idempotencyKey: key })),
     () => {
       setConfirming(false);
-      setDone(true);
+      onDone();
       void queryClient.invalidateQueries();
     },
   );
@@ -40,43 +42,37 @@ export function ReferralReview({ documentId }: { documentId: string }) {
   return (
     <>
       <h2>{t('referrals.review.title')}</h2>
-      {done ? (
-        <p role="status" className="state state-ok">
-          {t('referrals.review.done')}
-        </p>
-      ) : (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (choice) setConfirming(true);
-          }}
-        >
-          <p className="hint">{t('referrals.review.help')}</p>
-          <fieldset>
-            <legend>{t('referrals.review.legend')}</legend>
-            {DECISIONS.map((d) => (
-              <label key={d} className="choice">
-                <input
-                  type="radio"
-                  name={id}
-                  value={d}
-                  checked={choice === d}
-                  onChange={() => {
-                    setChoice(d);
-                    record.reset(); // a different decision is a different request: never reuse the old key
-                  }}
-                />
-                <span>{t(`referrals.decision.${d}`)}</span>
-              </label>
-            ))}
-          </fieldset>
-          <h3>{t('referrals.review.reasons')}</h3>
-          <PlaceholderNote>{t('placeholder.reviewReasons')}</PlaceholderNote>
-          <button type="submit" className="primary" disabled={choice === null}>
-            {t('referrals.review.record')}
-          </button>
-        </form>
-      )}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (choice) setConfirming(true);
+        }}
+      >
+        <p className="hint">{t('referrals.review.help')}</p>
+        <fieldset>
+          <legend>{t('referrals.review.legend')}</legend>
+          {DECISIONS.map((d) => (
+            <label key={d} className="choice">
+              <input
+                type="radio"
+                name={id}
+                value={d}
+                checked={choice === d}
+                onChange={() => {
+                  setChoice(d);
+                  record.reset(); // a different decision is a different request: never reuse the old key
+                }}
+              />
+              <span>{t(`referrals.decision.${d}`)}</span>
+            </label>
+          ))}
+        </fieldset>
+        <h3>{t('referrals.review.reasons')}</h3>
+        <PlaceholderNote>{t('placeholder.reviewReasons')}</PlaceholderNote>
+        <button type="submit" className="primary" disabled={choice === null}>
+          {t('referrals.review.record')}
+        </button>
+      </form>
 
       {confirming && choice && (
         <ConfirmDialog

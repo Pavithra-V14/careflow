@@ -77,6 +77,23 @@ describe('referral review decision (nurse, doctor)', () => {
     expect(Object.keys(writes(calls)[0]?.body as object)).toEqual(['decision']);
   });
 
+  it('keeps the success message after the referral refreshes to decided and the form disappears (regression)', async () => {
+    const user = userEvent.setup();
+    let decided = false;
+    const get: Routes[number] = ['get', `/v1/staff/referrals/${ID.doc}`, () => json(detail({ decided }))];
+    const post: Routes[number] = ['post', reviewPath, () => {
+      decided = true; // the next read of the referral says a decision exists
+      return json({ decision: 'approve', document_id: ID.doc, replayed: false });
+    }];
+    await openConsole({ role: 'nurse', hash: `/referrals/${ID.doc}`, routes: [get, post] });
+    await user.click(await screen.findByRole('radio', { name: 'Approve' }));
+    await user.click(screen.getByRole('button', { name: 'Record decision' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Record decision' }));
+    await waitFor(() => expect(screen.queryByRole('group', { name: 'Decision' })).toBeNull()); // refreshed, the form is gone
+    expect(screen.getByText('The decision was recorded.')).toBeInTheDocument();
+    expect(screen.queryByText('A decision has already been recorded.')).toBeNull(); // not replaced by the generic note
+  });
+
   it('retries a failed record with the SAME key, but a changed decision is a new request with a new key', async () => {
     const user = userEvent.setup();
     const { calls } = await openConsole({ role: 'nurse', hash: `/referrals/${ID.doc}`, routes: [detailRoute(), review([503, 503, 200])] });
@@ -169,6 +186,23 @@ describe('identity revoke (front desk)', () => {
     await user.click(within(screen.getByRole('dialog')).getByRole('radio', { name: 'Mistaken click' }));
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Revoke confirmation' }));
     expect(await screen.findByText(message)).toBeInTheDocument();
+  });
+
+  it('keeps the success message after the record refreshes to unverified and the revoke control disappears (regression)', async () => {
+    const user = userEvent.setup();
+    let verified = true;
+    const route: Routes[number] = ['get', `/v1/staff/patients/${ID.patient}`, () => json(status({ verified }))];
+    const post: Routes[number] = ['post', revokePath, () => {
+      verified = false; // the next read of the record says unverified
+      return json({ confirmed: false, patient_id: ID.patient, replayed: false, review_task: 'raised' });
+    }];
+    await openConsole({ hash: `/patients/${ID.patient}`, routes: [route, post] });
+    await user.click(await screen.findByRole('button', { name: 'Revoke confirmation' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('radio', { name: 'Wrong person' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Revoke confirmation' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Revoke confirmation' })).toBeNull()); // refreshed, now unverified
+    expect(screen.getByText('The confirmation was revoked.')).toBeInTheDocument();
+    expect(screen.getByText('A review task was raised.')).toBeInTheDocument();
   });
 
   it('never reads an unknown review-task word as "raised"', async () => {

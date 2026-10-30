@@ -78,6 +78,24 @@ nothing is pre-selected; no clinical, consent or legal wording (marked placehold
   tests use fake Supabase and API hosts (`e2e/mockBackend.ts`, `e2e/consoleApi.ts`). Fields the snapshot lacks (patient search
   `label`, `labels_withheld`, `truncated`) are mock-only guesses; see `../docs/frontend-backend-requests.md` item 5.
 
+## F4: decisions, identity and merges
+
+| Screen | Who | Routes | State |
+|---|---|---|---|
+| Referral decision (approve, edit, reject) on the referral detail | nurse, doctor | `POST /v1/staff/referrals/{id}/review` | built, mock-only |
+| Revoke an identity confirmation on the patient record | front desk | `POST /v1/staff/patients/{id}/revoke-identity` | built, mock-only |
+| Possible duplicates, merges, one merge (read-only) | duplicates: front desk; merges: front desk, nurse, doctor | `GET /v1/staff/identity/possible-duplicates`, `.../merges`, `.../merges/{id}` | built, mock-only |
+| Merge approve and unmerge | front desk | `POST /v1/staff/merges/{id}/approve`, `.../unmerge` | built, **OFF** behind `mergeActions`, mock-only |
+
+Rules: nothing is chosen for the person and nothing is written before a confirmation; the decision and revoke-reason word lists
+are copied from the schema and pinned to it (`tests/f4-schema.test.ts`); decision reasons are only a marked placeholder and none
+is sent; a cancelled step-up says "a fresh code is needed, nothing was changed" and does not sign the person out.
+
+**The merge-actions flag** (`src/staff/featureFlags.ts`, `mergeActionsEnabled()`) is a compile-time constant set in
+`vite.config.ts`: true only for `vite build --mode e2e`, the build the browser tests use, and false for development and
+production. It is not an environment variable of any name (`tests/flags.test.ts` plants several and checks). Turn it on only after
+the step-up claim spike is recorded.
+
 ### Remaining prerequisites for a LIVE sign-in test against the dev project
 
 1. `frontend/.env.local` in place with `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` and `CAREFLOW_API_BASE_URL` (you create it).

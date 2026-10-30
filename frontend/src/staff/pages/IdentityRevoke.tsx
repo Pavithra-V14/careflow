@@ -18,19 +18,24 @@ export const REVOKE_REASONS: readonly RevokeReason[] = ['wrong_person', 'planted
 type TaskOutcome = components['schemas']['RevokeIdentityOut']['review_task'];
 const isOutcome = (v: unknown): v is TaskOutcome => v === 'raised' || v === 'not_configured' || v === 'on_record';
 
-export function IdentityRevoke({ patientId }: { patientId: string }) {
+export type RevokeOutcome = TaskOutcome | 'unknown';
+
+/**
+ * The result is reported through `onDone`, not shown here: after a revoke the record is no longer verified, so the page stops
+ * rendering this control, and a message held inside it would vanish with it.
+ */
+export function IdentityRevoke({ patientId, onDone }: { patientId: string; onDone: (outcome: RevokeOutcome) => void }) {
   const { t } = useTranslation();
   const { api } = useAuth();
   const queryClient = useQueryClient();
   const id = useId();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<RevokeReason | null>(null);
-  const [outcome, setOutcome] = useState<TaskOutcome | 'unknown' | null>(null);
 
   const revoke = useIdempotentWrite(
     (r: RevokeReason, key) => unwrap(api.revokeIdentity(patientId, r, { idempotencyKey: key })),
     (result) => {
-      setOutcome(isOutcome(result.review_task) ? result.review_task : 'unknown'); // an unknown word is never read as "raised"
+      onDone(isOutcome(result.review_task) ? result.review_task : 'unknown'); // an unknown word is never read as "raised"
       setOpen(false);
       void queryClient.invalidateQueries();
     },
@@ -39,12 +44,6 @@ export function IdentityRevoke({ patientId }: { patientId: string }) {
   const problem = revoke.error;
   return (
     <>
-      {outcome && (
-        <div role="status" className="state state-ok">
-          <p>{t('patients.revoke.done')}</p>
-          {outcome !== 'unknown' && <p>{t(`patients.revoke.task.${outcome}`)}</p>}
-        </div>
-      )}
       <div className="toolbar">
         <button
           type="button"
