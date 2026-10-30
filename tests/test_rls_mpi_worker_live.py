@@ -492,7 +492,7 @@ async def test_only_front_desk_of_the_clinic_can_confirm_and_only_as_themselves_
     assert await confirm_as(db, p["fd_a"], b, target) == "23514"  # the wrong clinic id for this patient
     key = f"conf-{_u()}"
     assert await confirm_as(db, p["fd_a"], a, target, key=key) == 1  # positive control: the right caller, the right clinic, as themselves
-    assert await confirm_as(db, p["fd_a"], a, target) == "23505"  # one confirmation per patient
+    assert await confirm_as(db, p["fd_a"], a, target, key=key) == "23505"  # the same idempotency key cannot be used twice (since 0025 a LATER confirmation under a new key is a new event)
     row = (await db.execute(text("select id, confirmed_by from mpi.identity_confirmations where patient_id = :p"), {"p": target})).one()
     assert row.confirmed_by == p["fd_a"]
     # append-only for everyone, the owner included
@@ -529,3 +529,120 @@ async def test_a_queue_worker_cannot_hold_another_role_and_nobody_else_can_becom
     assert await owner_sqlstate(db, "update iam.staff_roles set role = 'nurse' where account_id = :u and role = 'queue_worker' and clinic_id = :c", u=worker_a, c=b) == "23514"
     survivors = (await db.execute(text("select count(distinct role) from iam.staff_roles where account_id = :u and revoked_at is null"), {"u": worker_a})).scalar_one()
     assert survivors == 1  # the worker still holds exactly one distinct role
+
+
+# ---- migration 0025: revoking a confirmation (an append-only event log; the latest event wins) -----------------------------------------------------
+
+# test inputs only: stand-ins for the clinician-owned task settings, not recommendations
+REVOKE_TASK = mpi.RevokeTaskSettings(_env_file=None, priority="standard", assigned_role="nurse")  # type: ignore[call-arg]
+
+
+async def revoke_as(conn, uid, clinic, patient, *, reason="wrong_person", key=None, task=REVOKE_TASK):
+    """Run mpi.revoke_identity as `uid`: its result, or the SQLSTATE-ish word of a refusal."""
+    try:
+        async with conn.begin_nested():
+            await as_user(conn, uid)
+            try:
+                return await mpi.revoke_identity(
+                    conn, clinic_id=clinic, origin="test", patient_id=patient, revoked_by=uid, reason=reason, idempotency_key=key or f"rev-{_u()}", task=task
+                )
+            finally:
+                await conn.exec_driver_sql("reset role")
+    except mpi.NotPermitted:
+        return "42501"
+    except mpi.PatientNotFound:
+        return "not_found"  # the patient is invisible to this role (another clinic)
+    except DBAPIError as exc:
+        return getattr(exc.orig, "sqlstate", None)
+
+
+async def test_a_revoke_makes_the_next_full_match_a_review_and_a_later_confirmation_restores_matching(db, pipeline, direct_pipeline):
+    a, _, p = await seed(db)
+    other = {"name": "Ravi Shankar", "dob": "1979-06-30", "phone": "+91 97000 11122"}
+    first = await ingest(db, pipeline, p["worker_a"], a, idempotency_key="referral:rv-1", **other)
+    assert await confirm_as(db, p["fd_a"], a, first.patient_id) == 1
+    assert (await ingest(db, pipeline, p["worker_a"], a, idempotency_key="referral:rv-2", **other)).outcome == "matched"  # confirmed: matches normally
+    revoked = await revoke_as(db, p["fd_a"], a, first.patient_id)
+    assert (revoked.replayed, revoked.review_task) == (False, "raised")
+    after = await ingest(db, pipeline, p["worker_a"], a, idempotency_key="referral:rv-3", **other)
+    assert after.outcome == "review" and after.candidate_ids == (first.patient_id,)  # unverified again: a person decides
+    assert await confirm_as(db, p["fd_a"], a, first.patient_id) == 1  # a second confirmation after the revoke is a NEW event (no unique per patient since 0025)
+    assert (await ingest(db, pipeline, p["worker_a"], a, idempotency_key="referral:rv-4", **other)).outcome == "matched"
+    # a record created by front desk can be demoted too
+    desk = await ingest(db, direct_pipeline, p["fd_a"], a, name="Meera Nair", phone="+91 90000 00001")
+    assert (await ingest(db, pipeline, p["worker_a"], a, idempotency_key="referral:rv-5", name="Meera Nair", phone="+91 90000 00001", dob=DOB)).outcome == "matched"
+    assert (await revoke_as(db, p["fd_a"], a, desk.patient_id)).replayed is False
+    assert (await ingest(db, pipeline, p["worker_a"], a, idempotency_key="referral:rv-6", name="Meera Nair", phone="+91 90000 00001", dob=DOB)).outcome == "review"
+    # nothing was undone: the earlier links are untouched, and a revoke of an already unverified record writes nothing
+    before = await count(db, "mpi.identity_confirmations", a)
+    again = await revoke_as(db, p["fd_a"], a, desk.patient_id)
+    assert (again.replayed, again.review_task) == (True, "on_record") and await count(db, "mpi.identity_confirmations", a) == before
+
+
+async def test_only_front_desk_of_the_clinic_can_revoke_as_themselves_with_a_listed_reason_and_the_task_is_for_nurses_only(db, pipeline):
+    a, b, p = await seed(db)
+    target = (await ingest(db, pipeline, p["worker_a"], a)).patient_id
+    assert await confirm_as(db, p["fd_a"], a, target) == 1
+    insert = "insert into mpi.identity_confirmations (clinic_id, patient_id, confirmed_by, origin, idempotency_key, kind, reason) values (:c, :p, :u, 'test', :k, :kind, :r)"
+
+    async def raw_event(uid, *, clinic=a, by=None, kind="revoke", reason="wrong_person"):
+        return await attempt(db, uid, insert, c=clinic, p=target, u=by or uid, k=f"ev-{_u()}", kind=kind, r=reason)
+
+    assert await raw_event(p["nurse_a"]) == "42501" and await raw_event(p["worker_a"]) == "42501"  # they can see the patient; row-level security refuses
+    assert await raw_event(p["fd_a"], by=p["nurse_a"]) == "42501"  # naming somebody else
+    assert await raw_event(p["fd_b"]) == "23514" and await raw_event(p["fd_a"], clinic=b) == "23514"  # another clinic: the origin trigger runs first
+    for bad in ("a free sentence", "WRONG_PERSON", ""):
+        assert await raw_event(p["fd_a"], reason=bad) == "23514", bad  # the reason list is closed
+    assert await raw_event(p["fd_a"], kind="revoke", reason=None) == "23514"  # a revoke needs its reason
+    assert await raw_event(p["fd_a"], kind="confirm", reason="wrong_person") == "23514"  # a confirmation has none
+    assert await raw_event(p["fd_a"], kind="whatever", reason=None) == "23514"
+    assert await revoke_as(db, p["nurse_a"], a, target) == "42501" and await revoke_as(db, p["fd_b"], a, target) == "not_found"  # through the function too: another clinic cannot even see the patient
+    done = await revoke_as(db, p["fd_a"], a, target, key=f"rev-{_u()}")
+    assert (done.replayed, done.review_task) == (False, "raised")  # positive control
+    # append-only for everyone, the owner included
+    row = (await db.execute(text("select id from mpi.identity_confirmations where patient_id = :p and kind = 'revoke'"), {"p": target})).one()
+    assert await owner_sqlstate(db, "update mpi.identity_confirmations set reason = 'mistaken_click' where id = :i", i=row.id) == "23001"
+    assert await owner_sqlstate(db, "delete from mpi.identity_confirmations where id = :i", i=row.id) == "23001"
+    # the task: a nurse of the clinic reads it, with ids and closed words only; front desk wrote it but cannot read it; nobody of another clinic sees it
+    task = "select kind, priority, assigned_role, provenance from agents.review_tasks where clinic_id = :c and kind = 'identity_confirmation_revoked' and provenance ->> 'patient_id' = :p"
+    for who, expected in (("nurse_a", 1), ("fd_a", 0), ("fd_b", 0), ("worker_b", 0)):
+        async with db.begin_nested():
+            await as_user(db, p[who])
+            rows = (await db.execute(text(task), {"c": a, "p": str(target)})).all()
+            await db.exec_driver_sql("reset role")
+        assert len(rows) == expected, who
+        if expected:
+            kind, priority, role, provenance = rows[0]
+            assert (kind, priority, role) == ("identity_confirmation_revoked", "standard", "nurse") and set(provenance) == {"patient_id", "revoke_event_id", "reason", "confirmed_at", "record_created_by"}
+    # front desk may raise ONLY this kind of task, for a nurse or doctor, in its own clinic, BOUND to a revoke event it wrote (the key and source id are fixed by the event's id)
+    new_task = (
+        "insert into agents.review_tasks (clinic_id, origin, kind, priority, assigned_role, source_message_id, provenance, idempotency_key, status) "
+        "values (:c, 'test', :k, 'standard', :r, :src, '{}'::jsonb, :ik, :st)"
+    )
+
+    async def fresh_event(uid=p["fd_a"], clinic=a):
+        event = _u()
+        n = await attempt(
+            db, uid,
+            "insert into mpi.identity_confirmations (id, clinic_id, patient_id, confirmed_by, origin, idempotency_key, kind, reason) values (:i, :c, :p, :u, 'test', :k, 'revoke', 'wrong_person')",
+            i=event, c=clinic, p=target, u=uid, k=f"ev-{_u()}",
+        )
+        assert n == 1
+        return event
+
+    async def task_as(uid, event, *, clinic=a, kind="identity_confirmation_revoked", role="nurse", status="open", ik=None, src=None):
+        return await attempt(
+            db, uid, new_task, c=clinic, k=kind, r=role, st=status, ik=ik or f"identity-revoke-review:{event}", src=src or f"identity-revoke:{event}",
+        )
+
+    event = await fresh_event()
+    assert await task_as(p["fd_a"], event) == 1  # positive control: bound to its own revoke event
+    assert await task_as(p["fd_a"], await fresh_event(), role="doctor") == 1
+    assert await task_as(p["fd_a"], await fresh_event(), role="front_desk") == "42501"  # not for itself
+    for other_kind in ("referral_hold", "some_other_kind"):
+        assert await task_as(p["fd_a"], await fresh_event(), kind=other_kind) == "42501", other_kind  # no other kind
+    assert await task_as(p["fd_a"], await fresh_event(), ik="redflag:squatted-key") == "42501"  # an arbitrary or predictable key (key squatting)
+    assert await task_as(p["fd_a"], await fresh_event(), src="whatever") == "42501"
+    assert await task_as(p["fd_a"], await fresh_event(), status="resolved") == "42501"  # a new task is open
+    assert await task_as(p["fd_a"], uuid.uuid4()) == "42501"  # no such revoke event
+    assert await task_as(p["fd_a"], event, clinic=b) == "42501" and await task_as(p["fd_b"], event) == "42501"  # not across clinics

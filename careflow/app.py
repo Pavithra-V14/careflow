@@ -34,7 +34,7 @@ import uuid
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Final, Literal
 
 from dotenv import dotenv_values
 from fastapi import (
@@ -59,7 +59,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from careflow import identity, mpi
+from careflow import identity, mpi, offers, review_tasks
 from careflow.audit import write_audit
 from careflow.auth import (
     AuthError,
@@ -73,7 +73,7 @@ from careflow.cors import middleware_kwargs, parse_origins
 from careflow.crypto import CryptoError, DemographicVault
 from careflow.db import make_app_engine, set_request_claims
 from careflow.dead_letters import raise_dead_letter_tasks
-from careflow.demo_phase3 import refuse_demo_outside_demo
+from careflow.demo_phase3 import refuse_demo_outside_demo, scheduling_settings_for
 from careflow.front_door import FrontDoorError, run_config
 from careflow.front_door_runner import TASK_TYPE as FRONT_DOOR_TASK
 from careflow.front_door_runner import (
@@ -83,6 +83,8 @@ from careflow.front_door_runner import (
     request_session,
     worker_session,
 )
+from careflow.mcp_kit import Envelope
+from careflow.mcp_kit import invoke as mcp_invoke
 from careflow.messages import (
     MessageErased,
     MessageNotFound,
@@ -108,6 +110,7 @@ from careflow.scheduling import (
     SlotUnavailable,
     UnknownReference,
 )
+from careflow.scheduling_agent import SchedulingSettings, build_scheduling_server
 from careflow.tick import Poker, worker_loop
 from careflow.triage_store import DecisionConflict, TriageStoreError
 from careflow.triage_store import NotPermitted as TriageNotPermitted
@@ -775,11 +778,274 @@ async def confirm_patient_identity(
         raise HTTPException(status_code=403, detail="your role may not do this") from None
     except mpi.IdempotencyConflict:
         raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request") from None
+    except mpi.RecordIsMerged:
+        raise HTTPException(status_code=409, detail="this record is merged into another record; act on that record") from None
     await write_audit(
         conn, clinic_id=row[0], origin=origin, actor_id=uuid.UUID(claims["sub"]), actor_role="front_desk", action="patient.confirm_identity", resource_type="patient",
         resource_id=patient_id, details={"replayed": result.replayed}, idempotency_key=f"audit:confirm-identity:{patient_id}:{idempotency_key}",
     )
     return ConfirmIdentityOut(patient_id=result.patient_id, confirmed=True, replayed=result.replayed)
+
+
+class RevokeIdentityIn(BaseModel):
+    """A closed reason word, nothing else (no free text)."""
+
+    model_config = ConfigDict(extra="forbid")
+    reason: Literal["wrong_person", "planted_or_suspect", "mistaken_click"]
+
+
+class RevokeIdentityOut(_Out):
+    """Ids, a flag and a closed word. `review_task`: `raised` (a nurse or doctor will re-check what was linked), `not_configured` (the revoke is recorded but NO task was raised, because the
+    clinician-owned task settings are unset) or `on_record` (nothing new was written by this call)."""
+
+    patient_id: uuid.UUID
+    confirmed: Literal[False]
+    replayed: bool
+    review_task: Literal["raised", "not_configured", "on_record"]
+
+
+def revoke_task_settings() -> mpi.RevokeTaskSettings:
+    return mpi.RevokeTaskSettings()
+
+
+@staff_patients.post("/{patient_id}/revoke-identity", response_model=RevokeIdentityOut)
+async def revoke_patient_identity(
+    patient_id: uuid.UUID, body: RevokeIdentityIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims),
+    task: mpi.RevokeTaskSettings = Depends(revoke_task_settings),
+) -> RevokeIdentityOut:
+    """A front-desk person revokes a mistaken identity confirmation (or demotes a front-desk-created record): afterwards a full match on the record is a review, never an automatic link.
+    Nothing already linked is undone; a nurse or doctor review task lists the patient and the window (when the clinician-owned task settings are configured; the response says if not).
+    One person, as themselves, no step-up (a revoke only moves a record towards 'a person decides'). 404 if the patient is not visible to you (or erased), 403 if you are not front desk
+    of that clinic, 409 if the key was used for a different request, 422 for a bad id, key or reason."""
+    row = (await conn.execute(text("select clinic_id, origin from mpi.patients where id = :i and erased_at is null"), {"i": patient_id})).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    origin = await _front_desk_gate(conn, claims, row[0])
+    try:
+        result = await mpi.revoke_identity(
+            conn, clinic_id=row[0], origin=origin, patient_id=patient_id, revoked_by=uuid.UUID(claims["sub"]), reason=body.reason, idempotency_key=idempotency_key, task=task
+        )
+    except mpi.PatientNotFound:
+        raise HTTPException(status_code=404, detail="not found") from None
+    except mpi.NotPermitted:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    except mpi.IdempotencyConflict:
+        raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request") from None
+    except mpi.RecordIsMerged:
+        raise HTTPException(status_code=409, detail="this record is merged into another record; act on that record") from None
+    await write_audit(
+        conn, clinic_id=row[0], origin=origin, actor_id=uuid.UUID(claims["sub"]), actor_role="front_desk", action="patient.revoke_identity", resource_type="patient",
+        resource_id=patient_id, details={"reason": body.reason, "replayed": result.replayed, "review_task": result.review_task},
+        idempotency_key=f"audit:revoke-identity:{patient_id}:{idempotency_key}",
+    )
+    return RevokeIdentityOut(patient_id=result.patient_id, confirmed=False, replayed=result.replayed, review_task=result.review_task)
+
+
+# ---- review tasks: list, open, acknowledge, resolve (careflow/review_tasks.py; docs/design/review-task-routes.md) --------------------------------------------
+#
+# Row-level security decides what a person sees and may change (0007, 0013, 0020); the routes add no grant and no policy. Releasing a referral hold IS resolving its `referral_hold` task.
+# Only the kinds in `review_tasks.RESOLVABLE_KINDS` close here; the rest close through their own route or wait for a clinician's decision (409, never closed quietly).
+
+staff_review_tasks = APIRouter(prefix="/v1/staff/review-tasks", tags=["staff review tasks"])
+TASK_READERS: Final = ("front_desk", "nurse", "doctor", "admin")
+
+
+class ReviewTaskOut(_Out):
+    """No provenance and no source id in the list; ids, closed words and times only."""
+
+    task_id: uuid.UUID
+    clinic_id: uuid.UUID
+    kind: str
+    priority: Literal["immediate", "standard"]
+    assigned_role: Literal["nurse", "doctor", "front_desk"]
+    status: Literal["open", "acknowledged", "resolved"]
+    created_at: datetime
+    acknowledged_by: uuid.UUID | None
+    acknowledged_at: datetime | None
+    resolved_at: datetime | None
+
+
+class ReviewTaskDetailOut(ReviewTaskOut):
+    """`provenance` holds rule ids, record ids and closed words only (migration 0007: never the patient's own words)."""
+
+    source_message_id: str
+    provenance: dict[str, Any]
+
+
+class ReviewTaskList(_Out):
+    items: list[ReviewTaskOut]
+    limit: int
+    has_more: bool
+
+
+class ReviewTaskTransitionOut(_Out):
+    task_id: uuid.UUID
+    status: Literal["acknowledged", "resolved"]
+    replayed: bool
+
+
+def _task_out(r: review_tasks.TaskRow) -> dict[str, Any]:
+    return {
+        "task_id": r.id, "clinic_id": r.clinic_id, "kind": r.kind, "priority": r.priority, "assigned_role": r.assigned_role, "status": r.status, "created_at": r.created_at,
+        "acknowledged_by": r.acknowledged_by, "acknowledged_at": r.acknowledged_at, "resolved_at": r.resolved_at,
+    }
+
+
+async def _task_reader(conn: AsyncConnection, claims: dict[str, Any]) -> None:
+    """403 unless the caller actively holds a task-reading staff role somewhere (row-level security then narrows what they see)."""
+    held = (
+        await conn.execute(
+            text(
+                "select 1 from iam.staff_roles sr join iam.accounts a on a.id = sr.account_id where sr.account_id = :u and sr.revoked_at is null "
+                "and sr.role = any(cast(:r as text[])) and a.status = 'active' and a.account_type = 'staff' limit 1"
+            ),
+            {"u": uuid.UUID(claims["sub"]), "r": list(TASK_READERS)},
+        )
+    ).first()
+    if held is None:
+        raise HTTPException(status_code=403, detail="your role may not read this")
+
+
+@staff_review_tasks.get("", response_model=ReviewTaskList)
+async def list_review_tasks(
+    conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), status: Literal["open", "acknowledged", "resolved"] | None = None,
+    kind: Annotated[str | None, Query(pattern=r"^[a-z][a-z0-9_]{0,63}$")] = None, assigned_role: Literal["nurse", "doctor", "front_desk"] | None = None, limit: Limit = 100,
+) -> ReviewTaskList:
+    """The tasks you may see, immediate before standard, then oldest first. 403 unless you hold a staff role."""
+    await _task_reader(conn, claims)
+    rows = await review_tasks.list_tasks(conn, status=status, kind=kind, assigned_role=assigned_role, limit=limit + 1)
+    return ReviewTaskList(items=[ReviewTaskOut(**_task_out(r)) for r in rows[:limit]], limit=limit, has_more=len(rows) > limit)
+
+
+@staff_review_tasks.get("/{task_id}", response_model=ReviewTaskDetailOut)
+async def open_review_task(task_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> ReviewTaskDetailOut:
+    """One task with its provenance. 404 if you cannot see it (the same as one that does not exist), 403 unless you hold a staff role."""
+    await _task_reader(conn, claims)
+    try:
+        r = await review_tasks.get_task(conn, task_id)
+    except review_tasks.TaskNotFound:
+        raise HTTPException(status_code=404, detail="not found") from None
+    return ReviewTaskDetailOut(**_task_out(r), source_message_id=r.source_message_id or "", provenance=r.provenance or {})
+
+
+async def _transition(
+    action: Literal["acknowledge", "resolve"], task_id: uuid.UUID, idempotency_key: str, conn: AsyncConnection, claims: dict[str, Any]
+) -> ReviewTaskTransitionOut:
+    await _task_reader(conn, claims)
+    by = uuid.UUID(claims["sub"])
+    try:
+        done = await (review_tasks.acknowledge if action == "acknowledge" else review_tasks.resolve)(conn, task_id, by)
+    except review_tasks.TaskNotFound:
+        raise HTTPException(status_code=404, detail="not found") from None
+    except review_tasks.NotPermitted:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    except review_tasks.TaskConflict:
+        raise HTTPException(status_code=409, detail="this task is already taken or closed") from None
+    except review_tasks.NotResolvableHere:
+        raise HTTPException(status_code=409, detail="this kind of task is closed through its own route") from None
+    await write_audit(
+        conn, clinic_id=done.clinic_id, origin=done.origin, actor_id=by, actor_role=await _acting_role(conn, claims, done.clinic_id, ("nurse", "doctor", "front_desk")),
+        action=f"review_task.{action}", resource_type="review-task", resource_id=task_id, details={"kind": done.kind, "replayed": done.replayed},
+        idempotency_key=f"audit:review-task-{action}:{task_id}:{idempotency_key}",
+    )
+    return ReviewTaskTransitionOut(task_id=done.task_id, status=done.status, replayed=done.replayed)  # type: ignore[arg-type]
+
+
+@staff_review_tasks.post("/{task_id}/acknowledge", response_model=ReviewTaskTransitionOut)
+async def acknowledge_review_task(
+    task_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)
+) -> ReviewTaskTransitionOut:
+    """Take a task: open -> acknowledged, by you. The same person again is a replay. 404 if invisible, 403 if you may not change it, 409 if another person holds it or it is closed."""
+    return await _transition("acknowledge", task_id, idempotency_key, conn, claims)
+
+
+@staff_review_tasks.post("/{task_id}/resolve", response_model=ReviewTaskTransitionOut)
+async def resolve_review_task(
+    task_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)
+) -> ReviewTaskTransitionOut:
+    """Close a task (releasing a referral hold is resolving its `referral_hold` task). Only the kinds in `RESOLVABLE_KINDS`; others are a 409. A task another person acknowledged is
+    a 409. 404 if invisible, 403 if you may not change it."""
+    return await _transition("resolve", task_id, idempotency_key, conn, claims)
+
+
+# ---- offers (Phase 3, slice 2, mechanism only; careflow/offers.py) -----------------------------------------------------------------------------------------
+#
+# Front desk only, under the person's own session; no worker identity and no new grant. The draft is computed now and stored nowhere; sending holds the slot for the chosen candidate and records the
+# offer as a staff message in the patient's `appointments` thread (the clinician-approved template, verbatim). Nothing is delivered to the patient and nothing is interpreted. Every clinician-owned
+# setting must exist (demo placeholders only in profile `demo`): otherwise the draft is `unavailable` and the send is a 503 naming the missing settings.
+
+
+def scheduling_settings() -> SchedulingSettings:
+    return scheduling_settings_for(os.environ, resolve_profile())
+
+
+class SendOfferIn(_Body):
+    clinic_id: uuid.UUID
+    visit_type_id: uuid.UUID
+    slot_id: uuid.UUID
+    waitlist_id: uuid.UUID  # which ranked candidate; recomputed and checked server-side, never trusted
+
+
+class SendOfferOut(_Out):
+    """Ids and a time only."""
+
+    hold_id: uuid.UUID
+    slot_id: uuid.UUID
+    patient_id: uuid.UUID
+    thread_id: uuid.UUID
+    message_id: uuid.UUID
+    hold_expires_at: datetime
+    replayed: bool
+
+
+@scheduling.get("/offers/draft", response_model=Envelope)
+async def draft_offer(
+    clinic_id: uuid.UUID, visit_type_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims),
+    settings: SchedulingSettings = Depends(scheduling_settings),
+) -> Envelope:
+    """The ranked candidates for a freed slot and a DRAFT offer for the first, computed now and stored nowhere (`status`: ok, empty, or unavailable with `not_configured:` and the names of the
+    missing clinician-owned settings). 404 for a clinic you cannot see, 403 unless you are front desk there."""
+    await _front_desk_gate(conn, claims, clinic_id)
+    return await mcp_invoke(
+        build_scheduling_server(settings), "propose_offer", {"clinic_id": str(clinic_id), "visit_type_id": str(visit_type_id)},
+        account_id=uuid.UUID(claims["sub"]), conn=conn, origin="live",
+    )
+
+
+@scheduling.post("/offers/send", response_model=SendOfferOut)
+async def send_offer_route(
+    body: SendOfferIn, idempotency_key: IdempotencyKey, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims),
+    settings: SchedulingSettings = Depends(scheduling_settings),
+) -> SendOfferOut:
+    """Press send: hold the slot for the chosen ranked candidate and record the offer message. 404 for a clinic you cannot see, 403 unless you are front desk there, 409 if the slot is not open, the
+    candidate is not among the ranked ones, or the key was used for a different offer, 503 if the clinician-owned settings or the encryption keys are not configured."""
+    vault: DemographicVault | None = request.app.state.vault
+    key_version = _active_key_version(request) if vault is not None else None
+    if vault is None or key_version is None:
+        log.error("offers are unavailable: no usable encryption key is configured (deployment fault)")
+        raise HTTPException(status_code=503, detail="offers are unavailable: encryption keys are not configured")
+    origin = await _front_desk_gate(conn, claims, body.clinic_id)
+    actor = uuid.UUID(claims["sub"])
+    try:
+        with _scheduling_errors():
+            sent = await offers.send_offer(
+                conn, vault, settings, key_version=key_version, clinic_id=body.clinic_id, origin=origin, visit_type_id=body.visit_type_id, slot_id=body.slot_id,
+                waitlist_id=body.waitlist_id, actor_id=actor, idempotency_key=idempotency_key,
+            )
+    except offers.OfferNotConfigured as exc:
+        raise HTTPException(status_code=503, detail="offers are unavailable: not configured: " + ",".join(exc.names)) from None
+    except offers.NotACandidate:
+        raise HTTPException(status_code=409, detail="the slot or the candidate cannot be offered") from None
+    except offers.OfferConflict:
+        raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request") from None
+    await write_audit(
+        conn, clinic_id=body.clinic_id, origin=origin, actor_id=actor, actor_role="front_desk", action="offer.send", resource_type="offer", resource_id=sent.hold_id,
+        details={"slot_id": sent.slot_id, "patient_id": sent.patient_id, "replayed": sent.replayed}, idempotency_key=f"audit:offer-send:{sent.hold_id}:{idempotency_key}",
+    )
+    return SendOfferOut(
+        hold_id=sent.hold_id, slot_id=sent.slot_id, patient_id=sent.patient_id, thread_id=sent.thread_id, message_id=sent.message_id,
+        hold_expires_at=sent.hold_expires_at, replayed=sent.replayed,
+    )
 
 
 async def _validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
@@ -1191,6 +1457,7 @@ def create_app(
     app.include_router(staff_patients)
     app.include_router(staff_merges)
     app.include_router(staff_referrals)
+    app.include_router(staff_review_tasks)
     app.include_router(health)
     return app
 

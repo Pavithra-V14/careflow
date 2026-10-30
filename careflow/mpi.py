@@ -42,6 +42,8 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Final, Literal
 
+from pydantic import AliasChoices, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
@@ -373,12 +375,12 @@ class PatientIngestionPipeline:
         rows = await conn.execute(
             text(
                 f"""select coalesce(mg.master_patient_id, t.patient_id) as patient_id, array_agg(distinct t.kind) as kinds,
-                           bool_or(pm.registered_via = 'front_desk' or ic.id is not null) as verified
+                           bool_or(coalesce(le.kind = 'confirm', pm.registered_via = 'front_desk')) as verified
                     from mpi.identity_tokens t
                     join mpi.patients p on p.id = t.patient_id and p.clinic_id = t.clinic_id
                     left join mpi.merges mg on mg.subordinate_patient_id = t.patient_id and mg.status = 'active'
                     join mpi.patients pm on pm.id = coalesce(mg.master_patient_id, t.patient_id) and pm.clinic_id = t.clinic_id
-                    left join mpi.identity_confirmations ic on ic.patient_id = pm.id
+                    left join lateral (select e.kind from mpi.identity_confirmations e where e.patient_id = pm.id order by e.seq desc limit 1) le on true
                     where t.clinic_id = :clinic and t.key_version = :kv
                       and p.origin = :origin and p.erased_at is null
                       and ({' or '.join(clauses)})
@@ -408,37 +410,177 @@ class ConfirmResult:
     replayed: bool
 
 
-async def confirm_identity(
-    conn: AsyncConnection, *, clinic_id: uuid.UUID, origin: Origin, patient_id: uuid.UUID, confirmed_by: uuid.UUID, idempotency_key: str
-) -> ConfirmResult:
-    """Record that a front-desk person confirmed this patient's identity. After this, a match on the record (if it was created by the unattended worker) is a confident match again.
-    Append-only and idempotent: the same key replays; a patient already confirmed (under any key) answers as a replay; a key used for a different patient is an
-    IdempotencyConflict. Row-level security (front desk of the clinic, confirmed_by = the caller) is what permits the insert."""
+async def _lock_patient_events(conn: AsyncConnection, patient_id: uuid.UUID) -> None:
+    """Serialise the confirm and revoke events of ONE patient (so `seq` order is event order and two clicks cannot interleave). Released at commit or rollback."""
+    await conn.execute(text("select pg_advisory_xact_lock(hashtextextended('identity-confirmation:' || cast(:p as text), 0))"), {"p": str(patient_id)})
+
+
+async def _latest_event(conn: AsyncConnection, patient_id: uuid.UUID) -> tuple[str, uuid.UUID, datetime] | None:
+    row = (await conn.execute(text("select kind, id, created_at from mpi.identity_confirmations where patient_id = :p order by seq desc limit 1"), {"p": patient_id})).first()
+    return None if row is None else (row[0], row[1], row[2])
+
+
+async def _event_by_key(conn: AsyncConnection, key: str) -> tuple[uuid.UUID, uuid.UUID, str] | None:
+    row = (await conn.execute(text("select patient_id, clinic_id, kind from mpi.identity_confirmations where idempotency_key = :k"), {"k": key})).first()
+    return None if row is None else (row[0], row[1], row[2])
+
+
+class RecordIsMerged(IngestionError):
+    """The patient is the subordinate of an ACTIVE merge: the matcher takes verification from the master, so an event on this record would change nothing. Act on the master."""
+
+
+async def _refuse_if_merged(conn: AsyncConnection, patient_id: uuid.UUID) -> None:
+    merged = (await conn.execute(text("select 1 from mpi.merges where subordinate_patient_id = :p and status = 'active'"), {"p": patient_id})).first()
+    if merged is not None:
+        raise RecordIsMerged("this record is merged into another; act on that record")
+
+
+def _check_write_arguments(origin: Origin, idempotency_key: str) -> None:
     if not isinstance(idempotency_key, str) or not idempotency_key.strip():
         raise MissingRequiredField("an idempotency key is required on every write")
     if origin not in ORIGINS:
         raise ValueError(f"origin must be one of {ORIGINS}, got {origin!r}")
-    by_key = (await conn.execute(text("select patient_id, clinic_id from mpi.identity_confirmations where idempotency_key = :k"), {"k": idempotency_key})).first()
+
+
+async def confirm_identity(
+    conn: AsyncConnection, *, clinic_id: uuid.UUID, origin: Origin, patient_id: uuid.UUID, confirmed_by: uuid.UUID, idempotency_key: str
+) -> ConfirmResult:
+    """Record that a front-desk person confirmed this patient's identity. After this, a match on the record (if it was created by the unattended worker) is a confident match again.
+    Append-only and idempotent: the same key replays; a patient whose LATEST event is already a confirmation answers as a replay (under any key); a key used for a different patient, or
+    for a revoke, is an IdempotencyConflict. After a revoke a new confirmation is a new event (migration 0025). Row-level security (front desk of the clinic, confirmed_by = the caller)
+    is what permits the insert."""
+    _check_write_arguments(origin, idempotency_key)
+    await _lock_patient_events(conn, patient_id)
+    by_key = await _event_by_key(conn, idempotency_key)
     if by_key is not None:
-        if by_key[0] != patient_id or by_key[1] != clinic_id:
+        if by_key[0] != patient_id or by_key[1] != clinic_id or by_key[2] != "confirm":
             raise IdempotencyConflict("this idempotency key was used for a different request")
         return ConfirmResult(patient_id, True)
     live = (await conn.execute(text("select 1 from mpi.patients where id = :p and clinic_id = :c and erased_at is null"), {"p": patient_id, "c": clinic_id})).first()
     if live is None:
         raise PatientNotFound("not found")
+    await _refuse_if_merged(conn, patient_id)
+    latest = await _latest_event(conn, patient_id)
+    if latest is not None and latest[0] == "confirm":
+        return ConfirmResult(patient_id, True)  # already confirmed: a replay in effect
     try:
         async with conn.begin_nested():
-            done = (
-                await conn.execute(
-                    text(
-                        """insert into mpi.identity_confirmations (clinic_id, patient_id, confirmed_by, origin, idempotency_key)
-                           values (:c, :p, :u, :o, :k) on conflict (patient_id) do nothing returning id"""
-                    ),
-                    {"c": clinic_id, "p": patient_id, "u": confirmed_by, "o": origin, "k": idempotency_key},
-                )
-            ).first()
+            await conn.execute(
+                text(
+                    """insert into mpi.identity_confirmations (clinic_id, patient_id, confirmed_by, origin, idempotency_key, kind)
+                       values (:c, :p, :u, :o, :k, 'confirm')"""
+                ),
+                {"c": clinic_id, "p": patient_id, "u": confirmed_by, "o": origin, "k": idempotency_key},
+            )
     except DBAPIError as exc:
-        if getattr(exc.orig, "sqlstate", None) == "42501":
+        state = getattr(exc.orig, "sqlstate", None)
+        if state == "42501":
             raise NotPermitted("this role may not confirm identities in this clinic") from exc
+        if state == "23505":  # the key is held by a row this role cannot see (another clinic's): the same answer as a key used for a different request
+            raise IdempotencyConflict("this idempotency key was used for a different request") from exc
         raise
-    return ConfirmResult(patient_id, done is None)  # nothing inserted: the patient was already confirmed, so this is a replay in effect
+    return ConfirmResult(patient_id, False)
+
+
+# ---- revoking a mistaken confirmation (migration 0025; docs/design/identity-confirmation-revoke.md) ------------------------------------------------
+
+REVOKE_REASONS: Final = ("wrong_person", "planted_or_suspect", "mistaken_click")  # a CLOSED operational vocabulary (no free text); listed in docs/design/clinician-sheet.md
+REVOKE_TASK_KIND: Final = "identity_confirmation_revoked"
+TaskStatus = Literal["raised", "not_configured", "on_record"]
+
+
+class InvalidRevokeReason(IngestionError):
+    """The reason is not one of REVOKE_REASONS."""
+
+
+class RevokeTaskSettings(BaseSettings):
+    """The nurse review task a revoke raises. Both values are CLINICIAN-OWNED: `# CLINICAL-PLACEHOLDER: needs clinician sign-off` (docs/design/clinician-sheet.md). None = NOT
+    CONFIGURED, there is no default: the revoke itself is still recorded (it only moves the record towards 'a person decides'), the response and the audit row say the task was NOT
+    raised, and nobody is told that a re-check was queued when it was not."""
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", populate_by_name=True)
+
+    # CLINICAL-PLACEHOLDER: needs clinician sign-off  (the review task's priority: 'immediate' or 'standard')
+    priority: Literal["immediate", "standard"] | None = Field(default=None, validation_alias=AliasChoices("CAREFLOW_REVOKE_TASK_PRIORITY", "priority"))
+    # CLINICAL-PLACEHOLDER: needs clinician sign-off  (who re-checks what was linked meanwhile: 'nurse' or 'doctor')
+    assigned_role: Literal["nurse", "doctor"] | None = Field(default=None, validation_alias=AliasChoices("CAREFLOW_REVOKE_TASK_ROLE", "assigned_role"))
+
+    @property
+    def configured(self) -> bool:
+        return self.priority is not None and self.assigned_role is not None
+
+
+@dataclass(frozen=True)
+class RevokeResult:
+    patient_id: uuid.UUID
+    replayed: bool
+    review_task: TaskStatus
+
+
+async def revoke_identity(
+    conn: AsyncConnection, *, clinic_id: uuid.UUID, origin: Origin, patient_id: uuid.UUID, revoked_by: uuid.UUID, reason: str, idempotency_key: str,
+    task: RevokeTaskSettings | None = None,
+) -> RevokeResult:
+    """Record that a front-desk person revokes this patient's identity confirmation (or demotes a front-desk-created record): the record is UNVERIFIED again, so a full match on it is a
+    review, never an automatic link. Nothing already decided is undone. One person, as themselves, no step-up: a revoke only moves a record towards 'a person decides'.
+    Append-only and idempotent: the same key replays; a record that is already unverified (latest event a revoke, or a worker-created record with no confirmation) answers as a replay in
+    effect and writes nothing. Raises ONE review task for a nurse or doctor listing the patient and the window, when the task settings are configured (ids and closed words only)."""
+    _check_write_arguments(origin, idempotency_key)
+    if reason not in REVOKE_REASONS:
+        raise InvalidRevokeReason("the reason must be one of the listed words")
+    await _lock_patient_events(conn, patient_id)
+    by_key = await _event_by_key(conn, idempotency_key)
+    if by_key is not None:
+        if by_key[0] != patient_id or by_key[1] != clinic_id or by_key[2] != "revoke":
+            raise IdempotencyConflict("this idempotency key was used for a different request")
+        return RevokeResult(patient_id, True, "on_record")
+    row = (await conn.execute(text("select registered_via from mpi.patients where id = :p and clinic_id = :c and erased_at is null"), {"p": patient_id, "c": clinic_id})).first()
+    if row is None:
+        raise PatientNotFound("not found")
+    await _refuse_if_merged(conn, patient_id)
+    latest = await _latest_event(conn, patient_id)
+    verified = (latest[0] == "confirm") if latest is not None else (row[0] == "front_desk")
+    if not verified:
+        return RevokeResult(patient_id, True, "on_record")  # already unverified: nothing to revoke
+    confirmed_at = latest[2] if latest is not None else None
+    event_id = uuid.uuid4()
+    try:
+        async with conn.begin_nested():
+            await conn.execute(
+                text(
+                    """insert into mpi.identity_confirmations (id, clinic_id, patient_id, confirmed_by, origin, idempotency_key, kind, reason)
+                       values (:i, :c, :p, :u, :o, :k, 'revoke', :r)"""
+                ),
+                {"i": event_id, "c": clinic_id, "p": patient_id, "u": revoked_by, "o": origin, "k": idempotency_key, "r": reason},
+            )
+    except DBAPIError as exc:
+        state = getattr(exc.orig, "sqlstate", None)
+        if state == "42501":
+            raise NotPermitted("this role may not revoke identities in this clinic") from exc
+        if state == "23505":
+            raise IdempotencyConflict("this idempotency key was used for a different request") from exc
+        raise
+    settings = task or RevokeTaskSettings()
+    if not settings.configured:
+        return RevokeResult(patient_id, False, "not_configured")
+    provenance = {
+        "patient_id": str(patient_id), "revoke_event_id": str(event_id), "reason": reason,
+        "confirmed_at": confirmed_at.isoformat() if confirmed_at is not None else None, "record_created_by": row[0],
+    }
+    try:
+        # NO `returning` and NO `on conflict`: front desk may insert this kind of task but cannot read it, and both of those need the SELECT policy.
+        async with conn.begin_nested():
+            await conn.execute(
+                text(
+                    """insert into agents.review_tasks (id, clinic_id, origin, kind, priority, assigned_role, source_message_id, provenance, idempotency_key)
+                       values (:i, :c, :o, :kind, :pr, :role, :src, cast(:p as jsonb), :k)"""
+                ),
+                {
+                    "i": uuid.uuid4(), "c": clinic_id, "o": origin, "kind": REVOKE_TASK_KIND, "pr": settings.priority, "role": settings.assigned_role,
+                    "src": f"identity-revoke:{event_id}", "p": json.dumps(provenance, sort_keys=True), "k": f"identity-revoke-review:{event_id}",
+                },
+            )
+    except DBAPIError as exc:
+        if getattr(exc.orig, "sqlstate", None) != "23505":  # a duplicate task for this revoke event is a replay; anything else rolls the revoke back
+            raise
+    return RevokeResult(patient_id, False, "raised")
