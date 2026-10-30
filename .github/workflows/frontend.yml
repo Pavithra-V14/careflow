@@ -42,6 +42,8 @@ jobs:
       - run: npm run lint
       # Regenerates the client types from openapi.snapshot.json and fails if the committed file differs.
       - run: npm run check:api
+      # Every Tamil string must appear on TAMIL-UNREVIEWED.md until a native speaker signs it off.
+      - run: npm run check:i18n
       # Production dependencies only; fails on high or critical findings.
       - run: npm run audit:prod
 

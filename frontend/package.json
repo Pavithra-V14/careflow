@@ -54,6 +54,8 @@
     "check:api": "node scripts/gen-api.mjs --check",
     "check:bundle": "node scripts/check-bundle-secrets.mjs dist",
     "e2e": "playwright test",
-    "audit:prod": "npm audit --omit=dev --audit-level=high"
+    "audit:prod": "npm audit --omit=dev --audit-level=high",
+    "i18n:list": "node scripts/list-unreviewed-tamil.mjs",
+    "check:i18n": "node scripts/list-unreviewed-tamil.mjs --check"
   }
 }
