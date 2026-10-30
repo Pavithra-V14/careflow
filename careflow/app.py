@@ -53,7 +53,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from langgraph.types import Command
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -1631,13 +1631,19 @@ class PatientSearchIn(_Body):
 
 
 def patient_view_config(request: Request) -> patient_view.PatientViewConfig:
-    """The deployment's view configuration (overridable in tests). The limiter lives on the app, one per configured limit, so a request cannot reset it."""
-    settings = patient_view.PatientViewSettings()
-    limiter = None
-    if settings.max_opens_per_minute is not None:
-        limiters: dict[int, patient_view.OpenRateLimiter] = request.app.state.__dict__.setdefault("patient_view_limiters", {})
-        limiter = limiters.setdefault(settings.max_opens_per_minute, patient_view.OpenRateLimiter(settings.max_opens_per_minute))
-    return patient_view.PatientViewConfig(patient_view.feature_enabled(resolve_profile(), os.environ), settings, limiter)
+    """The deployment's view configuration (overridable in tests). Read once per app and kept: the limiters live on the app, one per configured limit, so a request cannot reset them. A setting with an
+    INVALID value does not break the other routes: it marks the config `misconfigured` (the view routes answer a fixed 503; search still works, without labels)."""
+    cache: dict[str, Any] = request.app.state.__dict__.setdefault("patient_view_cache", {})
+    if "config" not in cache:
+        try:
+            settings = patient_view.PatientViewSettings()
+            bad = False
+        except ValidationError:
+            settings, bad = patient_view.PatientViewSettings.model_construct(max_opens_per_minute=None, max_label_rows_per_minute=None, page_limit=1), True  # inert values (no validation, no env): nothing is served while `misconfigured`
+        opens = patient_view.OpenRateLimiter(settings.max_opens_per_minute) if settings.max_opens_per_minute is not None else None
+        rows = patient_view.OpenRateLimiter(settings.max_label_rows_per_minute) if settings.max_label_rows_per_minute is not None else None
+        cache["config"] = patient_view.PatientViewConfig(patient_view.feature_enabled(resolve_profile(), os.environ), settings, opens, rows, misconfigured=bad)
+    return cache["config"]
 
 
 class PatientLabelOut(_Out):
@@ -1660,6 +1666,7 @@ class PatientHitOut(_Out):
 class PatientSearchOut(_Out):
     items: list[PatientHitOut]
     truncated: bool = False  # more exact matches than one page holds (the page limit, at most 25); there is no total count
+    labels_withheld: bool = False  # the feature is on but the labels were not produced (the per-user row budget is spent or not configured)
 
 
 class PatientStatusOut(_Out):
@@ -1700,13 +1707,20 @@ async def search_patients(
     response.headers["Cache-Control"] = "no-store"
     labels: dict[uuid.UUID, Any] = {}
     page = hits[: config.settings.page_limit]
-    if config.enabled and page:
-        with _view_errors():
-            labels = {x.patient_id: x for x in await patient_view.patient_labels(conn, vault, body.clinic_id, [h.patient_id for h in page], page_limit=config.settings.page_limit)}
+    # A label (the owner's name) is attached ONLY to a hit that matched on name and date of birth: a phone-only hit would reveal whose number it is. The rows are charged to the per-user row budget.
+    wanted = [h.patient_id for h in page if "name_dob" in h.matched_kinds]
+    withheld = False
+    if config.enabled and wanted:
+        ready = not config.misconfigured and config.label_limiter is not None and config.settings.max_label_rows_per_minute is not None
+        if ready and config.label_limiter.allow(uuid.UUID(claims["sub"]), len(wanted)):  # type: ignore[union-attr]
+            with _view_errors():
+                labels = {x.patient_id: x for x in await patient_view.patient_labels(conn, vault, body.clinic_id, wanted, page_limit=config.settings.page_limit)}
+        else:
+            withheld = True
     # One audit row per search: who, role, the KIND of search and how many results. Never the query text and never the results (owner decision 2026-10-30).
     await write_audit(
         conn, clinic_id=body.clinic_id, origin=origin, actor_id=uuid.UUID(claims["sub"]), actor_role="front_desk", action="patient.search", resource_type="clinic", resource_id=body.clinic_id,
-        details={"kind": "name_dob_phone" if body.phone else "name_dob", "results": len(hits)}, idempotency_key=f"audit:patient-search:{uuid.uuid4()}",
+        details={"kind": "name_dob_phone" if body.phone else "name_dob", "results": len(hits), "labels": len(labels)}, idempotency_key=f"audit:patient-search:{uuid.uuid4()}",
     )
     return PatientSearchOut(
         items=[
@@ -1717,6 +1731,7 @@ async def search_patients(
             for h in page
         ],
         truncated=len(hits) > len(page),
+        labels_withheld=withheld,
     )
 
 
@@ -2053,14 +2068,16 @@ async def patient_labels_route(
     config: patient_view.PatientViewConfig = Depends(patient_view_config),
 ) -> LabelsOut:
     """List rows for up to 25 patients of one clinic: name, year of birth, last four digits of the phone. Read-only; one audit row with the COUNT only. 404 for a clinic you cannot see, 403 unless you
-    are front desk, nurse or doctor there, 422 for more than the page limit, 503 outside the demo profile with synthetic data."""
+    are front desk, nurse or doctor there, 422 for more than the page limit, 429 over your per-minute row budget, 503 outside the demo profile with synthetic data or while the budget is not configured."""
     response.headers["Cache-Control"] = "no-store"
     with _view_errors():
-        patient_view.require_ready(config, needs_open_limit=False)
+        patient_view.require_ready(config, needs_label_limit=True)
         vault = _vault_or_503(request)
         origin = await _view_gate(conn, claims, body.clinic_id)
         if len(set(body.patient_ids)) != len(body.patient_ids) or len(body.patient_ids) > config.settings.page_limit:
             raise HTTPException(status_code=422, detail="too many or repeated patient ids for one page")
+        if config.label_limiter is not None and not config.label_limiter.allow(uuid.UUID(claims["sub"]), len(body.patient_ids)):
+            raise HTTPException(status_code=429, detail="too many list rows read; wait a moment")
         labels = await patient_view.patient_labels(conn, vault, body.clinic_id, body.patient_ids, page_limit=config.settings.page_limit)
     await write_audit(
         conn, clinic_id=body.clinic_id, origin=origin, actor_id=uuid.UUID(claims["sub"]), actor_role=await _acting_role(conn, claims, body.clinic_id, VIEW_ROLES), action="patient.view_labels",
@@ -2285,6 +2302,15 @@ def create_app(
         app.add_middleware(CORSMiddleware, **middleware_kwargs(origins))
     refuse_demo_outside_demo(os.environ, resolve_profile())  # the demo Phase 3 placeholders may never be present outside profile=demo + data_policy=synthetic_only
     app.add_exception_handler(RequestValidationError, _validation_error_handler)  # type: ignore[arg-type]
+
+    @app.middleware("http")
+    async def no_store_for_patient_routes(request: Request, call_next):
+        """Every response under /v1/staff/patients (errors and refusals included) is `Cache-Control: no-store`: these routes can carry a person's demographics."""
+        response = await call_next(request)
+        if request.url.path.startswith("/v1/staff/patients"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
     app.include_router(router)
     app.include_router(scheduling)
     app.include_router(staff_messages)

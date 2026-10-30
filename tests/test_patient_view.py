@@ -130,3 +130,80 @@ async def test_a_value_that_cannot_be_decrypted_is_a_fixed_refusal_with_nothing_
 async def test_a_missing_or_erased_record_is_one_not_found():
     with pytest.raises(pv.PatientNotFound):
         await pv.open_patient(Conn([]), vault(), uuid.uuid4())  # type: ignore[arg-type]
+
+
+# ---- the real configuration function (the route tests override it, so it is tested here) and the row budget --------------------------------------------------------------
+
+
+def _request():
+    return SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+
+
+def _clean(monkeypatch, **env):
+    for name in ("CAREFLOW_PATIENT_VIEW_MAX_OPENS_PER_MINUTE", "CAREFLOW_PATIENT_VIEW_MAX_LABEL_ROWS_PER_MINUTE", "CAREFLOW_PATIENT_VIEW_PAGE_LIMIT", "PAGE_LIMIT", "MAX_OPENS_PER_MINUTE", "CAREFLOW_PROFILE", "CAREFLOW_DATA_POLICY"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.chdir(os.path.dirname(os.path.abspath(__file__)))  # no .env of the repo root is read
+
+
+def test_the_real_config_reads_the_careflow_names_only_requires_both_limits_and_is_off_without_the_declaration(monkeypatch):
+    from careflow.app import patient_view_config
+
+    _clean(monkeypatch, PAGE_LIMIT="3", MAX_OPENS_PER_MINUTE="7")  # generic names in the host environment must not change a privacy limit
+    cfg = patient_view_config(_request())  # type: ignore[arg-type]
+    assert cfg.enabled is False and cfg.settings.page_limit == 25 and cfg.settings.max_opens_per_minute is None and cfg.limiter is None and cfg.label_limiter is None and not cfg.misconfigured
+    _clean(monkeypatch, CAREFLOW_PROFILE="demo", CAREFLOW_DATA_POLICY="synthetic_only", CAREFLOW_PATIENT_VIEW_MAX_OPENS_PER_MINUTE="5", CAREFLOW_PATIENT_VIEW_MAX_LABEL_ROWS_PER_MINUTE="50", CAREFLOW_PATIENT_VIEW_PAGE_LIMIT="10")
+    on = patient_view_config(_request())  # type: ignore[arg-type]
+    assert on.enabled and (on.settings.max_opens_per_minute, on.settings.max_label_rows_per_minute, on.settings.page_limit) == (5, 50, 10) and on.limiter and on.label_limiter
+
+
+def test_the_real_config_is_built_once_per_app_so_a_request_cannot_reset_the_limiters(monkeypatch):
+    from careflow.app import patient_view_config
+
+    _clean(monkeypatch, CAREFLOW_PROFILE="demo", CAREFLOW_DATA_POLICY="synthetic_only", CAREFLOW_PATIENT_VIEW_MAX_OPENS_PER_MINUTE="1")
+    request = _request()
+    first = patient_view_config(request)  # type: ignore[arg-type]
+    account = uuid.uuid4()
+    assert first.limiter.allow(account) and not first.limiter.allow(account)  # type: ignore[union-attr]
+    assert patient_view_config(request) is first and not patient_view_config(request).limiter.allow(account)  # type: ignore[arg-type, union-attr]
+
+
+@pytest.mark.parametrize("name", ["CAREFLOW_PATIENT_VIEW_PAGE_LIMIT", "CAREFLOW_PATIENT_VIEW_MAX_OPENS_PER_MINUTE", "CAREFLOW_PATIENT_VIEW_MAX_LABEL_ROWS_PER_MINUTE"])
+@pytest.mark.parametrize("value", ["100000", "abc", "0", "-1", ""])
+def test_a_bad_setting_marks_the_config_misconfigured_instead_of_breaking_other_routes(monkeypatch, name, value):
+    from careflow.app import patient_view_config
+
+    _clean(monkeypatch, CAREFLOW_PROFILE="demo", CAREFLOW_DATA_POLICY="synthetic_only", **{name: value})
+    cfg = patient_view_config(_request())  # type: ignore[arg-type]
+    assert cfg.misconfigured  # never served, never unlimited
+    if cfg.misconfigured:
+        with pytest.raises(pv.ViewNotConfigured):
+            pv.require_ready(cfg, needs_open_limit=True)
+
+
+def test_the_row_budget_charges_rows_and_a_refused_call_charges_nothing():
+    now = [0.0]
+    budget = pv.OpenRateLimiter(10, clock=lambda: now[0])
+    user = uuid.uuid4()
+    assert budget.allow(user, 6) and not budget.allow(user, 5) and budget.allow(user, 4) and not budget.allow(user, 1)
+    now[0] = 61.0
+    assert budget.allow(user, 10)
+
+
+def test_require_ready_needs_the_row_budget_for_the_label_read_only():
+    cfg = pv.PatientViewConfig(True, pv.PatientViewSettings(_env_file=None, max_opens_per_minute=5), pv.OpenRateLimiter(5), None)
+    pv.require_ready(cfg, needs_open_limit=True)
+    with pytest.raises(pv.ViewNotConfigured):
+        pv.require_ready(cfg, needs_label_limit=True)
+
+
+@pytest.mark.asyncio
+async def test_a_malformed_plaintext_date_is_the_fixed_refusal_and_the_decrypted_objects_do_not_print_their_values():
+    v = vault()
+    bad = row(v, dob="not-a-date")
+    with pytest.raises(pv.CannotShow) as raised:
+        await pv.patient_labels(Conn([bad]), v, uuid.uuid4(), [uuid.uuid4()], page_limit=25)  # type: ignore[arg-type]
+    assert "not-" not in str(raised.value)
+    full = await pv.open_patient(Conn([row(v)]), v, uuid.uuid4())  # type: ignore[arg-type]
+    assert "Asha" not in repr(full) and "1980" not in repr(full) and "9876543210" not in repr(full)

@@ -1356,6 +1356,11 @@
             "title": "Items",
             "type": "array"
           },
+          "labels_withheld": {
+            "default": false,
+            "title": "Labels Withheld",
+            "type": "boolean"
+          },
           "truncated": {
             "default": false,
             "title": "Truncated",
@@ -4368,7 +4373,7 @@
     },
     "/v1/staff/patients/labels": {
       "post": {
-        "description": "List rows for up to 25 patients of one clinic: name, year of birth, last four digits of the phone. Read-only; one audit row with the COUNT only. 404 for a clinic you cannot see, 403 unless you\nare front desk, nurse or doctor there, 422 for more than the page limit, 503 outside the demo profile with synthetic data.",
+        "description": "List rows for up to 25 patients of one clinic: name, year of birth, last four digits of the phone. Read-only; one audit row with the COUNT only. 404 for a clinic you cannot see, 403 unless you\nare front desk, nurse or doctor there, 422 for more than the page limit, 429 over your per-minute row budget, 503 outside the demo profile with synthetic data or while the budget is not configured.",
         "operationId": "patient_labels_route_v1_staff_patients_labels_post",
         "requestBody": {
           "content": {
@@ -4430,6 +4435,16 @@
               }
             },
             "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Too many requests: the per-user limit was reached; wait and try again. Fixed body."
           },
           "503": {
             "content": {

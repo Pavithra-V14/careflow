@@ -15,7 +15,13 @@ Where a proposal question did not fit exactly: "initials and surname" (question 
 - `GET /v1/staff/patients/{id}/view`: the opened record (name, full date of birth, full phone). Front desk, nurse, doctor of its clinic; anyone who cannot see the record gets the same 404; 429 over the per-user limit; one `patient.view` audit row (who, role, patient id, `{"fields": "full"}`).
 - `POST /v1/staff/patients/labels`: list rows (name, year of birth, last four digits) for up to 25 patients of one clinic; one `patient.view_labels` audit row with the COUNT only.
 - `POST /v1/staff/patients/search` now carries the same list label on each hit (null outside the gate) and a `truncated` flag instead of a count.
-The rate limiter is in memory and per process (several processes multiply the limit): fine for the demo, a shared limiter before real use.
+Findings of the rls-security-reviewer pass (no isolation or role breach found) and what was done:
+- **The label read was an unthrottled bulk path in practice** (a loop of 25-row pages). FIXED: a second REQUIRED setting with no default, a per-user ROW budget per minute (`CAREFLOW_PATIENT_VIEW_MAX_LABEL_ROWS_PER_MINUTE`), charged by the label read (429 over it; 503 while unset) and by the labels on search hits (over budget or unset: the hits come back WITHOUT labels and `labels_withheld` says so).
+- **Search was a phone-to-name lookup** (a phone-only hit revealed the owner's name). FIXED: a label is attached only to a hit that matched on name and date of birth. The search audit row now also holds how many labels were produced.
+- **A bad value in a view setting broke search and the view routes with a 500.** FIXED: the config is built once per app; an invalid value marks it `misconfigured` (the view routes answer a fixed 503, search still works without labels). Only the `CAREFLOW_PATIENT_VIEW_*` names are read (a generic `PAGE_LIMIT` in the host environment is ignored).
+- **`Cache-Control: no-store` was missing on error responses.** FIXED: a middleware sets it on EVERY response under `/v1/staff/patients`, errors included.
+- Also: a malformed plaintext date is the fixed refusal (no value in a message); the decrypted dataclasses do not print their values; tests added for a patient account bound to a record (not staff: nothing decrypted), an erased record, the real configuration function, an undecryptable record (fixed 503, no audit row), and the nurse and doctor label audit rows.
+- **Not changed, stated:** a person holding several roles in one clinic is audited under the first role alphabetically (doctor, then front desk, then nurse), not the role they used; the rate limiters are in memory and per process (several processes multiply the limits) — acceptable for the demo, a shared limiter before real use.
 
 ## Original proposal (kept for the record)
 

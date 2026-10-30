@@ -273,7 +273,7 @@ def _enable_patient_view(built: FastAPI) -> FastAPI:
         PatientViewSettings,
     )
 
-    config = PatientViewConfig(True, PatientViewSettings(_env_file=None, max_opens_per_minute=10_000), OpenRateLimiter(10_000))
+    config = PatientViewConfig(True, PatientViewSettings(_env_file=None, max_opens_per_minute=10_000, max_label_rows_per_minute=10_000), OpenRateLimiter(10_000), OpenRateLimiter(10_000))
     built.dependency_overrides[patient_view_config] = lambda: config
     return built
 
@@ -1449,8 +1449,8 @@ async def _revoke_event(conn, clinic, patient, by):
 def patient_search_cases(ids) -> list[tuple]:
     body = lambda **o: {"clinic_id": str(ids.clinic_a), "name": "Nobody Atall", "dob": "1990-01-01", "phone": "9876500001", **o}
     cases = [
-        _case(ids, "front desk searches for a person nobody registered: an empty list, not an error", "front_desk_a", 200, PATIENT_SEARCH, json=body(), key=None, body=lambda b: b == {"items": [], "truncated": False}),
-        _case(ids, "the phone is optional", "front_desk_a", 200, PATIENT_SEARCH, json={k: v for k, v in body().items() if k != "phone"}, key=None, body=lambda b: b == {"items": [], "truncated": False}),
+        _case(ids, "front desk searches for a person nobody registered: an empty list, not an error", "front_desk_a", 200, PATIENT_SEARCH, json=body(), key=None, body=lambda b: b == {"items": [], "truncated": False, "labels_withheld": False}),
+        _case(ids, "the phone is optional", "front_desk_a", 200, PATIENT_SEARCH, json={k: v for k, v in body().items() if k != "phone"}, key=None, body=lambda b: b == {"items": [], "truncated": False, "labels_withheld": False}),
         _case(ids, "a date of birth in the future is refused with a named message", "front_desk_a", 422, PATIENT_SEARCH, json=body(dob="2999-01-01"), key=None,
               body=lambda b: b == {"detail": "date of birth must be a real past date in YYYY-MM-DD form"}),
         _case(ids, "a phone that is not an Indian mobile is refused with a named message", "front_desk_a", 422, PATIENT_SEARCH, json=body(phone="123"), key=None,
@@ -2645,8 +2645,11 @@ def _view_override(client, *, enabled=True, settings=None):
     )
 
     # test inputs only: stand-ins for the engineering and required settings
-    configured = PatientViewSettings(_env_file=None, **{"max_opens_per_minute": 100, **(settings or {})})
-    config = PatientViewConfig(enabled, configured, None if configured.max_opens_per_minute is None else OpenRateLimiter(configured.max_opens_per_minute))
+    configured = PatientViewSettings(_env_file=None, **{"max_opens_per_minute": 100, "max_label_rows_per_minute": 1000, **(settings or {})})
+    config = PatientViewConfig(
+        enabled, configured, None if configured.max_opens_per_minute is None else OpenRateLimiter(configured.max_opens_per_minute),
+        None if configured.max_label_rows_per_minute is None else OpenRateLimiter(configured.max_label_rows_per_minute),
+    )
     client.app.dependency_overrides[patient_view_config] = lambda: config
     return patient_view_config
 
@@ -2694,7 +2697,7 @@ def test_outside_the_demo_profile_with_synthetic_data_nothing_is_decrypted_and_s
         ):
             assert response.status_code == 503 and response.json() == {"detail": "patient view is disabled outside the demo profile with synthetic data"}
         search = client.post(PATIENT_SEARCH, headers=bearer(mint(fd)), json={"clinic_id": str(ids.clinic_a), "name": "Nobody Atall", "dob": "1990-01-01"})
-        assert search.status_code == 200 and search.json() == {"items": [], "truncated": False}
+        assert search.status_code == 200 and search.json() == {"items": [], "truncated": False, "labels_withheld": False}
     finally:
         client.app.dependency_overrides.pop(key, None)
 
@@ -2729,6 +2732,97 @@ def test_search_rows_carry_the_list_label_when_the_feature_is_on(client, ids):
     (hit,) = found.json()["items"]
     assert hit["label"] == {"patient_id": hit["patient_id"], "name": "Odile Searchprobe", "birth_year": 1990, "phone_last4": "0777"}
     assert "1990-02-02" not in found.text and "9876500777" not in found.text  # not the full date, not the full number
+
+
+def test_the_list_row_budget_is_required_per_user_and_counted_in_rows_for_the_label_read_and_for_search_labels(client, ids):
+    fd, nurse = ids.people["front_desk_a"][0], ids.people["nurse_a"][0]
+    patients = [new_real_patient(ids) for _ in range(3)]
+    body = lambda *p: {"clinic_id": str(ids.clinic_a), "patient_ids": [str(x) for x in p]}
+    key = _view_override(client, settings={"max_label_rows_per_minute": 4})
+    try:
+        assert client.post(PATIENT_LABELS, headers=bearer(mint(fd)), json=body(*patients)).status_code == 200  # 3 rows
+        over = client.post(PATIENT_LABELS, headers=bearer(mint(fd)), json=body(*patients[:2]))  # 3 + 2 > 4
+        assert over.status_code == 429 and over.json() == {"detail": "too many list rows read; wait a moment"}
+        assert client.post(PATIENT_LABELS, headers=bearer(mint(fd)), json=body(patients[0])).status_code == 200  # 3 + 1 = 4: the refused call charged nothing
+        assert client.post(PATIENT_LABELS, headers=bearer(mint(nurse)), json=body(*patients)).status_code == 200  # another user has their own budget
+        # search labels draw on the SAME budget: the front desk user has spent it, so the hit comes back without a label and says so
+        person = {"name": "Budget Probe", "dob": "1981-01-01", "phone": "9876500888"}
+        client.post("/v1/staff/patients", headers={**bearer(mint(fd)), "X-Idempotency-Key": _new_key()}, json={"clinic_id": str(ids.clinic_a), **person})
+        found = client.post(PATIENT_SEARCH, headers=bearer(mint(fd)), json={"clinic_id": str(ids.clinic_a), **person})
+        assert found.status_code == 200 and found.json()["labels_withheld"] is True and all(i["label"] is None for i in found.json()["items"]) and found.json()["items"]
+    finally:
+        client.app.dependency_overrides.pop(key, None)
+    key = _view_override(client, settings={"max_label_rows_per_minute": None})
+    try:
+        unset = client.post(PATIENT_LABELS, headers=bearer(mint(fd)), json=body(patients[0]))
+        assert unset.status_code == 503 and unset.json() == {"detail": "patient view is unavailable: the per-user list-row limit is not configured"}
+        assert client.get(PATIENT_VIEW.format(patient_id=patients[0]), headers=bearer(mint(fd))).status_code == 200  # opening is a separate setting
+    finally:
+        client.app.dependency_overrides.pop(key, None)
+
+
+def test_a_phone_only_hit_carries_no_label_so_a_number_cannot_be_turned_into_a_name(client, ids):
+    fd = ids.people["front_desk_a"][0]
+    owner = {"name": "Phone Owner", "dob": "1970-10-10", "phone": "9876500999"}
+    client.post("/v1/staff/patients", headers={**bearer(mint(fd)), "X-Idempotency-Key": _new_key()}, json={"clinic_id": str(ids.clinic_a), **owner})
+    probe = client.post(PATIENT_SEARCH, headers=bearer(mint(fd)), json={"clinic_id": str(ids.clinic_a), "name": "Somebody Different", "dob": "1999-09-09", "phone": owner["phone"]})
+    assert probe.status_code == 200
+    phone_only = [i for i in probe.json()["items"] if i["matched_kinds"] == ["phone"]]
+    assert phone_only and all(i["label"] is None for i in phone_only)  # found by the number alone: no name is revealed
+    assert "Phone Owner" not in probe.text
+
+
+def test_a_patient_account_bound_to_a_record_cannot_open_it_or_read_its_label_and_an_erased_record_is_gone(client, ids):
+    async def bind(conn, account):
+        pid = await _new_real_patient(conn, ids.clinic_a)
+        await conn.execute("update mpi.patients set account_id = $1 where id = $2", account, pid)
+        return pid
+
+    for key in ("patient",):  # a guardian account cannot be bound to a record at all (migration 0012 refuses it), so the bound case is a patient account
+        account = ids.people[key][0]
+        bound = _run(_owner(lambda conn, a=account: bind(conn, a)))
+        token = bearer(mint(account))
+        opened = client.get(PATIENT_VIEW.format(patient_id=bound), headers=token)
+        assert opened.status_code in (403, 404) and "Testperson" not in opened.text and SYNTHETIC["dob"] not in opened.text  # can see its own row, but is not staff: nothing is decrypted
+        labels = client.post(PATIENT_LABELS, headers=token, json={"clinic_id": str(ids.clinic_a), "patient_ids": [str(bound)]})
+        assert labels.status_code in (403, 404) and "Testperson" not in labels.text
+    erased = new_real_patient(ids)
+    _run(_owner(lambda conn: conn.execute("update mpi.patients set erased_at = now(), name_ct = null, dob_ct = null, phone_ct = null where id = $1", erased)))
+    fd = ids.people["front_desk_a"][0]
+    assert client.get(PATIENT_VIEW.format(patient_id=erased), headers=bearer(mint(fd))).status_code == 404
+    gone = client.post(PATIENT_LABELS, headers=bearer(mint(fd)), json={"clinic_id": str(ids.clinic_a), "patient_ids": [str(erased)]})
+    assert gone.status_code == 200 and gone.json() == {"items": []}
+
+
+def test_a_record_that_cannot_be_decrypted_is_a_fixed_503_with_no_audit_row_and_every_response_is_no_store_errors_included(client, ids):
+    fd = ids.people["front_desk_a"][0]
+
+    async def damaged(conn):
+        pid = await _new_real_patient(conn, ids.clinic_a)
+        await conn.execute("update mpi.patients set dob_ct = $2 where id = $1", pid, b"\x00" * 40)
+        return pid
+
+    pid = _run(_owner(damaged))
+    broken = client.get(PATIENT_VIEW.format(patient_id=pid), headers=bearer(mint(fd)))
+    assert broken.status_code == 503 and broken.json() == {"detail": "this record cannot be shown"} and broken.headers["cache-control"] == "no-store"
+    assert _run(_fetch("select count(*) as n from audit.log where action = 'patient.view' and resource_id = $1", str(pid)))[0]["n"] == 0
+    for response in (
+        client.get(PATIENT_VIEW.format(patient_id=uuid.uuid4()), headers=bearer(mint(fd))),  # 404
+        client.get(PATIENT_VIEW.format(patient_id="nope"), headers=bearer(mint(fd))),  # 422
+        client.get(PATIENT_VIEW.format(patient_id=pid)),  # 401
+        client.post(PATIENT_LABELS, headers=bearer(mint(ids.people["admin_a"][0])), json={"clinic_id": str(ids.clinic_a), "patient_ids": [str(pid)]}),  # 403
+    ):
+        assert response.status_code in (401, 403, 404, 422) and response.headers["cache-control"] == "no-store", response.status_code
+
+
+def test_nurse_and_doctor_label_reads_are_audited_with_their_own_role_and_the_count_only(client, ids):
+    patient = new_real_patient(ids)
+    for who, role in (("nurse_a", "nurse"), ("doctor_a", "doctor")):
+        account = ids.people[who][0]
+        ok = client.post(PATIENT_LABELS, headers=bearer(mint(account)), json={"clinic_id": str(ids.clinic_a), "patient_ids": [str(patient)]})
+        assert ok.status_code == 200
+        rows = _run(_fetch("select actor_role, details from audit.log where action = 'patient.view_labels' and actor_id = $1", account))
+        assert rows and {r["actor_role"] for r in rows} == {role}
 
 
 # ---- message reads: the committed half's behaviour -----------------------------------------------------------------------------------------
