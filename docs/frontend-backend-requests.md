@@ -43,10 +43,30 @@ decide the mechanism. Until then "active role" is a display and navigation choic
 A design proposal (no code yet, awaiting the owner's OK) is in `docs/design/active-role.md`: an `X-CareFlow-Active-Role` header, verified
 against the live grants in the database and used only to narrow. If adopted, production CORS must also allow that request header.
 
-### 4. Step-up claim shape (not a code change: a spike)
+### 4. Step-up claim shape: RECORDED (2026-10-30, dev project, a real token)
 
-Tracked in `docs/design/step-up-spike.md`. The frontend will decode a real access token's `aal` / `amr` / `iat` structure in
-code once F2 sign-in works, and report the structure only (values blanked) so it can be pasted to the backend session.
+Captured by the console's development-only claim panel from a real access token of a dev staff account after TOTP enrolment and
+a refresh (the token itself was never shown, logged or read by the frontend session). The panel prints structure with values
+blanked, plus, because the owner ticked the box, the `aal` level and the `amr` method names. Pasted by the owner:
+
+| What | Observed | Backend assumption (`careflow/auth.py`, `step-up-spike.md`) |
+|---|---|---|
+| `aal` | the string `"aal2"` | exactly `"aal2"`: **matches** |
+| `amr` | a list of 2 entries; each has exactly the keys `method` and `timestamp` | a non-empty list, every entry exactly `{method, timestamp}`: **matches** |
+| `amr[].method` | `"totp"` and `"password"` (totp listed first) | one entry named `"totp"`: **matches** |
+| `amr[].timestamp` | an integer with 10 digits (unix seconds) | an integer count of unix seconds: **matches** |
+| `iat` | an integer with 10 digits | not used |
+| timestamps vs `iat` | both amr timestamps are **before** `iat` | a timestamp in the future is refused: not triggered |
+| after one refresh | the amr timestamps are **unchanged** (`iat` moves) | a refresh keeps the original timestamp: **matches** |
+
+What this does NOT cover: the legacy string form of `amr` (not seen), a token from a LATER sign-in challenge (this one followed
+enrolment; the shape is expected to be the same but was not captured), a token older than the step-up window, and the backend
+accepting such a token end to end (the live merge route was not called). The window is measured from the original TOTP time and
+a refresh does not move it, so after `CAREFLOW_STEP_UP_MAX_AGE_SECONDS` a refreshed token is correctly stepped-down again.
+
+The backend session should record this in `docs/design/step-up-spike.md` (that page is the backend's; the frontend does not
+edit it). The frontend's merge approve and unmerge stay OFF until that is done and one live approve with a step-up has worked
+against the dev backend.
 
 ### 5. F3 console: what the screens need that the snapshot does not give them yet
 
