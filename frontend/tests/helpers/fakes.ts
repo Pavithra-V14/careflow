@@ -82,16 +82,50 @@ export function makeFakePort(options: FakePortOptions = {}) {
   };
 }
 
-export type FakeApiRequest = { method: string; path: string; auth: string | null; key: string | null };
+export type FakeApiRequest = {
+  method: string;
+  /** Host plus path, so a request to the storage host is told apart from one to the API. */
+  host: string;
+  path: string;
+  query: URLSearchParams;
+  auth: string | null;
+  key: string | null;
+  activeRole: string | null;
+  contentType: string | null;
+  body: unknown;
+};
 
-/** Replaces global fetch with a fake API. `respond` returns the Response for each request, in order of arrival. */
-export function stubApi(respond: (req: FakeApiRequest, n: number) => Response) {
+/**
+ * Replaces global fetch with a fake. `respond` returns the Response for each request, in order of arrival. It accepts both
+ * `fetch(Request)` (the API client) and `fetch(url, init)` (the storage upload), so one fake serves both.
+ */
+export function stubApi(respond: (req: FakeApiRequest, n: number) => Response | Promise<Response>) {
   const calls: FakeApiRequest[] = [];
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (input: Request) => {
-      const url = new URL(input.url);
-      const call = { method: input.method.toLowerCase(), path: url.pathname, auth: input.headers.get('authorization'), key: input.headers.get('x-idempotency-key') };
+    vi.fn(async (input: Request | string, init?: RequestInit) => {
+      // A jsdom File is not a Node body type, so a binary upload body is recorded as a marker and not passed to Request.
+      const binary = init?.body !== undefined && init.body !== null && typeof init.body !== 'string';
+      const request = typeof input === 'string' ? new Request(input, binary ? { ...init, body: null } : init) : input;
+      const url = new URL(request.url);
+      const text = request.method === 'GET' || request.method === 'HEAD' ? '' : await request.clone().text();
+      let body: unknown = binary ? '[binary body]' : text === '' ? undefined : text;
+      try {
+        if (text.startsWith('{')) body = JSON.parse(text);
+      } catch {
+        /* keep the text */
+      }
+      const call: FakeApiRequest = {
+        method: request.method.toLowerCase(),
+        host: url.host,
+        path: url.pathname,
+        query: url.searchParams,
+        auth: request.headers.get('authorization'),
+        key: request.headers.get('x-idempotency-key'),
+        activeRole: request.headers.get('x-careflow-active-role'),
+        contentType: request.headers.get('content-type'),
+        body,
+      };
       calls.push(call);
       return respond(call, calls.length);
     }),

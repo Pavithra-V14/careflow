@@ -14,9 +14,9 @@ import { EmptyState, NotAvailableToRole } from '../ui/states';
  * OpenAPI snapshot yet, so they are read defensively and a missing field means "not provided", never a guess.
  * MOCK-ONLY until the backend adds them.
  */
-function readLabels(response: unknown, hit: unknown): { withheld: boolean; truncated: boolean; label: string | null } {
+function readLabels(response: unknown, hit?: unknown): { withheld: boolean; truncated: boolean; label: string | null } {
   const r = response as { labels_withheld?: unknown; truncated?: unknown };
-  const h = hit as { label?: unknown };
+  const h = (hit ?? {}) as { label?: unknown };
   return {
     withheld: r.labels_withheld === true,
     truncated: r.truncated === true,
@@ -79,7 +79,7 @@ export function PatientsPage() {
   }
 
   const result = search.data;
-  const labels = result ? readLabels(result, null) : null;
+  const labels = result ? readLabels(result) : null;
 
   return (
     <section aria-labelledby="patients-title">
@@ -144,8 +144,7 @@ export function PatientsPage() {
                   return (
                     <tr key={hit.patient_id}>
                       <th scope="row">
-                        <Link to={`/patients/${hit.patient_id}`}>
-                          <span className="visually-hidden">{t('patients.openRecord')} </span>
+                        <Link to={`/patients/${hit.patient_id}`} aria-label={`${t('patients.openRecord')} ${hit.patient_id.slice(0, 8)}`}>
                           <ShortId id={hit.patient_id} />
                         </Link>
                       </th>

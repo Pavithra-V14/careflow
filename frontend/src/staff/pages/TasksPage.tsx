@@ -70,8 +70,7 @@ export function TasksPage() {
                   return (
                     <tr key={task.task_id} className={urgent ? 'task-urgent' : undefined}>
                       <th scope="row">
-                        <Link to={`/tasks/${task.task_id}`}>
-                          <span className="visually-hidden">{t('tasks.open')} </span>
+                        <Link to={`/tasks/${task.task_id}`} aria-label={`${t('tasks.open')} ${task.task_id.slice(0, 8)}`}>
                           <ShortId id={task.task_id} />
                         </Link>
                       </th>

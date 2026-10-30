@@ -1,4 +1,4 @@
-import { HashRouter, NavLink, Route, Routes } from 'react-router';
+import { HashRouter, Navigate, NavLink, Route, Routes } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { EnvironmentBadge } from '../components/EnvironmentBadge';
 import { shortClinicId } from '../me';
@@ -76,7 +76,8 @@ export function Shell() {
         <Route path="/tasks/:taskId" element={<TaskDetailPage />} />
         <Route path="/patients" element={<PatientsPage />} />
         <Route path="/patients/:patientId" element={<PatientRecordPage />} />
-        <Route path="/scheduling" element={<SchedulingPage />} />
+        {/* The bare section opens its first list, so the sub-navigation always shows where you are. */}
+        <Route path="/scheduling" element={<Navigate to="/scheduling/providers" replace />} />
         <Route path="/scheduling/:list" element={<SchedulingPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

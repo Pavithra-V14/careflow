@@ -244,9 +244,8 @@ function HoldsList() {
                     </td>
                     <td>
                       {h.status === 'active' && hasRole(CAN_RELEASE_HOLD) ? (
-                        <button type="button" onClick={() => setReleasing(h.hold_id)}>
+                        <button type="button" aria-label={`${t('scheduling.release')} ${h.hold_id.slice(0, 8)}`} onClick={() => setReleasing(h.hold_id)}>
                           {t('scheduling.release')}
-                          <span className="visually-hidden"> {h.hold_id.slice(0, 8)}</span>
                         </button>
                       ) : (
                         '–'

@@ -52,8 +52,7 @@ export function ReferralsPage() {
                 {d.items.map((r) => (
                   <tr key={r.document_id}>
                     <th scope="row">
-                      <Link to={`/referrals/${r.document_id}`}>
-                        <span className="visually-hidden">{t('referrals.open')} </span>
+                      <Link to={`/referrals/${r.document_id}`} aria-label={`${t('referrals.open')} ${r.document_id.slice(0, 8)}`}>
                         <ShortId id={r.document_id} />
                       </Link>
                     </th>
