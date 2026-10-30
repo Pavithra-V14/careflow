@@ -193,6 +193,8 @@ jobs:
               tests/test_rls_checkpoints_live.py
               tests/test_rls_docs_live.py
               tests/test_rls_msg_live.py
+              tests/test_api_real_token_live.py
+              tests/test_storage_policies_live.py
           - shard: 4  # about 31 min: screenings 495 + scheduling concurrency 492 + ai registry 199 + mpi 145 + iam audit 112 + referral hold 95 + pooler 76 + migrate 58 + mpi scheduling 58 + the small ones
             matrix_part: ""
             files: >-
@@ -209,15 +211,12 @@ jobs:
               tests/test_api_offers_live.py
               tests/test_triage_writers_live.py
               tests/test_rls_child_tables_live.py
-              tests/test_api_real_token_live.py
-              tests/test_storage_policies_live.py
               tests/test_phase2_e2e_live.py
     env:
       CAREFLOW_ENV: ci
       CAREFLOW_PROFILE: demo
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
-      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       SUPABASE_JWKS_URL: ${{ secrets.SUPABASE_JWKS_URL }}
       DATABASE_URL_MIGRATOR: ${{ secrets.DATABASE_URL_MIGRATOR }}
       DATABASE_URL_APP: ${{ secrets.DATABASE_URL_APP }}
@@ -239,6 +238,8 @@ jobs:
       - name: "Live tests, shard ${{ matrix.shard }} (a skipped test is a failure - it means a credential or migration is missing)"
         env:
           CAREFLOW_MATRIX_PART: ${{ matrix.matrix_part }}
+          # The server-side (secret) key reaches SHARD 3 ONLY: the two files that need it (test_storage_policies_live, test_api_real_token_live) are in that shard; the other shards get an empty value.
+          SUPABASE_SECRET_KEY: ${{ matrix.shard == 3 && secrets.SUPABASE_SECRET_KEY || '' }}
         run: |
           set -o pipefail
           uv run python scripts/ci_peak_connections.py --label "shard-${{ matrix.shard }}" > peak.out 2>&1 &
