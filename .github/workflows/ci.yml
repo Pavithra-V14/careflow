@@ -20,9 +20,13 @@
 name: CI
 
 on:
+  # A change that touches ONLY the frontend (frontend/** and its own workflow) does not run this backend workflow: the frontend has its own (frontend.yml). A change that touches anything else
+  # still runs everything. NOTE for branch protection: a frontend-only pull request never reports the required `test` check from this workflow.
   pull_request:
+    paths-ignore: ['frontend/**', '.github/workflows/frontend.yml']
   push:
     branches: [main]
+    paths-ignore: ['frontend/**', '.github/workflows/frontend.yml']
 
 # A newer push to the same branch supersedes an older run of it, so superseded runs stop instead of piling up. Runs of DIFFERENT
 # branches still share ONE hosted CI database: each live shard below has its own, job-level group so two runs never overlap on the same shard
