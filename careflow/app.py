@@ -59,7 +59,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from careflow import identity, mpi, offers, review_tasks
+from careflow import identity, mpi, offers, openapi_errors, review_tasks
 from careflow.audit import write_audit
 from careflow.auth import (
     AuthError,
@@ -2152,6 +2152,7 @@ def create_app(
     app.include_router(staff_identity)
     app.include_router(staff_audit)
     app.include_router(health)
+    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
     return app
 
 
