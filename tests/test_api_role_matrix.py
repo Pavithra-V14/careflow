@@ -1476,6 +1476,40 @@ def patient_status_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(worker), None)
 
 
+# ---- scheduling reference lists (providers, locations, visit types, priority levels) ---------------------------------------------------------------------------
+#
+# Same readers as the other scheduling reads: front desk, nurse and doctor of the clinic (and `multi`, a nurse here); a reader of ANOTHER clinic is allowed and sees none of this clinic's rows;
+# everyone else is refused with 403 before any query. The matrix clinic has one provider, one location, one visit type and two priority levels (level_one rank 1, level_two rank 2).
+
+REF_ROUTES = {
+    "providers": PREFIX + "/providers", "locations": PREFIX + "/locations", "visit_types": PREFIX + "/visit-types", "priority_levels": PREFIX + "/priority-levels",
+}
+
+
+def reference_cases(ids, route) -> list[tuple]:
+    path = REF_ROUTES[route]
+    seeded = {
+        "providers": lambda items: str(ids.provider_a) in {i["provider_id"] for i in items} and all(set(i) == {"provider_id", "clinic_id", "display_name", "active"} for i in items),
+        "locations": lambda items: str(ids.location_a) in {i["location_id"] for i in items} and all(set(i) == {"location_id", "clinic_id", "name", "active"} for i in items),
+        "visit_types": lambda items: str(ids.vt_a) in {i["visit_type_id"] for i in items} and all(set(i) == {"visit_type_id", "clinic_id", "name", "duration_minutes", "active"} for i in items),
+        "priority_levels": lambda items: [(i["code"], i["rank"]) for i in items] == [("level_one", 1), ("level_two", 2)] and all(set(i) == {"clinic_id", "code", "label", "rank", "active"} for i in items),
+    }[route]
+    readers = ("front_desk_a", "nurse_a", "doctor_a", "multi")
+    cases = [_case(ids, f"{who} reads the {route.replace('_', ' ')}", who, 200, path, key=None, body=_page(ids, clinic_only=ids.clinic_a, non_empty=True, check=seeded)) for who in readers]
+    cases += [
+        _case(ids, "a reader of another clinic is allowed and sees none of this clinic's rows", "front_desk_b", 200, path, key=None, body=_page(ids, check=lambda items: items == [])),
+        _case(ids, "include_inactive is accepted", "front_desk_a", 200, path + "?include_inactive=true", key=None, body=_page(ids, clinic_only=ids.clinic_a, non_empty=True, check=seeded)),
+        _case(ids, "limit=1 returns one row", "front_desk_a", 200, path + "?limit=1", key=None, body=lambda b: len(b["items"]) == 1 and b["limit"] == 1 and (b["has_more"] is True or route != "priority_levels")),
+        _case(ids, "limit=0 is rejected", "front_desk_a", 422, path + "?limit=0", key=None, body=_fixed(422)),
+        _case(ids, "limit=501 is rejected", "front_desk_a", 422, path + "?limit=501", key=None, body=_fixed(422)),
+        _case(ids, "include_inactive that is not a boolean is rejected", "front_desk_a", 422, path + "?include_inactive=maybe", key=None, body=_fixed(422)),
+    ]
+    denied = [p for p in ids.people if p not in (*readers, "front_desk_b")]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path, key=None, body=lambda b: b == {"detail": "your role may not read this"}) for p in denied]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, path, key=None, body=lambda b: b == {"detail": "your role may not read this"}))
+    return cases + _unauthenticated(ids, path, None)
+
+
 # One entry per route: add the new route's cases here in the same change that adds the route.
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
@@ -1486,6 +1520,10 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", PREFIX + "/slots"): lambda ids: read_cases(ids, "slots"),
     ("GET", PREFIX + "/bookings"): lambda ids: read_cases(ids, "bookings"),
     ("GET", PREFIX + "/waitlist"): lambda ids: read_cases(ids, "waitlist"),
+    ("GET", PREFIX + "/providers"): lambda ids: reference_cases(ids, "providers"),
+    ("GET", PREFIX + "/locations"): lambda ids: reference_cases(ids, "locations"),
+    ("GET", PREFIX + "/visit-types"): lambda ids: reference_cases(ids, "visit_types"),
+    ("GET", PREFIX + "/priority-levels"): lambda ids: reference_cases(ids, "priority_levels"),
     ("POST", INGEST): ingest_cases,
     ("POST", MERGES): merge_propose_cases,
     ("POST", APPROVE): merge_approve_cases,

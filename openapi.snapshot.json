@@ -458,6 +458,64 @@
         "title": "IngestOut",
         "type": "object"
       },
+      "LocationList": {
+        "additionalProperties": false,
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LocationOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "limit",
+          "has_more"
+        ],
+        "title": "LocationList",
+        "type": "object"
+      },
+      "LocationOut": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "location_id": {
+            "format": "uuid",
+            "title": "Location Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "location_id",
+          "clinic_id",
+          "name",
+          "active"
+        ],
+        "title": "LocationOut",
+        "type": "object"
+      },
       "Me": {
         "properties": {
           "account_id": {
@@ -751,6 +809,68 @@
         "title": "PatientStatusOut",
         "type": "object"
       },
+      "PriorityLevelList": {
+        "additionalProperties": false,
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PriorityLevelOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "limit",
+          "has_more"
+        ],
+        "title": "PriorityLevelList",
+        "type": "object"
+      },
+      "PriorityLevelOut": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "code",
+          "label",
+          "rank",
+          "active"
+        ],
+        "title": "PriorityLevelOut",
+        "type": "object"
+      },
       "ProposalOut": {
         "additionalProperties": false,
         "properties": {
@@ -832,6 +952,64 @@
           "subordinate_patient_id"
         ],
         "title": "ProposeMergeIn",
+        "type": "object"
+      },
+      "ProviderList": {
+        "additionalProperties": false,
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "limit",
+          "has_more"
+        ],
+        "title": "ProviderList",
+        "type": "object"
+      },
+      "ProviderOut": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "provider_id": {
+            "format": "uuid",
+            "title": "Provider Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_id",
+          "clinic_id",
+          "display_name",
+          "active"
+        ],
+        "title": "ProviderOut",
         "type": "object"
       },
       "ReferralDetailOut": {
@@ -1919,6 +2097,69 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VisitTypeList": {
+        "additionalProperties": false,
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/VisitTypeOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "limit",
+          "has_more"
+        ],
+        "title": "VisitTypeList",
+        "type": "object"
+      },
+      "VisitTypeOut": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "duration_minutes": {
+            "title": "Duration Minutes",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "visit_type_id": {
+            "format": "uuid",
+            "title": "Visit Type Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "visit_type_id",
+          "clinic_id",
+          "name",
+          "duration_minutes",
+          "active"
+        ],
+        "title": "VisitTypeOut",
         "type": "object"
       },
       "WaitlistEntryOut": {
@@ -3600,6 +3841,67 @@
         ]
       }
     },
+    "/v1/staff/scheduling/locations": {
+      "get": {
+        "description": "Locations (rooms, sites) of the clinics you may read, by name.",
+        "operationId": "list_locations_v1_staff_scheduling_locations_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_inactive",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Inactive",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Locations",
+        "tags": [
+          "staff scheduling"
+        ]
+      }
+    },
     "/v1/staff/scheduling/offers/draft": {
       "get": {
         "description": "The ranked candidates for a freed slot and a DRAFT offer for the first, computed now and stored nowhere (`status`: ok, empty, or unavailable with `not_configured:` and the names of the\nmissing clinician-owned settings). 404 for a clinic you cannot see, 403 unless you are front desk there.",
@@ -3717,6 +4019,128 @@
           }
         ],
         "summary": "Send Offer Route",
+        "tags": [
+          "staff scheduling"
+        ]
+      }
+    },
+    "/v1/staff/scheduling/priority-levels": {
+      "get": {
+        "description": "The clinic's clinical priority levels, rank 1 first. The levels themselves are clinician-approved data (sched.priority_levels); this only reads them.",
+        "operationId": "list_priority_levels_v1_staff_scheduling_priority_levels_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_inactive",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Inactive",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriorityLevelList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Priority Levels",
+        "tags": [
+          "staff scheduling"
+        ]
+      }
+    },
+    "/v1/staff/scheduling/providers": {
+      "get": {
+        "description": "Providers of the clinics you may read, by display name.",
+        "operationId": "list_providers_v1_staff_scheduling_providers_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_inactive",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Inactive",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Providers",
         "tags": [
           "staff scheduling"
         ]
@@ -3965,6 +4389,67 @@
           }
         ],
         "summary": "Hold Slot",
+        "tags": [
+          "staff scheduling"
+        ]
+      }
+    },
+    "/v1/staff/scheduling/visit-types": {
+      "get": {
+        "description": "Visit types of the clinics you may read, by name, with their scheduling length.",
+        "operationId": "list_visit_types_v1_staff_scheduling_visit_types_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_inactive",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Inactive",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisitTypeList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Visit Types",
         "tags": [
           "staff scheduling"
         ]

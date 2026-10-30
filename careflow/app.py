@@ -556,6 +556,107 @@ async def list_waitlist(
     return WaitlistList(items=items, limit=limit, has_more=len(rows) > limit)
 
 
+# ---- scheduling reference lists: providers, locations, visit types, priority levels (the booking forms' dropdowns) -------------------------------------------------
+#
+# Reads only, under the existing `select` policies and grants; the same readers as the other scheduling reads (front desk, nurse, doctor). Names are clinic setup data (a provider's display name,
+# a room, a visit type), never patient data. `active` is returned so a screen can hide retired entries; inactive ones are listed only with `include_inactive=true`.
+
+
+class ProviderOut(_Out):
+    provider_id: uuid.UUID
+    clinic_id: uuid.UUID
+    display_name: str
+    active: bool
+
+
+class LocationOut(_Out):
+    location_id: uuid.UUID
+    clinic_id: uuid.UUID
+    name: str
+    active: bool
+
+
+class VisitTypeOut(_Out):
+    visit_type_id: uuid.UUID
+    clinic_id: uuid.UUID
+    name: str
+    duration_minutes: int
+    active: bool
+
+
+class PriorityLevelOut(_Out):
+    clinic_id: uuid.UUID
+    code: str
+    label: str
+    rank: int  # 1 is served first
+    active: bool
+
+
+class ProviderList(_Out):
+    items: list[ProviderOut]
+    limit: int
+    has_more: bool
+
+
+class LocationList(_Out):
+    items: list[LocationOut]
+    limit: int
+    has_more: bool
+
+
+class VisitTypeList(_Out):
+    items: list[VisitTypeOut]
+    limit: int
+    has_more: bool
+
+
+class PriorityLevelList(_Out):
+    items: list[PriorityLevelOut]
+    limit: int
+    has_more: bool
+
+
+async def _reference_rows(conn: AsyncConnection, claims: dict[str, Any], sql: str, include_inactive: bool, limit: int):
+    clinics = await _readable_clinics(conn, claims)
+    return (await conn.execute(text(sql.format(active="" if include_inactive else " and active")), {"c": clinics, "n": limit + 1})).all()
+
+
+@scheduling.get("/providers", response_model=ProviderList)
+async def list_providers(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), include_inactive: bool = False, limit: Limit = 100) -> ProviderList:
+    """Providers of the clinics you may read, by display name."""
+    rows = await _reference_rows(
+        conn, claims, "select id, clinic_id, display_name, active from sched.providers where clinic_id = any(cast(:c as uuid[])){active} order by display_name, id limit :n", include_inactive, limit
+    )
+    return ProviderList(items=[ProviderOut(provider_id=r.id, clinic_id=r.clinic_id, display_name=r.display_name, active=r.active) for r in rows[:limit]], limit=limit, has_more=len(rows) > limit)
+
+
+@scheduling.get("/locations", response_model=LocationList)
+async def list_locations(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), include_inactive: bool = False, limit: Limit = 100) -> LocationList:
+    """Locations (rooms, sites) of the clinics you may read, by name."""
+    rows = await _reference_rows(conn, claims, "select id, clinic_id, name, active from sched.locations where clinic_id = any(cast(:c as uuid[])){active} order by name, id limit :n", include_inactive, limit)
+    return LocationList(items=[LocationOut(location_id=r.id, clinic_id=r.clinic_id, name=r.name, active=r.active) for r in rows[:limit]], limit=limit, has_more=len(rows) > limit)
+
+
+@scheduling.get("/visit-types", response_model=VisitTypeList)
+async def list_visit_types(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), include_inactive: bool = False, limit: Limit = 100) -> VisitTypeList:
+    """Visit types of the clinics you may read, by name, with their scheduling length."""
+    rows = await _reference_rows(
+        conn, claims, "select id, clinic_id, name, duration_minutes, active from sched.visit_types where clinic_id = any(cast(:c as uuid[])){active} order by name, id limit :n", include_inactive, limit
+    )
+    return VisitTypeList(
+        items=[VisitTypeOut(visit_type_id=r.id, clinic_id=r.clinic_id, name=r.name, duration_minutes=r.duration_minutes, active=r.active) for r in rows[:limit]], limit=limit, has_more=len(rows) > limit
+    )
+
+
+@scheduling.get("/priority-levels", response_model=PriorityLevelList)
+async def list_priority_levels(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), include_inactive: bool = False, limit: Limit = 100) -> PriorityLevelList:
+    """The clinic's clinical priority levels, rank 1 first. The levels themselves are clinician-approved data (sched.priority_levels); this only reads them."""
+    rows = await _reference_rows(
+        conn, claims, "select clinic_id, code, label, rank, active from sched.priority_levels where clinic_id = any(cast(:c as uuid[])){active} order by clinic_id, rank, code limit :n", include_inactive, limit
+    )
+    return PriorityLevelList(items=[PriorityLevelOut(clinic_id=r.clinic_id, code=r.code, label=r.label, rank=r.rank, active=r.active) for r in rows[:limit]], limit=limit, has_more=len(rows) > limit)
+
+
 # ---- staff messages: red-flag screening of a stored message (BUILD-SPEC.md §5.2, §12.1; CLAUDE.md rules 2, 3, 5, 7, 8) --------------
 #
 # `POST /v1/staff/messages/{message_id}/screen` screens the stored (encrypted) body of one message with the deterministic rules, FIRST
