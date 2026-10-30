@@ -92,6 +92,11 @@ const INVOCATIONS: Record<keyof typeof OPERATIONS, (api: Api, o?: WriteOptions) 
   listHolds: (api) => api.listHolds(),
   releaseHold: (api, o) => api.releaseHold(ID, o),
   draftOffer: (api) => api.draftOffer(ID, ID),
+  reviewReferral: (api, o) => api.reviewReferral(ID, 'approve', o),
+  revokeIdentity: (api, o) => api.revokeIdentity(ID, 'wrong_person', o),
+  listMerges: (api) => api.listMerges(),
+  openMerge: (api) => api.openMerge(ID),
+  listDuplicates: (api) => api.listDuplicates(),
 };
 
 const requiredParams = (op: Json) => ((op.parameters ?? []) as Json[]).filter((p) => p.required);

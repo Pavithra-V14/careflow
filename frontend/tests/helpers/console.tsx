@@ -19,6 +19,7 @@ export const ID = {
   slot: '99999999-9999-4999-8999-999999999999',
   visitType: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   user: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  user2: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
 };
 
 export type Handler = (req: FakeApiRequest, match: RegExpMatchArray) => Response | Promise<Response>;

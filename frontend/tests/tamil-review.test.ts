@@ -24,6 +24,8 @@ describe('Tamil review list', () => {
   it('keeps the clinical task kinds and every placeholder in English, identical in both languages', () => {
     for (const k of ['tasks.kind.red_flag', 'tasks.kind.screening_unassessable', 'tasks.kind.triage_proposal']) expect(ta[k], k).toBe(en[k]);
     for (const k of Object.keys(en).filter((x) => x.startsWith('placeholder.'))) expect(ta[k], k).toBe(en[k]);
+    // The triage decision words and the identity-revoke reason words are clinical or policy terms: not translated until reviewed.
+    for (const k of Object.keys(en).filter((x) => x.startsWith('referrals.decision.') || x.startsWith('patients.revoke.reasons.'))) expect(ta[k], k).toBe(en[k]);
   });
 
   it('marks the reason-code placeholder with the exact agreed words', () => {

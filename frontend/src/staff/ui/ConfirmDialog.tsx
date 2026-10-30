@@ -11,6 +11,7 @@ export function ConfirmDialog({
   title,
   confirmLabel,
   busy,
+  confirmDisabled = false,
   onConfirm,
   onCancel,
   children,
@@ -19,6 +20,8 @@ export function ConfirmDialog({
   title: string;
   confirmLabel: string;
   busy: boolean;
+  /** True until the person has made the choice the action needs (for example a reason). */
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
   children?: ReactNode;
@@ -54,7 +57,7 @@ export function ConfirmDialog({
         <button type="button" onClick={onCancel} disabled={busy}>
           {t('common.cancel')}
         </button>
-        <button type="button" className="primary" onClick={onConfirm} disabled={busy}>
+        <button type="button" className="primary" onClick={onConfirm} disabled={busy || confirmDisabled}>
           {busy ? t('common.working') : confirmLabel}
         </button>
       </div>

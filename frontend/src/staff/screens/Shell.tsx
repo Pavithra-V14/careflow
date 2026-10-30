@@ -14,6 +14,8 @@ import { TaskDetailPage } from '../pages/TaskDetailPage';
 import { PatientsPage } from '../pages/PatientsPage';
 import { PatientRecordPage } from '../pages/PatientRecordPage';
 import { SchedulingPage } from '../pages/SchedulingPage';
+import { IdentityPage } from '../pages/IdentityPage';
+import { MergeDetailPage } from '../pages/MergeDetailPage';
 
 /**
  * The signed-in console: a persistent session bar (role, clinic, LIVE / TEST badge) above every screen, a role-aware
@@ -76,6 +78,9 @@ export function Shell() {
         <Route path="/tasks/:taskId" element={<TaskDetailPage />} />
         <Route path="/patients" element={<PatientsPage />} />
         <Route path="/patients/:patientId" element={<PatientRecordPage />} />
+        <Route path="/identity" element={<Navigate to="/identity/merges" replace />} />
+        <Route path="/identity/merges/:mergeId" element={<MergeDetailPage />} />
+        <Route path="/identity/:list" element={<IdentityPage />} />
         {/* The bare section opens its first list, so the sub-navigation always shows where you are. */}
         <Route path="/scheduling" element={<Navigate to="/scheduling/providers" replace />} />
         <Route path="/scheduling/:list" element={<SchedulingPage />} />

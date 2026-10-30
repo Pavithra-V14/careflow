@@ -6,6 +6,9 @@ import { useApiQuery } from '../hooks';
 import { Badge, PageHeading, ShortId, Time, UUID, useLang, useWord } from '../ui/bits';
 import { QueryView } from '../ui/states';
 import { NotFoundPage } from './NotFoundPage';
+import { ReferralReview } from './ReferralReview';
+import { CAN_REVIEW_REFERRAL } from '../sections';
+import { useSession } from '../session/SessionContext';
 import { TYPE_LABEL } from './ReferralsPage';
 import { formatNumber } from '../../shared/i18n/format';
 
@@ -20,6 +23,7 @@ function Detail({ documentId }: { documentId: string }) {
   const { api } = useAuth();
   const word = useWord();
   const lang = useLang();
+  const { hasRole } = useSession();
   const query = useApiQuery(['referral', documentId], () => unwrap(api.openReferral(documentId)));
 
   return (
@@ -101,6 +105,15 @@ function Detail({ documentId }: { documentId: string }) {
                 )}
               </>
             )}
+
+            {/* Decisions are for nurse and doctor, and only on a proposal they can see. The backend decides (409 when no run is waiting). */}
+            {hasRole(CAN_REVIEW_REFERRAL) && r.proposal_visible && (r.decided === true ? (
+              <p role="status" className="state state-empty">
+                {t('referrals.review.decidedNote')}
+              </p>
+            ) : (
+              <ReferralReview documentId={documentId} />
+            ))}
           </>
         )}
       </QueryView>

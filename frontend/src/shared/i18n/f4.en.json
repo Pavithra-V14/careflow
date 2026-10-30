@@ -1,0 +1,111 @@
+{
+  "nav": {
+    "identity": "Identity"
+  },
+  "referrals": {
+    "review": {
+      "title": "Record a decision",
+      "help": "Choose a decision for this referral. Nothing is chosen for you.",
+      "legend": "Decision",
+      "record": "Record decision",
+      "confirmTitle": "Record this decision?",
+      "confirmBody": "You are about to record the decision \"{{decision}}\" for this referral. It is kept under your name.",
+      "reasons": "Reasons",
+      "conflict": "The referral is not waiting for a decision, or a different decision is already recorded. Refresh and try again.",
+      "done": "The decision was recorded.",
+      "decidedNote": "A decision has already been recorded."
+    },
+    "decision": {
+      "approve": "Approve",
+      "edit": "Edit",
+      "reject": "Reject"
+    }
+  },
+  "patients": {
+    "revoke": {
+      "button": "Revoke confirmation",
+      "title": "Revoke this identity confirmation?",
+      "body": "This moves the record back to unverified, so a match on it is reviewed by a person. Nothing that is already linked is undone.",
+      "reason": "Reason",
+      "reasons": {
+        "wrong_person": "Wrong person",
+        "planted_or_suspect": "Planted or suspect",
+        "mistaken_click": "Mistaken click"
+      },
+      "chooseFirst": "Choose a reason first.",
+      "conflict": "That revoke conflicts with an earlier request. Refresh and try again.",
+      "done": "The confirmation was revoked.",
+      "task": {
+        "raised": "A review task was raised.",
+        "not_configured": "No review task was raised: the task settings are not configured yet.",
+        "on_record": "A review task is already on record."
+      }
+    }
+  },
+  "identity": {
+    "title": "Identity",
+    "lists": "Identity lists",
+    "duplicates": "Possible duplicates",
+    "merges": "Merges",
+    "emptyDuplicates": "There are no possible duplicates to show.",
+    "emptyMerges": "There are no merges to show.",
+    "filter": "Show items that are",
+    "all": "All",
+    "col": {
+      "candidate": "Candidate",
+      "patient": "Record",
+      "other": "Possible duplicate of",
+      "reason": "Reason",
+      "matched": "Matched on",
+      "status": "Status",
+      "created": "Created",
+      "resolved": "Resolved",
+      "merge": "Merge",
+      "master": "Kept record",
+      "subordinate": "Linked record",
+      "proposedBy": "Proposed by",
+      "approvedBy": "Approved by",
+      "activated": "Active since",
+      "unmerged": "Unmerged at",
+      "unmergedBy": "Unmerged by"
+    },
+    "dupStatus": {
+      "pending": "Pending",
+      "resolved": "Resolved"
+    },
+    "dupReason": {
+      "near_match": "Near match",
+      "ambiguous": "Ambiguous"
+    },
+    "mergeStatus": {
+      "awaiting_second_approval": "Awaiting second approval",
+      "active": "Active",
+      "unmerged": "Unmerged"
+    },
+    "openMerge": "Open merge",
+    "detail": "Merge",
+    "back": "Back to merges",
+    "actions": "Actions",
+    "none": "None",
+    "actionsSoon": "Approve and unmerge",
+    "approve": "Approve",
+    "unmerge": "Unmerge",
+    "differentPerson": "A different person from the one who proposed this merge must approve it.",
+    "approveTitle": "Approve this merge?",
+    "approveBody": "This links the two records. It asks for a fresh authenticator code first.",
+    "unmergeTitle": "Unmerge these records?",
+    "unmergeBody": "This breaks the link between the two records. It asks for a fresh authenticator code first.",
+    "approveConflict": "That approval was refused. It may already be approved, or you may have proposed it. Refresh and try again.",
+    "unmergeConflict": "That could not be done. Refresh and try again.",
+    "approved": "The merge was approved.",
+    "unmerged": "The link was broken.",
+    "flagged": "{{n}} earlier decisions were flagged for review."
+  },
+  "placeholder": {
+    "reviewReasons": "PLACEHOLDER - clinician to define",
+    "revokeReasons": "[PLACEHOLDER: the wording of these reasons is not final. To be confirmed by the clinic.]"
+  },
+  "problem": {
+    "step_up": "A fresh authenticator code is needed to do this. Nothing was changed."
+  }
+}

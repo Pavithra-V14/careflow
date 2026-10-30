@@ -5,12 +5,13 @@ import { useTranslation } from 'react-i18next';
 import { unwrap, type ApiProblem } from '../apiState';
 import { useAuth } from '../auth/AuthProvider';
 import { useApiQuery, useIdempotentWrite } from '../hooks';
-import { CAN_CONFIRM_IDENTITY } from '../sections';
+import { CAN_CONFIRM_IDENTITY, CAN_REVOKE_IDENTITY } from '../sections';
 import { useSession } from '../session/SessionContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Badge, PageHeading, PlaceholderNote, Time, UUID, useWord } from '../ui/bits';
 import { NotAvailableToRole, ProblemText, QueryView } from '../ui/states';
 import { NotFoundPage } from './NotFoundPage';
+import { IdentityRevoke } from './IdentityRevoke';
 
 export function PatientRecordPage() {
   const { patientId = '' } = useParams();
@@ -82,6 +83,9 @@ function RecordView({ patientId }: { patientId: string }) {
                 </button>
               </div>
             )}
+
+            {/* Front desk only, and only for a record that is currently verified. The backend decides. */}
+            {hasRole(CAN_REVOKE_IDENTITY) && p.verified && !p.merged_into && <IdentityRevoke patientId={patientId} />}
 
             {confirming && (
               <ConfirmDialog

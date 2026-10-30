@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolveConfig } from 'vite';
-import { EXPOSED_ENV_NAMES, assertNoSecretShapedValues, pickExposedEnv, CONFIG_GLOBAL } from '../env-allowlist';
+import { EXPOSED_ENV_NAMES, assertNoSecretShapedValues, pickExposedEnv, CONFIG_GLOBAL, FLAGS_GLOBAL } from '../env-allowlist';
 
 describe('env allowlist', () => {
   it('exposes exactly the three agreed names', () => {
@@ -32,7 +32,7 @@ describe('vite config', () => {
     for (const name of planted) process.env[name] = 'must-not-appear';
     try {
       const cfg = await resolveConfig({ configFile: 'vite.config.ts', root: process.cwd() }, 'build');
-      expect(Object.keys(cfg.define ?? {})).toEqual([CONFIG_GLOBAL]);
+      expect(Object.keys(cfg.define ?? {}).sort()).toEqual([CONFIG_GLOBAL, FLAGS_GLOBAL].sort());
       const defined = JSON.parse(String(cfg.define?.[CONFIG_GLOBAL])) as Record<string, string>;
       expect(Object.keys(defined).sort()).toEqual([...EXPOSED_ENV_NAMES].sort());
       expect(JSON.stringify(cfg.define)).not.toContain('must-not-appear');

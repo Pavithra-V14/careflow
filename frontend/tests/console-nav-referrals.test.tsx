@@ -26,8 +26,8 @@ const referral = (over: Record<string, unknown> = {}) => ({
 
 describe('navigation', () => {
   it.each([
-    ['front_desk', ['Referrals', 'Tasks', 'Patients', 'Scheduling']],
-    ['nurse', ['Referrals', 'Tasks', 'Patients', 'Scheduling']],
+    ['front_desk', ['Referrals', 'Tasks', 'Patients', 'Identity', 'Scheduling']],
+    ['nurse', ['Referrals', 'Tasks', 'Patients', 'Identity', 'Scheduling']],
     ['admin', ['Tasks']],
     ['auditor', []],
     ['business_owner', []],
