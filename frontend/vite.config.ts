@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
-import { CONFIG_GLOBAL, pickExposedEnv } from './env-allowlist';
+import { CONFIG_GLOBAL, pickExposedEnv } from './env-allowlist.ts';
 
 // Two entry points (patient, staff), one token package, one i18n setup, one API client.
 export default defineConfig(({ mode }) => {

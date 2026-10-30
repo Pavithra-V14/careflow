@@ -45,7 +45,9 @@ select {
 .skip-link {
   position: absolute;
   left: var(--space-2);
-  top: -4rem;
+  top: 0;
+  /* Moves by its own height, so a long wrapped Tamil label is fully hidden too. */
+  transform: translateY(calc(-100% - 4px));
   background: var(--color-bg);
   color: var(--color-text);
   padding: var(--space-1) var(--space-2);
@@ -54,7 +56,7 @@ select {
 }
 
 .skip-link:focus {
-  top: var(--space-2);
+  transform: none;
 }
 
 .visually-hidden {
