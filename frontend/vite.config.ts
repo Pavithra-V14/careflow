@@ -18,6 +18,9 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         input: {
           patient: resolve(import.meta.dirname, 'patient/index.html'),
+          'patient-sign-in': resolve(import.meta.dirname, 'patient/sign-in/index.html'),
+          'patient-sign-up': resolve(import.meta.dirname, 'patient/sign-up/index.html'),
+          'patient-privacy': resolve(import.meta.dirname, 'patient/privacy/index.html'),
           staff: resolve(import.meta.dirname, 'staff/index.html'),
         },
       },
