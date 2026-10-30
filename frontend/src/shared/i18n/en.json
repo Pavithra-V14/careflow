@@ -1,0 +1,24 @@
+{
+  "app": {
+    "hospitalName": "[PLACEHOLDER: hospital name]",
+    "patientTitle": "Patient portal",
+    "staffTitle": "Staff console"
+  },
+  "common": {
+    "signIn": "Sign in",
+    "signUp": "Sign up",
+    "staffSignIn": "Staff sign in",
+    "signOut": "Sign out",
+    "language": "Language",
+    "loading": "Loading…",
+    "retry": "Try again",
+    "genericError": "Something went wrong.",
+    "notConfigured": "This site is not configured yet.",
+    "skipToContent": "Skip to main content",
+    "emergencyBanner": "In an emergency call 108"
+  },
+  "languages": {
+    "en": "English",
+    "ta": "தமிழ்"
+  }
+}
