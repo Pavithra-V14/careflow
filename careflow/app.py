@@ -33,7 +33,7 @@ import time
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager, contextmanager
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Any, Final, Literal
 
 from dotenv import dotenv_values
@@ -68,6 +68,7 @@ from careflow import (
     patient_view,
     review_tasks,
 )
+from careflow.adapters.storage import SupabaseUploadAdapter
 from careflow.audit import write_audit
 from careflow.auth import (
     AuthError,
@@ -2253,6 +2254,30 @@ async def open_referral(document_id: uuid.UUID, conn: TxConn, claims: dict[str, 
     return ReferralDetailOut(**_referral_fields(r), holds=[ReferralHoldOut(task_id=h.id, assigned_role=h.assigned_role, status=h.status) for h in holds], proposal=proposal)
 
 
+def _intake_from_environment(supabase_url: str) -> tuple[DocumentIntake | None, Any]:
+    """The real document intake over Supabase Storage, or (None, None) so the upload routes answer 503. Built ONLY when ALL hold: `CAREFLOW_STORAGE_BUCKET` is set, `CAREFLOW_STORAGE_VERIFIED` names the
+    date the owner confirmed the real service with `scripts/storage_spike.py` (Appendix B: an external service's behaviour is confirmed by a real call before code depends on it), the profile is demo and the
+    data policy synthetic_only (owner decision 2026-10-30: dev and CI projects, synthetic data only), and the project's secret key is present. Anything missing is a logged reason and a 503, never a guess."""
+    bucket = (os.environ.get("CAREFLOW_STORAGE_BUCKET") or "").strip()
+    if not bucket:
+        return None, None
+    verified = (os.environ.get("CAREFLOW_STORAGE_VERIFIED") or "").strip()
+    try:
+        date.fromisoformat(verified)
+    except ValueError:
+        log.error("storage is configured but CAREFLOW_STORAGE_VERIFIED is not a date: uploads stay unavailable until the real-service spike is recorded")
+        return None, None
+    if not demo_phase3.demo_allowed(resolve_profile(), demo_phase3.data_policy(os.environ)):
+        log.error("storage is configured outside profile=demo with data_policy=synthetic_only: uploads stay unavailable")
+        return None, None
+    key = (os.environ.get("SUPABASE_SECRET_KEY") or "").strip()
+    if not key:
+        log.error("storage is configured but SUPABASE_SECRET_KEY is not set: uploads stay unavailable")
+        return None, None
+    adapter = SupabaseUploadAdapter(supabase_url, key, bucket)
+    return DocumentIntake(adapter, profile=resolve_profile()), adapter
+
+
 def create_app(
     settings: Settings | None = None, *, jwks: JWKSClient | None = None, engine: AsyncEngine | None = None,
     vault: DemographicVault | None = None, clock: Callable[[], float] = time.time, front_door: FrontDoorComponents | None = None,
@@ -2276,7 +2301,11 @@ def create_app(
         app.state.wired_adapters = frozenset()  # (provider, model_id) pairs with a wired adapter: none yet
         app.state.malware_scanner_configured = False  # nothing sets it: no scanner exists (BUILD-SPEC.md 11.5); clinical stays not ready
         app.state.front_door = front_door
-        app.state.document_intake = document_intake  # None until a storage adapter exists (needs the bucket policy: an owner decision): the upload routes answer 503
+        app.state.storage_adapter = None
+        intake = document_intake
+        if intake is None:
+            intake, app.state.storage_adapter = _intake_from_environment(cfg.supabase_url)
+        app.state.document_intake = intake  # None unless storage is configured AND verified (below): the upload routes answer 503
         app.state.poker = Poker()  # routes that enqueue call `app.state.poker.poke()` after their transaction commits (7.4)
         handlers = {FRONT_DOOR_TASK: front_door_handler(front_door, session_for=front_door_session_for)} if front_door is not None else {}
         sweeps = [lambda conn: raise_dead_letter_tasks(conn, front_door.dead_letters)] if front_door is not None else []  # a dead-lettered run is never silent
@@ -2298,6 +2327,8 @@ def create_app(
                 worker.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await worker
+            if app.state.storage_adapter is not None:
+                await app.state.storage_adapter.aclose()
             if engine is None:
                 await app.state.engine.dispose()
             if jwks is None:

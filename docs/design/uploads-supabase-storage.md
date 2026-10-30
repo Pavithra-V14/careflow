@@ -1,6 +1,27 @@
 # Uploads: Supabase Storage behind an `UploadPort` (accepted deviation from BUILD-SPEC.md §17.3)
 
-Decision of the owner, 2026-10-24. **Status: accepted deviation, planned for package P2-3. Nothing is built or called yet.**
+Decision of the owner, 2026-10-24. **Status: accepted deviation. UPDATED 2026-10-30: the owner approved building the real storage adapter for the DEV and CI Supabase projects with SYNTHETIC data only (`data_policy` `synthetic_only`): a private bucket, no public URLs, short-lived signed URLs only, an object path with no patient text, the scanner port before anything is shown as clean, and unscanned means held for a person. No real patient document, ever, until a separate decision on region and the privacy owner's written confirmation (pre-launch blocker 18 in `phase2-status.md`).**
+
+## Built (2026-10-30, branch b2-storage-adapter)
+- `careflow/adapters/storage.py`: `SupabaseUploadAdapter`, the real `UploadPort`, behind the existing port (the fake stays for tests). Explicit timeouts (connect 5 s, read and write 30 s, 60 s per call); only a document path (`clinic/<id>/doc/<id>`) ever reaches a request; a signed URL for another host is refused; downloads stop one byte past the size cap; every failure is a fixed-words error with no path, key or body in it.
+- `data-flow-register.yaml`: entry `supabase-storage` (data class `patient_plaintext`, `synthetic_only`, not permitted in clinical).
+- `tests/test_storage_adapter.py`: the adapter against a DOCUMENTED MOCK (`httpx.MockTransport`), plus the application wiring.
+- `scripts/storage_spike.py`: the Appendix B spike, with REAL calls (below).
+- Wiring (`careflow/app.py` `_intake_from_environment`): the real storage is built ONLY when `CAREFLOW_STORAGE_BUCKET` is set, `CAREFLOW_STORAGE_VERIFIED` holds the date the spike was recorded, the profile is demo with `CAREFLOW_DATA_POLICY=synthetic_only`, and `SUPABASE_SECRET_KEY` is present. Otherwise the upload routes answer 503, as before.
+
+## What the owner does, step by step (dev project first, then the CI project)
+1. Supabase dashboard of the DEV project, Storage, New bucket. **Name:** `careflow-documents`. **Public bucket:** OFF (private). **Restrict file size:** ON, **20 MB** (20971520 bytes). **Allowed MIME types:** `application/pdf, image/jpeg, image/png`. Create.
+2. Tell me; the policy review (below) is already done, and the 0027 migration is applied only after the owner's OK.
+3. After the OK and the migration: I run `python scripts/storage_spike.py --bucket careflow-documents --dev-project` against the dev project (synthetic bytes only, every object deleted at the end) and report what the service did.
+4. If every expectation held, set `CAREFLOW_STORAGE_BUCKET=careflow-documents` and `CAREFLOW_STORAGE_VERIFIED=<that date>` in the dev `.env`, and repeat step 1 and the migration for the CI project (its secrets go in the repository's secrets; the CI live tests keep using the fake storage).
+
+## The storage policies (PROPOSED, NOT APPLIED): in plain words
+The file is `docs/design/proposed-migrations/0027_storage_objects_policies.sql`. It sits OUTSIDE `db/migrations` so the CI migrate job cannot apply it before the owner agrees. It adds four RESTRICTIVE policies on `storage.objects`, one each for read, insert, update and delete, for the roles `anon` and `authenticated` only. Each says: "an object may be touched by these roles only if it is NOT in the bucket `careflow-documents`." Restrictive policies are AND-ed with any permissive ones, so even if somebody later adds a broad permissive rule for another purpose, nobody holding a browser-side role can read, write, replace or delete a document. It grants nothing, creates no permissive policy and no role, and changes no other bucket. The server uses the project's secret key (the service role), which bypasses these policies; that key never leaves the server. The migration also checks, and fails if it is ever untrue, that the application's own database role holds no privilege on the storage tables.
+
+## Pre-launch blockers recorded by this decision
+- No real patient document: needs the region decision (production in an India region, 16.5) and the privacy owner's written confirmation. The dev and CI projects are Tokyo and synthetic only.
+- The malware scanner (`malware-scanner-options.md`) before any real use.
+- The spike must be recorded (`CAREFLOW_STORAGE_VERIFIED`) before the adapter is built in any deployment.
 
 ## The deviation
 
