@@ -9,6 +9,8 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   jsxA11y.flatConfigs.recommended,
   reactHooks.configs.flat.recommended,
+  // Nothing in the app may log: a token or a code could end up in a console.
+  { files: ['src/**/*.{ts,tsx}'], rules: { 'no-console': 'error' } },
   {
     files: ['scripts/**/*.mjs', '*.config.js'],
     languageOptions: { globals: { process: 'readonly', console: 'readonly' } },

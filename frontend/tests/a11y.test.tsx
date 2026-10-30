@@ -6,6 +6,8 @@ import { initI18n, setLanguage } from '../src/shared/i18n';
 import { App as PatientApp } from '../src/patient/App';
 import { App as StaffApp } from '../src/staff/App';
 
+const StaffUnconfigured = () => <StaffApp port={null} apiBaseUrl="" />;
+
 expect.extend(matchers);
 
 // jsdom cannot compute colours, so contrast is checked by tokens.test.ts and by axe in a real browser (e2e).
@@ -13,7 +15,7 @@ const axeOptions = { rules: { 'color-contrast': { enabled: false } } };
 
 describe.each([
   ['patient', PatientApp],
-  ['staff', StaffApp],
+  ['staff (not configured)', StaffUnconfigured],
 ] as const)('%s shell accessibility', (_name, App) => {
   it.each(['en', 'ta'] as const)('has no axe violations in %s', async (lng) => {
     initI18n('en');

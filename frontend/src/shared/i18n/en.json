@@ -93,5 +93,97 @@
     "notAvailableSignIn": "Patient sign-in is not available yet.",
     "notAvailableSignUp": "Patient sign-up is not available yet.",
     "backHome": "Back to the home page"
+  },
+  "staff": {
+    "signIn": {
+      "title": "Staff sign in",
+      "intro": "Sign in with your work email and password.",
+      "email": "Work email",
+      "password": "Password",
+      "submit": "Sign in",
+      "submitting": "Signing in…",
+      "failed": "Sign-in failed. Check your details and try again.",
+      "invitationOnly": "Accounts are created by invitation only."
+    },
+    "mfa": {
+      "code": "6-digit code",
+      "codeHint": "Enter the 6 digits shown in your authenticator app.",
+      "verifying": "Verifying…",
+      "failed": "That code was not accepted. Try again.",
+      "invalid": "Enter the 6-digit code.",
+      "enrol": {
+        "title": "Set up your authenticator app",
+        "intro": "Staff accounts need a second step at every sign-in. Scan this QR code with an authenticator app.",
+        "scanAlt": "QR code for your authenticator app",
+        "manual": "Or enter this key in the app manually:",
+        "submit": "Verify and continue",
+        "preparing": "Preparing your setup…",
+        "error": "Setup could not be started.",
+        "retry": "Try again"
+      },
+      "challenge": {
+        "title": "Enter your authenticator code",
+        "help": "Open your authenticator app and enter the current 6-digit code.",
+        "submit": "Verify"
+      }
+    },
+    "stepUp": {
+      "title": "Confirm it is you",
+      "help": "This action needs a fresh code from your authenticator app.",
+      "submit": "Confirm",
+      "cancel": "Cancel"
+    },
+    "session": {
+      "ended": "Please sign in again."
+    },
+    "account": {
+      "unavailable": "This account cannot use the staff console. Contact your administrator.",
+      "signOut": "Sign out"
+    },
+    "console": {
+      "loading": "Loading your account…",
+      "error": "Your account details could not be loaded.",
+      "retry": "Try again",
+      "welcome": "You are signed in."
+    }
+  },
+  "shell": {
+    "activeRole": "Active role",
+    "clinic": "Clinic",
+    "changeRole": "Change role",
+    "pickTitle": "Choose your active role",
+    "pickHelp": "Pick the one role you need for this session. You can change it later.",
+    "continue": "Continue",
+    "environment": "Environment",
+    "profileUnknown": "Operating profile unknown",
+    "profile": "Operating profile",
+    "navLabel": "Session"
+  },
+  "env": {
+    "live": "LIVE",
+    "test": "TEST",
+    "unknown": "Environment unknown"
+  },
+  "roles": {
+    "patient": "Patient",
+    "guardian": "Guardian",
+    "front_desk": "Front desk",
+    "nurse": "Nurse",
+    "doctor": "Doctor",
+    "admin": "Admin",
+    "business_owner": "Business owner",
+    "auditor": "Auditor"
+  },
+  "profiles": {
+    "demo": "Demo",
+    "clinical": "Clinical"
+  },
+  "dev": {
+    "title": "Developer: claim structure",
+    "note": "Development builds only. Shows the structure of aal, amr and iat with values blanked. It never shows the token.",
+    "capture": "Capture claim structure",
+    "refresh": "Refresh session, then capture",
+    "reveal": "Also show enum-like values (the aal level and amr method names)",
+    "failed": "Could not read the session."
   }
 }
