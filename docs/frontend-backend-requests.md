@@ -11,7 +11,8 @@ In development the Vite dev server proxies `/v1` and `/readyz` to the API, so no
 frontend's origin calling the API's origin needs:
 
 - `Access-Control-Allow-Origin` set to the exact frontend origin(s), never `*` (requests carry a bearer token).
-- `Access-Control-Allow-Headers` including `Authorization`, `Content-Type` and `X-Idempotency-Key`.
+- `Access-Control-Allow-Headers` including `Authorization`, `Content-Type`, `X-Idempotency-Key` and **`X-CareFlow-Active-Role`**
+  (the active-role request header proposed in `docs/design/active-role.md`; without it the browser blocks every staff request at preflight).
 - `Access-Control-Allow-Methods` including `GET`, `POST`.
 - **`Access-Control-Expose-Headers: WWW-Authenticate`.** Without it the browser hides this header from the page's JavaScript,
   so the frontend cannot tell a step-up 401 from any other 401. This is the one that is easy to miss.
