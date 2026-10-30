@@ -220,3 +220,6 @@ What the forty concurrent requests in the two pool tests wait on: queueing behin
 - Forty requests over the small pool: latency min 1.5-1.7 s, p50 3.9-4.7 s, p95 6.5-6.6 s, max about 6.6 s.
 - Peak `careflow_app` backends in shard 1: 16 (all logins 30 of `max_connections` 60).
 Decision: keep the test-only 120 s pool wait; the `POOL-DIAG` lines stay (one line per test, observation only, cheap).
+
+## 2026-10-30 (PR #9)
+`tests/test_api_offers_live.py` (about 1 minute, never-committed transaction) joins shard 3. PR #9's first run measured shards 39:48, 41:10 and 36:25 (with a failing shard 1 that stopped early on the rotation precondition, so its true time is longer): shard 1 is now the one to watch; the role matrix grows with every route. Rebalance in the next change if any shard passes 50 minutes.
