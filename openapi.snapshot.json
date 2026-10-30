@@ -858,6 +858,49 @@
         "title": "IngestOut",
         "type": "object"
       },
+      "LabelsIn": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "patient_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 25,
+            "minItems": 1,
+            "title": "Patient Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "patient_ids"
+        ],
+        "title": "LabelsIn",
+        "type": "object"
+      },
+      "LabelsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PatientLabelOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "LabelsOut",
+        "type": "object"
+      },
       "LocationList": {
         "additionalProperties": false,
         "properties": {
@@ -1176,6 +1219,16 @@
       "PatientHitOut": {
         "additionalProperties": false,
         "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PatientLabelOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "matched_kinds": {
             "items": {
               "enum": [
@@ -1212,6 +1265,44 @@
           "registered_via"
         ],
         "title": "PatientHitOut",
+        "type": "object"
+      },
+      "PatientLabelOut": {
+        "additionalProperties": false,
+        "description": "One list row. The year of birth and the last four digits only; the full date and the full number appear only when one record is opened.",
+        "properties": {
+          "birth_year": {
+            "title": "Birth Year",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "phone_last4": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone Last4"
+          }
+        },
+        "required": [
+          "patient_id",
+          "name",
+          "birth_year",
+          "phone_last4"
+        ],
+        "title": "PatientLabelOut",
         "type": "object"
       },
       "PatientSearchIn": {
@@ -1264,6 +1355,11 @@
             },
             "title": "Items",
             "type": "array"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
           }
         },
         "required": [
@@ -1347,6 +1443,49 @@
           "merged_into"
         ],
         "title": "PatientStatusOut",
+        "type": "object"
+      },
+      "PatientViewOut": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "date_of_birth": {
+            "title": "Date Of Birth",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          }
+        },
+        "required": [
+          "patient_id",
+          "clinic_id",
+          "name",
+          "date_of_birth",
+          "phone"
+        ],
+        "title": "PatientViewOut",
         "type": "object"
       },
       "PriorityLevelList": {
@@ -4227,6 +4366,93 @@
         ]
       }
     },
+    "/v1/staff/patients/labels": {
+      "post": {
+        "description": "List rows for up to 25 patients of one clinic: name, year of birth, last four digits of the phone. Read-only; one audit row with the COUNT only. 404 for a clinic you cannot see, 403 unless you\nare front desk, nurse or doctor there, 422 for more than the page limit, 503 outside the demo profile with synthetic data.",
+        "operationId": "patient_labels_route_v1_staff_patients_labels_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LabelsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabelsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Patient Labels Route",
+        "tags": [
+          "staff patients"
+        ]
+      }
+    },
     "/v1/staff/patients/search": {
       "post": {
         "description": "Find existing records for exactly these details. 404 for a clinic you cannot see, 403 unless you are front desk there, 422 for an invalid date of birth or phone (named, never echoed), 503 if\nthe encryption keys are not configured. Read-only.",
@@ -4604,6 +4830,105 @@
           }
         ],
         "summary": "Revoke Patient Identity",
+        "tags": [
+          "staff patients"
+        ]
+      }
+    },
+    "/v1/staff/patients/{patient_id}/view": {
+      "get": {
+        "description": "OPEN one record: full name, date of birth and phone, decrypted for front desk, nurse and doctor of its clinic, one audit row (who, role, patient id; never the contents). 404 if you cannot\nsee it (the same as a missing or erased one), 403 unless you are front desk, nurse or doctor of its clinic, 429 over your per-minute limit, 503 outside the demo profile with synthetic data or\nwhile the limit is not configured.",
+        "operationId": "open_patient_record_v1_staff_patients__patient_id__view_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "patient_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Patient Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientViewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Too many requests: the per-user limit was reached; wait and try again. Fixed body."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Open Patient Record",
         "tags": [
           "staff patients"
         ]

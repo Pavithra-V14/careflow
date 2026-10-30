@@ -13,16 +13,17 @@ from typing import Any, Final
 from fastapi import APIRouter, FastAPI
 from fastapi.routing import APIRoute
 
-DECLARABLE: Final = (401, 403, 404, 409, 422, 503)
+DECLARABLE: Final = (401, 403, 404, 409, 422, 429, 503)
 DESCRIPTIONS: Final = {
     401: "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body.",
     403: "Authenticated, but this role may not do this. Fixed body.",
     404: "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body.",
     409: "Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body.",
     422: "Invalid request: a list of {type, loc, msg}; the offending input is never echoed.",
+    429: "Too many requests: the per-user limit was reached; wait and try again. Fixed body.",
     503: "Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body.",
 }
-_STATUS = re.compile(r"(?<![0-9A-Za-z.])(401|403|404|409|422|503)(?![0-9A-Za-z])")
+_STATUS = re.compile(r"(?<![0-9A-Za-z.])(401|403|404|409|422|429|503)(?![0-9A-Za-z])")
 
 
 def statuses_in(doc: str | None) -> set[int]:

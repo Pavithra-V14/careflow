@@ -68,4 +68,4 @@ def test_the_health_route_outside_v1_is_untouched():
 )
 def test_the_docstring_reader_takes_whole_status_numbers_only(doc, expected):
     assert statuses_in(doc) == expected
-    assert DECLARABLE == (401, 403, 404, 409, 422, 503)
+    assert DECLARABLE == (401, 403, 404, 409, 422, 429, 503)

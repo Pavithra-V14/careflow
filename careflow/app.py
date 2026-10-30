@@ -59,7 +59,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from careflow import identity, mpi, offers, openapi_errors, review_tasks
+from careflow import identity, mpi, offers, openapi_errors, patient_view, review_tasks
 from careflow.audit import write_audit
 from careflow.auth import (
     AuthError,
@@ -1630,8 +1630,28 @@ class PatientSearchIn(_Body):
     phone: str | None = Field(default=None, max_length=40)
 
 
+def patient_view_config(request: Request) -> patient_view.PatientViewConfig:
+    """The deployment's view configuration (overridable in tests). The limiter lives on the app, one per configured limit, so a request cannot reset it."""
+    settings = patient_view.PatientViewSettings()
+    limiter = None
+    if settings.max_opens_per_minute is not None:
+        limiters: dict[int, patient_view.OpenRateLimiter] = request.app.state.__dict__.setdefault("patient_view_limiters", {})
+        limiter = limiters.setdefault(settings.max_opens_per_minute, patient_view.OpenRateLimiter(settings.max_opens_per_minute))
+    return patient_view.PatientViewConfig(patient_view.feature_enabled(resolve_profile(), os.environ), settings, limiter)
+
+
+class PatientLabelOut(_Out):
+    """One list row. The year of birth and the last four digits only; the full date and the full number appear only when one record is opened."""
+
+    patient_id: uuid.UUID
+    name: str
+    birth_year: int
+    phone_last4: str | None
+
+
 class PatientHitOut(_Out):
     patient_id: uuid.UUID
+    label: PatientLabelOut | None = None  # the list-row view (name, year of birth, last four digits); None outside the demo profile with synthetic data
     matched_kinds: list[Literal["name_dob", "phone"]]
     verified: bool
     registered_via: Literal["front_desk", "referral_worker"]
@@ -1639,6 +1659,7 @@ class PatientHitOut(_Out):
 
 class PatientSearchOut(_Out):
     items: list[PatientHitOut]
+    truncated: bool = False  # more exact matches than one page holds (the page limit, at most 25); there is no total count
 
 
 class PatientStatusOut(_Out):
@@ -1652,7 +1673,10 @@ class PatientStatusOut(_Out):
 
 
 @staff_patients.post("/search", response_model=PatientSearchOut)
-async def search_patients(body: PatientSearchIn, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims)) -> PatientSearchOut:
+async def search_patients(
+    body: PatientSearchIn, response: Response, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims),
+    config: patient_view.PatientViewConfig = Depends(patient_view_config),
+) -> PatientSearchOut:
     """Find existing records for exactly these details. 404 for a clinic you cannot see, 403 unless you are front desk there, 422 for an invalid date of birth or phone (named, never echoed), 503 if
     the encryption keys are not configured. Read-only."""
     vault: DemographicVault | None = request.app.state.vault
@@ -1673,13 +1697,26 @@ async def search_patients(body: PatientSearchIn, conn: TxConn, request: Request,
         raise HTTPException(status_code=422, detail="a required field is missing or blank") from None
     except UnicodeError:
         raise HTTPException(status_code=422, detail="the name contains characters that cannot be stored") from None
+    response.headers["Cache-Control"] = "no-store"
+    labels: dict[uuid.UUID, Any] = {}
+    page = hits[: config.settings.page_limit]
+    if config.enabled and page:
+        with _view_errors():
+            labels = {x.patient_id: x for x in await patient_view.patient_labels(conn, vault, body.clinic_id, [h.patient_id for h in page], page_limit=config.settings.page_limit)}
     # One audit row per search: who, role, the KIND of search and how many results. Never the query text and never the results (owner decision 2026-10-30).
     await write_audit(
         conn, clinic_id=body.clinic_id, origin=origin, actor_id=uuid.UUID(claims["sub"]), actor_role="front_desk", action="patient.search", resource_type="clinic", resource_id=body.clinic_id,
         details={"kind": "name_dob_phone" if body.phone else "name_dob", "results": len(hits)}, idempotency_key=f"audit:patient-search:{uuid.uuid4()}",
     )
     return PatientSearchOut(
-        items=[PatientHitOut(patient_id=h.patient_id, matched_kinds=list(h.matched_kinds), verified=h.verified, registered_via=h.registered_via) for h in hits]  # type: ignore[arg-type]
+        items=[
+            PatientHitOut(
+                patient_id=h.patient_id, matched_kinds=list(h.matched_kinds), verified=h.verified, registered_via=h.registered_via,  # type: ignore[arg-type]
+                label=(PatientLabelOut(patient_id=h.patient_id, name=labels[h.patient_id].name, birth_year=labels[h.patient_id].birth_year, phone_last4=labels[h.patient_id].phone_last4) if h.patient_id in labels else None),
+            )
+            for h in page
+        ],
+        truncated=len(hits) > len(page),
     )
 
 
@@ -1950,6 +1987,113 @@ async def read_audit_log(
         for r in rows[:limit]
     ]
     return AuditList(items=items, limit=limit, has_more=len(rows) > limit, next_before_id=items[-1].audit_id if len(rows) > limit and items else None)
+
+
+# ---- patient view: label rows and the opened record (careflow/patient_view.py; docs/design/patient-view-fields.md) ----------------------------------------------
+#
+# DEMO PROFILE WITH SYNTHETIC DATA ONLY (503 anywhere else). A list row (`PatientLabelOut`) is the name, the YEAR of birth and the LAST FOUR digits of the phone, at most 25 rows per request, no total
+# count, no export. OPENING one record decrypts it fully (name, date of birth, phone) for front desk, nurse and doctor of its clinic, is rate-limited per user (a required setting with no default)
+# and writes an audit row holding who, role and the patient id, never the contents. Responses are `Cache-Control: no-store`.
+
+VIEW_ROLES: Final = ("front_desk", "nurse", "doctor")
+
+
+class LabelsIn(_Body):
+    clinic_id: uuid.UUID
+    patient_ids: list[uuid.UUID] = Field(min_length=1, max_length=patient_view.HARD_PAGE_CAP)
+
+
+class LabelsOut(_Out):
+    items: list[PatientLabelOut]  # only the records of that clinic you may see; an id you may not see is simply absent
+
+
+class PatientViewOut(_Out):
+    patient_id: uuid.UUID
+    clinic_id: uuid.UUID
+    name: str
+    date_of_birth: str  # ISO date
+    phone: str | None
+
+
+async def _view_gate(conn: AsyncConnection, claims: dict[str, Any], clinic_id: uuid.UUID) -> str:
+    """The clinic's origin after checking the caller is active front desk, nurse or doctor there: 404 if the clinic is invisible, 403 if visible but not one of those."""
+    clinic = (await conn.execute(text("select origin from iam.clinics where id = :c"), {"c": clinic_id})).first()
+    if clinic is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _holds_role(conn, claims, clinic_id, VIEW_ROLES):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    return clinic[0]
+
+
+@contextmanager
+def _view_errors() -> Iterator[None]:
+    try:
+        yield
+    except patient_view.ViewDisabled:
+        raise HTTPException(status_code=503, detail="patient view is disabled outside the demo profile with synthetic data") from None
+    except patient_view.ViewNotConfigured:
+        raise HTTPException(status_code=503, detail="patient view is unavailable: the per-user open rate limit is not configured") from None
+    except patient_view.CannotShow:
+        raise HTTPException(status_code=503, detail="this record cannot be shown") from None
+    except patient_view.PatientNotFound:
+        raise HTTPException(status_code=404, detail="not found") from None
+
+
+def _vault_or_503(request: Request) -> DemographicVault:
+    vault: DemographicVault | None = request.app.state.vault
+    if vault is None:
+        log.error("patient view is unavailable: no encryption keys are configured (deployment fault)")
+        raise HTTPException(status_code=503, detail="patient view is unavailable: encryption keys are not configured")
+    return vault
+
+
+@staff_patients.post("/labels", response_model=LabelsOut)
+async def patient_labels_route(
+    body: LabelsIn, response: Response, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims),
+    config: patient_view.PatientViewConfig = Depends(patient_view_config),
+) -> LabelsOut:
+    """List rows for up to 25 patients of one clinic: name, year of birth, last four digits of the phone. Read-only; one audit row with the COUNT only. 404 for a clinic you cannot see, 403 unless you
+    are front desk, nurse or doctor there, 422 for more than the page limit, 503 outside the demo profile with synthetic data."""
+    response.headers["Cache-Control"] = "no-store"
+    with _view_errors():
+        patient_view.require_ready(config, needs_open_limit=False)
+        vault = _vault_or_503(request)
+        origin = await _view_gate(conn, claims, body.clinic_id)
+        if len(set(body.patient_ids)) != len(body.patient_ids) or len(body.patient_ids) > config.settings.page_limit:
+            raise HTTPException(status_code=422, detail="too many or repeated patient ids for one page")
+        labels = await patient_view.patient_labels(conn, vault, body.clinic_id, body.patient_ids, page_limit=config.settings.page_limit)
+    await write_audit(
+        conn, clinic_id=body.clinic_id, origin=origin, actor_id=uuid.UUID(claims["sub"]), actor_role=await _acting_role(conn, claims, body.clinic_id, VIEW_ROLES), action="patient.view_labels",
+        resource_type="clinic", resource_id=body.clinic_id, details={"count": len(labels)}, idempotency_key=f"audit:patient-view-labels:{uuid.uuid4()}",
+    )
+    return LabelsOut(items=[PatientLabelOut(patient_id=x.patient_id, name=x.name, birth_year=x.birth_year, phone_last4=x.phone_last4) for x in labels])
+
+
+@staff_patients.get("/{patient_id}/view", response_model=PatientViewOut)
+async def open_patient_record(
+    patient_id: uuid.UUID, response: Response, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims),
+    config: patient_view.PatientViewConfig = Depends(patient_view_config),
+) -> PatientViewOut:
+    """OPEN one record: full name, date of birth and phone, decrypted for front desk, nurse and doctor of its clinic, one audit row (who, role, patient id; never the contents). 404 if you cannot
+    see it (the same as a missing or erased one), 403 unless you are front desk, nurse or doctor of its clinic, 429 over your per-minute limit, 503 outside the demo profile with synthetic data or
+    while the limit is not configured."""
+    response.headers["Cache-Control"] = "no-store"
+    with _view_errors():
+        patient_view.require_ready(config, needs_open_limit=True)
+        vault = _vault_or_503(request)
+        row = (await conn.execute(text("select clinic_id, origin from mpi.patients where id = :i and erased_at is null"), {"i": patient_id})).first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="not found")
+        origin = await _view_gate(conn, claims, row[0])
+        actor = uuid.UUID(claims["sub"])
+        if config.limiter is not None and not config.limiter.allow(actor):
+            raise HTTPException(status_code=429, detail="too many records opened; wait a moment")
+        record = await patient_view.open_patient(conn, vault, patient_id)
+    await write_audit(
+        conn, clinic_id=row[0], origin=origin, actor_id=actor, actor_role=await _acting_role(conn, claims, row[0], VIEW_ROLES), action="patient.view", resource_type="patient",
+        resource_id=patient_id, details={"fields": "full"}, idempotency_key=f"audit:patient-view:{uuid.uuid4()}",
+    )
+    return PatientViewOut(patient_id=record.patient_id, clinic_id=record.clinic_id, name=record.name, date_of_birth=record.date_of_birth, phone=record.phone)
 
 
 # ---- the referral queue: list and open (what a reviewer sees BEFORE deciding) --------------------------------------------------------------------------
