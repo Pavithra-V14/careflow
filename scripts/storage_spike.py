@@ -137,7 +137,10 @@ async def main(bucket: str, expect_host: str) -> int:
             await browser.request("DELETE", f"{base}/object/{bucket}", headers=weak, json={"prefixes": [held]}),
         ]
         listed = denied[0].json() if denied[0].status_code == 200 else []
-        record("9a the publishable key is refused", all(r.status_code >= 400 for r in denied) and not listed, f"list/read/upload/delete with the anon key -> {[r.status_code for r in denied]}; listed {len(listed)} objects (all must be refusals, none listed)")
+        # A listing or a delete that RLS filters answers 200 with nothing in it, so those two are judged by their effect (nothing listed, the object still there), read and upload by their refusal.
+        still_there = await adapter.describe(held) is not None
+        ok = denied[1].status_code >= 400 and denied[2].status_code >= 400 and not listed and still_there
+        record("9a the publishable key is refused", ok, f"list/read/upload/delete with the anon key -> {[r.status_code for r in denied]}; listed {len(listed)} objects; the object is still there after the delete attempt: {still_there} (read and upload must be refused; list shows nothing; delete removes nothing)")
         info = await browser.get(f"{base}/bucket/{bucket}", headers={"apikey": key, "Authorization": f"Bearer {key}"} if key.startswith("eyJ") else {"apikey": key})
         facts = info.json() if info.status_code == 200 else {}
         record("9b the bucket is private with its limits", facts.get("public") is False and facts.get("file_size_limit") == MAX_UPLOAD_BYTES and set(facts.get("allowed_mime_types") or []) == {"application/pdf", "image/jpeg", "image/png"},
