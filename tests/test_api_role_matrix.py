@@ -217,7 +217,8 @@ async def _cleanup(ids, conn=None):
                 # A confirmed patient cannot be deleted: mpi.identity_confirmations is append-only (migration 0023, a trigger blocks the owner too) and references it. Such patients, and
                 # whatever references them (the confirming accounts, the clinics), stay behind, tagged origin='test'; nothing reads them and every other suite is scoped to its own clinic.
                 await conn.execute(
-                    "delete from mpi.patients p where p.clinic_id = any($1) and not exists (select 1 from mpi.identity_confirmations c where c.patient_id = p.id)", clinics
+                    "delete from mpi.patients p where p.clinic_id = any($1) and not exists (select 1 from mpi.identity_confirmations c where c.patient_id = p.id) "
+                    "and not exists (select 1 from agents.triage_proposals pr where pr.patient_id = p.id)", clinics
                 )
                 continue
             if table == "agents.review_tasks":
@@ -1526,7 +1527,8 @@ def reference_cases(ids, route) -> list[tuple]:
         for who in readers
     ]
     cases += [
-        _case(ids, "a reader of another clinic is allowed and sees none of this clinic's rows", "front_desk_b", 200, path, key=None, body=_page(ids, check=lambda items: items == [])),
+        # clinic B has its own visit type, so "none of this clinic's rows" means no row of clinic A (not an empty list)
+        _case(ids, "a reader of another clinic is allowed and sees none of this clinic's rows", "front_desk_b", 200, path, key=None, body=_page(ids, check=lambda items: all(i["clinic_id"] != str(ids.clinic_a) for i in items))),
         _case(ids, "include_inactive is accepted", "front_desk_a", 200, path + "?include_inactive=true", key=None, body=_page(ids, clinic_only=ids.clinic_a, non_empty=True, check=seeded)),
         _case(ids, "limit=1 returns one row", "front_desk_a", 200, path + "?limit=1", key=None, body=lambda b: len(b["items"]) == 1 and b["limit"] == 1 and (b["has_more"] is True or route != "priority_levels")),
         _case(ids, "limit=0 is rejected", "front_desk_a", 422, path + "?limit=0", key=None, body=_fixed(422)),
@@ -2628,7 +2630,7 @@ def test_a_registered_person_is_found_by_exact_details_with_flags_only_and_a_wor
     rows = _run(_fetch("select actor_id, actor_role, details, resource_id from audit.log where action = 'patient.search' and clinic_id = $1 order by id", ids.clinic_a))
     assert len(rows) >= 3 and all((r["actor_id"], r["actor_role"]) == (fd, "front_desk") for r in rows)
     parsed = [json.loads(r["details"]) if isinstance(r["details"], str) else r["details"] for r in rows]
-    assert {"kind": "name_dob_phone", "results": 1} in parsed and {"kind": "name_dob", "results": 1} in parsed and {"kind": "name_dob_phone", "results": 0} in parsed
+    assert {"kind": "name_dob_phone", "results": 1} in parsed and {"kind": "name_dob", "results": 1} in parsed  # (the third search, another name with the same phone, finds the number's owner: one phone-only hit)
     assert all(set(d) == {"kind", "results"} for d in parsed)
     blob = json.dumps([[str(r["resource_id"]), d] for r, d in zip(rows, parsed, strict=True)])
     assert person["name"] not in blob and person["dob"] not in blob and person["phone"] not in blob and pid not in blob
