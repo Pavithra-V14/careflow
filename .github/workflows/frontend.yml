@@ -1,0 +1,97 @@
+# CareFlow frontend CI (BUILD-SPEC.md §21). A separate file from ci.yml on purpose: the backend pipeline is never
+# edited for frontend work. No Docker, no secrets, no database: the frontend build needs none of them, and the
+# bundle secret check below proves nothing secret ends up in the output.
+#
+# Installs use `npm ci` against the committed lockfile; frontend/.npmrc sets ignore-scripts=true, so the only
+# install-time download is the explicit Playwright browser step.
+
+name: Frontend CI
+
+on:
+  pull_request:
+    paths: ['frontend/**', 'openapi.snapshot.json', '.github/workflows/frontend.yml']
+  push:
+    branches: [main]
+    paths: ['frontend/**', 'openapi.snapshot.json', '.github/workflows/frontend.yml']
+
+concurrency:
+  group: frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: frontend
+
+jobs:
+  static:
+    name: Typecheck, lint, API schema freshness, dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      # Regenerates the client types from openapi.snapshot.json and fails if the committed file differs.
+      - run: npm run check:api
+      # Every Tamil string must appear on TAMIL-UNREVIEWED.md until a native speaker signs it off.
+      - run: npm run check:i18n
+      # Production dependencies only; fails on high or critical findings.
+      - run: npm run audit:prod
+
+  unit:
+    name: Unit, contract, env-allowlist and accessibility tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  build-and-browser:
+    name: Production build, bundle secret check, real-browser accessibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      # Build with secret-looking names PLANTED in the environment: the allowlist must keep them out of dist.
+      - name: Production build (with planted secret names)
+        run: |
+          # The planted key is assembled here so no secret-shaped literal is committed (push protection flags those).
+          prefix=sb_sec
+          export SUPABASE_SECRET_KEY="${prefix}ret_$(printf 'a%.0s' $(seq 1 40))"
+          export DATABASE_URL=postgres://planted-for-ci
+          export CAREFLOW_ENC_SECRET=planted-for-ci
+          npm run build
+      - run: npm run check:bundle
+      # Explicit browser download (install scripts are disabled).
+      - run: npx playwright install --with-deps chromium
+      # Builds a second copy with MOCK origins into dist-e2e (scripts/e2e-server.mjs) and runs the browser tests on it.
+      - run: npm run e2e
+      - run: node scripts/check-bundle-secrets.mjs dist-e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-screenshots
+          path: frontend/test-results/shots/
+          if-no-files-found: ignore
+          retention-days: 7

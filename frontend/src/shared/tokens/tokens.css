@@ -1,0 +1,48 @@
+/* One token system for both surfaces. PLACEHOLDER branding: colours, name and logo are stand-ins
+   until a real hospital supplies its own (BUILD-SPEC 19.1). Contrast pairs are verified by
+   tests/tokens.test.ts, so change a colour only together with that test passing. */
+:root {
+  --color-bg: #ffffff;
+  --color-surface: #f3f5f7;
+  --color-text: #14202e;
+  --color-text-muted: #435263;
+  --color-border: #66727f;
+  --color-primary: #0a5c8a;
+  --color-on-primary: #ffffff;
+  --color-link: #0a5c8a;
+  --color-focus: #0b57d0;
+  --color-danger: #a4161a;
+  --color-emergency-bg: #8a1111;
+  --color-emergency-text: #ffffff;
+  --color-test-bg: #7a4a00;
+  --color-test-text: #ffffff;
+  --color-live-bg: #1c5b2e;
+  --color-live-text: #ffffff;
+
+  --font-family: system-ui, -apple-system, 'Segoe UI', 'Nirmala UI', 'Noto Sans Tamil', 'Latha', Roboto, sans-serif;
+  --radius: 6px;
+  --focus-ring-width: 3px;
+  --measure: 68ch;
+}
+
+/* Patient surfaces: calm, large, high contrast. */
+[data-density='patient'] {
+  --font-size-base: 1.25rem;
+  --line-height-base: 1.65;
+  --space-1: 0.5rem;
+  --space-2: 1rem;
+  --space-3: 1.5rem;
+  --space-4: 2.5rem;
+  --target-min: 3rem;
+}
+
+/* Staff surfaces: dense, keyboard-first. Targets stay above the WCAG 2.2 AA minimum of 24px. */
+[data-density='staff'] {
+  --font-size-base: 0.9375rem;
+  --line-height-base: 1.5;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1.25rem;
+  --target-min: 2rem;
+}
