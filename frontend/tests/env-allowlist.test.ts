@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolveConfig } from 'vite';
-import { EXPOSED_ENV_NAMES, pickExposedEnv, CONFIG_GLOBAL } from '../env-allowlist';
+import { EXPOSED_ENV_NAMES, assertNoSecretShapedValues, pickExposedEnv, CONFIG_GLOBAL } from '../env-allowlist';
 
 describe('env allowlist', () => {
   it('exposes exactly the three agreed names', () => {
@@ -43,6 +43,27 @@ describe('vite config', () => {
       expect(prefixes).toEqual(['VITE_']);
     } finally {
       for (const name of planted) delete process.env[name];
+    }
+  });
+});
+
+describe('secret-shaped values', () => {
+  const ok = { SUPABASE_URL: 'https://x.invalid', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_abc', CAREFLOW_API_BASE_URL: 'https://api.invalid' };
+  it('lets a publishable key through', () => {
+    expect(() => assertNoSecretShapedValues(ok)).not.toThrow();
+  });
+  it('stops the build for a secret key in any exposed slot, naming the variable but never the value', () => {
+    // Assembled at run time so no secret-shaped literal is committed (GitHub push protection flags those).
+    const secret = ['sb_sec', 'ret_'].join('') + '0123456789abcdef0123456789abcdef';
+    for (const name of EXPOSED_ENV_NAMES) {
+      let message = '';
+      try {
+        assertNoSecretShapedValues({ ...ok, [name]: secret });
+      } catch (e) {
+        message = (e as Error).message;
+      }
+      expect(message, name).toContain(name);
+      expect(message, name).not.toContain(secret);
     }
   });
 });

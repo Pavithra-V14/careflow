@@ -13,3 +13,15 @@ export function pickExposedEnv(env: Record<string, string | undefined>): Exposed
   for (const name of EXPOSED_ENV_NAMES) out[name] = env[name] ?? '';
   return out;
 }
+
+/**
+ * Stops the build if an exposed value looks like a secret key pasted into the wrong slot (for example a Supabase
+ * secret key in SUPABASE_PUBLISHABLE_KEY). The message names the variable, never the value.
+ */
+export function assertNoSecretShapedValues(exposed: ExposedEnv): void {
+  for (const name of EXPOSED_ENV_NAMES) {
+    if (/sb_secret_|service_role|SERVICE_ROLE/.test(exposed[name])) {
+      throw new Error(`${name} looks like a secret key. Only the publishable key belongs in the frontend; the build was stopped.`);
+    }
+  }
+}

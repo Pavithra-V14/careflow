@@ -5,6 +5,14 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 export const FORBIDDEN = ['sb_secret_', 'SUPABASE_SECRET_KEY', 'DATABASE_URL', 'CAREFLOW_ENC_SECRET'];
+// supabase-js itself contains the literal "sb_secret_" (its key-type classifier, so it can warn when a secret key is
+// used in a browser). A bare prefix is therefore not evidence of a leak; a key-shaped VALUE is: the prefix followed by
+// 16 or more key characters. Every other marker is a plain substring match.
+const MATCHERS = { sb_secret_: (text) => /sb_secret_[A-Za-z0-9_-]{16,}/.test(text) };
+const contains = (text, marker) => (MATCHERS[marker] ? MATCHERS[marker](text) : text.includes(marker));
+
+// Development-only code (the claim-structure panel) must not ship. Its component carries this marker at runtime.
+export const DEV_ONLY_MARKERS = ['CAREFLOW_DEV_CLAIM_SPIKE'];
 
 function* walk(dir) {
   for (const name of readdirSync(dir)) {
@@ -19,7 +27,7 @@ export function findLeaks(dir) {
   const hits = [];
   for (const file of walk(dir)) {
     const text = readFileSync(file, 'latin1');
-    for (const marker of FORBIDDEN) if (text.includes(marker)) hits.push({ file, marker });
+    for (const marker of [...FORBIDDEN, ...DEV_ONLY_MARKERS]) if (contains(text, marker)) hits.push({ file, marker });
   }
   return hits;
 }
