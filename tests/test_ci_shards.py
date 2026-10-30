@@ -155,3 +155,10 @@ def test_no_live_test_counts_a_whole_table_that_another_file_commits_to():
 def test_the_unscoped_count_guard_really_catches_one():
     assert _WHOLE_TABLE_COUNT.findall('await one(db, "select count(*) from sched.holds") == 1') == ["sched.holds"]
     assert _WHOLE_TABLE_COUNT.findall('await one(db, "select count(*) from sched.holds where clinic_id = :c", c=1) == 1') == []
+
+
+def test_a_frontend_only_change_does_not_run_the_backend_workflow_but_any_other_change_does():
+    triggers = WORKFLOW[True]
+    for event in ("pull_request", "push"):
+        assert triggers[event]["paths-ignore"] == ["frontend/**", ".github/workflows/frontend.yml"], event
+        assert "paths" not in triggers[event]  # an allow-list would silently skip new backend directories
