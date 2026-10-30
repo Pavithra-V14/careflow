@@ -59,5 +59,5 @@ Provider approvals (vision, decision, translation) for synthetic demo use, the s
 
 13. **Spend ledger for reply interpretation** is a hard blocker for any real reply-interpretation call; options and a recommendation in `spend-ledger-options.md`.
 14. **Malware scanner:** options in `malware-scanner-options.md`; nothing is added until the owner chooses.
-15. **Real-PDF spike:** tooling and the sample request are ready (`real-pdf-spike.md`); waiting for de-identified samples from the owner.
+15. **Real-PDF spike:** tooling and the sample request are ready (`real-pdf-spike.md`); waiting for dummy-document samples the owner makes (never redacted real documents).
 16. **A key-squatting hole to close:** the 0013 `unmerge_review` insert clause for front desk can pre-insert a task carrying another writer's predictable idempotency key (recorded by the 0025 review; the new revoke clause is bound to a real event, the old one is not).

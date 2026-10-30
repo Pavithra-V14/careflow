@@ -1,4 +1,4 @@
-**Options note only (owner request 2026-10-30). No code, no migration, no grant. Nothing here changes a signed-off decision until the owner says so.**
+**DECIDED (owner, 2026-10-30): stay on option (c), the in-memory ledger. When a real model call for reply interpretation is wanted, build the definer-function variant of (b) (b2); that is a NEW GRANT and needs the owner's sign-off at that time, after its own design with exact grants and an rls-security-reviewer pass. Option (a) is REJECTED.** The hard blocker stands: no real reply-interpretation call until then. The rest of this note is the analysis the decision rests on. No code, no migration, no grant.
 
 # A durable spend ledger for the reply-interpretation call: the options
 

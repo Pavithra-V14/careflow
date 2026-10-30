@@ -24,11 +24,13 @@ Run it: `python scripts/pdf_spike_harness.py` (add `--write DIR` to write the sy
 - **Hidden-text OCR layers.** A scanner that adds an invisible OCR text layer over the page image gives a page with usable text and a large image: the pipeline will read it BOTH ways (text plus vision), paying for vision on a page that is already searchable. Whether that is wanted is a question the real samples will answer.
 - **Vision quality and cost.** The vision role is a fake here; reading accuracy and price per page are a separate step that needs a provider approval (not given).
 
-## The samples the owner supplies (de-identified)
+## The samples the owner makes (from dummy documents)
 
-**Who may supply them:** the owner, with the clinic's permission for each file. **Where they live:** outside the repository (for example `E:\spike-samples\`), never committed, never uploaded anywhere, never pasted into a chat. **Count:** about 20 to 30 files, one or two of each kind below; 1 to 10 pages each, plus one long one.
+**Decided (owner, 2026-10-30): the samples are made from DUMMY documents.** Write or type a made-up referral letter (invented patient, invented findings), then print or write it and scan or photograph it the way a clinic would: the scanner, the app and the paper are real, the content is not. **Never take a real patient document and redact it by hand**: a hand redaction can leave names behind in a text layer, in metadata, in an image's hidden layers or in a file name, and the spike would then hold real patient data. If a real document is ever needed, that is a separate decision with its own privacy review.
 
-**De-identification, done before the file is handed over:** remove or replace every name, date of birth, phone number, address, ID number, barcode and signature. Redact so the underlying content is gone (flatten to a new image, or replace the text in the source), **not** a black box drawn over a text layer that is still there. Keep the layout, fonts, compression, resolution, colour mode and scanner or app behaviour, because those are what is being tested. Keep a short note per file (the source device or software, in a separate text file; it must not name a patient).
+**Where they live:** outside the repository (for example `E:\spike-samples\`), never committed, never uploaded anywhere, never pasted into a chat. **Count:** about 20 to 30 files, one or two of each kind below; 1 to 10 pages each, plus one long one.
+
+**Making a sample look real without being real:** keep the layout, fonts, compression, resolution, colour mode and the scanner or app behaviour (those are what is being tested). Use invented names, dates of birth, phone numbers, addresses and IDs; invented signatures or stamps. Keep a short note per file (the source device or software, in a separate text file).
 
 | # | Kind of file | Why it matters |
 |---|---|---|
