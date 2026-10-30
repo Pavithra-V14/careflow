@@ -39,6 +39,9 @@ limit what the person can do, the backend would need to accept the chosen grant 
 clinic and role) and authorise against only that grant. The frontend sends nothing until the backend defines this; please
 decide the mechanism. Until then "active role" is a display and navigation choice, not a permission boundary.
 
+A design proposal (no code yet, awaiting the owner's OK) is in `docs/design/active-role.md`: an `X-CareFlow-Active-Role` header, verified
+against the live grants in the database and used only to narrow. If adopted, production CORS must also allow that request header.
+
 ### 4. Step-up claim shape (not a code change: a spike)
 
 Tracked in `docs/design/step-up-spike.md`. The frontend will decode a real access token's `aal` / `amr` / `iat` structure in
