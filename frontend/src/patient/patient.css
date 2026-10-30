@@ -218,3 +218,9 @@ summary {
   font-weight: 700;
   white-space: nowrap;
 }
+
+/* Same banner inside <noscript>: the stylesheet is linked from the HTML, so it applies without JavaScript. */
+.emergency-noscript {
+  margin: 0;
+  font-weight: 800;
+}

@@ -1,6 +1,6 @@
 import { defineConfig } from '@playwright/test';
 
-// Runs against the production build served by `vite preview` (build first: npm run build).
+// Builds with mock origins into dist-e2e and serves it (scripts/e2e-server.mjs); no manual build step.
 export default defineConfig({
   testDir: 'e2e',
   outputDir: 'test-results',
@@ -11,9 +11,9 @@ export default defineConfig({
   reporter: [['list']],
   use: { baseURL: 'http://127.0.0.1:4173', browserName: 'chromium' },
   webServer: {
-    command: 'npx vite preview --host 127.0.0.1 --port 4173 --strictPort',
+    command: 'node scripts/e2e-server.mjs',
     url: 'http://127.0.0.1:4173/patient/',
     reuseExistingServer: false,
-    timeout: 60_000,
+    timeout: 120_000,
   },
 });
