@@ -37,7 +37,11 @@ export async function installMock(page: Page, scenario: Scenario = {}) {
   const session = (aal: 'aal1' | 'aal2') => ({ access_token: jwt(aal), token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 3600, refresh_token: 'mock-refresh', user: user() });
   let aal: 'aal1' | 'aal2' = 'aal1';
   const log: string[] = [];
-  const consoleApi = createConsoleApi(String((scenario.roles?.[0] as { role?: unknown } | undefined)?.role ?? 'front_desk'), scenario.console);
+  // Idempotency keys of every API write, in order, so a test can assert a retry reused the same key.
+  const keys: { path: string; key: string | null }[] = [];
+  // Successful second-factor verifications this session: 1 is the sign-in challenge, 2 or more means a step-up happened.
+  let verifyCount = 0;
+  const consoleApi = createConsoleApi(String((scenario.roles?.[0] as { role?: unknown } | undefined)?.role ?? 'front_desk'), scenario.console, { steppedUp: () => verifyCount >= 2 });
 
   const cors = (route: Route) => {
     const req = route.request();
@@ -89,6 +93,7 @@ export async function installMock(page: Page, scenario: Scenario = {}) {
       const f = factors.find((x) => x.id === verify[1]);
       if (f) f.status = 'verified';
       aal = 'aal2';
+      verifyCount += 1;
       return reply(route, 200, session('aal2'));
     }
     const unenroll = /^\/factors\/([^/]+)$/.exec(path);
@@ -108,7 +113,10 @@ export async function installMock(page: Page, scenario: Scenario = {}) {
     log.push(`API ${req.method()} ${path}`);
     if (!req.headers()['authorization']?.startsWith('Bearer ')) return reply(route, 401, { detail: 'not authenticated' });
     const handled = consoleApi(req.method(), path, new URL(req.url()).searchParams);
-    if (handled) return reply(route, handled[0], handled[1]);
+    if (handled) {
+      if (req.method() === 'POST') keys.push({ path, key: req.headers()['x-idempotency-key'] ?? null });
+      return route.fulfill({ status: handled[0], headers: { ...cors(route), ...(handled[2] ?? {}) }, body: JSON.stringify(handled[1]) });
+    }
     if (path === '/v1/iam/me') {
       if (scenario.meStatus) return reply(route, scenario.meStatus, { detail: 'nope' });
       return reply(route, 200, { account_id: '9d0a1c2d-3e4f-4a6b-8c1e-3f2b6a4d4e1b', account_type: 'staff', status: 'active', roles: scenario.roles ?? [{ clinic_id: '3f2b8c1e-6a4d-4e1b-9d0a-1c2d3e4f5a6b', role: 'front_desk' }] });
@@ -116,5 +124,5 @@ export async function installMock(page: Page, scenario: Scenario = {}) {
     return reply(route, 404, {});
   });
 
-  return { log };
+  return { log, keys, verifications: () => verifyCount };
 }
