@@ -220,6 +220,10 @@ async def _cleanup(ids, conn=None):
                     "delete from mpi.patients p where p.clinic_id = any($1) and not exists (select 1 from mpi.identity_confirmations c where c.patient_id = p.id)", clinics
                 )
                 continue
+            if table == "agents.review_tasks":
+                # A task that an append-only triage proposal points at cannot be deleted (the referral-queue cases seed one); it stays behind with its clinic, tagged origin='test'.
+                await conn.execute("delete from agents.review_tasks t where t.clinic_id = any($1) and not exists (select 1 from agents.triage_proposals p where p.review_task_id = t.id)", clinics)
+                continue
             await conn.execute(f"delete from {table} where clinic_id = any($1)", clinics)
         await conn.execute("delete from iam.staff_roles where clinic_id = any($1)", [ids.clinic_a, ids.clinic_b])
         for statement, args in (("delete from iam.accounts where id = any($1)", accounts), ("delete from iam.clinics where id = any($1)", [ids.clinic_a, ids.clinic_b])):
@@ -1245,6 +1249,11 @@ def _put_object(ids, key, content=PDF_BYTES, content_type="application/pdf", *, 
     return ticket.document_id
 
 
+def _upload_refusal(status):
+    """The upload gate has its own 403 words; a 404 is the app-wide fixed body."""
+    return (lambda b: b == {"detail": "your role may not upload documents"}) if status == 403 else _fixed(status)
+
+
 def _gate_cases(ids, make_request):
     cases = []
     for p in [*ids.people, "no account"]:
@@ -1274,7 +1283,7 @@ def document_begin_cases(ids) -> list[tuple]:
         _case(ids, "blank X-Idempotency-Key is rejected", "front_desk_a", 422, DOC_BEGIN, json=body(), key="   ", body=_fixed(422)),
         _case(ids, "an empty body is rejected", "front_desk_a", 422, DOC_BEGIN, json={}, body=_fixed(422)),
     ]
-    cases += _gate_cases(ids, lambda label, who, status: _case(ids, label, who, status, DOC_BEGIN, json=body(), body=_fixed(status)))
+    cases += _gate_cases(ids, lambda label, who, status: _case(ids, label, who, status, DOC_BEGIN, json=body(), body=_upload_refusal(status)))
     return cases + _unauthenticated(ids, DOC_BEGIN, body())
 
 
@@ -1302,7 +1311,7 @@ def document_register_cases(ids) -> list[tuple]:
         _case(ids, "an unknown field is rejected", "front_desk_a", 422, DOC_REGISTER, json=body(sha256="0" * 64), body=_fixed(422)),
         _case(ids, "an empty body is rejected", "front_desk_a", 422, DOC_REGISTER, json={}, body=_fixed(422)),
     ]
-    cases += _gate_cases(ids, lambda label, who, status: _case(ids, label, who, status, DOC_REGISTER, json=body(), body=_fixed(status)))
+    cases += _gate_cases(ids, lambda label, who, status: _case(ids, label, who, status, DOC_REGISTER, json=body(), body=_upload_refusal(status)))
     return cases + _unauthenticated(ids, DOC_REGISTER, body())
 
 
@@ -1375,8 +1384,8 @@ def referral_list_cases(ids) -> list[tuple]:
         _case(ids, "limit=501 is rejected", "nurse_a", 422, REFERRALS + "?limit=501", key=None, body=_fixed(422)),
     ]
     readers = ("front_desk_a", "nurse_a", "doctor_a", "multi", "front_desk_b")
-    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, REFERRALS, key=None, body=_fixed(403)) for p in ids.people if p not in readers]
-    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, REFERRALS, key=None, body=_fixed(403)))
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, REFERRALS, key=None, body=READ_403) for p in ids.people if p not in readers]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, REFERRALS, key=None, body=READ_403))
     return cases + _unauthenticated(ids, REFERRALS, None)
 
 
@@ -1401,8 +1410,8 @@ def referral_open_cases(ids) -> list[tuple]:
         _case(ids, "a document id that is not a uuid is rejected", "nurse_a", 422, path("nope"), key=None, body=_fixed(422)),
     ]
     readers = ("front_desk_a", "nurse_a", "doctor_a", "multi", "front_desk_b")
-    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path(s.plain), key=None, body=_fixed(403)) for p in ids.people if p not in readers]
-    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, path(s.plain), key=None, body=_fixed(403)))
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path(s.plain), key=None, body=READ_403) for p in ids.people if p not in readers]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, path(s.plain), key=None, body=READ_403))
     return cases + _unauthenticated(ids, path(s.plain), None)
 
 
@@ -1471,8 +1480,8 @@ def patient_status_cases(ids) -> list[tuple]:
         _case(ids, "a patient id that is not a uuid is rejected", "nurse_a", 422, path("nope"), key=None, body=_fixed(422)),
     ]
     readers = ("front_desk_a", "nurse_a", "doctor_a", "multi", "front_desk_b")
-    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path(worker), key=None, body=_fixed(403)) for p in ids.people if p not in readers]
-    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, path(worker), key=None, body=_fixed(403)))
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path(worker), key=None, body=READ_403) for p in ids.people if p not in readers]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, path(worker), key=None, body=READ_403))
     return cases + _unauthenticated(ids, path(worker), None)
 
 
@@ -1495,7 +1504,12 @@ def reference_cases(ids, route) -> list[tuple]:
         "priority_levels": lambda items: [(i["code"], i["rank"]) for i in items] == [("level_one", 1), ("level_two", 2)] and all(set(i) == {"clinic_id", "code", "label", "rank", "active"} for i in items),
     }[route]
     readers = ("front_desk_a", "nurse_a", "doctor_a", "multi")
-    cases = [_case(ids, f"{who} reads the {route.replace('_', ' ')}", who, 200, path, key=None, body=_page(ids, clinic_only=ids.clinic_a, non_empty=True, check=seeded)) for who in readers]
+    # `multi` is a nurse in clinic A and a doctor in clinic B, and clinic B has its own visit type: it sees both clinics' visit types (and only clinic A's other lists)
+    cases = [
+        _case(ids, f"{who} reads the {route.replace('_', ' ')}", who, 200, path, key=None,
+              body=_page(ids, clinic_only=None if (who == "multi" and route == "visit_types") else ids.clinic_a, non_empty=True, check=seeded))
+        for who in readers
+    ]
     cases += [
         _case(ids, "a reader of another clinic is allowed and sees none of this clinic's rows", "front_desk_b", 200, path, key=None, body=_page(ids, check=lambda items: items == [])),
         _case(ids, "include_inactive is accepted", "front_desk_a", 200, path + "?include_inactive=true", key=None, body=_page(ids, clinic_only=ids.clinic_a, non_empty=True, check=seeded)),
@@ -2451,7 +2465,8 @@ def test_a_registered_person_is_found_by_exact_details_with_flags_only_and_a_wor
     other = client.post(PATIENT_SEARCH, headers=bearer(mint(ids.people["front_desk_b"][0])), json={"clinic_id": str(ids.clinic_a), **person})
     assert other.status_code == 404
     nobody = client.post(PATIENT_SEARCH, headers=headers, json={"clinic_id": str(ids.clinic_a), **person, "name": "Somebody Else"})
-    assert pid not in [i["patient_id"] for i in nobody.json()["items"]]
+    probe = [i for i in nobody.json()["items"] if i["patient_id"] == pid]
+    assert [i["matched_kinds"] for i in probe] == [["phone"]]  # found by the number alone: never as a name match
     status = client.get(PATIENT_STATUS.format(patient_id=pid), headers=headers)
     assert status.status_code == 200 and status.json()["verified"] is True and status.json()["registered_via"] == "front_desk"
     # one audit row per search that reached the lookup: who, role, the KIND of search and the result count; never the query text or the results

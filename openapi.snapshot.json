@@ -545,6 +545,38 @@
         "title": "HoldIn",
         "type": "object"
       },
+      "HoldOut": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "hold_id": {
+            "format": "uuid",
+            "title": "Hold Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "slot_id": {
+            "format": "uuid",
+            "title": "Slot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "hold_id",
+          "slot_id",
+          "expires_at",
+          "replayed"
+        ],
+        "title": "HoldOut",
+        "type": "object"
+      },
       "HoldRowList": {
         "additionalProperties": false,
         "properties": {
@@ -1448,7 +1480,7 @@
           },
           "holds": {
             "items": {
-              "$ref": "#/components/schemas/careflow__app__HoldOut__2"
+              "$ref": "#/components/schemas/ReferralHoldOut"
             },
             "title": "Holds",
             "type": "array"
@@ -1526,6 +1558,41 @@
           "proposal"
         ],
         "title": "ReferralDetailOut",
+        "type": "object"
+      },
+      "ReferralHoldOut": {
+        "additionalProperties": false,
+        "properties": {
+          "assigned_role": {
+            "enum": [
+              "nurse",
+              "doctor",
+              "front_desk"
+            ],
+            "title": "Assigned Role",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "acknowledged",
+              "resolved"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "assigned_role",
+          "status"
+        ],
+        "title": "ReferralHoldOut",
         "type": "object"
       },
       "ReferralList": {
@@ -2729,73 +2796,6 @@
           "has_more"
         ],
         "title": "WaitlistList",
-        "type": "object"
-      },
-      "careflow__app__HoldOut__1": {
-        "additionalProperties": false,
-        "properties": {
-          "expires_at": {
-            "format": "date-time",
-            "title": "Expires At",
-            "type": "string"
-          },
-          "hold_id": {
-            "format": "uuid",
-            "title": "Hold Id",
-            "type": "string"
-          },
-          "replayed": {
-            "title": "Replayed",
-            "type": "boolean"
-          },
-          "slot_id": {
-            "format": "uuid",
-            "title": "Slot Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "hold_id",
-          "slot_id",
-          "expires_at",
-          "replayed"
-        ],
-        "title": "HoldOut",
-        "type": "object"
-      },
-      "careflow__app__HoldOut__2": {
-        "additionalProperties": false,
-        "properties": {
-          "assigned_role": {
-            "enum": [
-              "nurse",
-              "doctor",
-              "front_desk"
-            ],
-            "title": "Assigned Role",
-            "type": "string"
-          },
-          "status": {
-            "enum": [
-              "open",
-              "acknowledged",
-              "resolved"
-            ],
-            "title": "Status",
-            "type": "string"
-          },
-          "task_id": {
-            "format": "uuid",
-            "title": "Task Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "task_id",
-          "assigned_role",
-          "status"
-        ],
-        "title": "HoldOut",
         "type": "object"
       }
     },
@@ -5067,7 +5067,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/careflow__app__HoldOut__1"
+                  "$ref": "#/components/schemas/HoldOut"
                 }
               }
             },
