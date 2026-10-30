@@ -111,6 +111,7 @@ ROUTES = {
     "acknowledge_review_task": "review_task.acknowledge",
     "resolve_review_task": "review_task.resolve",
     "send_offer_route": "offer.send",
+    "register_document": "document.register",
 }
 
 

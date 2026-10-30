@@ -74,6 +74,14 @@ from careflow.crypto import CryptoError, DemographicVault
 from careflow.db import make_app_engine, set_request_claims
 from careflow.dead_letters import raise_dead_letter_tasks
 from careflow.demo_phase3 import refuse_demo_outside_demo, scheduling_settings_for
+from careflow.documents import (
+    DocumentIntake,
+    UploadRejected,
+    UploadsDisabled,
+    UploadUnavailable,
+)
+from careflow.documents import IdempotencyConflict as DocumentIdempotencyConflict
+from careflow.documents import NotPermitted as DocumentNotPermitted
 from careflow.front_door import FrontDoorError, run_config
 from careflow.front_door_runner import TASK_TYPE as FRONT_DOOR_TASK
 from careflow.front_door_runner import (
@@ -1048,6 +1056,117 @@ async def send_offer_route(
     )
 
 
+# ---- documents: begin an upload, register it (careflow/documents.py; docs/design/uploads-supabase-storage.md) -------------------------------------------------
+#
+# Two steps, both by a front-desk person or a nurse of the clinic. BEGIN hands the browser a short-lived signed URL for a path THE SERVER chose (derived from the clinic and the idempotency key).
+# The browser PUTs the file. REGISTER (the SAME `X-Idempotency-Key`) makes the server read the stored object back and check its size, type and magic number before one row is written; a row exists
+# only for an object the server itself accepted. Uploads are disabled outside profile `demo` until a malware scanner is wired (503); with no storage adapter configured they answer 503 too (no real
+# storage adapter exists yet: it needs the bucket policy, an owner decision). The file name, bytes, path and hash never appear in a response error.
+
+staff_documents = APIRouter(prefix="/v1/staff/documents", tags=["staff documents"])
+UPLOAD_ROLES: Final = ("front_desk", "nurse")
+DocumentKind = Literal["referral", "report", "other"]
+UploadContentType = Literal["application/pdf", "image/jpeg", "image/png"]
+
+
+class BeginUploadIn(_Body):
+    clinic_id: uuid.UUID
+    kind: DocumentKind
+    content_type: UploadContentType
+    size_hint: int | None = Field(default=None, gt=0, le=1_000_000_000)  # the browser's own claim; the server re-checks the stored size
+
+
+class BeginUploadOut(_Out):
+    """Where to PUT the file, once. The path is the server's and is not returned."""
+
+    document_id: uuid.UUID
+    upload_url: str
+    expires_at: datetime
+    replayed_ticket: bool = False
+
+
+class RegisterIn(_Body):
+    clinic_id: uuid.UUID
+    kind: DocumentKind
+
+
+class RegisteredOut(_Out):
+    document_id: uuid.UUID
+    kind: DocumentKind
+    content_type: UploadContentType
+    size_bytes: int
+    replayed: bool
+    scan: Literal["clean", "not_scanned", "not_checked"]  # not_scanned: registered but HELD for a person; not_checked: demo, no scanner wired
+
+
+def _document_intake(request: Request) -> DocumentIntake:
+    intake: DocumentIntake | None = request.app.state.document_intake
+    if intake is None:
+        log.error("uploads are unavailable: no document intake is configured (no storage adapter)")
+        raise HTTPException(status_code=503, detail="uploads are unavailable: not configured")
+    return intake
+
+
+async def _upload_gate(conn: AsyncConnection, claims: dict[str, Any], clinic_id: uuid.UUID) -> str:
+    """The clinic's origin after checking the caller is active front desk or nurse there: 404 if the clinic is invisible, 403 if visible but not one of those."""
+    clinic = (await conn.execute(text("select origin from iam.clinics where id = :c"), {"c": clinic_id})).first()
+    if clinic is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _holds_role(conn, claims, clinic_id, UPLOAD_ROLES):
+        raise HTTPException(status_code=403, detail="your role may not upload documents")
+    return clinic[0]
+
+
+@contextmanager
+def _document_errors() -> Iterator[None]:
+    try:
+        yield
+    except UploadsDisabled:
+        raise HTTPException(status_code=503, detail="uploads are disabled in this profile") from None
+    except UploadUnavailable:
+        raise HTTPException(status_code=503, detail="storage is unavailable; try again") from None
+    except UploadRejected as exc:
+        raise HTTPException(status_code=422, detail=exc.code) from None  # a fixed word: invalid_request, type_not_allowed, empty, too_large, not_found, content_mismatch, malware_detected
+    except DocumentNotPermitted:
+        raise HTTPException(status_code=403, detail="your role may not upload documents") from None
+    except DocumentIdempotencyConflict:
+        raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request") from None
+
+
+@staff_documents.post("/uploads", response_model=BeginUploadOut)
+async def begin_document_upload(
+    body: BeginUploadIn, idempotency_key: IdempotencyKey, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims)
+) -> BeginUploadOut:
+    """Step 1: a signed URL to PUT one file to. 404 for a clinic you cannot see, 403 unless you are front desk or a nurse there, 422 for a type or size not allowed, 503 if uploads are disabled
+    or storage is not configured. Writes nothing (no row exists until step 2), so there is no audit row."""
+    intake = _document_intake(request)
+    await _upload_gate(conn, claims, body.clinic_id)
+    with _document_errors():
+        ticket = await intake.begin(body.clinic_id, body.kind, body.content_type, idempotency_key, size_hint=body.size_hint)
+    return BeginUploadOut(document_id=ticket.document_id, upload_url=ticket.signed.url, expires_at=ticket.signed.expires_at)
+
+
+@staff_documents.post("/register", response_model=RegisteredOut)
+async def register_document(
+    body: RegisterIn, idempotency_key: IdempotencyKey, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims)
+) -> RegisteredOut:
+    """Step 2, with the SAME idempotency key as step 1: the server reads the stored object back, verifies it, and writes one row. 422 with a fixed word if the object is missing, empty, too large,
+    of a type not allowed, not what its type says, or flagged by the scanner (then it is deleted); 409 if the key was used for a different request; 503 as for step 1."""
+    intake = _document_intake(request)
+    origin = await _upload_gate(conn, claims, body.clinic_id)
+    actor = uuid.UUID(claims["sub"])
+    with _document_errors():
+        done = await intake.register(conn, body.clinic_id, origin, body.kind, actor, idempotency_key)
+    await write_audit(
+        conn, clinic_id=body.clinic_id, origin=origin, actor_id=actor, actor_role=await _acting_role(conn, claims, body.clinic_id, UPLOAD_ROLES),
+        action="document.register", resource_type="document", resource_id=done.document_id, details={"kind": done.kind, "scan": done.scan, "replayed": done.replayed},
+        idempotency_key=f"audit:document-register:{done.document_id}:{idempotency_key}",
+    )
+    return RegisteredOut(
+        document_id=done.document_id, kind=done.kind, content_type=done.content_type, size_bytes=done.size_bytes, replayed=done.replayed, scan=done.scan  # type: ignore[arg-type]
+    )
+
+
 async def _validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     """FastAPI's default 422 body includes the offending INPUT. On a route that takes a name, a date of birth and a phone that would put them
     in an error response (and in anything that records responses), so every validation error is reduced to its type, location and
@@ -1394,10 +1513,141 @@ def _load_vault() -> DemographicVault | None:
         return None
 
 
+# ---- the referral queue: list and open (what a reviewer sees BEFORE deciding) --------------------------------------------------------------------------
+#
+# Reads only, under the caller's own row-level security. A role sees only what its policies show: front desk cannot read triage proposals (migration 0018), so for front desk `proposal_visible` is
+# FALSE and the proposal fields are null, which means "you cannot see", never "there is none". `run_state` is the latest Front Door job for the document (every reader role can see the queue).
+# `holds` are the open `referral_hold` tasks YOU may see (front desk sees its own; a nurse-assigned hold is invisible to front desk).
+
+RunState = Literal["unclaimed", "claimed", "completed", "dead_lettered"]
+
+
+class ReferralOut(_Out):
+    document_id: uuid.UUID
+    clinic_id: uuid.UUID
+    content_type: UploadContentType
+    size_bytes: int
+    created_at: datetime
+    registered_by: uuid.UUID
+    run_state: RunState | None  # None: no run has been started
+    open_holds: int  # open referral_hold tasks you may see
+    proposal_visible: bool  # False: your role cannot read triage proposals, so the next two fields are unknown, not empty
+    proposal_id: uuid.UUID | None
+    decided: bool | None
+
+
+class HoldOut(_Out):
+    task_id: uuid.UUID
+    assigned_role: Literal["nurse", "doctor", "front_desk"]
+    status: Literal["open", "acknowledged", "resolved"]
+
+
+class CandidateOut(_Out):
+    """A protocol card the retrieval proposed: its id and version only."""
+
+    card_id: str
+    version: int
+
+
+class ProposalOut(_Out):
+    proposal_id: uuid.UUID
+    patient_id: uuid.UUID
+    abstained: bool
+    mode: Literal["shadow", "assisted", "autonomous"]
+    candidates: list[CandidateOut]
+    review_task_id: uuid.UUID
+    created_at: datetime
+
+
+class ReferralDetailOut(ReferralOut):
+    holds: list[HoldOut]
+    proposal: ProposalOut | None  # None when there is none OR when proposal_visible is False
+
+
+class ReferralList(_Out):
+    items: list[ReferralOut]
+    limit: int
+    has_more: bool
+
+
+REFERRAL_READERS: Final = ("front_desk", "nurse", "doctor")
+_REFERRAL_SELECT = """
+    select d.id as document_id, d.clinic_id, d.content_type, d.size_bytes, d.created_at, d.registered_by,
+           (select q.state from ops.queue q where q.task_type = :tt and q.payload ->> 'document_id' = d.id::text order by q.created_at desc, q.id limit 1) as run_state,
+           (select count(*) from agents.review_tasks t where t.kind = 'referral_hold' and t.source_message_id = 'document:' || d.id::text and t.status <> 'resolved') as open_holds,
+           iam.has_clinic_role(d.clinic_id, array['nurse', 'doctor']) as proposal_visible,
+           case when iam.has_clinic_role(d.clinic_id, array['nurse', 'doctor'])
+                then (select p.id from agents.triage_proposals p where p.document_id = d.id and p.clinic_id = d.clinic_id) end as proposal_id,
+           case when iam.has_clinic_role(d.clinic_id, array['nurse', 'doctor'])
+                then exists (select 1 from agents.review_decisions rd join agents.triage_proposals p2 on p2.id = rd.proposal_id where p2.document_id = d.id and p2.clinic_id = d.clinic_id) end as decided
+    from docs.documents d where d.kind = 'referral'
+"""
+
+
+async def _referral_reader(conn: AsyncConnection, claims: dict[str, Any]) -> None:
+    held = (
+        await conn.execute(
+            text(
+                "select 1 from iam.staff_roles sr join iam.accounts a on a.id = sr.account_id where sr.account_id = :u and sr.revoked_at is null "
+                "and sr.role = any(cast(:r as text[])) and a.status = 'active' and a.account_type = 'staff' limit 1"
+            ),
+            {"u": uuid.UUID(claims["sub"]), "r": list(REFERRAL_READERS)},
+        )
+    ).first()
+    if held is None:
+        raise HTTPException(status_code=403, detail="your role may not read this")
+
+
+def _referral_fields(r: Any) -> dict[str, Any]:
+    return {
+        "document_id": r.document_id, "clinic_id": r.clinic_id, "content_type": r.content_type, "size_bytes": r.size_bytes, "created_at": r.created_at, "registered_by": r.registered_by,
+        "run_state": r.run_state, "open_holds": r.open_holds, "proposal_visible": r.proposal_visible, "proposal_id": r.proposal_id, "decided": r.decided,
+    }
+
+
+@staff_referrals.get("", response_model=ReferralList)
+async def list_referrals(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 100) -> ReferralList:
+    """The referral documents you may see, newest first, with the state of their run. 403 unless you hold front desk, nurse or doctor somewhere."""
+    await _referral_reader(conn, claims)
+    rows = (await conn.execute(text(_REFERRAL_SELECT + " order by d.created_at desc, d.id limit :n"), {"tt": FRONT_DOOR_TASK, "n": limit + 1})).all()
+    return ReferralList(items=[ReferralOut(**_referral_fields(r)) for r in rows[:limit]], limit=limit, has_more=len(rows) > limit)
+
+
+@staff_referrals.get("/{document_id}", response_model=ReferralDetailOut)
+async def open_referral(document_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> ReferralDetailOut:
+    """One referral with the holds you may see and, for a nurse or doctor, the triage proposal to review (card ids and versions only). 404 if you cannot see it, 403 unless you hold a reader role."""
+    await _referral_reader(conn, claims)
+    r = (await conn.execute(text(_REFERRAL_SELECT + " and d.id = :d"), {"tt": FRONT_DOOR_TASK, "d": document_id})).first()
+    if r is None:
+        raise HTTPException(status_code=404, detail="not found")
+    holds = (
+        await conn.execute(
+            text(
+                "select id, assigned_role, status from agents.review_tasks where kind = 'referral_hold' and source_message_id = :s order by created_at, id"
+            ),
+            {"s": f"document:{document_id}"},
+        )
+    ).all()
+    proposal = None
+    if r.proposal_visible:
+        p = (
+            await conn.execute(
+                text("select id, patient_id, candidates, abstained, mode, review_task_id, created_at from agents.triage_proposals where document_id = :d and clinic_id = :c"),
+                {"d": document_id, "c": r.clinic_id},
+            )
+        ).first()
+        if p is not None:
+            proposal = ProposalOut(
+                proposal_id=p.id, patient_id=p.patient_id, abstained=p.abstained, mode=p.mode, review_task_id=p.review_task_id, created_at=p.created_at,
+                candidates=[CandidateOut(card_id=str(c["card_id"]), version=int(c["version"])) for c in p.candidates],
+            )
+    return ReferralDetailOut(**_referral_fields(r), holds=[HoldOut(task_id=h.id, assigned_role=h.assigned_role, status=h.status) for h in holds], proposal=proposal)
+
+
 def create_app(
     settings: Settings | None = None, *, jwks: JWKSClient | None = None, engine: AsyncEngine | None = None,
     vault: DemographicVault | None = None, clock: Callable[[], float] = time.time, front_door: FrontDoorComponents | None = None,
-    front_door_session_for: Callable[..., Any] = worker_session,
+    front_door_session_for: Callable[..., Any] = worker_session, document_intake: DocumentIntake | None = None,
 ) -> FastAPI:
     """Build the app. `jwks`, `engine`, `vault` and `clock` (for the step-up window) can be injected (tests do); otherwise they come from
     settings / the environment. `front_door` holds the Front Door's stand-in components; with None the run and review routes answer 503 and no handler is registered."""
@@ -1417,6 +1667,7 @@ def create_app(
         app.state.wired_adapters = frozenset()  # (provider, model_id) pairs with a wired adapter: none yet
         app.state.malware_scanner_configured = False  # nothing sets it: no scanner exists (BUILD-SPEC.md 11.5); clinical stays not ready
         app.state.front_door = front_door
+        app.state.document_intake = document_intake  # None until a storage adapter exists (needs the bucket policy: an owner decision): the upload routes answer 503
         app.state.poker = Poker()  # routes that enqueue call `app.state.poker.poke()` after their transaction commits (7.4)
         handlers = {FRONT_DOOR_TASK: front_door_handler(front_door, session_for=front_door_session_for)} if front_door is not None else {}
         sweeps = [lambda conn: raise_dead_letter_tasks(conn, front_door.dead_letters)] if front_door is not None else []  # a dead-lettered run is never silent
@@ -1458,6 +1709,7 @@ def create_app(
     app.include_router(staff_merges)
     app.include_router(staff_referrals)
     app.include_router(staff_review_tasks)
+    app.include_router(staff_documents)
     app.include_router(health)
     return app
 

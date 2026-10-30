@@ -62,10 +62,10 @@ Grouped by the staff-console packages. None of these is a decision for the front
 6. Releasing a hold on purpose (`release_hold` is in the design but there is no route; holds expire by time only), and listing current holds/offers.
 7. Slot creation and editing for an admin (no route).
 
-**Referrals and documents**
-8. Registering an upload: the signed-upload and `register` service exist (P2-3) but **no route exposes them**; the frontend cannot upload a referral yet.
-9. A referral queue: list documents with their run status, and open one (extracted fields, candidate patient, proposed card) for the review screen. `POST .../review` exists but there is nothing to review FROM.
-10. A signed read URL for the document the reviewer is looking at.
+**Referrals and documents** (upload and queue routes added on branch `batch4`, not yet merged)
+8. Upload: `POST /v1/staff/documents/uploads` (a signed URL) and `POST /v1/staff/documents/register` (same idempotency key) exist and are role-matrix covered, but they answer **503 until a real storage adapter and its bucket policy exist** (an owner decision; the matrix runs them against a fake storage in `demo`). Uploads are also refused (503) outside `demo` until a malware scanner is wired.
+9. Referral queue: `GET /v1/staff/referrals` and `GET /v1/staff/referrals/{document_id}` exist: run state, holds you may see, and for a nurse or doctor the triage proposal (card ids and versions). Front desk cannot read proposals, so `proposal_visible` is false for it and the proposal fields mean "you cannot see", not "none".
+10. A signed READ url for the document the reviewer is looking at: still missing (needs the storage adapter).
 
 **Review tasks (new in PR #9)**
 11. The task list has no patient or document reference except inside `provenance` on the detail route (ids only). A reviewer opening a hold needs "which referral"; that is `provenance.document_id` for holds today. Confirm the shape per kind with the frontend session before building the screen.

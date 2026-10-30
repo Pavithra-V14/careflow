@@ -25,6 +25,7 @@ from collections.abc import Callable
 from datetime import UTC, timedelta
 from itertools import pairwise
 from pathlib import Path
+from types import SimpleNamespace
 
 import asyncpg
 import httpx
@@ -35,10 +36,14 @@ from dotenv import dotenv_values
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
+from careflow.adapters.fake import FakeUpload
 from careflow.app import Settings, create_app
 from careflow.auth import JWKSClient
 from careflow.crypto import DemographicVault
 from careflow.db import make_app_engine
+from careflow.documents import ALLOWED_TYPES as ALLOWED_DOC_TYPES
+from careflow.documents import DocumentIntake, document_id_for
+from careflow.front_door_runner import TASK_TYPE as FRONT_DOOR_TASK
 from careflow.front_door_runner import FrontDoorComponents
 from tests.bounds import bounded
 
@@ -243,11 +248,17 @@ TEST_VAULT = DemographicVault.from_env({f"CAREFLOW_{k}_SECRET_V1": base64.b64enc
 STEP_UP_WINDOW = 1800
 
 
+UPLOADS = FakeUpload()  # the matrix app's storage: the document routes' cases play the browser against it
+
+
 @pytest.fixture(scope="module")
 def app() -> FastAPI:
     settings = Settings(supabase_url=PROJECT, database_url_app=APP_URL or "", step_up_max_age_seconds=STEP_UP_WINDOW)
     # Stand-in components (all None): the referral routes need SOME configured front door to get past their 503; the paths tested here (404, 422, 401) never touch a component.
-    return create_app(settings, jwks=fake_jwks_client(), vault=TEST_VAULT, front_door=FrontDoorComponents(None, None, None, None, None, None, None, None, None))
+    return create_app(
+        settings, jwks=fake_jwks_client(), vault=TEST_VAULT, front_door=FrontDoorComponents(None, None, None, None, None, None, None, None, None),
+        document_intake=DocumentIntake(UPLOADS, profile="demo"),  # a fake storage in the demo profile with no scanner: registration reports scan=not_checked
+    )
 
 
 @pytest.fixture(scope="module")
@@ -1195,6 +1206,192 @@ def offer_send_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, OFFER_SEND, body())
 
 
+# ---- /v1/staff/documents (begin, register) and /v1/staff/referrals (list, open) ---------------------------------------------------------------------------
+#
+# Uploads: front desk or a nurse of the clinic (the same two roles that may insert `docs.documents`). A caller who SEES the clinic row but is not one of those (doctor, admin, business owner,
+# auditor) gets 403; everyone else, including front desk of ANOTHER clinic, gets the same 404 as an unknown clinic. The matrix app is built with a fake storage (module-level `UPLOADS`) in the
+# `demo` profile with no scanner, so a registration reports `scan: not_checked`.
+# Referral queue: readers are front desk, nurse and doctor of SOME clinic (everyone else 403 before any query). Front desk cannot read triage proposals, so for front desk `proposal_visible` is
+# false and the proposal fields are null; a reader of another clinic sees none of this clinic's documents (list: empty of them; open: the same 404 as a missing one).
+
+DOC_BEGIN = "/v1/staff/documents/uploads"
+DOC_REGISTER = "/v1/staff/documents/register"
+REFERRALS = "/v1/staff/referrals"
+REFERRAL = REFERRALS + "/{document_id}"
+PDF_BYTES = b"%PDF-1.7\n" + b"x" * 300
+UPLOAD_ALLOWED = ("front_desk_a", "nurse_a", "multi")
+UPLOAD_VISIBLE_NOT_ALLOWED = {r: 403 for r in ("doctor_a", "admin_a", "business_owner_a", "auditor_a")}
+
+
+def _put_object(ids, key, content=PDF_BYTES, content_type="application/pdf", *, clinic=None):
+    """The browser's half of an upload: take a ticket from the real intake for (clinic, key) and PUT the bytes at the server-chosen path."""
+    clinic = clinic or ids.clinic_a
+    ticket = _run(DocumentIntake(UPLOADS, profile="demo").begin(clinic, "referral", content_type if content_type in ALLOWED_DOC_TYPES else "application/pdf", key))
+    UPLOADS.client_put(ticket.path, content, content_type)
+    return ticket.document_id
+
+
+def _gate_cases(ids, make_request):
+    cases = []
+    for p in [*ids.people, "no account"]:
+        if p in UPLOAD_ALLOWED:
+            continue
+        status = UPLOAD_VISIBLE_NOT_ALLOWED.get(p, 404)
+        who = bearer(mint(ids.no_account)) if p == "no account" else p
+        cases.append(make_request(f"{p} is refused", who, status))
+    return cases
+
+
+def document_begin_cases(ids) -> list[tuple]:
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "kind": "referral", "content_type": "application/pdf", **o}
+    key = _new_key()
+    ticket = lambda b: set(b) == {"document_id", "upload_url", "expires_at", "replayed_ticket"} and b["upload_url"].startswith("fake://upload/clinic/")
+    cases = [
+        _case(ids, "front desk begins an upload", "front_desk_a", 200, DOC_BEGIN, json=body(), key=key, body=ticket),
+        _case(ids, "the same key gets the same document id back", "front_desk_a", 200, DOC_BEGIN, json=body(), key=key,
+              body=lambda b: b["document_id"] == str(document_id_for(ids.clinic_a, key))),
+        _case(ids, "a nurse begins an upload", "nurse_a", 200, DOC_BEGIN, json=body(kind="report", content_type="image/png"), body=ticket),
+        _case(ids, "a size hint above the bound is refused with a fixed word", "front_desk_a", 422, DOC_BEGIN, json=body(size_hint=21 * 1024 * 1024), body=lambda b: b == {"detail": "too_large"}),
+        _case(ids, "a content type that is not allowed is rejected", "front_desk_a", 422, DOC_BEGIN, json=body(content_type="text/html"), body=_fixed(422)),
+        _case(ids, "an unknown kind is rejected", "front_desk_a", 422, DOC_BEGIN, json=body(kind="selfie"), body=_fixed(422)),
+        _case(ids, "a client-supplied path is an unknown field", "front_desk_a", 422, DOC_BEGIN, json=body(path="clinic/x/doc/y"), body=_fixed(422)),
+        _case(ids, "an unknown clinic is not found", "front_desk_a", 404, DOC_BEGIN, json=body(clinic_id=str(uuid.uuid4())), body=_fixed(404)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "front_desk_a", 422, DOC_BEGIN, json=body(), key=None, body=_fixed(422)),
+        _case(ids, "blank X-Idempotency-Key is rejected", "front_desk_a", 422, DOC_BEGIN, json=body(), key="   ", body=_fixed(422)),
+        _case(ids, "an empty body is rejected", "front_desk_a", 422, DOC_BEGIN, json={}, body=_fixed(422)),
+    ]
+    cases += _gate_cases(ids, lambda label, who, status: _case(ids, label, who, status, DOC_BEGIN, json=body(), body=_fixed(status)))
+    return cases + _unauthenticated(ids, DOC_BEGIN, body())
+
+
+def document_register_cases(ids) -> list[tuple]:
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "kind": "referral", **o}
+    k_ok, k_nurse, k_mismatch, k_empty = _new_key(), _new_key(), _new_key(), _new_key()
+    doc_ok = _put_object(ids, k_ok)
+    doc_nurse = _put_object(ids, k_nurse)
+    _put_object(ids, k_mismatch, b"this is not a pdf at all", "application/pdf")
+    _put_object(ids, k_empty, b"", "application/pdf")
+    registered = lambda doc, replayed: (lambda b: b == {
+        "document_id": str(doc), "kind": "referral", "content_type": "application/pdf", "size_bytes": len(PDF_BYTES), "replayed": replayed, "scan": "not_checked"})
+    cases = [
+        _case(ids, "front desk registers an uploaded file", "front_desk_a", 200, DOC_REGISTER, json=body(), key=k_ok, body=registered(doc_ok, False)),
+        _case(ids, "replaying the same key is a replay", "front_desk_a", 200, DOC_REGISTER, json=body(), key=k_ok, body=registered(doc_ok, True)),
+        _case(ids, "the same key for a different kind is a conflict", "front_desk_a", 409, DOC_REGISTER, json=body(kind="report"), key=k_ok,
+              body=lambda b: b == {"detail": "this idempotency key was already used by a different request"}),
+        _case(ids, "a nurse registers an uploaded file", "nurse_a", 200, DOC_REGISTER, json=body(), key=k_nurse, body=registered(doc_nurse, False)),
+        _case(ids, "a key with nothing uploaded is refused with a fixed word", "front_desk_a", 422, DOC_REGISTER, json=body(), body=lambda b: b == {"detail": "not_found"}),
+        _case(ids, "an object that is not what its type says is refused", "front_desk_a", 422, DOC_REGISTER, json=body(), key=k_mismatch, body=lambda b: b == {"detail": "content_mismatch"}),
+        _case(ids, "an empty object is refused", "front_desk_a", 422, DOC_REGISTER, json=body(), key=k_empty, body=lambda b: b == {"detail": "empty"}),
+        _case(ids, "an unknown clinic is not found", "front_desk_a", 404, DOC_REGISTER, json=body(clinic_id=str(uuid.uuid4())), body=_fixed(404)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "front_desk_a", 422, DOC_REGISTER, json=body(), key=None, body=_fixed(422)),
+        _case(ids, "blank X-Idempotency-Key is rejected", "front_desk_a", 422, DOC_REGISTER, json=body(), key="   ", body=_fixed(422)),
+        _case(ids, "an unknown field is rejected", "front_desk_a", 422, DOC_REGISTER, json=body(sha256="0" * 64), body=_fixed(422)),
+        _case(ids, "an empty body is rejected", "front_desk_a", 422, DOC_REGISTER, json={}, body=_fixed(422)),
+    ]
+    cases += _gate_cases(ids, lambda label, who, status: _case(ids, label, who, status, DOC_REGISTER, json=body(), body=_fixed(status)))
+    return cases + _unauthenticated(ids, DOC_REGISTER, body())
+
+
+async def _seed_referrals(conn, ids):
+    """Owner-written synthetic referral documents in clinic A with a queued run, holds (front desk's and a nurse's) and a triage proposal."""
+    fd = ids.people["front_desk_a"][0]
+
+    async def doc():
+        did = uuid.uuid4()
+        await conn.execute(
+            "insert into docs.documents (id, clinic_id, origin, kind, storage_path, content_type, size_bytes, sha256, registered_by, idempotency_key) "
+            "values ($1, $2, 'test', 'referral', $3, 'application/pdf', 300, $4, $5, $6)",
+            did, ids.clinic_a, f"clinic/{ids.clinic_a}/doc/{did}", "ab" * 32, fd, f"matrix-doc-{did}",
+        )
+        return did
+
+    plain, queued, held_fd, held_nurse, proposed = await doc(), await doc(), await doc(), await doc(), await doc()
+    await conn.execute(
+        "insert into ops.queue (clinic_id, origin, task_type, payload, idempotency_key) values ($1, 'test', $2, $3::jsonb, $4)",
+        ids.clinic_a, FRONT_DOOR_TASK, json.dumps({"document_id": str(queued)}), f"matrix-run-{queued}",
+    )
+    for did, role in ((held_fd, "front_desk"), (held_nurse, "nurse")):
+        await _new_task_for_document(conn, ids, did, role)
+    patient = await _new_worker_patient(conn, ids.clinic_a)
+    task = await _new_task(conn, ids.clinic_a, "triage_proposal", "nurse")
+    pid = uuid.uuid4()
+    await conn.execute(
+        "insert into agents.triage_proposals (id, clinic_id, origin, document_id, patient_id, candidates, abstained, mode, review_task_id, idempotency_key) "
+        "values ($1, $2, 'test', $3, $4, $5::jsonb, false, 'assisted', $6, $7)",
+        pid, ids.clinic_a, proposed, patient, json.dumps([{"card_id": "card-x", "version": 3}]), task, f"matrix-prop-{pid}",
+    )
+    return SimpleNamespace(plain=plain, queued=queued, held_fd=held_fd, held_nurse=held_nurse, proposed=proposed, proposal=pid, task=task)
+
+
+async def _new_task_for_document(conn, ids, did, role):
+    tid = uuid.uuid4()
+    await conn.execute(
+        "insert into agents.review_tasks (id, clinic_id, origin, kind, priority, assigned_role, source_message_id, provenance, idempotency_key) "
+        "values ($1, $2, 'test', 'referral_hold', 'standard', $3, $4, '{}'::jsonb, $5)", tid, ids.clinic_a, role, f"document:{did}", f"matrix-hold-{tid}",
+    )
+    return tid
+
+
+def referral_list_cases(ids) -> list[tuple]:
+    s = _run(_owner(lambda conn: _seed_referrals(conn, ids)))
+    row = lambda items, doc: next((i for i in items if i["document_id"] == str(doc)), None)
+
+    def check(who, wants):
+        def pred(items):
+            for doc, expect in wants.items():
+                r = row(items, doc)
+                if r is None or any(r[k] != v for k, v in expect.items()):
+                    return False
+            return True
+
+        return _page(ids, clinic_only=ids.clinic_a, check=pred)
+
+    fd_view = {s.plain: {"run_state": None, "open_holds": 0}, s.queued: {"run_state": "unclaimed"}, s.held_fd: {"open_holds": 1}, s.held_nurse: {"open_holds": 0},
+               s.proposed: {"proposal_visible": False, "proposal_id": None, "decided": None}}
+    nurse_view = {s.plain: {"run_state": None, "open_holds": 0}, s.queued: {"run_state": "unclaimed"}, s.held_fd: {"open_holds": 1}, s.held_nurse: {"open_holds": 1},
+                  s.proposed: {"proposal_visible": True, "proposal_id": str(s.proposal), "decided": False}}
+    cases = [
+        _case(ids, "front desk lists: its own holds only, and it cannot see proposals", "front_desk_a", 200, REFERRALS, key=None, body=check("fd", fd_view)),
+        _case(ids, "a nurse lists: every hold and the proposal", "nurse_a", 200, REFERRALS, key=None, body=check("nurse", nurse_view)),
+        _case(ids, "a doctor lists like a nurse", "doctor_a", 200, REFERRALS, key=None, body=check("doctor", nurse_view)),
+        _case(ids, "a nurse here who is a doctor elsewhere lists like a nurse", "multi", 200, REFERRALS, key=None, body=check("multi", nurse_view)),
+        _case(ids, "a reader of another clinic sees none of this clinic's documents", "front_desk_b", 200, REFERRALS, key=None, body=_page(ids, check=lambda items: items == [])),
+        _case(ids, "limit=1 returns one row and says there are more", "nurse_a", 200, REFERRALS + "?limit=1", key=None, body=lambda b: len(b["items"]) == 1 and b["limit"] == 1 and b["has_more"] is True),
+        _case(ids, "limit=0 is rejected", "nurse_a", 422, REFERRALS + "?limit=0", key=None, body=_fixed(422)),
+        _case(ids, "limit=501 is rejected", "nurse_a", 422, REFERRALS + "?limit=501", key=None, body=_fixed(422)),
+    ]
+    readers = ("front_desk_a", "nurse_a", "doctor_a", "multi", "front_desk_b")
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, REFERRALS, key=None, body=_fixed(403)) for p in ids.people if p not in readers]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, REFERRALS, key=None, body=_fixed(403)))
+    return cases + _unauthenticated(ids, REFERRALS, None)
+
+
+def referral_open_cases(ids) -> list[tuple]:
+    s = _run(_owner(lambda conn: _seed_referrals(conn, ids)))
+    path = lambda d: REFERRAL.format(document_id=d)
+    base = lambda d: (lambda b: b["document_id"] == str(d) and b["clinic_id"] == str(ids.clinic_a))
+    cases = [
+        _case(ids, "front desk opens a document with its own hold: one hold, no proposal visible", "front_desk_a", 200, path(s.held_fd), key=None,
+              body=lambda b: base(s.held_fd)(b) and len(b["holds"]) == 1 and b["holds"][0]["assigned_role"] == "front_desk" and b["proposal"] is None and b["proposal_visible"] is False),
+        _case(ids, "front desk cannot see a nurse's hold on a document", "front_desk_a", 200, path(s.held_nurse), key=None, body=lambda b: base(s.held_nurse)(b) and b["holds"] == []),
+        _case(ids, "front desk opens a document with a proposal: the proposal is hidden, not absent", "front_desk_a", 200, path(s.proposed), key=None,
+              body=lambda b: b["proposal_visible"] is False and b["proposal"] is None and b["proposal_id"] is None),
+        _case(ids, "a nurse opens the proposal: card ids and versions only", "nurse_a", 200, path(s.proposed), key=None,
+              body=lambda b: b["proposal_visible"] is True and b["proposal"]["proposal_id"] == str(s.proposal) and b["proposal"]["candidates"] == [{"card_id": "card-x", "version": 3}]
+              and b["proposal"]["mode"] == "assisted" and b["proposal"]["abstained"] is False),
+        _case(ids, "a doctor opens the proposal too", "doctor_a", 200, path(s.proposed), key=None, body=lambda b: b["proposal"] is not None),
+        _case(ids, "a nurse sees both holds on their document", "nurse_a", 200, path(s.held_nurse), key=None, body=lambda b: len(b["holds"]) == 1 and b["holds"][0]["assigned_role"] == "nurse"),
+        _case(ids, "a queued run is shown", "front_desk_a", 200, path(s.queued), key=None, body=lambda b: b["run_state"] == "unclaimed"),
+        _case(ids, "a reader of another clinic gets the same 404 as a missing document", "front_desk_b", 404, path(s.plain), key=None, body=_fixed(404)),
+        _case(ids, "an unknown document is not found", "nurse_a", 404, path(uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "a document id that is not a uuid is rejected", "nurse_a", 422, path("nope"), key=None, body=_fixed(422)),
+    ]
+    readers = ("front_desk_a", "nurse_a", "doctor_a", "multi", "front_desk_b")
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path(s.plain), key=None, body=_fixed(403)) for p in ids.people if p not in readers]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, path(s.plain), key=None, body=_fixed(403)))
+    return cases + _unauthenticated(ids, path(s.plain), None)
+
+
 # One entry per route: add the new route's cases here in the same change that adds the route.
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
@@ -1217,6 +1414,10 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", TASK_RESOLVE): review_task_resolve_cases,
     ("GET", OFFER_DRAFT): offer_draft_cases,
     ("POST", OFFER_SEND): offer_send_cases,
+    ("POST", DOC_BEGIN): document_begin_cases,
+    ("POST", DOC_REGISTER): document_register_cases,
+    ("GET", REFERRALS): referral_list_cases,
+    ("GET", REFERRAL): referral_open_cases,
     ("GET", READ): message_read_cases,
     ("POST", RUN_REFERRAL): referral_run_cases,
     ("POST", REVIEW_REFERRAL): referral_review_cases,
@@ -1956,6 +2157,42 @@ def test_a_configured_draft_is_computed_and_a_send_holds_the_slot_and_records_th
         assert details == {"slot_id": str(slot), "patient_id": top["patient_id"], "replayed": False}
     finally:
         client.app.dependency_overrides.pop(app_module.scheduling_settings, None)
+
+
+def test_registering_a_document_writes_one_row_and_one_audit_row_as_the_person_and_a_replay_writes_none(client, ids):
+    fd = ids.people["front_desk_a"][0]
+    key = _new_key()
+    document = _put_object(ids, key)
+    headers = {**bearer(mint(fd)), "X-Idempotency-Key": key}
+    body = {"clinic_id": str(ids.clinic_a), "kind": "referral"}
+    ok = client.post(DOC_REGISTER, headers=headers, json=body)
+    assert ok.status_code == 200 and ok.json()["document_id"] == str(document) and ok.json()["replayed"] is False
+    assert client.post(DOC_REGISTER, headers=headers, json=body).json()["replayed"] is True
+    rows = _run(_fetch("select registered_by, kind, content_type, size_bytes, storage_path from docs.documents where id = $1", document))
+    assert len(rows) == 1 and rows[0]["registered_by"] == fd and rows[0]["storage_path"] == f"clinic/{ids.clinic_a}/doc/{document}"
+    audit = _run(_fetch("select actor_id, actor_role, details, clinic_id from audit.log where resource_type = 'document' and resource_id = $1 and action = 'document.register'", str(document)))
+    assert len(audit) == 1 and (audit[0]["actor_id"], audit[0]["actor_role"], audit[0]["clinic_id"]) == (fd, "front_desk", ids.clinic_a)
+    details = json.loads(audit[0]["details"]) if isinstance(audit[0]["details"], str) else audit[0]["details"]
+    assert details == {"kind": "referral", "scan": "not_checked", "replayed": False}
+    refused = client.post(DOC_REGISTER, headers={**bearer(mint(ids.people["doctor_a"][0])), "X-Idempotency-Key": key}, json=body)
+    assert refused.status_code == 403 and _run(_fetch("select count(*) as n from audit.log where resource_id = $1 and action = 'document.register'", str(document)))[0]["n"] == 1
+
+
+def test_an_unconfigured_storage_answers_503_and_a_clinical_profile_without_a_scanner_refuses_uploads(ids):
+    from careflow.app import Settings as _Settings
+
+    def build(intake):
+        return create_app(_Settings(supabase_url=PROJECT, database_url_app=APP_URL or ""), jwks=fake_jwks_client(), vault=TEST_VAULT, document_intake=intake)
+
+    fd = ids.people["front_desk_a"][0]
+    body = {"clinic_id": str(ids.clinic_a), "kind": "referral", "content_type": "application/pdf"}
+    headers = {**bearer(mint(fd)), "X-Idempotency-Key": _new_key()}
+    with TestClient(build(None), raise_server_exceptions=False) as c:
+        r = c.post(DOC_BEGIN, headers=headers, json=body)
+        assert (r.status_code, r.json()) == (503, {"detail": "uploads are unavailable: not configured"})
+    with TestClient(build(DocumentIntake(UPLOADS, profile="clinical")), raise_server_exceptions=False) as c:
+        r = c.post(DOC_BEGIN, headers=headers, json=body)
+        assert (r.status_code, r.json()) == (503, {"detail": "uploads are disabled in this profile"})
 
 
 # ---- message reads: the committed half's behaviour -----------------------------------------------------------------------------------------

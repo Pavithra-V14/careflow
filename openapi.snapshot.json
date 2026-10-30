@@ -1,6 +1,86 @@
 {
   "components": {
     "schemas": {
+      "BeginUploadIn": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "content_type": {
+            "enum": [
+              "application/pdf",
+              "image/jpeg",
+              "image/png"
+            ],
+            "title": "Content Type",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "referral",
+              "report",
+              "other"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "size_hint": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 1000000000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Hint"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "kind",
+          "content_type"
+        ],
+        "title": "BeginUploadIn",
+        "type": "object"
+      },
+      "BeginUploadOut": {
+        "additionalProperties": false,
+        "description": "Where to PUT the file, once. The path is the server's and is not returned.",
+        "properties": {
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "replayed_ticket": {
+            "default": false,
+            "title": "Replayed Ticket",
+            "type": "boolean"
+          },
+          "upload_url": {
+            "title": "Upload Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "upload_url",
+          "expires_at"
+        ],
+        "title": "BeginUploadOut",
+        "type": "object"
+      },
       "BookIn": {
         "additionalProperties": false,
         "properties": {
@@ -159,7 +239,7 @@
           },
           "candidates": {
             "items": {
-              "$ref": "#/components/schemas/CandidateOut"
+              "$ref": "#/components/schemas/careflow__app__CandidateOut__1"
             },
             "title": "Candidates",
             "type": "array"
@@ -181,43 +261,6 @@
           "replayed"
         ],
         "title": "CancelOut",
-        "type": "object"
-      },
-      "CandidateOut": {
-        "additionalProperties": false,
-        "properties": {
-          "joined_at": {
-            "format": "date-time",
-            "title": "Joined At",
-            "type": "string"
-          },
-          "patient_id": {
-            "format": "uuid",
-            "title": "Patient Id",
-            "type": "string"
-          },
-          "priority_code": {
-            "title": "Priority Code",
-            "type": "string"
-          },
-          "rank": {
-            "title": "Rank",
-            "type": "integer"
-          },
-          "waitlist_id": {
-            "format": "uuid",
-            "title": "Waitlist Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "waitlist_id",
-          "patient_id",
-          "priority_code",
-          "rank",
-          "joined_at"
-        ],
-        "title": "CandidateOut",
         "type": "object"
       },
       "ConfirmIdentityOut": {
@@ -334,38 +377,6 @@
           "duration_minutes"
         ],
         "title": "HoldIn",
-        "type": "object"
-      },
-      "HoldOut": {
-        "additionalProperties": false,
-        "properties": {
-          "expires_at": {
-            "format": "date-time",
-            "title": "Expires At",
-            "type": "string"
-          },
-          "hold_id": {
-            "format": "uuid",
-            "title": "Hold Id",
-            "type": "string"
-          },
-          "replayed": {
-            "title": "Replayed",
-            "type": "boolean"
-          },
-          "slot_id": {
-            "format": "uuid",
-            "title": "Slot Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "hold_id",
-          "slot_id",
-          "expires_at",
-          "replayed"
-        ],
-        "title": "HoldOut",
         "type": "object"
       },
       "IngestIn": {
@@ -564,6 +575,62 @@
         "title": "MessageReadOut",
         "type": "object"
       },
+      "ProposalOut": {
+        "additionalProperties": false,
+        "properties": {
+          "abstained": {
+            "title": "Abstained",
+            "type": "boolean"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/careflow__app__CandidateOut__2"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "shadow",
+              "assisted",
+              "autonomous"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "proposal_id": {
+            "format": "uuid",
+            "title": "Proposal Id",
+            "type": "string"
+          },
+          "review_task_id": {
+            "format": "uuid",
+            "title": "Review Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "patient_id",
+          "abstained",
+          "mode",
+          "candidates",
+          "review_task_id",
+          "created_at"
+        ],
+        "title": "ProposalOut",
+        "type": "object"
+      },
       "ProposeMergeIn": {
         "additionalProperties": false,
         "properties": {
@@ -589,6 +656,334 @@
           "subordinate_patient_id"
         ],
         "title": "ProposeMergeIn",
+        "type": "object"
+      },
+      "ReferralDetailOut": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "content_type": {
+            "enum": [
+              "application/pdf",
+              "image/jpeg",
+              "image/png"
+            ],
+            "title": "Content Type",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decided": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "holds": {
+            "items": {
+              "$ref": "#/components/schemas/careflow__app__HoldOut__2"
+            },
+            "title": "Holds",
+            "type": "array"
+          },
+          "open_holds": {
+            "title": "Open Holds",
+            "type": "integer"
+          },
+          "proposal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProposalOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          },
+          "proposal_visible": {
+            "title": "Proposal Visible",
+            "type": "boolean"
+          },
+          "registered_by": {
+            "format": "uuid",
+            "title": "Registered By",
+            "type": "string"
+          },
+          "run_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "unclaimed",
+                  "claimed",
+                  "completed",
+                  "dead_lettered"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run State"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "document_id",
+          "clinic_id",
+          "content_type",
+          "size_bytes",
+          "created_at",
+          "registered_by",
+          "run_state",
+          "open_holds",
+          "proposal_visible",
+          "proposal_id",
+          "decided",
+          "holds",
+          "proposal"
+        ],
+        "title": "ReferralDetailOut",
+        "type": "object"
+      },
+      "ReferralList": {
+        "additionalProperties": false,
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReferralOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "limit",
+          "has_more"
+        ],
+        "title": "ReferralList",
+        "type": "object"
+      },
+      "ReferralOut": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "content_type": {
+            "enum": [
+              "application/pdf",
+              "image/jpeg",
+              "image/png"
+            ],
+            "title": "Content Type",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decided": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "open_holds": {
+            "title": "Open Holds",
+            "type": "integer"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          },
+          "proposal_visible": {
+            "title": "Proposal Visible",
+            "type": "boolean"
+          },
+          "registered_by": {
+            "format": "uuid",
+            "title": "Registered By",
+            "type": "string"
+          },
+          "run_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "unclaimed",
+                  "claimed",
+                  "completed",
+                  "dead_lettered"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run State"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "document_id",
+          "clinic_id",
+          "content_type",
+          "size_bytes",
+          "created_at",
+          "registered_by",
+          "run_state",
+          "open_holds",
+          "proposal_visible",
+          "proposal_id",
+          "decided"
+        ],
+        "title": "ReferralOut",
+        "type": "object"
+      },
+      "RegisterIn": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "referral",
+              "report",
+              "other"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "kind"
+        ],
+        "title": "RegisterIn",
+        "type": "object"
+      },
+      "RegisteredOut": {
+        "additionalProperties": false,
+        "properties": {
+          "content_type": {
+            "enum": [
+              "application/pdf",
+              "image/jpeg",
+              "image/png"
+            ],
+            "title": "Content Type",
+            "type": "string"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "referral",
+              "report",
+              "other"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "scan": {
+            "enum": [
+              "clean",
+              "not_scanned",
+              "not_checked"
+            ],
+            "title": "Scan",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "document_id",
+          "kind",
+          "content_type",
+          "size_bytes",
+          "replayed",
+          "scan"
+        ],
+        "title": "RegisteredOut",
         "type": "object"
       },
       "ReviewIn": {
@@ -1490,6 +1885,130 @@
         ],
         "title": "WaitlistList",
         "type": "object"
+      },
+      "careflow__app__CandidateOut__1": {
+        "additionalProperties": false,
+        "properties": {
+          "joined_at": {
+            "format": "date-time",
+            "title": "Joined At",
+            "type": "string"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "priority_code": {
+            "title": "Priority Code",
+            "type": "string"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "waitlist_id": {
+            "format": "uuid",
+            "title": "Waitlist Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "waitlist_id",
+          "patient_id",
+          "priority_code",
+          "rank",
+          "joined_at"
+        ],
+        "title": "CandidateOut",
+        "type": "object"
+      },
+      "careflow__app__CandidateOut__2": {
+        "additionalProperties": false,
+        "description": "A protocol card the retrieval proposed: its id and version only.",
+        "properties": {
+          "card_id": {
+            "title": "Card Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "card_id",
+          "version"
+        ],
+        "title": "CandidateOut",
+        "type": "object"
+      },
+      "careflow__app__HoldOut__1": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "hold_id": {
+            "format": "uuid",
+            "title": "Hold Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "slot_id": {
+            "format": "uuid",
+            "title": "Slot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "hold_id",
+          "slot_id",
+          "expires_at",
+          "replayed"
+        ],
+        "title": "HoldOut",
+        "type": "object"
+      },
+      "careflow__app__HoldOut__2": {
+        "additionalProperties": false,
+        "properties": {
+          "assigned_role": {
+            "enum": [
+              "nurse",
+              "doctor",
+              "front_desk"
+            ],
+            "title": "Assigned Role",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "acknowledged",
+              "resolved"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "assigned_role",
+          "status"
+        ],
+        "title": "HoldOut",
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -1546,6 +2065,132 @@
           }
         ],
         "summary": "Me"
+      }
+    },
+    "/v1/staff/documents/register": {
+      "post": {
+        "description": "Step 2, with the SAME idempotency key as step 1: the server reads the stored object back, verifies it, and writes one row. 422 with a fixed word if the object is missing, empty, too large,\nof a type not allowed, not what its type says, or flagged by the scanner (then it is deleted); 409 if the key was used for a different request; 503 as for step 1.",
+        "operationId": "register_document_v1_staff_documents_register_post",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisteredOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Register Document",
+        "tags": [
+          "staff documents"
+        ]
+      }
+    },
+    "/v1/staff/documents/uploads": {
+      "post": {
+        "description": "Step 1: a signed URL to PUT one file to. 404 for a clinic you cannot see, 403 unless you are front desk or a nurse there, 422 for a type or size not allowed, 503 if uploads are disabled\nor storage is not configured. Writes nothing (no row exists until step 2), so there is no audit row.",
+        "operationId": "begin_document_upload_v1_staff_documents_uploads_post",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BeginUploadIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BeginUploadOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Begin Document Upload",
+        "tags": [
+          "staff documents"
+        ]
       }
     },
     "/v1/staff/merges": {
@@ -2045,6 +2690,106 @@
         "summary": "Revoke Patient Identity",
         "tags": [
           "staff patients"
+        ]
+      }
+    },
+    "/v1/staff/referrals": {
+      "get": {
+        "description": "The referral documents you may see, newest first, with the state of their run. 403 unless you hold front desk, nurse or doctor somewhere.",
+        "operationId": "list_referrals_v1_staff_referrals_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Referrals",
+        "tags": [
+          "staff referrals"
+        ]
+      }
+    },
+    "/v1/staff/referrals/{document_id}": {
+      "get": {
+        "description": "One referral with the holds you may see and, for a nurse or doctor, the triage proposal to review (card ids and versions only). 404 if you cannot see it, 403 unless you hold a reader role.",
+        "operationId": "open_referral_v1_staff_referrals__document_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Open Referral",
+        "tags": [
+          "staff referrals"
         ]
       }
     },
@@ -2925,7 +3670,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HoldOut"
+                  "$ref": "#/components/schemas/careflow__app__HoldOut__1"
                 }
               }
             },
