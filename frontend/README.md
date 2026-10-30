@@ -82,7 +82,7 @@ nothing is pre-selected; no clinical, consent or legal wording (marked placehold
 
 | Screen | Who | Routes | State |
 |---|---|---|---|
-| Referral decision (approve, edit, reject) on the referral detail | nurse, doctor | `POST /v1/staff/referrals/{id}/review` | built, mock-only |
+| Referral decision (approve, reject; "edit" shown as Coming soon, clinician item 26) on the referral detail | nurse, doctor | `POST /v1/staff/referrals/{id}/review` | built, mock-only |
 | Revoke an identity confirmation on the patient record | front desk | `POST /v1/staff/patients/{id}/revoke-identity` | built, mock-only |
 | Possible duplicates, merges, one merge (read-only) | duplicates: front desk; merges: front desk, nurse, doctor | `GET /v1/staff/identity/possible-duplicates`, `.../merges`, `.../merges/{id}` | built, mock-only |
 | Merge approve and unmerge | front desk | `POST /v1/staff/merges/{id}/approve`, `.../unmerge` | built, **OFF** behind `mergeActions`, mock-only |

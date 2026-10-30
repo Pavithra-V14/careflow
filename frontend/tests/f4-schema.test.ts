@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { DECISIONS } from '../src/staff/pages/ReferralReview';
+import { DECISIONS, OFFERED_DECISIONS } from '../src/staff/pages/ReferralReview';
 import { REVOKE_REASONS } from '../src/staff/pages/IdentityRevoke';
 import { DUPLICATE_STATUSES, MERGE_STATUSES } from '../src/staff/pages/IdentityPage';
 
@@ -20,6 +20,10 @@ describe('word lists mirrored from the schema', () => {
   it('referral decisions are exactly the words ReviewIn accepts, in order', () => {
     expect([...DECISIONS]).toEqual(prop('ReviewIn', 'decision'));
     expect(DECISIONS.length).toBeGreaterThan(0);
+  });
+  it('offers only decisions the API accepts, and edit is not offered (clinician item 26)', () => {
+    for (const d of OFFERED_DECISIONS) expect(DECISIONS).toContain(d);
+    expect([...OFFERED_DECISIONS]).toEqual(['approve', 'reject']);
   });
   it('identity-revoke reasons are exactly the words RevokeIdentityIn accepts, in order', () => {
     expect([...REVOKE_REASONS]).toEqual(prop('RevokeIdentityIn', 'reason'));

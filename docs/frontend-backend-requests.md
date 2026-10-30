@@ -121,14 +121,14 @@ sending "Coming soon".
 
 All three screens are built to the snapshot; these are the places where the schema does not say enough.
 
-- **What "edit" records.** `POST /v1/staff/referrals/{id}/review` takes only `decision` (`approve`, `edit`, `reject`). The console
-  records the word and nothing else: there is no field for what was edited or why. If "edit" is meant to carry content, the
-  route needs a body for it first. No reason is collected or sent (a clinician defines reason codes; the screen shows
-  "PLACEHOLDER - clinician to define").
+- **"Edit" is hidden (owner decision, 2026-10-30).** `POST /v1/staff/referrals/{id}/review` takes only `decision` (`approve`, `edit`,
+  `reject`) and records only the word. The console offers **approve and reject only**; "edit" is shown as "Coming soon" and
+  cannot be chosen or sent (a test pins it). What a reviewer may edit is a clinician question: **clinician item 26**. No reason
+  is collected or sent either (a clinician defines reason codes; the screen shows "PLACEHOLDER - clinician to define").
 - **What `review_task: on_record` means.** The revoke response is `raised`, `not_configured` or `on_record`. The console shows
   "A review task was raised.", "No review task was raised: the task settings are not configured yet." and "A review task is
   already on record." The third wording is my reading of the word; please confirm it.
-- **The revoke reasons are not final.** The route accepts `wrong_person`, `planted_or_suspect`, `mistaken_click`
+- **The revoke reasons are not final (clinician item 23; the clinic has not accepted them).** The route accepts `wrong_person`, `planted_or_suspect`, `mistaken_click`
   (`docs/design/identity-confirmation-revoke.md` leaves the list open). The console shows them as given, in English in both
   languages, with a marked placeholder saying the wording is not final.
 - **Merge approve and unmerge are built but OFF.** `mergeActions` is a compile-time flag that is false in every build except

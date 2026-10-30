@@ -63,6 +63,27 @@ describe('referral review decision (nurse, doctor)', () => {
     expect(await screen.findByText('The decision was recorded.')).toBeInTheDocument();
   });
 
+  it('offers approve and reject only: "edit" is shown as Coming soon, cannot be chosen, and is never sent', async () => {
+    const user = userEvent.setup();
+    const { calls } = await openConsole({ role: 'doctor', hash: `/referrals/${ID.doc}`, routes: [detailRoute(), review([])] });
+    const group = await screen.findByRole('group', { name: 'Decision' });
+    const radios = within(group).getAllByRole('radio') as HTMLInputElement[];
+    expect(radios.filter((r) => !r.disabled).map((r) => r.value)).toEqual(['approve', 'reject']);
+    const edit = radios.find((r) => r.value === 'edit') as HTMLInputElement;
+    expect(edit).toBeDisabled();
+    expect(edit.closest('label')).toHaveTextContent('Coming soon');
+
+    await user.click(edit); // clicking a disabled option does nothing
+    expect(edit).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'Record decision' })).toBeDisabled();
+
+    await user.click(within(group).getByRole('radio', { name: 'Approve' }));
+    await user.click(screen.getByRole('button', { name: 'Record decision' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Record decision' }));
+    await waitFor(() => expect(writes(calls)).toHaveLength(1));
+    expect(JSON.stringify(writes(calls).map((c) => c.body))).not.toContain('edit');
+  });
+
   it('shows the reasons only as a marked clinician placeholder, and collects and sends none', async () => {
     const user = userEvent.setup();
     const { calls } = await openConsole({ role: 'doctor', hash: `/referrals/${ID.doc}`, routes: [detailRoute(), review([])] });
@@ -107,12 +128,12 @@ describe('referral review decision (nurse, doctor)', () => {
     expect(writes(calls)[1]?.key).toBe(writes(calls)[0]?.key);
 
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
-    await user.click(screen.getByRole('radio', { name: 'Edit' })); // a different decision
+    await user.click(screen.getByRole('radio', { name: 'Reject' })); // a different decision
     await user.click(screen.getByRole('button', { name: 'Record decision' }));
     await user.click(go());
     await waitFor(() => expect(writes(calls)).toHaveLength(3));
     expect(writes(calls)[2]?.key).not.toBe(writes(calls)[0]?.key);
-    expect(writes(calls)[2]?.body).toEqual({ decision: 'edit' });
+    expect(writes(calls)[2]?.body).toEqual({ decision: 'reject' });
   });
 
   it('says a conflict plainly, a 403 as "not available", and never shows backend text', async () => {

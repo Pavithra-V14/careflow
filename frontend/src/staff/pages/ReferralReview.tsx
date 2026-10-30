@@ -6,12 +6,18 @@ import { unwrap } from '../apiState';
 import { useAuth } from '../auth/AuthProvider';
 import { useIdempotentWrite } from '../hooks';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import { PlaceholderNote } from '../ui/bits';
+import { ComingSoon, PlaceholderNote } from '../ui/bits';
 import { NotAvailableToRole, ProblemText } from '../ui/states';
 
 // The three words the review route accepts (ReviewIn.decision). Mirrored here and pinned to the schema by
 // tests/f4-schema.test.ts. Shown in the order the API lists them; none is marked or pre-selected.
 export const DECISIONS: readonly ReviewDecision[] = ['approve', 'edit', 'reject'];
+
+/**
+ * Only these can be chosen or sent. "edit" is shown as Coming soon: what a reviewer may edit is a clinician question (clinician
+ * item 26), and the route records only the word, so offering it would record an edit that carries nothing.
+ */
+export const OFFERED_DECISIONS: readonly ReviewDecision[] = ['approve', 'reject'];
 
 /**
  * A reviewer's decision on a triage proposal (nurse and doctor). Nothing is chosen for the person, nothing is written
@@ -51,21 +57,27 @@ export function ReferralReview({ documentId, onDone }: { documentId: string; onD
         <p className="hint">{t('referrals.review.help')}</p>
         <fieldset>
           <legend>{t('referrals.review.legend')}</legend>
-          {DECISIONS.map((d) => (
-            <label key={d} className="choice">
-              <input
-                type="radio"
-                name={id}
-                value={d}
-                checked={choice === d}
-                onChange={() => {
-                  setChoice(d);
-                  record.reset(); // a different decision is a different request: never reuse the old key
-                }}
-              />
-              <span>{t(`referrals.decision.${d}`)}</span>
-            </label>
-          ))}
+          {DECISIONS.map((d) => {
+            const offered = OFFERED_DECISIONS.includes(d);
+            return (
+              <label key={d} className="choice">
+                <input
+                  type="radio"
+                  name={id}
+                  value={d}
+                  checked={offered && choice === d}
+                  disabled={!offered}
+                  onChange={() => {
+                    if (!offered) return;
+                    setChoice(d);
+                    record.reset(); // a different decision is a different request: never reuse the old key
+                  }}
+                />
+                <span>{t(`referrals.decision.${d}`)}</span>
+                {!offered && <ComingSoon />}
+              </label>
+            );
+          })}
         </fieldset>
         <h3>{t('referrals.review.reasons')}</h3>
         <PlaceholderNote>{t('placeholder.reviewReasons')}</PlaceholderNote>
