@@ -93,6 +93,12 @@ def test_a_normal_request_from_a_listed_origin_carries_the_allow_origin_header_a
     assert r.headers["access-control-allow-origin"] == ORIGIN and "access-control-allow-credentials" not in r.headers
 
 
+def test_www_authenticate_is_exposed_to_a_listed_origin_so_the_browser_can_read_a_401s_signal(monkeypatch):
+    r = client(monkeypatch, ORIGIN).get("/openapi.json", headers={"Origin": ORIGIN})
+    exposed = {h.strip().lower() for h in r.headers["access-control-expose-headers"].split(",")}
+    assert exposed == {"www-authenticate"}  # exactly that one, nothing else widened
+
+
 def test_with_nothing_configured_there_is_no_cors_layer_at_all(monkeypatch):
     c = client(monkeypatch, None)
     assert "access-control-allow-origin" not in c.get("/openapi.json", headers={"Origin": ORIGIN}).headers
