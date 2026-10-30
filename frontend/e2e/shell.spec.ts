@@ -1,12 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
-// Real-browser checks for every screen: automated accessibility (WCAG 2.2 AA tags, including colour
+// Real-browser checks for the staff shell (patient pages: patient.spec.ts): automated accessibility (WCAG 2.2 AA tags, including colour
 // contrast), keyboard-only operation, narrow-viewport overflow, and a screenshot per screen.
 // Screenshots land in test-results/shots/ (git-ignored); they are for human review, not baselines.
 
 const SCREENS = [
-  { name: 'patient-shell', path: '/patient/' },
   { name: 'staff-shell', path: '/staff/' },
 ] as const;
 const LANGS = ['en', 'ta'] as const;
