@@ -575,6 +575,182 @@
         "title": "MessageReadOut",
         "type": "object"
       },
+      "PatientHitOut": {
+        "additionalProperties": false,
+        "properties": {
+          "matched_kinds": {
+            "items": {
+              "enum": [
+                "name_dob",
+                "phone"
+              ],
+              "type": "string"
+            },
+            "title": "Matched Kinds",
+            "type": "array"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "registered_via": {
+            "enum": [
+              "front_desk",
+              "referral_worker"
+            ],
+            "title": "Registered Via",
+            "type": "string"
+          },
+          "verified": {
+            "title": "Verified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "patient_id",
+          "matched_kinds",
+          "verified",
+          "registered_via"
+        ],
+        "title": "PatientHitOut",
+        "type": "object"
+      },
+      "PatientSearchIn": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "dob": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Dob",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "name",
+          "dob"
+        ],
+        "title": "PatientSearchIn",
+        "type": "object"
+      },
+      "PatientSearchOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PatientHitOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "PatientSearchOut",
+        "type": "object"
+      },
+      "PatientStatusOut": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "latest_identity_event": {
+            "anyOf": [
+              {
+                "enum": [
+                  "confirm",
+                  "revoke"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Identity Event"
+          },
+          "latest_identity_event_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Identity Event At"
+          },
+          "merged_into": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merged Into"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "registered_via": {
+            "enum": [
+              "front_desk",
+              "referral_worker"
+            ],
+            "title": "Registered Via",
+            "type": "string"
+          },
+          "verified": {
+            "title": "Verified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "patient_id",
+          "clinic_id",
+          "registered_via",
+          "verified",
+          "latest_identity_event",
+          "latest_identity_event_at",
+          "merged_into"
+        ],
+        "title": "PatientStatusOut",
+        "type": "object"
+      },
       "ProposalOut": {
         "additionalProperties": false,
         "properties": {
@@ -2552,6 +2728,102 @@
           }
         ],
         "summary": "Register Patient",
+        "tags": [
+          "staff patients"
+        ]
+      }
+    },
+    "/v1/staff/patients/search": {
+      "post": {
+        "description": "Find existing records for exactly these details. 404 for a clinic you cannot see, 403 unless you are front desk there, 422 for an invalid date of birth or phone (named, never echoed), 503 if\nthe encryption keys are not configured. Read-only.",
+        "operationId": "search_patients_v1_staff_patients_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatientSearchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientSearchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Search Patients",
+        "tags": [
+          "staff patients"
+        ]
+      }
+    },
+    "/v1/staff/patients/{patient_id}": {
+      "get": {
+        "description": "Whether this record is verified and why (its source and its latest confirm or revoke). 404 if you cannot see it (the same as a missing or erased one), 403 unless you are front desk,\nnurse or doctor somewhere.",
+        "operationId": "patient_status_route_v1_staff_patients__patient_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "patient_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Patient Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientStatusOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Patient Status Route",
         "tags": [
           "staff patients"
         ]

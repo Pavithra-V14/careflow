@@ -51,10 +51,10 @@ New in PR #9: `revoke-identity`, the four `review-tasks` routes, `offers/draft`,
 
 Grouped by the staff-console packages. None of these is a decision for the frontend session; each is a backend package for the owner to schedule. Items marked (D) need an owner decision first, (C) a clinician.
 
-**Patients and identity**
-1. Find and read a patient: search by name/phone/DOB and a patient detail route. Needs a decision on what a staff session may see decrypted and a log of such reads (D); today no route returns a name.
-2. Whether a record is **verified** (front-desk created or confirmed) and who confirmed it: no field says so; the confirm/revoke buttons need it.
-3. List of possible duplicates (`mpi.match_candidates`) and of merges (propose/approve/unmerge exist, but there is no way to list or open a merge or a candidate).
+**Patients and identity** (lookup and status added on branch `batch4`, not yet merged)
+1. Find a patient: `POST /v1/staff/patients/search` (exact name + date of birth, optional phone; front desk) returns ids, the kinds that agreed, `verified` and `registered_via`. **It returns no name, date of birth or phone**, and fuzzy or partial search does not exist (tokens are keyed hashes). Showing a stored name or a patient list needs an owner decision on what a staff session may see decrypted, with read logging (D). Search reads are not audited yet.
+2. `GET /v1/staff/patients/{id}`: `verified`, `registered_via`, the latest confirm/revoke event and its time, and `merged_into` (act on that record). The confirm and revoke buttons can use it.
+3. List of possible duplicates (`mpi.match_candidates`) and of merges (propose/approve/unmerge exist, but there is no way to list or open a merge or a candidate): still missing.
 
 **Scheduling**
 4. Lists the booking screens need: providers, locations, visit types and priority levels (ids exist in slot rows; names do not).

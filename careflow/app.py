@@ -1513,6 +1513,84 @@ def _load_vault() -> DemographicVault | None:
         return None
 
 
+# ---- patient lookup and the verified-status read (mpi.lookup_patients, mpi.patient_status) ---------------------------------------------------------------------
+#
+# SEARCH is an exact, read-only lookup by the same keyed tokens registration uses: the caller types a name and date of birth (and optionally a phone) and gets ids, the kinds of identifier that
+# agreed and whether each record is verified. It returns NO name, date of birth or phone (what the caller typed they already know; showing a stored value is a separate decision), writes
+# nothing, and is not audited (existence only; the owner may want search reads logged: noted in the frontend contract). Front desk only (they register). STATUS tells a front-desk person, nurse
+# or doctor whether one record is verified and why; the confirm and revoke buttons need it.
+
+
+class PatientSearchIn(_Body):
+    clinic_id: uuid.UUID
+    name: str = Field(min_length=1, max_length=200)
+    dob: str = Field(min_length=1, max_length=40)
+    phone: str | None = Field(default=None, max_length=40)
+
+
+class PatientHitOut(_Out):
+    patient_id: uuid.UUID
+    matched_kinds: list[Literal["name_dob", "phone"]]
+    verified: bool
+    registered_via: Literal["front_desk", "referral_worker"]
+
+
+class PatientSearchOut(_Out):
+    items: list[PatientHitOut]
+
+
+class PatientStatusOut(_Out):
+    patient_id: uuid.UUID
+    clinic_id: uuid.UUID
+    registered_via: Literal["front_desk", "referral_worker"]
+    verified: bool
+    latest_identity_event: Literal["confirm", "revoke"] | None
+    latest_identity_event_at: datetime | None
+    merged_into: uuid.UUID | None  # set when this record is the subordinate of an ACTIVE merge: act on that record
+
+
+@staff_patients.post("/search", response_model=PatientSearchOut)
+async def search_patients(body: PatientSearchIn, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims)) -> PatientSearchOut:
+    """Find existing records for exactly these details. 404 for a clinic you cannot see, 403 unless you are front desk there, 422 for an invalid date of birth or phone (named, never echoed), 503 if
+    the encryption keys are not configured. Read-only."""
+    vault: DemographicVault | None = request.app.state.vault
+    key_version = _active_key_version(request) if vault is not None else None
+    if vault is None or key_version is None:
+        log.error("patient search is unavailable: no usable encryption key is configured (deployment fault)")
+        raise HTTPException(status_code=503, detail="patient search is unavailable: encryption keys are not configured")
+    origin = await _front_desk_gate(conn, claims, body.clinic_id)
+    try:
+        hits = await mpi.lookup_patients(
+            PatientIngestionPipeline(vault, key_version=key_version), conn, clinic_id=body.clinic_id, origin=origin, name=body.name, dob=body.dob, phone=body.phone
+        )
+    except mpi.InvalidDateOfBirth:
+        raise HTTPException(status_code=422, detail="date of birth must be a real past date in YYYY-MM-DD form") from None
+    except mpi.InvalidPhone:
+        raise HTTPException(status_code=422, detail="phone must be a valid Indian mobile number") from None
+    except mpi.IngestionError:
+        raise HTTPException(status_code=422, detail="a required field is missing or blank") from None
+    except UnicodeError:
+        raise HTTPException(status_code=422, detail="the name contains characters that cannot be stored") from None
+    return PatientSearchOut(
+        items=[PatientHitOut(patient_id=h.patient_id, matched_kinds=list(h.matched_kinds), verified=h.verified, registered_via=h.registered_via) for h in hits]  # type: ignore[arg-type]
+    )
+
+
+@staff_patients.get("/{patient_id}", response_model=PatientStatusOut)
+async def patient_status_route(patient_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> PatientStatusOut:
+    """Whether this record is verified and why (its source and its latest confirm or revoke). 404 if you cannot see it (the same as a missing or erased one), 403 unless you are front desk,
+    nurse or doctor somewhere."""
+    await _referral_reader(conn, claims)
+    try:
+        s = await mpi.patient_status(conn, patient_id)
+    except mpi.PatientNotFound:
+        raise HTTPException(status_code=404, detail="not found") from None
+    return PatientStatusOut(
+        patient_id=s.patient_id, clinic_id=s.clinic_id, registered_via=s.registered_via, verified=s.verified,  # type: ignore[arg-type]
+        latest_identity_event=s.latest_event, latest_identity_event_at=s.latest_event_at, merged_into=s.merged_into,
+    )
+
+
 # ---- the referral queue: list and open (what a reviewer sees BEFORE deciding) --------------------------------------------------------------------------
 #
 # Reads only, under the caller's own row-level security. A role sees only what its policies show: front desk cannot read triage proposals (migration 0018), so for front desk `proposal_visible` is

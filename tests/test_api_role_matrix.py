@@ -1392,6 +1392,76 @@ def referral_open_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(s.plain), None)
 
 
+# ---- /v1/staff/patients/search and /v1/staff/patients/{id} (lookup and verified status) -----------------------------------------------------------------------
+#
+# Search: front desk of the clinic only (CLINIC_VISIBLE_NOT_FRONT_DESK get 403, everyone else the same 404 as an unknown clinic); read-only, exact, returns ids and flags but no name, date of birth
+# or phone. Status: readers are front desk, nurse and doctor of SOME clinic (everyone else 403); a record of another clinic is the same 404 as a missing one.
+
+PATIENT_SEARCH = "/v1/staff/patients/search"
+PATIENT_STATUS = "/v1/staff/patients/{patient_id}"
+
+
+async def _new_front_desk_patient(conn, clinic):
+    pid = uuid.uuid4()
+    await conn.execute(
+        "insert into mpi.patients (id, clinic_id, name_ct, name_key_version, dob_ct, dob_key_version, origin, idempotency_key) values ($1, $2, $3, 1, $3, 1, 'test', $4)",
+        pid, clinic, b"x" * 40, f"matrix-fd-{uuid.uuid4().hex}",
+    )
+    return pid
+
+
+async def _revoke_event(conn, clinic, patient, by):
+    await conn.execute(
+        "insert into mpi.identity_confirmations (clinic_id, patient_id, confirmed_by, origin, idempotency_key, kind, reason) values ($1, $2, $3, 'test', $4, 'revoke', 'wrong_person')",
+        clinic, patient, by, f"matrix-rv-{uuid.uuid4().hex}",
+    )
+
+
+def patient_search_cases(ids) -> list[tuple]:
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "name": "Nobody Atall", "dob": "1990-01-01", "phone": "9876500001", **o}
+    cases = [
+        _case(ids, "front desk searches for a person nobody registered: an empty list, not an error", "front_desk_a", 200, PATIENT_SEARCH, json=body(), key=None, body=lambda b: b == {"items": []}),
+        _case(ids, "the phone is optional", "front_desk_a", 200, PATIENT_SEARCH, json={k: v for k, v in body().items() if k != "phone"}, key=None, body=lambda b: b == {"items": []}),
+        _case(ids, "a date of birth in the future is refused with a named message", "front_desk_a", 422, PATIENT_SEARCH, json=body(dob="2999-01-01"), key=None,
+              body=lambda b: b == {"detail": "date of birth must be a real past date in YYYY-MM-DD form"}),
+        _case(ids, "a phone that is not an Indian mobile is refused with a named message", "front_desk_a", 422, PATIENT_SEARCH, json=body(phone="123"), key=None,
+              body=lambda b: b == {"detail": "phone must be a valid Indian mobile number"}),
+        _case(ids, "a blank name is rejected", "front_desk_a", 422, PATIENT_SEARCH, json=body(name=""), key=None, body=_fixed(422)),
+        _case(ids, "an unknown field is rejected", "front_desk_a", 422, PATIENT_SEARCH, json=body(origin="live"), key=None, body=_fixed(422)),
+        _case(ids, "a missing date of birth is rejected", "front_desk_a", 422, PATIENT_SEARCH, json={"clinic_id": str(ids.clinic_a), "name": "A B"}, key=None, body=_fixed(422)),
+        _case(ids, "an unknown clinic is not found", "front_desk_a", 404, PATIENT_SEARCH, json=body(clinic_id=str(uuid.uuid4())), key=None, body=_fixed(404)),
+    ]
+    cases += _offer_gate_cases(ids, lambda label, who, status: _case(ids, label, who, status, PATIENT_SEARCH, json=body(), key=None, body=_fixed(status)))
+    return cases + _unauthenticated(ids, PATIENT_SEARCH, body())
+
+
+def patient_status_cases(ids) -> list[tuple]:
+    fd = ids.people["front_desk_a"][0]
+    worker, confirmed, desk, revoked = new_worker_patient(ids), new_confirmed_patient(ids), _run(_owner(lambda c: _new_front_desk_patient(c, ids.clinic_a))), new_confirmed_patient(ids)
+    _run(_owner(lambda c: _revoke_event(c, ids.clinic_a, revoked, fd)))
+    path = lambda p: PATIENT_STATUS.format(patient_id=p)
+
+    def shape(patient, via, verified, event):
+        return lambda b: (
+            b["patient_id"] == str(patient) and b["clinic_id"] == str(ids.clinic_a) and b["registered_via"] == via and b["verified"] is verified
+            and b["latest_identity_event"] == event and (b["latest_identity_event_at"] is None) == (event is None) and b["merged_into"] is None
+        )
+
+    cases = [_case(ids, f"{who} reads a worker-created record: not verified", who, 200, path(worker), key=None, body=shape(worker, "referral_worker", False, None)) for who in ("front_desk_a", "nurse_a", "doctor_a", "multi")]
+    cases += [
+        _case(ids, "a confirmed worker-created record is verified", "front_desk_a", 200, path(confirmed), key=None, body=shape(confirmed, "referral_worker", True, "confirm")),
+        _case(ids, "a front-desk-created record with no event is verified", "nurse_a", 200, path(desk), key=None, body=shape(desk, "front_desk", True, None)),
+        _case(ids, "a confirmation that was revoked is not verified: the latest event wins", "front_desk_a", 200, path(revoked), key=None, body=shape(revoked, "referral_worker", False, "revoke")),
+        _case(ids, "a reader of another clinic gets the same 404 as a missing record", "front_desk_b", 404, path(worker), key=None, body=_fixed(404)),
+        _case(ids, "an unknown record is not found", "nurse_a", 404, path(uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "a patient id that is not a uuid is rejected", "nurse_a", 422, path("nope"), key=None, body=_fixed(422)),
+    ]
+    readers = ("front_desk_a", "nurse_a", "doctor_a", "multi", "front_desk_b")
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path(worker), key=None, body=_fixed(403)) for p in ids.people if p not in readers]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, path(worker), key=None, body=_fixed(403)))
+    return cases + _unauthenticated(ids, path(worker), None)
+
+
 # One entry per route: add the new route's cases here in the same change that adds the route.
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
@@ -1418,6 +1488,8 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", DOC_REGISTER): document_register_cases,
     ("GET", REFERRALS): referral_list_cases,
     ("GET", REFERRAL): referral_open_cases,
+    ("POST", PATIENT_SEARCH): patient_search_cases,
+    ("GET", PATIENT_STATUS): patient_status_cases,
     ("GET", READ): message_read_cases,
     ("POST", RUN_REFERRAL): referral_run_cases,
     ("POST", REVIEW_REFERRAL): referral_review_cases,
@@ -2193,6 +2265,30 @@ def test_an_unconfigured_storage_answers_503_and_a_clinical_profile_without_a_sc
     with TestClient(build(DocumentIntake(UPLOADS, profile="clinical")), raise_server_exceptions=False) as c:
         r = c.post(DOC_BEGIN, headers=headers, json=body)
         assert (r.status_code, r.json()) == (503, {"detail": "uploads are disabled in this profile"})
+
+
+def test_a_registered_person_is_found_by_exact_details_with_flags_only_and_a_worker_record_shows_unverified(client, ids):
+    fd = ids.people["front_desk_a"][0]
+    headers = bearer(mint(fd))
+    person = {"name": "Meena Kulkarni", "dob": "1984-03-09", "phone": "9876543999"}
+    registered = client.post("/v1/staff/patients", headers={**headers, "X-Idempotency-Key": _new_key()}, json={"clinic_id": str(ids.clinic_a), **person})
+    assert registered.status_code == 200
+    pid = registered.json()["patient_id"]
+    found = client.post(PATIENT_SEARCH, headers=headers, json={"clinic_id": str(ids.clinic_a), **person})
+    assert found.status_code == 200
+    (hit,) = [i for i in found.json()["items"] if i["patient_id"] == pid]
+    assert hit == {"patient_id": pid, "matched_kinds": ["name_dob", "phone"], "verified": True, "registered_via": "front_desk"}
+    assert not ({"name", "dob", "phone"} & set(hit))  # no stored identifier is returned
+    assert person["name"] not in found.text and person["dob"] not in found.text and person["phone"] not in found.text
+    name_only = client.post(PATIENT_SEARCH, headers=headers, json={"clinic_id": str(ids.clinic_a), "name": person["name"], "dob": person["dob"]})
+    assert [i["matched_kinds"] for i in name_only.json()["items"] if i["patient_id"] == pid] == [["name_dob"]]
+    # another clinic's front desk cannot search this clinic, and a different person finds nothing
+    other = client.post(PATIENT_SEARCH, headers=bearer(mint(ids.people["front_desk_b"][0])), json={"clinic_id": str(ids.clinic_a), **person})
+    assert other.status_code == 404
+    nobody = client.post(PATIENT_SEARCH, headers=headers, json={"clinic_id": str(ids.clinic_a), **person, "name": "Somebody Else"})
+    assert pid not in [i["patient_id"] for i in nobody.json()["items"]]
+    status = client.get(PATIENT_STATUS.format(patient_id=pid), headers=headers)
+    assert status.status_code == 200 and status.json()["verified"] is True and status.json()["registered_via"] == "front_desk"
 
 
 # ---- message reads: the committed half's behaviour -----------------------------------------------------------------------------------------
