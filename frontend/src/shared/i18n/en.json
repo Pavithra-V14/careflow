@@ -20,5 +20,77 @@
   "languages": {
     "en": "English",
     "ta": "தமிழ்"
+  },
+  "placeholder": {
+    "about": "[PLACEHOLDER: about the hospital. Content must be supplied by the hospital.]",
+    "departments": "[PLACEHOLDER: departments and doctors. Content must be supplied by the hospital.]",
+    "privacyPromise": "[PLACEHOLDER: privacy promise wording. To be written and approved by the hospital and its legal counsel.]",
+    "privacyNotice": "[PLACEHOLDER: privacy notice. To be supplied by the hospital and approved by its legal counsel.]",
+    "grievance": "[PLACEHOLDER: grievance officer name and contact details. To be supplied by the hospital.]",
+    "faqGrievance": "[PLACEHOLDER: how to raise a concern or a data request. Wording to be supplied by the hospital and its legal counsel.]",
+    "faqPrivacy": "[PLACEHOLDER: how personal information is used. Wording to be supplied by the hospital and its legal counsel.]",
+    "address": "[PLACEHOLDER: address]",
+    "hours": "[PLACEHOLDER: opening hours]",
+    "phone": "[PLACEHOLDER: phone number]"
+  },
+  "landing": {
+    "account": "Account",
+    "emergencyLabel": "Emergency information",
+    "about": {
+      "heading": "About the hospital"
+    },
+    "departments": {
+      "heading": "Departments and doctors"
+    },
+    "features": {
+      "heading": "What you can do here",
+      "book": "Book an appointment",
+      "offers": "Receive appointment offers by SMS or email",
+      "messages": "Send and read messages with the clinic",
+      "records": "See your records after your first visit",
+      "family": "Manage appointments for family members",
+      "language": "Use English or Tamil"
+    },
+    "how": {
+      "heading": "How it works",
+      "step1Title": "Create your account",
+      "step1Body": "Sign up with your mobile number. We send a one-time code to confirm it.",
+      "step2Title": "Book or accept an appointment",
+      "step2Body": "Choose a time that suits you, or accept a time the clinic offers.",
+      "step3Title": "Stay in touch",
+      "step3Body": "Get messages and reminders about your visit in the portal."
+    },
+    "privacy": {
+      "heading": "Our privacy promise",
+      "readNotice": "Read the privacy notice"
+    },
+    "location": {
+      "heading": "Location and timings",
+      "address": "Address",
+      "hours": "Opening hours",
+      "phone": "Phone"
+    },
+    "faq": {
+      "heading": "Frequently asked questions",
+      "q1": "How do I create an account?",
+      "a1": "Choose Sign up and enter your mobile number. We will send a one-time code to confirm it.",
+      "q2": "Can I use the portal in Tamil?",
+      "a2": "Yes. Use the language menu at the top of any page to switch between English and Tamil.",
+      "q3": "How do I raise a concern about my data or my care?",
+      "q4": "How is my personal information used?"
+    },
+    "footer": {
+      "grievance": "Grievance contact",
+      "privacyNotice": "Privacy notice",
+      "branding": "Placeholder branding: the name, colours and logo are stand-ins until the hospital supplies its own."
+    }
+  },
+  "pages": {
+    "signInTitle": "Sign in",
+    "signUpTitle": "Sign up",
+    "privacyTitle": "Privacy notice",
+    "notAvailableSignIn": "Patient sign-in is not available yet.",
+    "notAvailableSignUp": "Patient sign-up is not available yet.",
+    "backHome": "Back to the home page"
   }
 }

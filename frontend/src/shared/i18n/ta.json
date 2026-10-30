@@ -20,5 +20,77 @@
   "languages": {
     "en": "English",
     "ta": "தமிழ்"
+  },
+  "placeholder": {
+    "about": "[PLACEHOLDER: about the hospital. Content must be supplied by the hospital.]",
+    "departments": "[PLACEHOLDER: departments and doctors. Content must be supplied by the hospital.]",
+    "privacyPromise": "[PLACEHOLDER: privacy promise wording. To be written and approved by the hospital and its legal counsel.]",
+    "privacyNotice": "[PLACEHOLDER: privacy notice. To be supplied by the hospital and approved by its legal counsel.]",
+    "grievance": "[PLACEHOLDER: grievance officer name and contact details. To be supplied by the hospital.]",
+    "faqGrievance": "[PLACEHOLDER: how to raise a concern or a data request. Wording to be supplied by the hospital and its legal counsel.]",
+    "faqPrivacy": "[PLACEHOLDER: how personal information is used. Wording to be supplied by the hospital and its legal counsel.]",
+    "address": "[PLACEHOLDER: address]",
+    "hours": "[PLACEHOLDER: opening hours]",
+    "phone": "[PLACEHOLDER: phone number]"
+  },
+  "landing": {
+    "account": "கணக்கு",
+    "emergencyLabel": "அவசரகாலத் தகவல்",
+    "about": {
+      "heading": "மருத்துவமனை பற்றி"
+    },
+    "departments": {
+      "heading": "துறைகள் மற்றும் மருத்துவர்கள்"
+    },
+    "features": {
+      "heading": "இங்கே நீங்கள் செய்யக்கூடியவை",
+      "book": "சந்திப்பு நேரத்தை முன்பதிவு செய்யுங்கள்",
+      "offers": "எஸ்எம்எஸ் அல்லது மின்னஞ்சல் மூலம் சந்திப்பு வாய்ப்புகளைப் பெறுங்கள்",
+      "messages": "மருத்துவமனையுடன் செய்திகளை அனுப்பவும் படிக்கவும்",
+      "records": "முதல் வருகைக்குப் பிறகு உங்கள் பதிவுகளைப் பாருங்கள்",
+      "family": "குடும்ப உறுப்பினர்களுக்கான சந்திப்புகளை நிர்வகியுங்கள்",
+      "language": "ஆங்கிலம் அல்லது தமிழைப் பயன்படுத்துங்கள்"
+    },
+    "how": {
+      "heading": "இது எவ்வாறு செயல்படுகிறது",
+      "step1Title": "உங்கள் கணக்கை உருவாக்குங்கள்",
+      "step1Body": "உங்கள் கைபேசி எண்ணுடன் பதிவு செய்யுங்கள். அதை உறுதிப்படுத்த ஒருமுறைக் குறியீடு அனுப்புவோம்.",
+      "step2Title": "சந்திப்பை முன்பதிவு செய்யுங்கள் அல்லது ஏற்றுக்கொள்ளுங்கள்",
+      "step2Body": "உங்களுக்கு ஏற்ற நேரத்தைத் தேர்ந்தெடுங்கள், அல்லது மருத்துவமனை வழங்கும் நேரத்தை ஏற்றுக்கொள்ளுங்கள்.",
+      "step3Title": "தொடர்பில் இருங்கள்",
+      "step3Body": "உங்கள் வருகை குறித்த செய்திகளையும் நினைவூட்டல்களையும் தளத்தில் பெறுங்கள்."
+    },
+    "privacy": {
+      "heading": "எங்கள் தனியுரிமை உறுதிமொழி",
+      "readNotice": "தனியுரிமை அறிவிப்பைப் படிக்கவும்"
+    },
+    "location": {
+      "heading": "இடம் மற்றும் நேரங்கள்",
+      "address": "முகவரி",
+      "hours": "நேரங்கள்",
+      "phone": "தொலைபேசி"
+    },
+    "faq": {
+      "heading": "அடிக்கடி கேட்கப்படும் கேள்விகள்",
+      "q1": "கணக்கை எவ்வாறு உருவாக்குவது?",
+      "a1": "பதிவு செய்க என்பதைத் தேர்ந்தெடுத்து உங்கள் கைபேசி எண்ணை உள்ளிடுங்கள். அதை உறுதிப்படுத்த ஒருமுறைக் குறியீடு அனுப்புவோம்.",
+      "q2": "தளத்தைத் தமிழில் பயன்படுத்தலாமா?",
+      "a2": "ஆம். எந்தப் பக்கத்தின் மேலேயும் உள்ள மொழி தேர்வைப் பயன்படுத்தி ஆங்கிலம், தமிழ் இடையே மாறலாம்.",
+      "q3": "என் தரவு அல்லது சிகிச்சை குறித்த கவலையை எவ்வாறு தெரிவிப்பது?",
+      "q4": "என் தனிப்பட்ட தகவல் எவ்வாறு பயன்படுத்தப்படுகிறது?"
+    },
+    "footer": {
+      "grievance": "குறைதீர்ப்புத் தொடர்பு",
+      "privacyNotice": "தனியுரிமை அறிவிப்பு",
+      "branding": "பெயர், நிறங்கள், சின்னம் ஆகியவை தற்காலிகமானவை; மருத்துவமனை தனது சொந்தத்தை வழங்கும் வரை இவ்வாறே இருக்கும்."
+    }
+  },
+  "pages": {
+    "signInTitle": "உள்நுழைக",
+    "signUpTitle": "பதிவு செய்க",
+    "privacyTitle": "தனியுரிமை அறிவிப்பு",
+    "notAvailableSignIn": "நோயாளர் உள்நுழைவு இன்னும் கிடைக்கவில்லை.",
+    "notAvailableSignUp": "நோயாளர் பதிவு இன்னும் கிடைக்கவில்லை.",
+    "backHome": "முகப்புப் பக்கத்திற்குத் திரும்பு"
   }
 }
