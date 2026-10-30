@@ -1,0 +1,46 @@
+# Frontend to backend requests
+
+The frontend session never changes `careflow/`, `db/`, `tests/` or `scripts/`. Anything it needs from the backend is written
+here, with why it is needed and what the frontend does until it exists.
+
+## Open
+
+### 1. Production CORS (the backend session is already handling it)
+
+In development the Vite dev server proxies `/v1` and `/readyz` to the API, so no CORS is involved. A production browser at the
+frontend's origin calling the API's origin needs:
+
+- `Access-Control-Allow-Origin` set to the exact frontend origin(s), never `*` (requests carry a bearer token).
+- `Access-Control-Allow-Headers` including `Authorization`, `Content-Type` and `X-Idempotency-Key`.
+- `Access-Control-Allow-Methods` including `GET`, `POST`.
+- **`Access-Control-Expose-Headers: WWW-Authenticate`.** Without it the browser hides this header from the page's JavaScript,
+  so the frontend cannot tell a step-up 401 from any other 401. This is the one that is easy to miss.
+
+### 2. `GET /v1/iam/me`: clinic name, clinic origin, and an operating-profile indicator
+
+Today each role grant is `{clinic_id, role}` only. The staff shell needs, per role grant:
+
+- `clinic_name` (string): shown in the shell. Until it exists the frontend shows a shortened clinic id.
+- `clinic_origin` (`"live"` or `"test"`): the persistent LIVE / TEST badge (BUILD-SPEC 19.3) is derived from this. Until it
+  exists the frontend shows **"environment unknown"**: it never guesses LIVE or TEST (CLAUDE.md rule 3, unknown is not a value).
+
+And one field at the top level of the response (or on `/readyz`, whichever fits the backend better):
+
+- an operating-profile indicator, `"demo"` or `"clinical"` (BUILD-SPEC 2), so the frontend can degrade visibly and not silently
+  when running `clinical` without an approved external route.
+
+`/readyz` currently documents an empty response schema, so nothing there can be generated into the client either.
+
+### 3. Step-up claim shape (not a code change: a spike)
+
+Tracked in `docs/design/step-up-spike.md`. The frontend will decode a real access token's `aal` / `amr` / `iat` structure in
+code once F2 sign-in works, and report the structure only (values blanked) so it can be pasted to the backend session.
+
+## Decisions recorded here for later readers
+
+- **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;
+  revisit when both do. The frontend pins TypeScript 6.0.3, with a scoped npm `overrides` entry satisfying openapi-typescript's
+  peer range (not `--legacy-peer-deps`).
+- **ESLint is 9.39.5, not 10**, because eslint-plugin-jsx-a11y 6.10.2 (the latest release) supports ESLint up to 9.
+- Versions published in the last 7 days were avoided at install time; i18next, react-i18next, vite, react-router,
+  @tanstack/react-query and typescript-eslint are therefore one release behind the newest.
