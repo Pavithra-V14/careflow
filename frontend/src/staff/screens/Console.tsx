@@ -6,6 +6,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { readStoredGrant, storeGrant } from '../activeRole';
 import { parseMe, type Account, type Grant } from '../me';
 import { SessionProvider } from '../session/SessionContext';
+import { DevSpikeSlot } from '../components/DevSpikeSlot';
 import { Shell } from './Shell';
 import { Loading, Message } from './Message';
 import { RolePicker } from './RolePicker';
@@ -56,12 +57,16 @@ export function Console() {
 
   if (me.isError || !me.data) {
     return (
-      <Message id="me-error-title" title={t('app.staffTitle')} alert>
-        <p>{t('staff.console.error')}</p>
-        <button type="button" onClick={() => void me.refetch()}>
-          {t('staff.console.retry')}
-        </button>
-      </Message>
+      <>
+        <Message id="me-error-title" title={t('app.staffTitle')} alert>
+          <p>{t('staff.console.error')}</p>
+          <button type="button" onClick={() => void me.refetch()}>
+            {t('staff.console.retry')}
+          </button>
+        </Message>
+        {/* Development builds only: the claim spike needs the session, not the backend. Outside the alert on purpose. */}
+        <DevSpikeSlot />
+      </>
     );
   }
 
