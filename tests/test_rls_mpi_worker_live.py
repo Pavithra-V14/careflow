@@ -550,6 +550,8 @@ async def revoke_as(conn, uid, clinic, patient, *, reason="wrong_person", key=No
                 await conn.exec_driver_sql("reset role")
     except mpi.NotPermitted:
         return "42501"
+    except mpi.PatientNotFound:
+        return "not_found"  # the patient is invisible to this role (another clinic)
     except DBAPIError as exc:
         return getattr(exc.orig, "sqlstate", None)
 
@@ -594,7 +596,7 @@ async def test_only_front_desk_of_the_clinic_can_revoke_as_themselves_with_a_lis
     assert await raw_event(p["fd_a"], kind="revoke", reason=None) == "23514"  # a revoke needs its reason
     assert await raw_event(p["fd_a"], kind="confirm", reason="wrong_person") == "23514"  # a confirmation has none
     assert await raw_event(p["fd_a"], kind="whatever", reason=None) == "23514"
-    assert await revoke_as(db, p["nurse_a"], a, target) == "42501" and await revoke_as(db, p["fd_b"], a, target) == "23514"  # through the function too
+    assert await revoke_as(db, p["nurse_a"], a, target) == "42501" and await revoke_as(db, p["fd_b"], a, target) == "not_found"  # through the function too: another clinic cannot even see the patient
     done = await revoke_as(db, p["fd_a"], a, target, key=f"rev-{_u()}")
     assert (done.replayed, done.review_task) == (False, "raised")  # positive control
     # append-only for everyone, the owner included

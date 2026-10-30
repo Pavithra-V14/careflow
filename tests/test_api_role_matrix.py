@@ -1001,6 +1001,7 @@ TASK = TASKS + "/{task_id}"
 TASK_ACK = TASK + "/acknowledge"
 TASK_RESOLVE = TASK + "/resolve"
 TASK_READER_KEYS = ("front_desk_a", "nurse_a", "doctor_a", "admin_a", "multi", "front_desk_b")
+READ_403 = lambda b: b == {"detail": "your role may not read this"}
 
 
 async def _new_task(conn, clinic, kind, role, *, priority="standard", status="open", acknowledged_by=None):
@@ -1077,8 +1078,8 @@ def review_task_open_cases(ids) -> list[tuple]:
         _case(ids, "a task id that is not a uuid is rejected", "nurse_a", 422, path("nope"), key=None, body=_fixed(422)),
     ]
     denied = [p for p in ids.people if p not in TASK_READER_KEYS]
-    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path(hold), key=None, body=_fixed(403)) for p in denied]
-    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, path(hold), key=None, body=_fixed(403)))
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path(hold), key=None, body=READ_403) for p in denied]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, path(hold), key=None, body=READ_403))
     return cases + _unauthenticated(ids, path(hold), None)
 
 
@@ -1088,13 +1089,13 @@ def _transition_body(task, status, replayed):
 
 def _task_write_denials(ids, path, cases):
     denied = [p for p in ids.people if p not in TASK_READER_KEYS]
-    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path, body=_fixed(403)) for p in denied]
-    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, path, body=_fixed(403)))
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path, body=READ_403) for p in denied]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, path, body=READ_403))
     return cases
 
 
 def review_task_acknowledge_cases(ids) -> list[tuple]:
-    hold, held, unmerge, red = new_task(ids, "referral_hold", "front_desk"), new_task(ids, "referral_hold", "front_desk"), new_task(ids, "unmerge_review", "nurse"), new_task(ids, "red_flag", "nurse")
+    hold, held, unmerge, red = new_task(ids, "referral_hold", "front_desk"), new_task(ids, "referral_hold", "front_desk"), new_task(ids, "unmerge_review", "nurse"), new_task(ids, "red_flag", "nurse", priority="immediate")
     path = lambda t: TASK_ACK.format(task_id=t)
     key = _new_key()
     cases = [
@@ -1119,7 +1120,7 @@ def review_task_acknowledge_cases(ids) -> list[tuple]:
 
 def review_task_resolve_cases(ids) -> list[tuple]:
     hold, hold2, unmerge, red, shot = (new_task(ids, "referral_hold", "front_desk"), new_task(ids, "referral_hold", "front_desk"), new_task(ids, "unmerge_review", "nurse"),
-                                       new_task(ids, "red_flag", "nurse"), new_task(ids, "triage_proposal", "nurse"))
+                                       new_task(ids, "red_flag", "nurse", priority="immediate"), new_task(ids, "triage_proposal", "nurse"))
     taken = new_task(ids, "referral_hold", "front_desk", status="acknowledged", acknowledged_by=ids.people["doctor_a"][0])
     path = lambda t: TASK_RESOLVE.format(task_id=t)
     key = _new_key()
@@ -1908,54 +1909,8 @@ def test_acknowledging_and_releasing_a_hold_write_one_audit_row_each_as_the_pers
     assert _run(_fetch(audit, str(refused))) == []  # a refusal writes no audit row
 
 
-def _configured_scheduling_settings():
-    from careflow.scheduling_agent import SchedulingSettings
-
-    # test inputs only: stand-ins for the clinician-owned values, not recommendations
-    return SchedulingSettings(
-        _env_file=None, offer_expiry_seconds=3600, hold_lifetime_seconds=900, backfill_candidates=2, accept_confidence_threshold=0.5, offer_message_template="TEST-TEMPLATE-NOT-A-CLINICAL-TEXT",
-    )
-
-
-def test_a_configured_draft_is_computed_and_a_send_holds_the_slot_and_records_the_template_once_as_the_person(client, ids):
-    from careflow import app as app_module
-
-    fd = ids.people["front_desk_a"][0]
-    client.app.dependency_overrides[app_module.scheduling_settings] = _configured_scheduling_settings
-    try:
-        headers = {**bearer(mint(fd))}
-        draft = client.get(f"{OFFER_DRAFT}?clinic_id={ids.clinic_a}&visit_type_id={ids.vt_a}", headers=headers)
-        assert draft.status_code == 200 and draft.json()["status"] == "ok"
-        top = draft.json()["data"]["candidates"][0]
-        assert draft.json()["data"]["draft"]["template"] == "TEST-TEMPLATE-NOT-A-CLINICAL-TEXT" and draft.json()["data"]["draft"]["candidate_patient_id"] == top["patient_id"]
-        assert _run(_fetch("select count(*) as n from sched.holds where patient_id = $1", uuid.UUID(top["patient_id"])))[0]["n"] == 0  # a draft stores nothing
-        slot = ids.pools["extra"].pop()
-        send = {"clinic_id": str(ids.clinic_a), "visit_type_id": str(ids.vt_a), "slot_id": str(slot), "waitlist_id": top["waitlist_id"]}
-        key = _new_key()
-        ok = client.post(OFFER_SEND, headers={**headers, "X-Idempotency-Key": key}, json=send)
-        assert ok.status_code == 200 and ok.json()["replayed"] is False and ok.json()["patient_id"] == top["patient_id"] and ok.json()["slot_id"] == str(slot)
-        again = client.post(OFFER_SEND, headers={**headers, "X-Idempotency-Key": key}, json=send)
-        assert again.status_code == 200 and again.json()["replayed"] is True and again.json()["message_id"] == ok.json()["message_id"]
-        # the slot is held for that patient, the message is the template in the patient's appointments thread, recorded by the person; one of each
-        hold = _run(_fetch("select patient_id from sched.holds where slot_id = $1", slot))
-        assert [h["patient_id"] for h in hold] == [uuid.UUID(top["patient_id"])]
-        msgs = _run(_fetch("select topic, sender_kind, recorded_by, thread_id, body_ct from msg.messages where id = $1", uuid.UUID(ok.json()["message_id"])))
-        assert len(msgs) == 1 and (msgs[0]["topic"], msgs[0]["sender_kind"], msgs[0]["recorded_by"]) == ("appointments", "staff", fd)
-        assert b"TEST-TEMPLATE" not in bytes(msgs[0]["body_ct"])  # stored encrypted
-        # a different key for the SAME slot is refused (the slot is held); a candidate that is not ranked is refused
-        other = client.post(OFFER_SEND, headers={**headers, "X-Idempotency-Key": _new_key()}, json=send)
-        assert other.status_code == 409
-        stranger = client.post(OFFER_SEND, headers={**headers, "X-Idempotency-Key": _new_key()}, json={**send, "slot_id": str(ids.pools["extra"].pop()), "waitlist_id": str(uuid.uuid4())})
-        assert stranger.status_code == 409 and stranger.json() == {"detail": "the slot or the candidate cannot be offered"}
-        # a slot of another visit type or clinic is refused as the same 409
-        wrong = client.post(OFFER_SEND, headers={**headers, "X-Idempotency-Key": _new_key()}, json={**send, "visit_type_id": str(ids.vt_b), "slot_id": str(ids.pools["extra"].pop())})
-        assert wrong.status_code == 409
-        audit = _run(_fetch("select actor_id, actor_role, details, clinic_id from audit.log where resource_type = 'offer' and resource_id = $1 and action = 'offer.send'", uuid.UUID(ok.json()["hold_id"])))
-        assert len(audit) == 1 and (audit[0]["actor_id"], audit[0]["actor_role"], audit[0]["clinic_id"]) == (fd, "front_desk", ids.clinic_a)
-        details = json.loads(audit[0]["details"]) if isinstance(audit[0]["details"], str) else audit[0]["details"]
-        assert details == {"slot_id": str(slot), "patient_id": top["patient_id"], "replayed": False}
-    finally:
-        client.app.dependency_overrides.pop(app_module.scheduling_settings, None)
+# The configured offer paths (a real draft, a real send, replays, conflicts, the audit row) write an ENCRYPTED MESSAGE, which can never be cleaned up and would break the key-rotation tests' precondition
+# if committed: they are in tests/test_api_offers_live.py, inside a never-committed transaction.
 
 
 # ---- message reads: the committed half's behaviour -----------------------------------------------------------------------------------------
