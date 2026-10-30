@@ -1,0 +1,5 @@
+{
+  "SUPABASE_URL": "https://mock-project.supabase.invalid",
+  "SUPABASE_PUBLISHABLE_KEY": "mock-publishable-key-not-real",
+  "CAREFLOW_API_BASE_URL": "https://mock-api.invalid"
+}

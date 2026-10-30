@@ -1,4 +1,4 @@
-"""Live proof that the browser-side database roles cannot touch the document bucket (docs/design/proposed-migrations/0027, owner decision 2026-10-30).
+"""Live proof that the browser-side database roles cannot touch the document bucket (db/migrations/0027, owner decision 2026-10-30).
 
 An ANON session (the publishable key alone) and an AUTHENTICATED session (a real token for a throwaway Auth user) are each refused for list, read, upload and delete on
 `careflow-documents`. The proof does not trust the HTTP status alone: after every attempt the object is looked at again with the server-side key (still there, unchanged;

@@ -1,0 +1,189 @@
+{
+  "app": {
+    "hospitalName": "[PLACEHOLDER: hospital name]",
+    "patientTitle": "Patient portal",
+    "staffTitle": "Staff console"
+  },
+  "common": {
+    "signIn": "Sign in",
+    "signUp": "Sign up",
+    "staffSignIn": "Staff sign in",
+    "signOut": "Sign out",
+    "language": "Language",
+    "loading": "Loading…",
+    "retry": "Try again",
+    "genericError": "Something went wrong.",
+    "notConfigured": "This site is not configured yet.",
+    "skipToContent": "Skip to main content",
+    "emergencyBanner": "In an emergency call 108",
+    "comingSoon": "Coming soon"
+  },
+  "languages": {
+    "en": "English",
+    "ta": "தமிழ்"
+  },
+  "placeholder": {
+    "about": "[PLACEHOLDER: about the hospital. Content must be supplied by the hospital.]",
+    "departments": "[PLACEHOLDER: departments and doctors. Content must be supplied by the hospital.]",
+    "privacyPromise": "[PLACEHOLDER: privacy promise wording. To be written and approved by the hospital and its legal counsel.]",
+    "privacyNotice": "[PLACEHOLDER: privacy notice. To be supplied by the hospital and approved by its legal counsel.]",
+    "grievance": "[PLACEHOLDER: grievance officer name and contact details. To be supplied by the hospital.]",
+    "faqGrievance": "[PLACEHOLDER: how to raise a concern or a data request. Wording to be supplied by the hospital and its legal counsel.]",
+    "faqPrivacy": "[PLACEHOLDER: how personal information is used. Wording to be supplied by the hospital and its legal counsel.]",
+    "address": "[PLACEHOLDER: address]",
+    "hours": "[PLACEHOLDER: opening hours]",
+    "phone": "[PLACEHOLDER: phone number]"
+  },
+  "landing": {
+    "account": "Account",
+    "emergencyLabel": "Emergency information",
+    "about": {
+      "heading": "About the hospital"
+    },
+    "departments": {
+      "heading": "Departments and doctors"
+    },
+    "features": {
+      "heading": "What you can do here",
+      "book": "Book an appointment",
+      "offers": "Receive appointment offers by SMS or email",
+      "messages": "Send and read messages with the clinic",
+      "records": "See your records after your first visit",
+      "family": "Manage appointments for family members",
+      "language": "Use English or Tamil"
+    },
+    "how": {
+      "heading": "How it works",
+      "step1Title": "Create your account",
+      "step1Body": "Sign up with your mobile number. We send a one-time code to confirm it.",
+      "step2Title": "Book or accept an appointment",
+      "step2Body": "Choose a time that suits you, or accept a time the clinic offers.",
+      "step3Title": "Stay in touch",
+      "step3Body": "Get messages and reminders about your visit in the portal."
+    },
+    "privacy": {
+      "heading": "Our privacy promise",
+      "readNotice": "Read the privacy notice"
+    },
+    "location": {
+      "heading": "Location and timings",
+      "address": "Address",
+      "hours": "Opening hours",
+      "phone": "Phone"
+    },
+    "faq": {
+      "heading": "Frequently asked questions",
+      "q1": "How do I create an account?",
+      "a1": "Choose Sign up and enter your mobile number. We will send a one-time code to confirm it.",
+      "q2": "Can I use the portal in Tamil?",
+      "a2": "Yes. Use the language menu at the top of any page to switch between English and Tamil.",
+      "q3": "How do I raise a concern about my data or my care?",
+      "q4": "How is my personal information used?"
+    },
+    "footer": {
+      "grievance": "Grievance contact",
+      "privacyNotice": "Privacy notice",
+      "branding": "Placeholder branding: the name, colours and logo are stand-ins until the hospital supplies its own."
+    }
+  },
+  "pages": {
+    "signInTitle": "Sign in",
+    "signUpTitle": "Sign up",
+    "privacyTitle": "Privacy notice",
+    "notAvailableSignIn": "Patient sign-in is not available yet.",
+    "notAvailableSignUp": "Patient sign-up is not available yet.",
+    "backHome": "Back to the home page"
+  },
+  "staff": {
+    "signIn": {
+      "title": "Staff sign in",
+      "intro": "Sign in with your work email and password.",
+      "email": "Work email",
+      "password": "Password",
+      "submit": "Sign in",
+      "submitting": "Signing in…",
+      "failed": "Sign-in failed. Check your details and try again.",
+      "invitationOnly": "Accounts are created by invitation only."
+    },
+    "mfa": {
+      "code": "6-digit code",
+      "codeHint": "Enter the 6 digits shown in your authenticator app.",
+      "verifying": "Verifying…",
+      "failed": "That code was not accepted. Try again.",
+      "invalid": "Enter the 6-digit code.",
+      "enrol": {
+        "title": "Set up your authenticator app",
+        "intro": "Staff accounts need a second step at every sign-in. Scan this QR code with an authenticator app.",
+        "scanAlt": "QR code for your authenticator app",
+        "manual": "Or enter this key in the app manually:",
+        "submit": "Verify and continue",
+        "preparing": "Preparing your setup…",
+        "error": "Setup could not be started.",
+        "retry": "Try again"
+      },
+      "challenge": {
+        "title": "Enter your authenticator code",
+        "help": "Open your authenticator app and enter the current 6-digit code.",
+        "submit": "Verify"
+      }
+    },
+    "stepUp": {
+      "title": "Confirm it is you",
+      "help": "This action needs a fresh code from your authenticator app.",
+      "submit": "Confirm",
+      "cancel": "Cancel"
+    },
+    "session": {
+      "ended": "Please sign in again."
+    },
+    "account": {
+      "unavailable": "This account cannot use the staff console. Contact your administrator.",
+      "signOut": "Sign out"
+    },
+    "console": {
+      "loading": "Loading your account…",
+      "error": "Your account details could not be loaded.",
+      "retry": "Try again",
+      "welcome": "You are signed in."
+    }
+  },
+  "shell": {
+    "activeRole": "Active role",
+    "clinic": "Clinic",
+    "changeRole": "Change role",
+    "pickTitle": "Choose your active role",
+    "pickHelp": "Pick the one role you need for this session. You can change it later.",
+    "continue": "Continue",
+    "environment": "Environment",
+    "profileUnknown": "Operating profile unknown",
+    "profile": "Operating profile",
+    "navLabel": "Session"
+  },
+  "env": {
+    "live": "LIVE",
+    "test": "TEST",
+    "unknown": "Environment unknown"
+  },
+  "roles": {
+    "patient": "Patient",
+    "guardian": "Guardian",
+    "front_desk": "Front desk",
+    "nurse": "Nurse",
+    "doctor": "Doctor",
+    "admin": "Admin",
+    "business_owner": "Business owner",
+    "auditor": "Auditor"
+  },
+  "profiles": {
+    "demo": "Demo",
+    "clinical": "Clinical"
+  },
+  "dev": {
+    "title": "Developer: claim structure",
+    "note": "Development builds only. Shows the structure of aal, amr and iat with values blanked. It never shows the token.",
+    "capture": "Capture claim structure",
+    "refresh": "Refresh session, then capture",
+    "reveal": "Also show enum-like values (the aal level and amr method names)",
+    "failed": "Could not read the session."
+  }
+}

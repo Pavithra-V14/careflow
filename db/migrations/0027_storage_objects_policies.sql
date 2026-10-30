@@ -1,6 +1,5 @@
--- PROPOSED, NOT APPLIED. This file lives OUTSIDE db/migrations on purpose: the CI migrate job applies every file in db/migrations to the CI project, and the owner has asked to see the policies and a
--- reviewer verdict BEFORE anything touches storage.objects. When the owner approves, it moves to db/migrations/0027_storage_objects_policies.sql in its own change and the migrate job applies it to CI;
--- the dev project is migrated by hand with `python -m careflow.migrate`.
+-- Owner-approved 2026-10-30 (final shape: deny everything on storage.objects and storage.buckets for anon and authenticated). Dry-run in the dev project as the real migrator inside begin/rollback: applied,
+-- verify block passed, and a later PERMISSIVE allow-all policy did not open it (anon and authenticated saw 0 rows and could not insert). rls-security-reviewer pass applied. SUPABASE-ONLY (storage schema, anon/authenticated roles).
 --
 -- 0027: close the document bucket to every database role except the service role (docs/design/uploads-supabase-storage.md; owner decision 2026-10-30: dev and CI projects, synthetic data only).
 --

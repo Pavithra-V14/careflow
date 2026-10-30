@@ -16,7 +16,7 @@ What it checks (each line of the output is one):
   7. a read with NO credentials is refused (the bucket is private: no public URL works)
   8. delete removes the object; a second delete is harmless; reading a missing object is the adapter's None
   9. the PUBLISHABLE (anon) key, the role a browser could hold, is refused for list, read, direct upload and delete in the bucket, and the bucket reports public=false with the size limit and the allowed types
-     (the evidence that the policies of docs/design/proposed-migrations/0027 and the dashboard settings do what they are meant to: run this step AFTER the migration)
+     (the evidence that the policies of db/migrations/0027 and the dashboard settings do what they are meant to: run this step AFTER the migration)
 """
 
 import argparse

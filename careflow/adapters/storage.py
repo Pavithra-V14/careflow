@@ -27,7 +27,7 @@ import httpx
 
 from careflow.ports import PermanentError, SignedUpload, StoredObject, TransientError
 
-DOCUMENT_BUCKET: Final = "careflow-documents"  # the one bucket the storage policies (docs/design/proposed-migrations/0027) protect; the wiring refuses any other name
+DOCUMENT_BUCKET: Final = "careflow-documents"  # the one bucket the storage policies (db/migrations/0027) protect; the wiring refuses any other name
 # The only path shape a document ever has (careflow/documents.py `storage_path`). Anything else is refused BEFORE a request is built.
 PATH_RE: Final = re.compile(r"\Aclinic/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/doc/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
 BUCKET_RE: Final = re.compile(r"\A[a-z0-9][a-z0-9_-]{2,62}\Z")
