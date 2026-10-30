@@ -208,3 +208,15 @@ union all select 'review_tasks', count(*) from agents.review_tasks where origin 
 ## Rebalance of 2026-10-29 (standing rule applied), from PR #6's run (40857011070)
 
 Shard 1 took 50:11 (the role matrix alone 1428 s, test_rls_screenings_live 604 s); shard 2 39:07; shard 3 27:23. Shard 1 passed 50 minutes, so by the standing rule (a shard job over 50 minutes is rebalanced in the next change) `test_rls_screenings_live.py` moves from shard 1 to shard 3. Estimates after the move: shard 1 about 40, shard 2 about 39, shard 3 about 37 minutes. The `test_ci_shards` gate accepts the pairs. Note the spread: the same shard varied by 10 minutes between runs of the same code (30:54 to 50:11), so the headroom rule is applied to the worst run seen, not the average.
+
+## Rebalance of 2026-10-29 (second), from PR #7's last run (40886609546)
+
+Shard 3 took 49:21 (job time; 49:10 pytest) after `test_rls_screenings_live` moved in; shard 1 26:15; shard 2 42:00. Shard 3 was a minute under the 50-minute line, so the rule did not fire, but it had under 11 minutes of headroom and shard 1 had 34. `test_rotation_live.py` (about 4 to 5 minutes) moves from shard 3 to shard 1. The rotation tests count every key-version-1 message and refuse to run beside a committed one (their loud precondition), so they share a shard with suites that commit no messages. Estimates: shard 1 about 32, shard 2 about 42, shard 3 about 44 minutes.
+
+## POOL-DIAG results (PR #8, run 40895463696, shard 1; owner accepted 2026-10-29)
+What the forty concurrent requests in the two pool tests wait on: queueing behind per-statement latency, not app behaviour.
+- A bare `select 1` transaction and a `set_config` transaction each take about 0.51 s (min = p50 = max over five samples): the round trip from the CI runner to the Tokyo pooler.
+- A request holds its connection for about 1.0 s (identity, then the query: two round trips). Longest hold 5.1 s = connections opened during the burst.
+- Forty requests over the small pool: latency min 1.5-1.7 s, p50 3.9-4.7 s, p95 6.5-6.6 s, max about 6.6 s.
+- Peak `careflow_app` backends in shard 1: 16 (all logins 30 of `max_connections` 60).
+Decision: keep the test-only 120 s pool wait; the `POOL-DIAG` lines stay (one line per test, observation only, cheap).

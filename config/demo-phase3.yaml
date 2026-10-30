@@ -1,0 +1,40 @@
+# DEMO ONLY - NOT A CLINICAL DECISION.
+#
+# Placeholder operating settings so the Phase 3 Scheduling agent can be exercised end to end on SYNTHETIC data in the demo profile. Every value below is an invented stand-in: none
+# is a clinical judgment, a recommendation, or a proposal for a clinic. The real values are clinician-owned and stay unset (docs/design/clinician-decisions.md items 16-22,
+# docs/design/clinician-sheet.md); nothing here answers them.
+#
+# LOADS ONLY WHEN CAREFLOW_PROFILE=demo AND CAREFLOW_DATA_POLICY=synthetic_only AND CAREFLOW_DEMO_PHASE3=1 (careflow/demo_phase3.py). In any other profile, or with any other data policy,
+# the application REFUSES TO START if CAREFLOW_DEMO_PHASE3 is set or a scheduling setting carries the label below.
+#
+# DELIBERATELY ABSENT, even for demo: red-flag rules, thresholds, emergency wording, protocol cards, unit synonyms, identity rules, the accept-confidence threshold.
+
+label: "DEMO ONLY - NOT A CLINICAL DECISION"
+loads_only_when:
+  profile: demo
+  data_policy: synthetic_only
+
+settings:
+  offer_expiry_seconds:
+    value: 3600
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  hold_lifetime_seconds:
+    value: 900
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  backfill_candidates:
+    value: 3
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  priority_names:
+    value: ["DEMO-LEVEL-A", "DEMO-LEVEL-B", "DEMO-LEVEL-C"]
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  offer_message_text:
+    value:
+      en: "DEMO ONLY - NOT A CLINICAL DECISION. Placeholder offer text: a slot is available."
+      ta: "DEMO ONLY - NOT A CLINICAL DECISION. Placeholder offer text in Tamil: a slot is available."
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  scheduling_task_priority:
+    value: standard
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  scheduling_task_role:
+    value: front_desk
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"

@@ -1090,24 +1090,103 @@ def _pool_test_app():
     return create_app(settings, jwks=fake_jwks_client(), vault=TEST_VAULT, front_door=FrontDoorComponents(None, None, None, None, None, None, None, None, None), engine=engine), engine
 
 
-def test_identity_never_leaks_between_pooled_requests(ids):
+class PoolDiagnostics:
+    """WHAT THE FORTY REQUESTS WAIT ON (owner request 2026-10-29): per-request latency, how long a connection is held (checkout to checkin), and the pooler round trips (`select 1` and
+    `set_config`, each in its own transaction). Observation only: it changes no behaviour and asserts nothing. One `POOL-DIAG` line per test is printed into the CI log."""
+
+    def __init__(self, engine):
+        from sqlalchemy import event
+
+        self.latencies, self.holds, self.engine = [], [], engine
+        pool = engine.sync_engine.pool
+
+        @event.listens_for(pool, "checkout")
+        def _out(dbapi_connection, record, proxy):
+            record.info["t0"] = time.perf_counter()
+
+        @event.listens_for(pool, "checkin")
+        def _in(dbapi_connection, record):
+            t0 = record.info.pop("t0", None)
+            if t0 is not None:
+                self.holds.append(time.perf_counter() - t0)
+
+    def timed(self, coro_fn):
+        async def run(*args, **kwargs):
+            t0 = time.perf_counter()
+            try:
+                return await coro_fn(*args, **kwargs)
+            finally:
+                self.latencies.append(time.perf_counter() - t0)
+
+        return run
+
+    async def round_trips(self):
+        from sqlalchemy import text
+
+        out = {}
+        async with self.engine.connect() as conn:
+            for name, sql in (("select1", "select 1"), ("set_config", "select set_config('request.jwt.claims', '{}', true)")):
+                samples = []
+                for _ in range(5):
+                    t0 = time.perf_counter()
+                    async with conn.begin():
+                        await conn.execute(text(sql))
+                    samples.append(time.perf_counter() - t0)
+                out[name] = samples
+        return out
+
+    @staticmethod
+    def _stats(values):
+        if not values:
+            return "n=0"
+        v = sorted(values)
+        return f"n={len(v)} min={v[0]:.2f}s p50={v[len(v) // 2]:.2f}s p95={v[min(len(v) - 1, int(len(v) * 0.95))]:.2f}s max={v[-1]:.2f}s"
+
+    def report(self, name, trips, capsys):
+        with capsys.disabled():
+            print(
+                f"\nPOOL-DIAG {name} requests[{self._stats(self.latencies)}] connection_held[{self._stats(self.holds)}] "
+                f"select1_txn[{self._stats(trips['select1'])}] set_config_txn[{self._stats(trips['set_config'])}]"
+            )
+
+
+def test_confirm_identity_answers_a_patient_of_another_clinic_exactly_as_it_answers_a_patient_that_does_not_exist(client, ids):
+    """The route must never reveal that a patient exists in another clinic: the status, the body and the headers that matter are IDENTICAL for (1) a real patient of clinic A asked about
+    by clinic B's front desk and (2) an id that exists nowhere. (The origin trigger's 23514 is only reachable below the route, which looks the patient up under row-level security first.)"""
+    foreign = new_worker_patient(ids)  # clinic A
+    ghost = uuid.uuid4()
+    headers = {**bearer(mint(ids.people["front_desk_b"][0])), "X-Idempotency-Key": _new_key()}
+    a = client.post(CONFIRM.format(patient_id=foreign), headers=headers)
+    b = client.post(CONFIRM.format(patient_id=ghost), headers=headers)
+    assert (a.status_code, a.json()) == (b.status_code, b.json()) == (404, {"detail": "not found"})
+    volatile = {"content-length", "date"}
+    assert {k: v for k, v in a.headers.items() if k.lower() not in volatile} == {k: v for k, v in b.headers.items() if k.lower() not in volatile}
+    assert _run(_fetch("select count(*) as n from mpi.identity_confirmations where patient_id = $1", foreign))[0]["n"] == 0  # and nothing was written
+
+
+def test_identity_never_leaks_between_pooled_requests(ids, capsys):
     """Forty concurrent requests from six identities over a pool of five connections: each must get exactly
     its own profile back, which only holds if the claims are transaction-local and set before any query."""
     keys = ["front_desk_a", "nurse_a", "admin_a", "auditor_a", "patient", "front_desk_b"]
     app, engine = _pool_test_app()
+    diag = PoolDiagnostics(engine)
 
     async def run():
         try:
             async with app.router.lifespan_context(app):
                 transport = httpx.ASGITransport(app=app)
+                trips = await diag.round_trips()
                 async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
 
+                    @diag.timed
                     async def call(i):
                         key = keys[i % len(keys)]
                         r = await http.get("/v1/iam/me", headers=bearer(mint(ids.people[key][0])))
                         return key, r.status_code, r.json()
 
-                    return await bounded(asyncio.gather(*(call(i) for i in range(40))), "the forty concurrent requests", seconds=2 * POOL_TIMEOUT_SECONDS)
+                    done = await bounded(asyncio.gather(*(call(i) for i in range(40))), "the forty concurrent requests", seconds=2 * POOL_TIMEOUT_SECONDS)
+                    diag.report("identity-never-leaks", trips, capsys)
+                    return done
         finally:
             await engine.dispose()
 
@@ -1262,18 +1341,21 @@ def test_list_responses_carry_identifiers_only(client, ids):
             assert set(item) <= allowed, (route, set(item) - allowed)
 
 
-def test_concurrent_reads_from_different_identities_neither_mix_rows_nor_leak_connections(ids):
+def test_concurrent_reads_from_different_identities_neither_mix_rows_nor_leak_connections(ids, capsys):
     """Forty concurrent reads over a pool of five: clinic A readers see only clinic A rows, clinic B's front desk sees
     none, admin, auditor and a patient are refused, and every connection is back in the pool."""
     plan = [("front_desk_a", 200), ("nurse_a", 200), ("front_desk_b", 200), ("admin_a", 403), ("auditor_a", 403), ("patient", 403)]
     app, engine = _pool_test_app()
+    diag = PoolDiagnostics(engine)
 
     async def run():
         try:
             async with app.router.lifespan_context(app):
                 transport = httpx.ASGITransport(app=app)
+                trips = await diag.round_trips()
                 async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
 
+                    @diag.timed
                     async def read(i):
                         who, _ = plan[i % len(plan)]
                         route = ("slots", "bookings", "waitlist")[i % 3]
@@ -1281,6 +1363,7 @@ def test_concurrent_reads_from_different_identities_neither_mix_rows_nor_leak_co
                         return who, r.status_code, (r.json()["items"] if r.status_code == 200 else None)
 
                     done = await bounded(asyncio.gather(*(read(i) for i in range(40))), "the forty concurrent reads", seconds=2 * POOL_TIMEOUT_SECONDS)
+                    diag.report("concurrent-reads", trips, capsys)
                     return done, app.state.engine.pool.checkedout()
         finally:
             await engine.dispose()
@@ -1410,6 +1493,14 @@ def test_the_two_person_rule_end_to_end(client, ids):
     assert (second.status_code, second.json()["status"]) == (200, "active")
     (row,) = _run(_fetch("select status, approved_by, second_approved_by from mpi.merges where id = $1", uuid.UUID(merge_id)))
     assert row["status"] == "active" and row["approved_by"] == ids.people["front_desk_a"][0] and row["second_approved_by"] == ids.fd2
+    # each human step wrote exactly one audit row, as the person who took it, with ids only; the two refusals above wrote none
+    audit = _run(_fetch("select action, actor_id, actor_role, resource_id, details from audit.log where resource_type = 'merge' and resource_id = $1 order by action", merge_id))
+    assert [(r["action"], r["actor_id"], r["actor_role"]) for r in audit] == [
+        ("merge.approve", ids.fd2, "front_desk"), ("merge.propose", ids.people["front_desk_a"][0], "front_desk"),
+    ]
+    for r in audit:
+        details = json.loads(r["details"]) if isinstance(r["details"], str) else r["details"]
+        assert set(details) <= {"master_patient_id", "subordinate_patient_id", "replayed"} and all(isinstance(v, (str, bool)) for v in details.values())
 
 
 def test_unmerge_raises_one_nurse_task_for_an_active_link_and_none_for_a_cancelled_proposal(client, ids):
@@ -1463,6 +1554,25 @@ def test_the_step_up_check_is_off_the_database_path_when_the_window_is_unset(ids
     assert (r.status_code, r.json()) == (503, {"detail": "step-up re-authentication is not configured"})
 
 
+def test_a_failing_audit_insert_rolls_the_decision_back_and_the_replay_of_a_real_key_still_succeeds(client, ids, monkeypatch):
+    """Fail closed: an audit write that fails for any reason except a duplicate key makes the request fail and the decision (the confirmation row) does not commit."""
+    from careflow import app as app_module
+
+    patient = new_worker_patient(ids)
+    fd = ids.people["front_desk_a"][0]
+
+    async def broken(*args, **kwargs):
+        raise RuntimeError("audit unavailable")
+
+    monkeypatch.setattr(app_module, "write_audit", broken)
+    failed = client.post(CONFIRM.format(patient_id=patient), headers={**bearer(mint(fd)), "X-Idempotency-Key": _new_key()})
+    assert failed.status_code == 500
+    assert _run(_fetch("select count(*) as n from mpi.identity_confirmations where patient_id = $1", patient))[0]["n"] == 0  # nothing committed
+    monkeypatch.undo()
+    ok = client.post(CONFIRM.format(patient_id=patient), headers={**bearer(mint(fd)), "X-Idempotency-Key": _new_key()})
+    assert ok.status_code == 200 and ok.json()["replayed"] is False
+
+
 # ---- message reads: the committed half's behaviour -----------------------------------------------------------------------------------------
 
 
@@ -1474,3 +1584,21 @@ def test_refused_message_reads_write_no_audit_row(client, ids):
         assert "cache-control" not in r.headers
     rows = _run(_fetch("select count(*) as n from audit.log where action = 'message.read' and actor_id = any($1)", actors))
     assert rows[0]["n"] == 0
+
+
+def test_a_confirmation_writes_exactly_one_audit_row_as_the_confirmer_with_ids_only_and_a_replay_or_refusal_writes_none(client, ids):
+    patient = new_worker_patient(ids)
+    fd = ids.people["front_desk_a"][0]
+    key = _new_key()
+    audit = "select actor_id, actor_role, action, details, clinic_id from audit.log where resource_type = 'patient' and resource_id = $1 and action = 'patient.confirm_identity'"
+    refused = client.post(CONFIRM.format(patient_id=patient), headers={**bearer(mint(ids.people["nurse_a"][0])), "X-Idempotency-Key": _new_key()})
+    assert refused.status_code == 403 and _run(_fetch(audit, str(patient))) == []
+    ok = client.post(CONFIRM.format(patient_id=patient), headers={**bearer(mint(fd)), "X-Idempotency-Key": key})
+    assert ok.status_code == 200 and ok.json()["replayed"] is False
+    (row,) = _run(_fetch(audit, str(patient)))
+    assert (row["actor_id"], row["actor_role"], row["clinic_id"]) == (fd, "front_desk", ids.clinic_a)
+    details = json.loads(row["details"]) if isinstance(row["details"], str) else row["details"]
+    assert details == {"replayed": False}
+    again = client.post(CONFIRM.format(patient_id=patient), headers={**bearer(mint(fd)), "X-Idempotency-Key": key})
+    assert again.status_code == 200 and again.json()["replayed"] is True
+    assert len(_run(_fetch(audit, str(patient)))) == 1  # the same key writes no second row

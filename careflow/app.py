@@ -60,6 +60,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from careflow import identity, mpi
+from careflow.audit import write_audit
 from careflow.auth import (
     AuthError,
     AuthUnavailable,
@@ -72,6 +73,7 @@ from careflow.cors import middleware_kwargs, parse_origins
 from careflow.crypto import CryptoError, DemographicVault
 from careflow.db import make_app_engine, set_request_claims
 from careflow.dead_letters import raise_dead_letter_tasks
+from careflow.demo_phase3 import refuse_demo_outside_demo
 from careflow.front_door import FrontDoorError, run_config
 from careflow.front_door_runner import TASK_TYPE as FRONT_DOOR_TASK
 from careflow.front_door_runner import (
@@ -773,6 +775,10 @@ async def confirm_patient_identity(
         raise HTTPException(status_code=403, detail="your role may not do this") from None
     except mpi.IdempotencyConflict:
         raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request") from None
+    await write_audit(
+        conn, clinic_id=row[0], origin=origin, actor_id=uuid.UUID(claims["sub"]), actor_role="front_desk", action="patient.confirm_identity", resource_type="patient",
+        resource_id=patient_id, details={"replayed": result.replayed}, idempotency_key=f"audit:confirm-identity:{patient_id}:{idempotency_key}",
+    )
     return ConfirmIdentityOut(patient_id=result.patient_id, confirmed=True, replayed=result.replayed)
 
 
@@ -843,6 +849,24 @@ def _identity_errors() -> Iterator[None]:
         raise HTTPException(status_code=409, detail="this merge cannot be carried out") from None
 
 
+async def _acting_role(conn: AsyncConnection, claims: dict[str, Any], clinic_id: uuid.UUID, roles: tuple[str, ...]) -> str:
+    """The first of `roles` the caller actively holds in this clinic (for the audit row). Every caller has already been authorised for one of them; if none is found the audit row is not
+    written and the request fails closed (a decision without an audit row must not commit)."""
+    row = (
+        await conn.execute(
+            text(
+                "select sr.role from iam.staff_roles sr join iam.accounts a on a.id = sr.account_id "
+                "where sr.account_id = :u and sr.clinic_id = :c and sr.role = any(cast(:r as text[])) and sr.revoked_at is null "
+                "and a.status = 'active' and a.account_type = 'staff' order by sr.role limit 1"
+            ),
+            {"u": uuid.UUID(claims["sub"]), "c": clinic_id, "r": list(roles)},
+        )
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    return row[0]
+
+
 async def _front_desk_gate(conn: AsyncConnection, claims: dict[str, Any], clinic_id: uuid.UUID) -> str:
     """The clinic's origin, after checking the caller is active front desk there. 404 if the clinic is invisible, 403 if visible but not front desk."""
     clinic = (await conn.execute(text("select origin from iam.clinics where id = :c"), {"c": clinic_id})).first()
@@ -889,6 +913,11 @@ async def propose_merge(
         result = await identity.IdentityManager().execute_merge(
             conn, body.clinic_id, origin, body.master_patient_id, body.subordinate_patient_id, uuid.UUID(claims["sub"]), idempotency_key
         )
+    await write_audit(
+        conn, clinic_id=body.clinic_id, origin=origin, actor_id=uuid.UUID(claims["sub"]), actor_role="front_desk", action="merge.propose", resource_type="merge",
+        resource_id=result.merge_id, details={"master_patient_id": result.master_id, "subordinate_patient_id": result.subordinate_id, "replayed": result.replayed},
+        idempotency_key=f"audit:merge-propose:{result.merge_id}:{idempotency_key}",
+    )
     return _merge_out(result)
 
 
@@ -902,6 +931,11 @@ async def approve_merge(
     origin = await _front_desk_gate(conn, claims, clinic_id)
     with _identity_errors():
         result = await identity.IdentityManager().approve_merge(conn, clinic_id, origin, merge_id, uuid.UUID(claims["sub"]), idempotency_key)  # type: ignore[arg-type]
+    await write_audit(
+        conn, clinic_id=clinic_id, origin=origin, actor_id=uuid.UUID(claims["sub"]), actor_role="front_desk", action="merge.approve", resource_type="merge",
+        resource_id=merge_id, details={"master_patient_id": result.master_id, "subordinate_patient_id": result.subordinate_id, "replayed": result.replayed},
+        idempotency_key=f"audit:merge-approve:{merge_id}:{idempotency_key}",
+    )
     return _merge_out(result)
 
 
@@ -915,6 +949,11 @@ async def unmerge(
     origin = await _front_desk_gate(conn, claims, clinic_id)
     with _identity_errors():
         result = await identity.IdentityManager().execute_unmerge(conn, clinic_id, origin, merge_id, uuid.UUID(claims["sub"]), idempotency_key)  # type: ignore[arg-type]
+    await write_audit(
+        conn, clinic_id=clinic_id, origin=origin, actor_id=uuid.UUID(claims["sub"]), actor_role="front_desk", action="merge.unmerge", resource_type="merge",
+        resource_id=merge_id, details={"decisions_flagged": result.decisions_flagged, "replayed": result.replayed},
+        idempotency_key=f"audit:merge-unmerge:{merge_id}:{idempotency_key}",
+    )
     return UnmergeOut(
         merge_id=result.merge_id, status="unmerged", review_task_id=result.review_task_id, decisions_flagged=result.decisions_flagged,
         replayed=result.replayed,
@@ -1069,6 +1108,11 @@ async def review_referral(
         # A deployment fault (hosted tracing switched on, a checkpoint without its scope): not a role problem and not the client's. Logged by class only.
         log.error("a referral review failed in the graph or its checkpointer; nothing was recorded")
         raise HTTPException(status_code=503, detail="referral runs are unavailable") from None
+    await write_audit(
+        conn, clinic_id=doc.clinic_id, origin=doc.origin, actor_id=uuid.UUID(reviewer), actor_role=await _acting_role(conn, claims, doc.clinic_id, ("nurse", "doctor")),
+        action="referral.review_decision", resource_type="document", resource_id=document_id, details={"decision": body.decision},
+        idempotency_key=f"audit:referral-review:{document_id}:{idempotency_key}",
+    )
     return ReviewOut(document_id=document_id, decision=body.decision, replayed=False)
 
 
@@ -1139,6 +1183,7 @@ def create_app(
     origins = parse_origins(raw_origins, resolve_profile())
     if origins:
         app.add_middleware(CORSMiddleware, **middleware_kwargs(origins))
+    refuse_demo_outside_demo(os.environ, resolve_profile())  # the demo Phase 3 placeholders may never be present outside profile=demo + data_policy=synthetic_only
     app.add_exception_handler(RequestValidationError, _validation_error_handler)  # type: ignore[arg-type]
     app.include_router(router)
     app.include_router(scheduling)

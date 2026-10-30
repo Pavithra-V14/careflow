@@ -501,3 +501,22 @@ async def test_a_review_task_another_reviewer_already_acknowledged_refuses_the_d
     assert await decisions(w, doc) == []  # the request rolled back: no decision on an unresolved task
     still_open = await post(w, "doctor_a", REVIEW.format(doc), json={"decision": "approve"})
     assert still_open.status_code == 200 and len(await decisions(w, doc)) == 1  # the run was still paused: the acknowledging doctor can decide
+
+
+async def test_a_recorded_review_decision_writes_exactly_one_audit_row_as_the_reviewer_with_ids_only_and_a_refusal_writes_none(w):
+    doc = await paused(w)
+    audit = "select actor_id, actor_role, action, resource_type, resource_id, details, clinic_id from audit.log where action = 'referral.review_decision' and resource_id = :d"
+    assert await rows(w, audit, d=str(doc)) == []  # nothing before the decision
+    refused = await post(w, "fd_a", REVIEW.format(doc), json={"decision": "approve"})  # front desk may not review
+    assert refused.status_code == 403 and await rows(w, audit, d=str(doc)) == []
+    ok = await post(w, "nurse_a", REVIEW.format(doc), json={"decision": "approve"}, key="audit-review-1")
+    assert ok.status_code == 200 and ok.json()["replayed"] is False
+    ((actor, role, action, rtype, rid, details, clinic),) = await rows(w, audit, d=str(doc))
+    assert (actor, role, action, rtype, rid, clinic) == (w.ids["nurse_a"], "nurse", "referral.review_decision", "document", str(doc), w.a)
+    assert details == {"decision": "approve"}  # an id-free closed word: no name, no date, no letter text
+    assert_not_leaked(str(details), label="the audit details")
+    again = await post(w, "nurse_a", REVIEW.format(doc), json={"decision": "approve"}, key="audit-review-1")
+    assert again.status_code == 200 and again.json()["replayed"] is True
+    other = await post(w, "doctor_a", REVIEW.format(doc), json={"decision": "reject"})
+    assert other.status_code == 409
+    assert len(await rows(w, audit, d=str(doc))) == 1  # a replay and a refusal write no second row
