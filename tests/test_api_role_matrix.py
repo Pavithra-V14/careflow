@@ -236,7 +236,20 @@ async def _cleanup(ids, conn=None):
 def ids():
     seeded = _run(_seed())
     yield seeded
+    leaked = _run(_assert_no_committed_messages(seeded))
     _run(_cleanup(seeded))
+    assert not leaked, leaked
+
+
+async def _assert_no_committed_messages(ids) -> str | None:
+    """This module COMMITS its fixtures. msg.messages is append-only for every role, so a message committed here can never be deleted, and the key-rotation tests assert that NO committed message
+    exists on key version 1: one stray row fails all of them in every later run until a person erases it by hand (PR #9, 2026-10-30). If a case reaches a route that writes a message, move it into a
+    never-committed harness (tests/test_api_offers_live.py). Returns the explanation, or None."""
+    rows = await _fetch("select count(*) as n from msg.messages where clinic_id = any($1)", [ids.clinic_a, ids.clinic_b])
+    if rows[0]["n"]:
+        return (f"{rows[0]['n']} message(s) were COMMITTED into this module's clinics. msg.messages is append-only, so they cannot be deleted and the key-rotation tests will fail until they are "
+                "erased by hand. Move the case that writes a message into a never-committed harness (see tests/test_no_committed_message_writes.py).")
+    return None
 
 
 # Per-run keys: nothing secret is committed. The patient-registration route encrypts demographics with them (version 1, the only one loaded).
