@@ -45,6 +45,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/documents/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register Document
+         * @description Step 2, with the SAME idempotency key as step 1: the server reads the stored object back, verifies it, and writes one row. 422 with a fixed word if the object is missing, empty, too large,
+         *     of a type not allowed, not what its type says, or flagged by the scanner (then it is deleted); 409 if the key was used for a different request; 503 as for step 1.
+         */
+        post: operations["register_document_v1_staff_documents_register_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/documents/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Begin Document Upload
+         * @description Step 1: a signed URL to PUT one file to. 404 for a clinic you cannot see, 403 unless you are front desk or a nurse there, 422 for a type or size not allowed, 503 if uploads are disabled
+         *     or storage is not configured. Writes nothing (no row exists until step 2), so there is no audit row.
+         */
+        post: operations["begin_document_upload_v1_staff_documents_uploads_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/identity/merges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Merges
+         * @description Merges of the clinics you may read, newest first. Front desk, nurse and doctor. 403 otherwise.
+         */
+        get: operations["list_merges_v1_staff_identity_merges_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/identity/merges/{merge_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Open Merge
+         * @description One merge. 404 if you cannot see it (the same as a missing one), 403 unless you hold front desk, nurse or doctor somewhere.
+         */
+        get: operations["open_merge_v1_staff_identity_merges__merge_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/identity/possible-duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Possible Duplicates
+         * @description Records the matcher queued for a person to compare (newest first; `pending` by default, `status` filters). Front desk only. 403 otherwise.
+         */
+        get: operations["list_possible_duplicates_v1_staff_identity_possible_duplicates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/merges": {
         parameters: {
             query?: never;
@@ -172,6 +274,255 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/patients/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Search Patients
+         * @description Find existing records for exactly these details. 404 for a clinic you cannot see, 403 unless you are front desk there, 422 for an invalid date of birth or phone (named, never echoed), 503 if
+         *     the encryption keys are not configured. Read-only.
+         */
+        post: operations["search_patients_v1_staff_patients_search_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/patients/{patient_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Patient Status Route
+         * @description Whether this record is verified and why (its source and its latest confirm or revoke). 404 if you cannot see it (the same as a missing or erased one), 403 unless you are front desk,
+         *     nurse or doctor somewhere.
+         */
+        get: operations["patient_status_route_v1_staff_patients__patient_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/patients/{patient_id}/confirm-identity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Patient Identity
+         * @description A front-desk person confirms a patient's identity. A record the unattended worker created is NOT auto-linked to by later referrals until this is done (a match on it goes
+         *     to a person); confirming it makes it match normally. A triage approval does NOT do this (owner decision). 404 if the patient is not visible to you (or erased), 403 if you
+         *     are not front desk of that clinic, 409 if the key was used for a different patient, 422 for a bad id or key.
+         */
+        post: operations["confirm_patient_identity_v1_staff_patients__patient_id__confirm_identity_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/patients/{patient_id}/revoke-identity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke Patient Identity
+         * @description A front-desk person revokes a mistaken identity confirmation (or demotes a front-desk-created record): afterwards a full match on the record is a review, never an automatic link.
+         *     Nothing already linked is undone; a nurse or doctor review task lists the patient and the window (when the clinician-owned task settings are configured; the response says if not).
+         *     One person, as themselves, no step-up (a revoke only moves a record towards 'a person decides'). 404 if the patient is not visible to you (or erased), 403 if you are not front desk
+         *     of that clinic, 409 if the key was used for a different request, 422 for a bad id, key or reason.
+         */
+        post: operations["revoke_patient_identity_v1_staff_patients__patient_id__revoke_identity_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/referrals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Referrals
+         * @description The referral documents you may see, newest first, with the state of their run. 403 unless you hold front desk, nurse or doctor somewhere.
+         */
+        get: operations["list_referrals_v1_staff_referrals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/referrals/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Open Referral
+         * @description One referral with the holds you may see and, for a nurse or doctor, the triage proposal to review (card ids and versions only). 404 if you cannot see it, 403 unless you hold a reader role.
+         */
+        get: operations["open_referral_v1_staff_referrals__document_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/referrals/{document_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review Referral
+         * @description Record the reviewer's decision on a paused run and finish it. 404 if you cannot see the document, 403 unless nurse or doctor there, 404 if the document has no
+         *     run, 409 if the run is not waiting for a decision or already has a different one, 503 if not configured.
+         */
+        post: operations["review_referral_v1_staff_referrals__document_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/referrals/{document_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Referral Run
+         * @description Enqueue a Front Door run for a referral document. 404 if you cannot see it, 403 if you may not start a run, 503 if not configured.
+         */
+        post: operations["start_referral_run_v1_staff_referrals__document_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/review-tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Review Tasks
+         * @description The tasks you may see, immediate before standard, then oldest first. 403 unless you hold a staff role.
+         */
+        get: operations["list_review_tasks_v1_staff_review_tasks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/review-tasks/{task_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Open Review Task
+         * @description One task with its provenance. 404 if you cannot see it (the same as one that does not exist), 403 unless you hold a staff role.
+         */
+        get: operations["open_review_task_v1_staff_review_tasks__task_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/review-tasks/{task_id}/acknowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Acknowledge Review Task
+         * @description Take a task: open -> acknowledged, by you. The same person again is a replay. 404 if invisible, 403 if you may not change it, 409 if another person holds it or it is closed.
+         */
+        post: operations["acknowledge_review_task_v1_staff_review_tasks__task_id__acknowledge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/review-tasks/{task_id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve Review Task
+         * @description Close a task (releasing a referral hold is resolving its `referral_hold` task). Only the kinds in `RESOLVABLE_KINDS`; others are a 409. A task another person acknowledged is
+         *     a 409. 404 if invisible, 403 if you may not change it.
+         */
+        post: operations["resolve_review_task_v1_staff_review_tasks__task_id__resolve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/scheduling/bookings": {
         parameters: {
             query?: never;
@@ -206,6 +557,148 @@ export interface paths {
          * @description Cancel a booking, free its slot, and return the ranked waitlist candidates. Nobody is contacted or booked.
          */
         post: operations["cancel_booking_v1_staff_scheduling_bookings__booking_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/scheduling/holds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Holds
+         * @description Holds of the clinics you may read, soonest to expire first (`active` by default; `status` filters).
+         */
+        get: operations["list_holds_v1_staff_scheduling_holds_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/scheduling/holds/{hold_id}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Release Hold Route
+         * @description Give a held slot back now. 404 if you cannot see the hold, 403 unless you are front desk of its clinic, 409 if it was booked or has expired.
+         */
+        post: operations["release_hold_route_v1_staff_scheduling_holds__hold_id__release_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/scheduling/locations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Locations
+         * @description Locations (rooms, sites) of the clinics you may read, by name.
+         */
+        get: operations["list_locations_v1_staff_scheduling_locations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/scheduling/offers/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Draft Offer
+         * @description The ranked candidates for a freed slot and a DRAFT offer for the first, computed now and stored nowhere (`status`: ok, empty, or unavailable with `not_configured:` and the names of the
+         *     missing clinician-owned settings). 404 for a clinic you cannot see, 403 unless you are front desk there.
+         */
+        get: operations["draft_offer_v1_staff_scheduling_offers_draft_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/scheduling/offers/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Offer Route
+         * @description Press send: hold the slot for the chosen ranked candidate and record the offer message. 404 for a clinic you cannot see, 403 unless you are front desk there, 409 if the slot is not open, the
+         *     candidate is not among the ranked ones, or the key was used for a different offer, 503 if the clinician-owned settings or the encryption keys are not configured.
+         */
+        post: operations["send_offer_route_v1_staff_scheduling_offers_send_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/scheduling/priority-levels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Priority Levels
+         * @description The clinic's clinical priority levels, rank 1 first. The levels themselves are clinician-approved data (sched.priority_levels); this only reads them.
+         */
+        get: operations["list_priority_levels_v1_staff_scheduling_priority_levels_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/scheduling/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Providers
+         * @description Providers of the clinics you may read, by display name.
+         */
+        get: operations["list_providers_v1_staff_scheduling_providers_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -272,6 +765,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/scheduling/visit-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Visit Types
+         * @description Visit types of the clinics you may read, by name, with their scheduling length.
+         */
+        get: operations["list_visit_types_v1_staff_scheduling_visit_types_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/scheduling/waitlist": {
         parameters: {
             query?: never;
@@ -316,6 +829,49 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** BeginUploadIn */
+        BeginUploadIn: {
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /**
+             * Content Type
+             * @enum {string}
+             */
+            content_type: "application/pdf" | "image/jpeg" | "image/png";
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "referral" | "report" | "other";
+            /** Size Hint */
+            size_hint?: number | null;
+        };
+        /**
+         * BeginUploadOut
+         * @description Where to PUT the file, once. The path is the server's and is not returned.
+         */
+        BeginUploadOut: {
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /**
+             * Replayed Ticket
+             * @default false
+             */
+            replayed_ticket: boolean;
+            /** Upload Url */
+            upload_url: string;
+        };
         /** BookIn */
         BookIn: {
             /**
@@ -447,6 +1003,102 @@ export interface components {
              */
             waitlist_id: string;
         };
+        /**
+         * CardCandidateOut
+         * @description A protocol card the retrieval proposed: its id and version only.
+         */
+        CardCandidateOut: {
+            /** Card Id */
+            card_id: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * ConfirmIdentityOut
+         * @description Ids and a flag only.
+         */
+        ConfirmIdentityOut: {
+            /**
+             * Confirmed
+             * @constant
+             */
+            confirmed: true;
+            /**
+             * Patient Id
+             * Format: uuid
+             */
+            patient_id: string;
+            /** Replayed */
+            replayed: boolean;
+        };
+        /** DuplicateList */
+        DuplicateList: {
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: components["schemas"]["DuplicateOut"][];
+            /** Limit */
+            limit: number;
+        };
+        /** DuplicateOut */
+        DuplicateOut: {
+            /**
+             * Candidate Id
+             * Format: uuid
+             */
+            candidate_id: string;
+            /**
+             * Candidate Patient Id
+             * Format: uuid
+             */
+            candidate_patient_id: string;
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Matched Kinds */
+            matched_kinds: ("name_dob" | "phone")[];
+            /**
+             * Patient Id
+             * Format: uuid
+             */
+            patient_id: string;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "near_match" | "ambiguous";
+            /** Resolved At */
+            resolved_at: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "resolved";
+        };
+        /**
+         * Envelope
+         * @description The result of every tool. `data` holds ids, numbers and closed words only; a degraded or unavailable result says so in `status` and `reason` (a fixed word).
+         */
+        Envelope: {
+            /** Data */
+            data?: {
+                [key: string]: unknown;
+            } | unknown[] | null;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "empty" | "degraded" | "unavailable";
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -478,6 +1130,50 @@ export interface components {
              * Format: uuid
              */
             slot_id: string;
+        };
+        /** HoldRowList */
+        HoldRowList: {
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: components["schemas"]["HoldRowOut"][];
+            /** Limit */
+            limit: number;
+        };
+        /** HoldRowOut */
+        HoldRowOut: {
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /**
+             * Hold Id
+             * Format: uuid
+             */
+            hold_id: string;
+            /** Patient Id */
+            patient_id: string | null;
+            /**
+             * Slot Id
+             * Format: uuid
+             */
+            slot_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "released" | "expired" | "converted";
         };
         /** IngestIn */
         IngestIn: {
@@ -514,6 +1210,32 @@ export interface components {
              */
             patient_id: string;
         };
+        /** LocationList */
+        LocationList: {
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: components["schemas"]["LocationOut"][];
+            /** Limit */
+            limit: number;
+        };
+        /** LocationOut */
+        LocationOut: {
+            /** Active */
+            active: boolean;
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /**
+             * Location Id
+             * Format: uuid
+             */
+            location_id: string;
+            /** Name */
+            name: string;
+        };
         /** Me */
         Me: {
             /**
@@ -527,6 +1249,66 @@ export interface components {
             roles: components["schemas"]["RoleGrant"][];
             /** Status */
             status: string;
+        };
+        /** MergeDetailOut */
+        MergeDetailOut: {
+            /** Activated At */
+            activated_at: string | null;
+            /**
+             * Candidate Id
+             * Format: uuid
+             */
+            candidate_id: string;
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Master Patient Id
+             * Format: uuid
+             */
+            master_patient_id: string;
+            /**
+             * Merge Id
+             * Format: uuid
+             */
+            merge_id: string;
+            /**
+             * Proposed By
+             * Format: uuid
+             */
+            proposed_by: string;
+            /** Second Approved By */
+            second_approved_by: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "awaiting_second_approval" | "active" | "unmerged";
+            /**
+             * Subordinate Patient Id
+             * Format: uuid
+             */
+            subordinate_patient_id: string;
+            /** Unmerged At */
+            unmerged_at: string | null;
+            /** Unmerged By */
+            unmerged_by: string | null;
+        };
+        /** MergeList */
+        MergeList: {
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: components["schemas"]["MergeDetailOut"][];
+            /** Limit */
+            limit: number;
         };
         /**
          * MergeOut
@@ -581,6 +1363,125 @@ export interface components {
              */
             topic: "care" | "appointments" | "safety";
         };
+        /** PatientHitOut */
+        PatientHitOut: {
+            /** Matched Kinds */
+            matched_kinds: ("name_dob" | "phone")[];
+            /**
+             * Patient Id
+             * Format: uuid
+             */
+            patient_id: string;
+            /**
+             * Registered Via
+             * @enum {string}
+             */
+            registered_via: "front_desk" | "referral_worker";
+            /** Verified */
+            verified: boolean;
+        };
+        /** PatientSearchIn */
+        PatientSearchIn: {
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /** Dob */
+            dob: string;
+            /** Name */
+            name: string;
+            /** Phone */
+            phone?: string | null;
+        };
+        /** PatientSearchOut */
+        PatientSearchOut: {
+            /** Items */
+            items: components["schemas"]["PatientHitOut"][];
+        };
+        /** PatientStatusOut */
+        PatientStatusOut: {
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /** Latest Identity Event */
+            latest_identity_event: ("confirm" | "revoke") | null;
+            /** Latest Identity Event At */
+            latest_identity_event_at: string | null;
+            /** Merged Into */
+            merged_into: string | null;
+            /**
+             * Patient Id
+             * Format: uuid
+             */
+            patient_id: string;
+            /**
+             * Registered Via
+             * @enum {string}
+             */
+            registered_via: "front_desk" | "referral_worker";
+            /** Verified */
+            verified: boolean;
+        };
+        /** PriorityLevelList */
+        PriorityLevelList: {
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: components["schemas"]["PriorityLevelOut"][];
+            /** Limit */
+            limit: number;
+        };
+        /** PriorityLevelOut */
+        PriorityLevelOut: {
+            /** Active */
+            active: boolean;
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /** Code */
+            code: string;
+            /** Label */
+            label: string;
+            /** Rank */
+            rank: number;
+        };
+        /** ProposalOut */
+        ProposalOut: {
+            /** Abstained */
+            abstained: boolean;
+            /** Candidates */
+            candidates: components["schemas"]["CardCandidateOut"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "shadow" | "assisted" | "autonomous";
+            /**
+             * Patient Id
+             * Format: uuid
+             */
+            patient_id: string;
+            /**
+             * Proposal Id
+             * Format: uuid
+             */
+            proposal_id: string;
+            /**
+             * Review Task Id
+             * Format: uuid
+             */
+            review_task_id: string;
+        };
         /** ProposeMergeIn */
         ProposeMergeIn: {
             /**
@@ -599,6 +1500,378 @@ export interface components {
              */
             subordinate_patient_id: string;
         };
+        /** ProviderList */
+        ProviderList: {
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: components["schemas"]["ProviderOut"][];
+            /** Limit */
+            limit: number;
+        };
+        /** ProviderOut */
+        ProviderOut: {
+            /** Active */
+            active: boolean;
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /** Display Name */
+            display_name: string;
+            /**
+             * Provider Id
+             * Format: uuid
+             */
+            provider_id: string;
+        };
+        /** ReferralDetailOut */
+        ReferralDetailOut: {
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /**
+             * Content Type
+             * @enum {string}
+             */
+            content_type: "application/pdf" | "image/jpeg" | "image/png";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Decided */
+            decided: boolean | null;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Holds */
+            holds: components["schemas"]["ReferralHoldOut"][];
+            /** Open Holds */
+            open_holds: number;
+            proposal: components["schemas"]["ProposalOut"] | null;
+            /** Proposal Id */
+            proposal_id: string | null;
+            /** Proposal Visible */
+            proposal_visible: boolean;
+            /**
+             * Registered By
+             * Format: uuid
+             */
+            registered_by: string;
+            /** Run State */
+            run_state: ("unclaimed" | "claimed" | "completed" | "dead_lettered") | null;
+            /** Size Bytes */
+            size_bytes: number;
+        };
+        /** ReferralHoldOut */
+        ReferralHoldOut: {
+            /**
+             * Assigned Role
+             * @enum {string}
+             */
+            assigned_role: "nurse" | "doctor" | "front_desk";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "acknowledged" | "resolved";
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
+        };
+        /** ReferralList */
+        ReferralList: {
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: components["schemas"]["ReferralOut"][];
+            /** Limit */
+            limit: number;
+        };
+        /** ReferralOut */
+        ReferralOut: {
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /**
+             * Content Type
+             * @enum {string}
+             */
+            content_type: "application/pdf" | "image/jpeg" | "image/png";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Decided */
+            decided: boolean | null;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Open Holds */
+            open_holds: number;
+            /** Proposal Id */
+            proposal_id: string | null;
+            /** Proposal Visible */
+            proposal_visible: boolean;
+            /**
+             * Registered By
+             * Format: uuid
+             */
+            registered_by: string;
+            /** Run State */
+            run_state: ("unclaimed" | "claimed" | "completed" | "dead_lettered") | null;
+            /** Size Bytes */
+            size_bytes: number;
+        };
+        /** RegisterIn */
+        RegisterIn: {
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "referral" | "report" | "other";
+        };
+        /** RegisteredOut */
+        RegisteredOut: {
+            /**
+             * Content Type
+             * @enum {string}
+             */
+            content_type: "application/pdf" | "image/jpeg" | "image/png";
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "referral" | "report" | "other";
+            /** Replayed */
+            replayed: boolean;
+            /**
+             * Scan
+             * @enum {string}
+             */
+            scan: "clean" | "not_scanned" | "not_checked";
+            /** Size Bytes */
+            size_bytes: number;
+        };
+        /** ReleaseOut */
+        ReleaseOut: {
+            /**
+             * Hold Id
+             * Format: uuid
+             */
+            hold_id: string;
+            /** Replayed */
+            replayed: boolean;
+            /**
+             * Slot Id
+             * Format: uuid
+             */
+            slot_id: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "released";
+        };
+        /** ReviewIn */
+        ReviewIn: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "edit" | "reject";
+        };
+        /** ReviewOut */
+        ReviewOut: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "edit" | "reject";
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Replayed */
+            replayed: boolean;
+        };
+        /**
+         * ReviewTaskDetailOut
+         * @description `provenance` holds rule ids, record ids and closed words only (migration 0007: never the patient's own words).
+         */
+        ReviewTaskDetailOut: {
+            /** Acknowledged At */
+            acknowledged_at: string | null;
+            /** Acknowledged By */
+            acknowledged_by: string | null;
+            /**
+             * Assigned Role
+             * @enum {string}
+             */
+            assigned_role: "nurse" | "doctor" | "front_desk";
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Priority
+             * @enum {string}
+             */
+            priority: "immediate" | "standard";
+            /** Provenance */
+            provenance: {
+                [key: string]: unknown;
+            };
+            /** Resolved At */
+            resolved_at: string | null;
+            /** Source Message Id */
+            source_message_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "acknowledged" | "resolved";
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
+        };
+        /** ReviewTaskList */
+        ReviewTaskList: {
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: components["schemas"]["ReviewTaskOut"][];
+            /** Limit */
+            limit: number;
+        };
+        /**
+         * ReviewTaskOut
+         * @description No provenance and no source id in the list; ids, closed words and times only.
+         */
+        ReviewTaskOut: {
+            /** Acknowledged At */
+            acknowledged_at: string | null;
+            /** Acknowledged By */
+            acknowledged_by: string | null;
+            /**
+             * Assigned Role
+             * @enum {string}
+             */
+            assigned_role: "nurse" | "doctor" | "front_desk";
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Priority
+             * @enum {string}
+             */
+            priority: "immediate" | "standard";
+            /** Resolved At */
+            resolved_at: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "acknowledged" | "resolved";
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
+        };
+        /** ReviewTaskTransitionOut */
+        ReviewTaskTransitionOut: {
+            /** Replayed */
+            replayed: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "acknowledged" | "resolved";
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
+        };
+        /**
+         * RevokeIdentityIn
+         * @description A closed reason word, nothing else (no free text).
+         */
+        RevokeIdentityIn: {
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "wrong_person" | "planted_or_suspect" | "mistaken_click";
+        };
+        /**
+         * RevokeIdentityOut
+         * @description Ids, a flag and a closed word. `review_task`: `raised` (a nurse or doctor will re-check what was linked), `not_configured` (the revoke is recorded but NO task was raised, because the
+         *     clinician-owned task settings are unset) or `on_record` (nothing new was written by this call).
+         */
+        RevokeIdentityOut: {
+            /**
+             * Confirmed
+             * @constant
+             */
+            confirmed: false;
+            /**
+             * Patient Id
+             * Format: uuid
+             */
+            patient_id: string;
+            /** Replayed */
+            replayed: boolean;
+            /**
+             * Review Task
+             * @enum {string}
+             */
+            review_task: "raised" | "not_configured" | "on_record";
+        };
         /** RoleGrant */
         RoleGrant: {
             /**
@@ -606,8 +1879,22 @@ export interface components {
              * Format: uuid
              */
             clinic_id: string;
+            /** Clinic Name */
+            clinic_name: string | null;
+            /** Clinic Origin */
+            clinic_origin: string | null;
             /** Role */
             role: string;
+        };
+        /** RunOut */
+        RunOut: {
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Replayed */
+            replayed: boolean;
         };
         /**
          * ScreenOut
@@ -633,6 +1920,67 @@ export interface components {
              * Format: uuid
              */
             screening_id: string;
+        };
+        /** SendOfferIn */
+        SendOfferIn: {
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /**
+             * Slot Id
+             * Format: uuid
+             */
+            slot_id: string;
+            /**
+             * Visit Type Id
+             * Format: uuid
+             */
+            visit_type_id: string;
+            /**
+             * Waitlist Id
+             * Format: uuid
+             */
+            waitlist_id: string;
+        };
+        /**
+         * SendOfferOut
+         * @description Ids and a time only.
+         */
+        SendOfferOut: {
+            /**
+             * Hold Expires At
+             * Format: date-time
+             */
+            hold_expires_at: string;
+            /**
+             * Hold Id
+             * Format: uuid
+             */
+            hold_id: string;
+            /**
+             * Message Id
+             * Format: uuid
+             */
+            message_id: string;
+            /**
+             * Patient Id
+             * Format: uuid
+             */
+            patient_id: string;
+            /** Replayed */
+            replayed: boolean;
+            /**
+             * Slot Id
+             * Format: uuid
+             */
+            slot_id: string;
+            /**
+             * Thread Id
+             * Format: uuid
+             */
+            thread_id: string;
         };
         /** SlotList */
         SlotList: {
@@ -719,6 +2067,34 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** VisitTypeList */
+        VisitTypeList: {
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: components["schemas"]["VisitTypeOut"][];
+            /** Limit */
+            limit: number;
+        };
+        /** VisitTypeOut */
+        VisitTypeOut: {
+            /** Active */
+            active: boolean;
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /** Duration Minutes */
+            duration_minutes: number;
+            /** Name */
+            name: string;
+            /**
+             * Visit Type Id
+             * Format: uuid
+             */
+            visit_type_id: string;
         };
         /** WaitlistEntryOut */
         WaitlistEntryOut: {
@@ -843,6 +2219,173 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Me"];
+                };
+            };
+        };
+    };
+    register_document_v1_staff_documents_register_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegisteredOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    begin_document_upload_v1_staff_documents_uploads_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BeginUploadIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BeginUploadOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_merges_v1_staff_identity_merges_get: {
+        parameters: {
+            query?: {
+                status?: ("awaiting_second_approval" | "active" | "unmerged") | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MergeList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    open_merge_v1_staff_identity_merges__merge_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                merge_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MergeDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_possible_duplicates_v1_staff_identity_possible_duplicates_get: {
+        parameters: {
+            query?: {
+                status?: ("pending" | "resolved") | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuplicateList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -1052,6 +2595,409 @@ export interface operations {
             };
         };
     };
+    search_patients_v1_staff_patients_search_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatientSearchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatientSearchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patient_status_route_v1_staff_patients__patient_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                patient_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatientStatusOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_patient_identity_v1_staff_patients__patient_id__confirm_identity_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path: {
+                patient_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfirmIdentityOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_patient_identity_v1_staff_patients__patient_id__revoke_identity_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path: {
+                patient_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevokeIdentityIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevokeIdentityOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_referrals_v1_staff_referrals_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferralList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    open_referral_v1_staff_referrals__document_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferralDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_referral_v1_staff_referrals__document_id__review_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_referral_run_v1_staff_referrals__document_id__run_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_review_tasks_v1_staff_review_tasks_get: {
+        parameters: {
+            query?: {
+                status?: ("open" | "acknowledged" | "resolved") | null;
+                kind?: string | null;
+                assigned_role?: ("nurse" | "doctor" | "front_desk") | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewTaskList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    open_review_task_v1_staff_review_tasks__task_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewTaskDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    acknowledge_review_task_v1_staff_review_tasks__task_id__acknowledge_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewTaskTransitionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolve_review_task_v1_staff_review_tasks__task_id__resolve_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewTaskTransitionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_bookings_v1_staff_scheduling_bookings_get: {
         parameters: {
             query?: {
@@ -1104,6 +3050,236 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CancelOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_holds_v1_staff_scheduling_holds_get: {
+        parameters: {
+            query?: {
+                status?: ("active" | "released" | "expired" | "converted") | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldRowList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    release_hold_route_v1_staff_scheduling_holds__hold_id__release_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path: {
+                hold_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_locations_v1_staff_scheduling_locations_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocationList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    draft_offer_v1_staff_scheduling_offers_draft_get: {
+        parameters: {
+            query: {
+                clinic_id: string;
+                visit_type_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_offer_route_v1_staff_scheduling_offers_send_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendOfferIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SendOfferOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_priority_levels_v1_staff_scheduling_priority_levels_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriorityLevelList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_providers_v1_staff_scheduling_providers_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderList"];
                 };
             };
             /** @description Validation Error */
@@ -1214,6 +3390,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HoldOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_visit_types_v1_staff_scheduling_visit_types_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VisitTypeList"];
                 };
             };
             /** @description Validation Error */

@@ -1,11 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { OPERATIONS, createApi, type Api, type ProposeMergeIn } from '../src/shared/api/client';
+import { OPERATIONS, createApi, type Api, type WriteOptions, type ProposeMergeIn, type BeginUploadIn, type RegisterIn, type PatientSearchIn } from '../src/shared/api/client';
 
 // Contract test (BUILD-SPEC 21): the client is driven for real; only the network transport is captured.
 // It asserts every method targets an endpoint that exists in the backend's schema, with its required
-// parameters and body fields.
+// parameters and body fields, and that every write sends an idempotency key and reuses a supplied one.
 
 type Json = Record<string, unknown>;
 const spec = JSON.parse(readFileSync(resolve(import.meta.dirname, '../../openapi.snapshot.json'), 'utf8')) as Json;
@@ -18,9 +18,15 @@ function deref(node: Json): Json {
   return deref(schemas[ref.replace('#/components/schemas/', '')] as Json);
 }
 
+/** The smallest valid value for a schema: required fields only, the first enum word, a fixed uuid. */
 function sample(schema: Json): unknown {
   const s = deref(schema);
-  if (s.type === 'string') return s.format === 'uuid' ? '3f2b8c1e-6a4d-4e1b-9d0a-1c2d3e4f5a6b' : 'x';
+  if (Array.isArray(s.anyOf)) return sample((s.anyOf as Json[]).find((x) => x.type !== 'null') as Json);
+  if (Array.isArray(s.enum)) return s.enum[0];
+  if (s.type === 'string') return s.format === 'uuid' ? '3f2b8c1e-6a4d-4e1b-9d0a-1c2d3e4f5a6b' : s.format === 'date' ? '1990-01-01' : 'x';
+  if (s.type === 'integer') return 1;
+  if (s.type === 'boolean') return true;
+  if (s.type === 'array') return [];
   if (s.type === 'object') {
     const props = (s.properties ?? {}) as Record<string, Json>;
     const out: Json = {};
@@ -29,6 +35,7 @@ function sample(schema: Json): unknown {
   }
   throw new Error(`sample(): unsupported schema ${JSON.stringify(s)}`);
 }
+const body = <T>(name: string) => sample({ $ref: `#/components/schemas/${name}` }) as T;
 
 interface Captured {
   method: string;
@@ -58,17 +65,37 @@ function harness() {
 }
 
 const ID = '3f2b8c1e-6a4d-4e1b-9d0a-1c2d3e4f5a6b';
-const proposeBody = () => sample({ $ref: '#/components/schemas/ProposeMergeIn' }) as ProposeMergeIn;
 
 // One real invocation per client method. TypeScript forces the right argument shapes; the keys must
 // equal OPERATIONS so a new method cannot ship without a contract case.
-const INVOCATIONS: Record<keyof typeof OPERATIONS, (api: Api) => Promise<unknown>> = {
+const INVOCATIONS: Record<keyof typeof OPERATIONS, (api: Api, o?: WriteOptions) => Promise<unknown>> = {
   getMe: (api) => api.getMe(),
   getReadyz: (api) => api.getReadyz(),
-  proposeMerge: (api) => api.proposeMerge(proposeBody()),
-  approveMerge: (api) => api.approveMerge(ID),
-  unmerge: (api) => api.unmerge(ID),
+  proposeMerge: (api, o) => api.proposeMerge(body<ProposeMergeIn>('ProposeMergeIn'), o),
+  approveMerge: (api, o) => api.approveMerge(ID, o),
+  unmerge: (api, o) => api.unmerge(ID, o),
+  listReferrals: (api) => api.listReferrals(),
+  openReferral: (api) => api.openReferral(ID),
+  beginUpload: (api, o) => api.beginUpload(body<BeginUploadIn>('BeginUploadIn'), o),
+  registerDocument: (api, o) => api.registerDocument(body<RegisterIn>('RegisterIn'), o),
+  listReviewTasks: (api) => api.listReviewTasks(),
+  openReviewTask: (api) => api.openReviewTask(ID),
+  acknowledgeTask: (api, o) => api.acknowledgeTask(ID, o),
+  resolveTask: (api, o) => api.resolveTask(ID, o),
+  searchPatients: (api) => api.searchPatients(body<PatientSearchIn>('PatientSearchIn')),
+  openPatient: (api) => api.openPatient(ID),
+  confirmIdentity: (api, o) => api.confirmIdentity(ID, o),
+  listProviders: (api) => api.listProviders(),
+  listLocations: (api) => api.listLocations(),
+  listVisitTypes: (api) => api.listVisitTypes(),
+  listPriorityLevels: (api) => api.listPriorityLevels(),
+  listHolds: (api) => api.listHolds(),
+  releaseHold: (api, o) => api.releaseHold(ID, o),
+  draftOffer: (api) => api.draftOffer(ID, ID),
 };
+
+const requiredParams = (op: Json) => ((op.parameters ?? []) as Json[]).filter((p) => p.required);
+const isWrite = (name: keyof typeof OPERATIONS) => requiredParams(paths[OPERATIONS[name].path]?.[OPERATIONS[name].method] as Json).some((p) => p.name === 'X-Idempotency-Key');
 
 describe('API client contract', () => {
   it('has a contract invocation for every declared operation, and no extras', () => {
@@ -90,11 +117,9 @@ describe('API client contract', () => {
       const op_ = operation as Json;
 
       expect(call.method).toBe(op.method);
-      const expectedPath = op.path.replace('{merge_id}', ID);
-      expect(call.url.pathname).toBe(expectedPath);
+      expect(call.url.pathname).toBe(op.path.replace(/\{[a-z_]+\}/g, ID));
 
-      const params = ((op_.parameters ?? []) as Json[]).filter((p) => p.required);
-      for (const p of params) {
+      for (const p of requiredParams(op_)) {
         if (p.in === 'header') expect(call.headers.get(p.name as string), `header ${String(p.name)}`).toBeTruthy();
         if (p.in === 'query') expect(call.url.searchParams.has(p.name as string), `query ${String(p.name)}`).toBe(true);
         if (p.in === 'path') expect(op.path).toContain(`{${String(p.name)}}`);
@@ -103,11 +128,11 @@ describe('API client contract', () => {
       const bodySchema = (((op_.requestBody as Json | undefined)?.content as Json | undefined)?.['application/json'] as Json | undefined)?.schema;
       if (bodySchema) {
         const s = deref(bodySchema as Json);
-        const body = call.body as Json;
-        for (const field of (s.required ?? []) as string[]) expect(body, `body field ${field}`).toHaveProperty(field);
+        const sent = call.body as Json;
+        for (const field of (s.required ?? []) as string[]) expect(sent, `body field ${field}`).toHaveProperty(field);
         if (s.additionalProperties === false) {
           const known = Object.keys((s.properties ?? {}) as Json);
-          for (const field of Object.keys(body)) expect(known, `unknown body field ${field}`).toContain(field);
+          for (const field of Object.keys(sent)) expect(known, `unknown body field ${field}`).toContain(field);
         }
       } else {
         expect(call.body).toBeUndefined();
@@ -121,22 +146,34 @@ describe('API client contract', () => {
     expect(calls[0]?.headers.get('authorization')).toBe('Bearer test-token-not-real');
   });
 
-  it('gives every write a fresh idempotency key, and honours a caller-supplied one for retries', async () => {
-    const { api, calls } = harness();
-    await api.approveMerge(ID);
-    await api.approveMerge(ID);
-    await api.approveMerge(ID, { idempotencyKey: 'retry-key' });
-    const keys = calls.map((c) => c.headers.get('x-idempotency-key'));
-    expect(keys[0]).toBeTruthy();
-    expect(keys[0]).not.toBe(keys[1]);
-    expect(keys[2]).toBe('retry-key');
+  describe.each((Object.keys(OPERATIONS) as (keyof typeof OPERATIONS)[]).filter(isWrite))('write %s', (name) => {
+    it('sends a fresh idempotency key each time, and reuses a supplied one (a retry replays, never repeats)', async () => {
+      const { api, calls } = harness();
+      await INVOCATIONS[name](api);
+      await INVOCATIONS[name](api);
+      await INVOCATIONS[name](api, { idempotencyKey: 'retry-key' });
+      await INVOCATIONS[name](api, { idempotencyKey: 'retry-key' });
+      const keys = calls.map((c) => c.headers.get('x-idempotency-key'));
+      expect(keys[0]).toBeTruthy();
+      expect(keys[0]).not.toBe(keys[1]);
+      expect(keys[2]).toBe('retry-key');
+      expect(keys[3]).toBe('retry-key');
+    });
   });
 
-  it('declares X-Idempotency-Key as required on every write operation in the schema the client uses', () => {
-    for (const op of Object.values(OPERATIONS)) {
+  it('knows every write the schema says needs an idempotency key: none of the client writes lacks one', () => {
+    for (const [name, op] of Object.entries(OPERATIONS)) {
       if (op.method === 'get') continue;
-      const names = ((paths[op.path]?.[op.method]?.parameters ?? []) as Json[]).filter((p) => p.required).map((p) => p.name);
-      expect(names, op.path).toContain('X-Idempotency-Key');
+      const needs = isWrite(name as keyof typeof OPERATIONS);
+      // The one POST that is a read (patient search) deliberately carries no key.
+      expect(needs, `${name} (${op.path})`).toBe(name !== 'searchPatients');
     }
+  });
+
+  it('sends no idempotency key on a read', async () => {
+    const { api, calls } = harness();
+    await api.listReferrals();
+    await api.searchPatients(body<PatientSearchIn>('PatientSearchIn'));
+    expect(calls.map((c) => c.headers.get('x-idempotency-key'))).toEqual([null, null]);
   });
 });
