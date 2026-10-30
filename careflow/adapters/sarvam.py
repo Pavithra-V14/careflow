@@ -23,6 +23,7 @@ from careflow.adapters.provider_http import (
 from careflow.gateway import RoleDailyCeilings, SpendCeilingReached
 from careflow.ports import (
     AdapterResult,
+    DataClass,
     PermanentError,
     TranslationRequest,
     TranslationResult,
@@ -52,7 +53,12 @@ class SarvamTranslation:
         self._key, self._seconds, self._model, self._price, self._ceilings = api_key.strip(), timeout_seconds, model_id, price_per_1k_chars_usd, ceilings
         self._http = http or new_client(timeout_seconds)
 
+    def accepts(self, request: TranslationRequest) -> bool:
+        return request.data_class is DataClass.SYNTHETIC  # a third party: never patient text
+
     async def translate(self, request: TranslationRequest) -> AdapterResult[TranslationResult]:
+        if request.data_class is not DataClass.SYNTHETIC:
+            raise PermanentError("sarvam handles synthetic data only")  # the adapter's own refusal, whatever the caller or the deployment gate says
         source, target = LANGUAGE_CODES.get(request.source), LANGUAGE_CODES.get(request.target)
         if source is None or target is None or source == target:
             raise PermanentError("this language pair is not one the translation route handles")

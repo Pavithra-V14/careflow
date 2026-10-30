@@ -5562,7 +5562,7 @@ def create_app(
             intake, app.state.storage_adapter = _intake_from_environment(cfg.supabase_url)
         try:  # hosted providers (demo + synthetic only, keys/verified date/ceilings required): none is built unless every gate passes; nothing consumes them yet
             app.state.providers = provider_setup.build_providers(profile=resolve_profile())
-        except provider_setup.ProviderConfigRefused:
+        except Exception:  # noqa: BLE001 - ANY fault in the provider configuration degrades to 'no hosted provider', never a startup crash (CLAUDE.md: degrade explicitly and visibly)
             log.error("the hosted-provider configuration is refused: no hosted provider is available")
             app.state.providers = provider_setup.ProviderSet()
         app.state.document_intake = intake  # None unless storage is configured AND verified (below): the upload routes answer 503

@@ -142,7 +142,7 @@ calls:
     approved_on: "2026-10-30"
     status: approved
     appendix_b: "generateContent request/response shape, inline_data limits, usageMetadata names, free-tier rate limits (NOT YET CONFIRMED against the real service: scripts/provider_live_check.py; the application builds the adapter only when CAREFLOW_GEMINI_VERIFIED records the date)"
-    notes: "Demo profile with data_policy synthetic_only only; never under CI. A free-tier row is synthetic_only by definition. No real patient page goes here until a separate decision (a data-processing arrangement and region) and the privacy owner's written confirmation. A per-role daily spend ceiling (CAREFLOW_SPEND_CEILING_VLM_USD) is required and has no default; a stop becomes a manual task showing the image."
+    notes: "Demo profile with data_policy synthetic_only only; never under CI. A free-tier row is synthetic_only by definition (Google may use unpaid-tier content to improve its products; keep billing off and use synthetic pages only). No real patient page goes here until a separate decision (a data-processing arrangement and region) and the privacy owner's written confirmation. A per-role daily spend ceiling (CAREFLOW_SPEND_CEILING_VLM_USD) is required and has no default; a stop becomes a manual task showing the image."
 
   - id: openrouter-jev
     service: "OpenRouter, router model typesafe/jev-router (the decision role's hosted engine, \"Jev\")"

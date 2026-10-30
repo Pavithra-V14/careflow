@@ -99,7 +99,7 @@ def test_a_decision_call_takes_between_two_and_twenty_distinct_options():
 
 def test_patient_text_never_appears_in_a_request_repr():
     secret = "SENTINEL-PATIENT-TEXT-5521"
-    for obj in (DecisionRequest("q", secret, ("a", "b"), DataClass.PHI), RerankRequest(secret, (secret,)), TranslationRequest(secret, "ta", "en")):
+    for obj in (DecisionRequest("q", secret, ("a", "b"), DataClass.PHI), RerankRequest(secret, (secret,)), TranslationRequest(secret, "ta", "en", DataClass.PHI)):
         assert secret not in repr(obj)
 
 
@@ -152,7 +152,7 @@ async def test_the_fakes_are_deterministic_and_can_be_told_to_fail():
     assert v.vectors == (await e.embed(["alpha", "beta"])).value.vectors and len(v.vectors[0]) == v.dimensions
     r = (await FakeRerank().rerank(RerankRequest("heart failure", ("knee pain", "heart failure clinic")))).value
     assert r.order[0] == 1
-    t = (await FakeTranslation().translate(TranslationRequest("hello", "en", "ta"))).value
+    t = (await FakeTranslation().translate(TranslationRequest("hello", "en", "ta", DataClass.SYNTHETIC))).value
     assert t.text.startswith("[en->ta]")
     d.fail_next(2)
     for _ in range(2):

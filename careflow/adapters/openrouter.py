@@ -73,7 +73,7 @@ class JevRouterClient:
         answer = await post_json(self._http, ENDPOINT, headers={"Authorization": f"Bearer {self._key}"}, body=body, seconds=self._seconds)
         choice, confidence = _choice_of(answer, options)
         rest = (1.0 - confidence) / (len(options) - 1)
-        return {"probabilities": {o: (confidence if o == choice else rest) for o in options}, "usage": _usage_of(answer)}
+        return {"probabilities": {o: (confidence if o == choice else rest) for o in options}, "usage": _usage_of(answer), "served_by": answer.get("model") if isinstance(answer.get("model"), str) else None}
 
 
 def _choice_of(answer: dict, options: list[str]) -> tuple[str, float]:
@@ -93,6 +93,8 @@ def _choice_of(answer: dict, options: list[str]) -> tuple[str, float]:
         raise PermanentError("the model's choice is not one of the offered options")
     if isinstance(confidence, bool) or not isinstance(confidence, int | float) or not math.isfinite(confidence) or not 0 <= confidence <= 1:
         raise PermanentError("the model's confidence is not a number from 0 to 1")
+    if confidence <= 1 / len(options):  # a choice the spread would not rank first would turn into ANOTHER option: that is no decision
+        raise PermanentError("the model's confidence does not rank its own choice first")
     return choice, float(confidence)
 
 

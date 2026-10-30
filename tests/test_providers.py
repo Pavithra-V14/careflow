@@ -242,7 +242,7 @@ def sarvam(handler, ceiling="1.00", price="0.06"):
 @pytest.mark.asyncio
 async def test_sarvam_builds_the_documented_request_and_counts_characters():
     adapter, mock, ceilings = sarvam(json_reply({"request_id": "r", "translated_text": "vanakkam", "source_language_code": "en-IN"}))
-    out = await adapter.translate(TranslationRequest("hello there", "en", "ta"))
+    out = await adapter.translate(TranslationRequest("hello there", "en", "ta", DataClass.SYNTHETIC))
     assert out.value.text == "vanakkam" and (out.value.source, out.value.target) == ("en", "ta") and (out.usage.input_tokens, out.usage.output_tokens) == (11, 8)
     (req,) = mock.requests
     assert str(req.url) == SARVAM_ENDPOINT == "https://api.sarvam.ai/translate" and req.headers["api-subscription-key"] == KEY
@@ -253,20 +253,20 @@ async def test_sarvam_builds_the_documented_request_and_counts_characters():
 @pytest.mark.asyncio
 async def test_sarvam_never_cuts_a_long_text_and_refuses_an_unknown_pair_before_any_call():
     adapter, mock, _ = sarvam(json_reply({"translated_text": "x"}))
-    for bad in (TranslationRequest("a" * 1001, "en", "ta"), TranslationRequest("hi", "en", "xx"), TranslationRequest("hi", "ta", "ta"), TranslationRequest("   ", "en", "ta")):
+    for bad in (TranslationRequest("a" * 1001, "en", "ta", DataClass.SYNTHETIC), TranslationRequest("hi", "en", "xx", DataClass.SYNTHETIC), TranslationRequest("hi", "ta", "ta", DataClass.SYNTHETIC), TranslationRequest("   ", "en", "ta", DataClass.SYNTHETIC)):
         with pytest.raises(PermanentError):
             await adapter.translate(bad)
     assert mock.requests == []
     empty, _, _ = sarvam(json_reply({"translated_text": " "}))
     with pytest.raises(PermanentError):
-        await empty.translate(TranslationRequest("hi", "en", "ta"))
+        await empty.translate(TranslationRequest("hi", "en", "ta", DataClass.SYNTHETIC))
 
 
 @pytest.mark.asyncio
 async def test_the_translation_ceiling_stops_a_call_before_it_is_made_and_is_a_visible_hold():
     adapter, mock, _ = sarvam(json_reply({"translated_text": "x"}), ceiling="0.0001")
     with pytest.raises(SpendCeilingReached):
-        await adapter.translate(TranslationRequest("a" * 500, "en", "ta"))
+        await adapter.translate(TranslationRequest("a" * 500, "en", "ta", DataClass.SYNTHETIC))
     assert mock.requests == []
     with pytest.raises(ValueError):  # a translation route without a required ceiling cannot be built
         SarvamTranslation(KEY, timeout_seconds=5, price_per_1k_chars_usd=Decimal("0.06"), ceilings=RoleDailyCeilings({}), http=Mock(json_reply({})).client())
@@ -399,7 +399,7 @@ async def test_with_every_gate_open_the_providers_are_built_and_work_end_to_end_
     assert decided.value.choice == "urgent"
     with pytest.raises(NoApprovedRoute):
         await built.gateway.call("decision", decision_request(DataClass.PHI), data_class=DataClass.PHI, clinic_id=CLINIC)
-    assert (await built.translation.translate(TranslationRequest("hello", "en", "ta"))).value.text == "vanakkam"
+    assert (await built.translation.translate(TranslationRequest("hello", "en", "ta", DataClass.SYNTHETIC))).value.text == "vanakkam"
     assert {r.url.host for r in mock.requests} == {"generativelanguage.googleapis.com", "openrouter.ai", "api.sarvam.ai"}
 
 
@@ -452,3 +452,74 @@ def test_the_opt_in_live_check_refuses_under_ci_and_without_the_synthetic_confir
     assert under_ci.returncode == 2 and "refusing to run under CI" in under_ci.stdout
     without = subprocess.run([sys.executable, "-I", script, "--provider", "sarvam"], capture_output=True, text=True, env=env, timeout=60, check=False)
     assert without.returncode != 0  # --yes-synthetic is required
+
+
+@pytest.mark.asyncio
+async def test_sarvam_refuses_patient_text_itself_before_any_call():
+    adapter, mock, _ = sarvam(json_reply({"translated_text": "x"}))
+    request = TranslationRequest("hello", "en", "ta", DataClass.PHI)
+    assert adapter.accepts(request) is False
+    with pytest.raises(PermanentError):
+        await adapter.translate(request)
+    assert mock.requests == []
+
+
+@pytest.mark.asyncio
+async def test_gemini_accepts_only_a_finished_transcription():
+    for reason in ("MAX_TOKENS", "RECITATION", "SAFETY", None):
+        body = gemini_ok("HALF A LETTER")
+        if reason is None:
+            del body["candidates"][0]["finishReason"]
+        else:
+            body["candidates"][0]["finishReason"] = reason
+        adapter = GeminiVisionAdapter(KEY, "gemini-2.5-flash", timeout_seconds=60, http=Mock(json_reply(body)).client())
+        with pytest.raises(PermanentError):
+            await adapter(vision_request())  # a cut-off page is incomplete: the rules must never screen half a letter and call it done
+
+
+@pytest.mark.asyncio
+async def test_gemini_usage_with_a_missing_count_is_estimated_high_and_thinking_tokens_are_counted():
+    body = gemini_ok()
+    body["usageMetadata"] = {"promptTokenCount": 10}  # no output count
+    out = await GeminiVisionAdapter(KEY, "gemini-2.5-flash", timeout_seconds=60, http=Mock(json_reply(body)).client())(vision_request(image=b"x" * 4000))
+    assert out.usage.input_tokens == 1000
+    body["usageMetadata"] = {"promptTokenCount": 10, "candidatesTokenCount": 5, "thoughtsTokenCount": 7}
+    out = await GeminiVisionAdapter(KEY, "gemini-2.5-flash", timeout_seconds=60, http=Mock(json_reply(body)).client())(vision_request())
+    assert (out.usage.input_tokens, out.usage.output_tokens) == (10, 12)
+
+
+@pytest.mark.asyncio
+async def test_a_choice_the_spread_would_not_rank_first_is_no_decision_and_missing_usage_is_estimated_high():
+    for confidence in (0.3, 0.5):
+        adapter = JevAdapter(JevRouterClient(KEY, timeout_seconds=20, http=Mock(json_reply(openrouter_ok("urgent", confidence))).client()))
+        with pytest.raises(PermanentError):
+            await adapter(decision_request())  # 0.3 of two options would make the OTHER option the argmax
+    adapter = JevAdapter(JevRouterClient(KEY, timeout_seconds=20, http=Mock(json_reply(openrouter_ok(usage=False))).client()))
+    out = await adapter(decision_request())
+    assert out.usage.input_tokens >= 400 and out.usage.output_tokens == 64
+
+
+@pytest.mark.asyncio
+async def test_a_stream_or_header_fault_is_a_failed_route_and_a_slow_drip_is_cut_by_the_wall_clock():
+    import asyncio
+
+    def decoding(request):
+        raise httpx.DecodingError("bad " + KEY)
+
+    adapter = GeminiVisionAdapter(KEY, "gemini-2.5-flash", timeout_seconds=60, http=Mock(decoding).client())
+    with pytest.raises(PermanentError) as caught:
+        await adapter(vision_request())
+    assert_clean(caught.value)
+    class Drip(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            for _ in range(50):
+                await asyncio.sleep(0.05)
+                yield b" "
+
+    slow = Mock(lambda request: httpx.Response(200, stream=Drip()))
+    with pytest.raises(TransientError):
+        await provider_http.post_json(slow.client(), "https://x.test/", headers={}, body={}, seconds=0.2)
+
+
+def test_the_provider_client_ignores_proxy_and_ca_settings_from_the_environment():
+    assert provider_http.new_client(5)._trust_env is False

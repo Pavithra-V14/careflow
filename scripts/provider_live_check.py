@@ -1,11 +1,11 @@
 """OPT-IN live check of the three hosted providers, run BY THE OWNER, by hand, on a developer machine (owner decision 2026-10-30; Appendix B discipline). NEVER run by CI and by nothing else.
 
-    uv run python scripts/provider_live_check.py --provider gemini --yes-synthetic [--image path/to/DUMMY.png]
+    uv run python scripts/provider_live_check.py --provider gemini --yes-synthetic --image path/to/DUMMY.png
     uv run python scripts/provider_live_check.py --provider jev    --yes-synthetic
     uv run python scripts/provider_live_check.py --provider sarvam --yes-synthetic
 
-What it does: ONE small request per run to the named provider, with SYNTHETIC input (a one-pixel PNG, or a DUMMY image you name with --image; a made-up sentence), using the same HTTP helper and request builders
-as the application, then prints WHAT THE SERVICE DID: the HTTP outcome in fixed words, the key NAMES of the answer (never values), whether the usage fields the adapter reads are present, the elapsed time. It reads only
+What it does: ONE small request per run to the named provider, with SYNTHETIC input (a DUMMY image you made, a made-up sentence), calling the APPLICATION'S OWN adapter (so a later change to an adapter is re-verified by
+running this again), then prints WHAT THE SERVICE DID: pass or fail in fixed words, the usage seen, the elapsed time, and for Jev the downstream model that answered. It does not verify prices or rate limits. It reads only
 the repository's `.env` (no shell fallback, never `.env.cli`), REFUSES to run under CI or unless CAREFLOW_PROFILE=demo and CAREFLOW_DATA_POLICY=synthetic_only, needs the explicit `--yes-synthetic`, and
 never prints or logs a key. A real document or a real patient sentence must NEVER be used here.
 
@@ -15,11 +15,11 @@ provider only after that date is recorded. A FAIL line means the adapter's assum
 
 import argparse
 import asyncio
-import base64
 import os
 import sys
 import time
-import zlib
+import uuid
+from decimal import Decimal
 from pathlib import Path
 
 from dotenv import dotenv_values
@@ -27,8 +27,14 @@ from dotenv import dotenv_values
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from careflow.adapters import gemini, openrouter, sarvam
-from careflow.adapters.provider_http import new_client, post_json
-from careflow.ports import PermanentError, TransientError
+from careflow.gateway import RoleDailyCeilings
+from careflow.ports import (
+    DataClass,
+    PermanentError,
+    TransientError,
+    TranslationRequest,
+    VisionRequest,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 KEYS = {"gemini": "GEMINI_API_KEY", "jev": "OPENROUTER_API_KEY", "sarvam": "SARVAM_API_KEY"}
@@ -40,73 +46,55 @@ def record(name: str, ok: bool, detail: str) -> None:
     print(("PASS  " if ok else "FAIL  ") + f"{name}: {detail}")
 
 
-def tiny_png() -> bytes:
-    def chunk(kind: bytes, data: bytes) -> bytes:
-        body = kind + data
-        return len(data).to_bytes(4, "big") + body + zlib.crc32(body).to_bytes(4, "big")
-
-    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", (1).to_bytes(4, "big") * 2 + b"\x08\x02\x00\x00\x00") + chunk(b"IDAT", zlib.compress(b"\x00\xff\xff\xff")) + chunk(b"IEND", b"")
-
-
 def names(obj: object) -> str:
     return ", ".join(sorted(obj)) if isinstance(obj, dict) else type(obj).__name__
 
 
 async def check_gemini(key: str, image: bytes, content_type: str) -> None:
-    http = new_client(60)
+    """Calls the APPLICATION'S adapter (so a change to the adapter is re-verified), with a DUMMY image you made yourself."""
+    adapter = gemini.GeminiVisionAdapter(key, "gemini-2.5-flash", timeout_seconds=60)
     started = time.monotonic()
-    body = {"contents": [{"role": "user", "parts": [{"text": gemini.INSTRUCTION}, {"inline_data": {"mime_type": content_type, "data": base64.b64encode(image).decode()}}]}], "generationConfig": {"temperature": 0}}
     try:
-        answer = await post_json(http, f"{gemini.HOST}/v1beta/models/gemini-2.5-flash:generateContent", headers={"x-goog-api-key": key}, body=body, seconds=60)
+        out = await adapter(VisionRequest(image=image, content_type=content_type, page=1, clinic_id=uuid.uuid4()))
     except (TransientError, PermanentError) as exc:
-        record("1 request accepted", False, f"{exc}")
+        record("1 the adapter read the page (text came back, finishReason STOP)", False, f"{exc}")
         return
-    finally:
-        await http.aclose()
-    record("1 request accepted", True, f"HTTP 200 in {time.monotonic() - started:.1f}s; answer keys: {names(answer)}")
-    cands = answer.get("candidates")
-    record("2 candidates[0].content.parts shape", isinstance(cands, list) and bool(cands) and isinstance(cands[0], dict) and isinstance((cands[0].get("content") or {}).get("parts"), list),
-           f"candidate keys: {names(cands[0]) if isinstance(cands, list) and cands else 'none'}")
-    meta = answer.get("usageMetadata")
-    record("3 usageMetadata has promptTokenCount and candidatesTokenCount", isinstance(meta, dict) and isinstance(meta.get("promptTokenCount"), int) and isinstance(meta.get("candidatesTokenCount"), int), f"usage keys: {names(meta)}")
-    print("note: with the one-pixel image the transcription is expected to be empty; pass --image with a DUMMY page to see text come back.")
+    record("1 the adapter read the page (text came back, finishReason STOP)", bool(out.value.text.strip()), f"{len(out.value.text)} characters in {time.monotonic() - started:.1f}s; compare them with your dummy page by eye")
+    record("2 usage reported", out.usage.input_tokens > 0, f"input {out.usage.input_tokens}, output {out.usage.output_tokens} tokens (an ESTIMATE if the service omitted a count)")
 
 
 async def check_jev(key: str) -> None:
-    http = new_client(20)
-    client = openrouter.JevRouterClient(key, timeout_seconds=20, http=http)
+    client = openrouter.JevRouterClient(key, timeout_seconds=20)
     started = time.monotonic()
     try:
         reply = await client.decide({"task": "choice", "question": "triage_band", "input": "A made-up sentence: the synthetic patient asks for a routine check.", "options": ["routine", "urgent"]})
     except (TransientError, PermanentError) as exc:
-        record("1 router answered with a strict-JSON choice", False, f"{exc}")
+        record("1 the router answered with a strict-JSON choice", False, f"{exc}")
         return
-    finally:
-        await http.aclose()
     probs = reply.get("probabilities") if isinstance(reply, dict) else None
-    record("1 router answered with a strict-JSON choice", isinstance(probs, dict) and set(probs) == {"routine", "urgent"}, f"in {time.monotonic() - started:.1f}s; probabilities keys: {names(probs)}")
+    record("1 the router answered with a strict-JSON choice", isinstance(probs, dict) and set(probs) == {"routine", "urgent"}, f"in {time.monotonic() - started:.1f}s; probabilities keys: {names(probs)}")
     record("2 usage reported (prompt_tokens, completion_tokens)", reply.get("usage") is not None, f"usage: {reply.get('usage')}")
+    print(f"info: the router says the DOWNSTREAM MODEL that answered was: {reply.get('served_by')!r} (the text went to it; check its data handling before you rely on this row)")
 
 
 async def check_sarvam(key: str) -> None:
-    http = new_client(5)
+    adapter = sarvam.SarvamTranslation(key, timeout_seconds=5, price_per_1k_chars_usd=Decimal("0.06"), ceilings=RoleDailyCeilings({"translation": Decimal(1)}))
+    text = ("Hello, this is a made-up test sentence. " * 30)[: sarvam.MAX_CHARS]
     started = time.monotonic()
     try:
-        answer = await post_json(http, sarvam.ENDPOINT, headers={"api-subscription-key": key}, body={"input": "Hello, this is a made-up test sentence.", "source_language_code": "en-IN", "target_language_code": "ta-IN", "model": sarvam.MODEL}, seconds=5)
+        out = await adapter.translate(TranslationRequest(text, "en", "ta", DataClass.SYNTHETIC))
     except (TransientError, PermanentError) as exc:
-        record("1 request accepted", False, f"{exc}")
+        record("1 a text of exactly 1,000 characters is accepted", False, f"{exc}")
         return
-    finally:
-        await http.aclose()
-    record("1 request accepted", True, f"HTTP 200 in {time.monotonic() - started:.1f}s; answer keys: {names(answer)}")
-    record("2 translated_text is a non-empty string", isinstance(answer.get("translated_text"), str) and bool(answer["translated_text"].strip()), "translated_text present" if "translated_text" in answer else "translated_text missing")
+    record("1 a text of exactly 1,000 characters is accepted", bool(out.value.text.strip()), f"{len(text)} characters in, {len(out.value.text)} out, {time.monotonic() - started:.1f}s")
+    print("info: this script does NOT verify the price per character or the rate limits (Appendix B): read them on Sarvam's pricing page and update config/demo-providers.yaml if they differ.")
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--provider", required=True, choices=sorted(KEYS))
     ap.add_argument("--yes-synthetic", action="store_true", required=True, help="confirm that the input is synthetic (a dummy image, a made-up sentence)")
-    ap.add_argument("--image", type=Path, help="gemini only: a DUMMY .png or .jpg you made yourself (never a real document)")
+    ap.add_argument("--image", type=Path, help="gemini only, REQUIRED: a DUMMY .png or .jpg page you made yourself (never a real document)")
     args = ap.parse_args()
     if (os.environ.get("CAREFLOW_ENV") or "").lower() == "ci" or os.environ.get("GITHUB_ACTIONS"):
         print("refusing to run under CI: this check is for the owner's own machine")
@@ -120,8 +108,10 @@ def main() -> int:
         print(f"refusing: {KEYS[args.provider]} is not set in the repository's .env")
         return 2
     if args.provider == "gemini":
-        image, content_type = (args.image.read_bytes(), "image/jpeg" if args.image.suffix.lower() in (".jpg", ".jpeg") else "image/png") if args.image else (tiny_png(), "image/png")
-        asyncio.run(check_gemini(key, image, content_type))
+        if not args.image:
+            print("refusing: --image <a DUMMY page you made yourself> is required for gemini (a blank image would prove nothing about reading text)")
+            return 2
+        asyncio.run(check_gemini(key, args.image.read_bytes(), "image/jpeg" if args.image.suffix.lower() in (".jpg", ".jpeg") else "image/png"))
     elif args.provider == "jev":
         asyncio.run(check_jev(key))
     else:

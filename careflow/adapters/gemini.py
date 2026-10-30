@@ -65,9 +65,14 @@ class GeminiVisionAdapter:
 
 
 def _text_of(answer: dict) -> str:
+    feedback = answer.get("promptFeedback")
+    if isinstance(feedback, dict) and feedback.get("blockReason"):
+        raise PermanentError("the provider blocked this page")
     candidates = answer.get("candidates")
     if not isinstance(candidates, list) or not candidates or not isinstance(candidates[0], dict):
         raise PermanentError("the provider returned no candidate (the page may have been blocked)")
+    if candidates[0].get("finishReason") != "STOP":  # a cut-off (MAX_TOKENS), a recitation stop or an unreported reason is an INCOMPLETE page: the rules must never screen half a letter and call it done
+        raise PermanentError("the provider did not finish the transcription of this page")
     parts = (candidates[0].get("content") or {}).get("parts") if isinstance(candidates[0].get("content"), dict) else None
     if not isinstance(parts, list):
         raise PermanentError("the provider's candidate has no text")
@@ -77,8 +82,8 @@ def _text_of(answer: dict) -> str:
 def _usage_of(answer: dict, request: VisionRequest, text: str) -> Usage:
     meta = answer.get("usageMetadata")
     if isinstance(meta, dict):
-        used_in, used_out = meta.get("promptTokenCount"), meta.get("candidatesTokenCount", meta.get("responseTokenCount", 0))
-        if isinstance(used_in, int) and isinstance(used_out, int) and not isinstance(used_in, bool) and not isinstance(used_out, bool) and used_in >= 0 and used_out >= 0:
-            return Usage(used_in, used_out)
+        used_in, used_out, thoughts = meta.get("promptTokenCount"), meta.get("candidatesTokenCount"), meta.get("thoughtsTokenCount", 0)  # thinking tokens are billed as output
+        if all(isinstance(n, int) and not isinstance(n, bool) and n >= 0 for n in (used_in, used_out, thoughts)):
+            return Usage(int(used_in), int(used_out) + int(thoughts))
     # Unknown is not zero: with no usage reported, spend is estimated HIGH (the image's bytes over 4, the text's characters over 3) so a ceiling errs towards stopping.
     return Usage(max(1, len(request.image) // 4), max(1, len(text) // 3))

@@ -8,6 +8,7 @@ Rules, the same as `careflow/adapters/storage.py`:
     request body or a response body. This module logs nothing, and keeps the transport's own loggers quiet (httpx logs request URLs at INFO).
 """
 
+import asyncio
 import json
 import logging
 from typing import Any, Final
@@ -30,7 +31,7 @@ def timeout_for(seconds: float) -> httpx.Timeout:
 
 
 def new_client(seconds: float) -> httpx.AsyncClient:
-    return httpx.AsyncClient(timeout=timeout_for(seconds), follow_redirects=False)
+    return httpx.AsyncClient(timeout=timeout_for(seconds), follow_redirects=False, trust_env=False)  # trust_env off: a proxy or CA bundle in the host environment must not see a key or a text
 
 
 def refuse_redirecting_client(http: httpx.AsyncClient) -> None:
@@ -41,19 +42,22 @@ def refuse_redirecting_client(http: httpx.AsyncClient) -> None:
 async def post_json(http: httpx.AsyncClient, url: str, *, headers: dict[str, str], body: dict[str, Any], seconds: float) -> dict[str, Any]:
     """POST `body` as JSON and return the JSON object answered. Fixed-words errors only."""
     try:
-        async with http.stream("POST", url, headers={**headers, "content-type": "application/json"}, content=json.dumps(body).encode("utf-8"), timeout=timeout_for(seconds)) as response:
-            status = response.status_code
-            chunks: list[bytes] = []
-            size = 0
-            async for chunk in response.aiter_bytes():
-                size += len(chunk)
-                if size > MAX_RESPONSE_BYTES:
-                    raise PermanentError("the provider's answer is larger than the allowed size")
-                chunks.append(chunk)
-    except httpx.TimeoutException:
+        async with asyncio.timeout(seconds):  # a WALL-CLOCK limit for the whole exchange (httpx's read timeout is per chunk, so a slow drip could outlast it)
+            async with http.stream("POST", url, headers={**headers, "content-type": "application/json"}, content=json.dumps(body).encode("utf-8"), timeout=timeout_for(seconds)) as response:
+                status = response.status_code
+                chunks: list[bytes] = []
+                size = 0
+                async for chunk in response.aiter_bytes():
+                    size += len(chunk)
+                    if size > MAX_RESPONSE_BYTES:
+                        raise PermanentError("the provider's answer is larger than the allowed size")
+                    chunks.append(chunk)
+    except (httpx.TimeoutException, TimeoutError):
         raise TransientError("the provider did not answer in time") from None
     except httpx.TransportError:
         raise TransientError("the provider could not be reached") from None
+    except (httpx.HTTPError, UnicodeError):  # a decoding or stream fault, or a header that cannot be sent: a failed route, never a raw exception out of the gateway
+        raise PermanentError("the exchange with the provider failed") from None
     if status in _TRANSIENT_STATUS:
         raise TransientError(f"the provider answered with a retry-worthy status ({status})")
     if status in (401, 403):
