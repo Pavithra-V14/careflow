@@ -37,3 +37,12 @@ Run one heavy tool at a time (build, then Playwright), not in parallel.
   consent, privacy-notice or legal wording is written by the frontend session; those are marked placeholders until supplied.
 - Only the chosen language is remembered in `localStorage` (a per-viewer convenience, wrapped in try/catch).
 - Backend requests live in `../docs/frontend-backend-requests.md`.
+
+## Pre-launch list (owners, not code)
+
+- The owner and counsel write the about text, the privacy promise, the grievance contact and the privacy notice. Until then
+  these render as marked `[PLACEHOLDER: ...]` blocks.
+- Native Tamil review of all strings, including the 108 emergency banner and the F1 sentences.
+- Clinician approval of the emergency banner.
+- Features shown with a "Coming soon" label (`src/patient/features.ts`) are switched to built only when their page exists;
+  `tests/features.test.tsx` enforces that.

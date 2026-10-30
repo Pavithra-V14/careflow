@@ -15,7 +15,8 @@
     "genericError": "Something went wrong.",
     "notConfigured": "This site is not configured yet.",
     "skipToContent": "Skip to main content",
-    "emergencyBanner": "In an emergency call 108"
+    "emergencyBanner": "In an emergency call 108",
+    "comingSoon": "Coming soon"
   },
   "languages": {
     "en": "English",

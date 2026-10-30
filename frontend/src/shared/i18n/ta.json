@@ -15,7 +15,8 @@
     "genericError": "ஏதோ தவறு ஏற்பட்டது.",
     "notConfigured": "இந்தத் தளம் இன்னும் அமைக்கப்படவில்லை.",
     "skipToContent": "முதன்மை உள்ளடக்கத்திற்குச் செல்க",
-    "emergencyBanner": "அவசரநிலையில் 108 ஐ அழைக்கவும்"
+    "emergencyBanner": "அவசரநிலையில் 108 ஐ அழைக்கவும்",
+    "comingSoon": "விரைவில் வரும்"
   },
   "languages": {
     "en": "English",

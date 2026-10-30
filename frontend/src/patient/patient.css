@@ -204,3 +204,17 @@ summary {
     padding-inline: var(--space-2);
   }
 }
+
+/* Text label, not colour alone: marks a feature that is not built yet. */
+.badge {
+  display: inline-block;
+  margin-inline-start: var(--space-1);
+  padding: 0 var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 0.8em;
+  font-weight: 700;
+  white-space: nowrap;
+}

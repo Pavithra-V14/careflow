@@ -1,8 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import { PATHS } from '../paths';
+import { FEATURES } from '../features';
 import { Placeholder } from '../components/Placeholder';
 
-const FEATURES = ['book', 'offers', 'messages', 'records', 'family', 'language'] as const;
 const STEPS = ['step1', 'step2', 'step3'] as const;
 const FAQ = [
   { q: 'q1', a: 'a1' },
@@ -32,7 +32,10 @@ export function Landing() {
         <h2 id="features-heading">{t('landing.features.heading')}</h2>
         <ul className="feature-list">
           {FEATURES.map((f) => (
-            <li key={f}>{t(`landing.features.${f}`)}</li>
+            <li key={f.key}>
+              <span>{t(`landing.features.${f.key}`)}</span>
+              {f.status === 'soon' && <span className="badge">{t('common.comingSoon')}</span>}
+            </li>
           ))}
         </ul>
       </section>
