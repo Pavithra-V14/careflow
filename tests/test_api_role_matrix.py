@@ -2630,8 +2630,9 @@ def test_a_registered_person_is_found_by_exact_details_with_flags_only_and_a_wor
     rows = _run(_fetch("select actor_id, actor_role, details, resource_id from audit.log where action = 'patient.search' and clinic_id = $1 order by id", ids.clinic_a))
     assert len(rows) >= 3 and all((r["actor_id"], r["actor_role"]) == (fd, "front_desk") for r in rows)
     parsed = [json.loads(r["details"]) if isinstance(r["details"], str) else r["details"] for r in rows]
-    assert {"kind": "name_dob_phone", "results": 1} in parsed and {"kind": "name_dob", "results": 1} in parsed  # (the third search, another name with the same phone, finds the number's owner: one phone-only hit)
-    assert all(set(d) == {"kind", "results"} for d in parsed)
+    assert {"kind": "name_dob_phone", "labels": 1, "results": 1} in parsed and {"kind": "name_dob", "labels": 1, "results": 1} in parsed  # (the third search, another name with the same phone, finds the number's owner: one phone-only hit, no label)
+    assert {"kind": "name_dob_phone", "labels": 0, "results": 1} in parsed
+    assert all(set(d) == {"kind", "labels", "results"} for d in parsed)  # counts only, never ids or text
     blob = json.dumps([[str(r["resource_id"]), d] for r, d in zip(rows, parsed, strict=True)])
     assert person["name"] not in blob and person["dob"] not in blob and person["phone"] not in blob and pid not in blob
 
@@ -2667,8 +2668,20 @@ def _view_override(client, *, enabled=True, settings=None):
         enabled, configured, None if configured.max_opens_per_minute is None else OpenRateLimiter(configured.max_opens_per_minute),
         None if configured.max_label_rows_per_minute is None else OpenRateLimiter(configured.max_label_rows_per_minute),
     )
+    _PRIOR_VIEW_OVERRIDE[id(client.app)] = client.app.dependency_overrides.get(patient_view_config)  # the module-wide stand-in (_enable_patient_view): put back afterwards, never dropped
     client.app.dependency_overrides[patient_view_config] = lambda: config
     return patient_view_config
+
+
+_PRIOR_VIEW_OVERRIDE: dict[int, object] = {}
+
+
+def _end_view_override(client, key):
+    prior = _PRIOR_VIEW_OVERRIDE.pop(id(client.app), None)
+    if prior is None:
+        client.app.dependency_overrides.pop(key, None)
+    else:
+        client.app.dependency_overrides[key] = prior
 
 
 def test_opening_a_record_is_audited_without_its_contents_and_is_rate_limited_per_user_with_a_required_setting(client, ids):
@@ -2688,7 +2701,7 @@ def test_opening_a_record_is_audited_without_its_contents_and_is_rate_limited_pe
         blob = json.dumps([[str(r["resource_id"]), str(r["details"])] for r in rows])
         assert "Quentin" not in blob and "1955" not in blob and "9111122222" not in blob  # who, role and the patient id; never the contents
     finally:
-        client.app.dependency_overrides.pop(key, None)
+        _end_view_override(client, key)
     # the required setting has no default: unset, opening is unavailable (never unlimited); list rows do not need it
     key = _view_override(client, settings={"max_opens_per_minute": None})
     try:
@@ -2697,7 +2710,7 @@ def test_opening_a_record_is_audited_without_its_contents_and_is_rate_limited_pe
         rows_ok = client.post(PATIENT_LABELS, headers=bearer(mint(fd)), json={"clinic_id": str(ids.clinic_a), "patient_ids": [str(pid)]})
         assert rows_ok.status_code == 200 and rows_ok.json()["items"][0]["name"] == "Quentin Auditprobe"
     finally:
-        client.app.dependency_overrides.pop(key, None)
+        _end_view_override(client, key)
     from careflow.patient_view import PatientViewSettings
 
     assert PatientViewSettings(_env_file=None).max_opens_per_minute is None  # no default anywhere
@@ -2716,7 +2729,7 @@ def test_outside_the_demo_profile_with_synthetic_data_nothing_is_decrypted_and_s
         search = client.post(PATIENT_SEARCH, headers=bearer(mint(fd)), json={"clinic_id": str(ids.clinic_a), "name": "Nobody Atall", "dob": "1990-01-01"})
         assert search.status_code == 200 and search.json() == {"items": [], "truncated": False, "labels_withheld": False}
     finally:
-        client.app.dependency_overrides.pop(key, None)
+        _end_view_override(client, key)
 
 
 def test_list_rows_are_audited_with_the_count_only_and_the_page_limit_setting_can_lower_the_cap_but_never_raise_it(client, ids):
@@ -2731,8 +2744,8 @@ def test_list_rows_are_audited_with_the_count_only_and_the_page_limit_setting_ca
         ok = client.post(PATIENT_LABELS, headers=bearer(mint(fd)), json={"clinic_id": str(ids.clinic_a), "patient_ids": [str(a)]})
         assert ok.status_code == 200 and ok.headers["cache-control"] == "no-store"
     finally:
-        client.app.dependency_overrides.pop(key, None)
-    rows = _run(_fetch("select actor_role, details, resource_type from audit.log where action = 'patient.view_labels' and clinic_id = $1 order by id", ids.clinic_a))
+        _end_view_override(client, key)
+    rows = _run(_fetch("select actor_role, details, resource_type from audit.log where action = 'patient.view_labels' and clinic_id = $1 and actor_id = $2 order by id", ids.clinic_a, fd))  # this user's rows only: other tests of the clinic read labels as nurse and doctor
     parsed = [json.loads(r["details"]) if isinstance(r["details"], str) else r["details"] for r in rows]
     assert {"count": 1} in parsed and all(set(d) == {"count"} for d in parsed) and all(r["actor_role"] == "front_desk" for r in rows)  # a count, never ids
     assert HARD_PAGE_CAP == 25
@@ -2768,14 +2781,14 @@ def test_the_list_row_budget_is_required_per_user_and_counted_in_rows_for_the_la
         found = client.post(PATIENT_SEARCH, headers=bearer(mint(fd)), json={"clinic_id": str(ids.clinic_a), **person})
         assert found.status_code == 200 and found.json()["labels_withheld"] is True and all(i["label"] is None for i in found.json()["items"]) and found.json()["items"]
     finally:
-        client.app.dependency_overrides.pop(key, None)
+        _end_view_override(client, key)
     key = _view_override(client, settings={"max_label_rows_per_minute": None})
     try:
         unset = client.post(PATIENT_LABELS, headers=bearer(mint(fd)), json=body(patients[0]))
         assert unset.status_code == 503 and unset.json() == {"detail": "patient view is unavailable: the per-user list-row limit is not configured"}
         assert client.get(PATIENT_VIEW.format(patient_id=patients[0]), headers=bearer(mint(fd))).status_code == 200  # opening is a separate setting
     finally:
-        client.app.dependency_overrides.pop(key, None)
+        _end_view_override(client, key)
 
 
 def test_a_phone_only_hit_carries_no_label_so_a_number_cannot_be_turned_into_a_name(client, ids):

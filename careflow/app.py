@@ -2056,8 +2056,8 @@ def _view_errors() -> Iterator[None]:
         yield
     except patient_view.ViewDisabled:
         raise HTTPException(status_code=503, detail="patient view is disabled outside the demo profile with synthetic data") from None
-    except patient_view.ViewNotConfigured:
-        raise HTTPException(status_code=503, detail="patient view is unavailable: the per-user open rate limit is not configured") from None
+    except patient_view.ViewNotConfigured as exc:
+        raise HTTPException(status_code=503, detail=f"patient view is unavailable: {exc}") from None  # the exception's own fixed words: which setting is missing (open limit, list-row limit, or an invalid value)
     except patient_view.CannotShow:
         raise HTTPException(status_code=503, detail="this record cannot be shown") from None
     except patient_view.PatientNotFound:

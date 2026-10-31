@@ -166,12 +166,10 @@ jobs:
           # every matrix test exactly once. Each part seeds its own clinics. Every shard prints per-file times (SHARD-TIME lines) so the next rebalance uses measurements; the targets below
           # are seconds from that run (matrix parts estimated at half of a matrix grown by this batch's routes). tests/test_ci_shards.py requires every live test file to appear in
           # exactly one shard, except the matrix, which must appear as complete parts.
-          - shard: 1  # about 38 min: matrix part 1 (about 1200 s) + identity 393 + rotation 260 + rules 177 + read 98 + screen 97 + binding 35 + staff roles 16
+          - shard: 1  # about 43 min (run 41089472168 measured 55 min with identity and rules in it): matrix part 1 1964 s + rotation 319 + read 121 + screen 120 + binding 44 + staff roles 19
             matrix_part: "1/2"
             files: >-
               tests/test_api_role_matrix.py
-              tests/test_identity_live.py
-              tests/test_rules_live.py
               tests/test_api_screen_message_live.py
               tests/test_api_read_message_live.py
               tests/test_patient_binding_live.py
@@ -184,10 +182,11 @@ jobs:
               tests/test_queue_live.py
               tests/test_rls_spend_and_approval_live.py
               tests/test_scheduling_live.py
-          - shard: 3  # about 37 min: referrals 1097 + mpi worker 298 + triage 206 + checkpoints 204 + docs 194 + msg 193
+          - shard: 3  # about 44 min: referrals 1101 + identity 466 + mpi worker 263 + checkpoints 193 + triage 191 + docs 180 + msg 180 + real token 13 + storage policies 18 (measured on run 41089472168)
             matrix_part: ""
             files: >-
               tests/test_api_referrals_live.py
+              tests/test_identity_live.py
               tests/test_rls_mpi_worker_live.py
               tests/test_rls_triage_live.py
               tests/test_rls_checkpoints_live.py
@@ -195,7 +194,7 @@ jobs:
               tests/test_rls_msg_live.py
               tests/test_api_real_token_live.py
               tests/test_storage_policies_live.py
-          - shard: 4  # about 31 min: screenings 495 + scheduling concurrency 492 + ai registry 199 + mpi 145 + iam audit 112 + referral hold 95 + pooler 76 + migrate 58 + mpi scheduling 58 + the small ones
+          - shard: 4  # about 41 min (run 41089472168: this shard timed out at 60 min on a hung e2e test, since fixed; the rest measured 36 min, plus rules 218 moved in): screenings 584 + scheduling concurrency 492 + ai registry 199 + mpi 145 + iam audit 112 + referral hold 95 + pooler 76 + migrate 58 + mpi scheduling 58 + the small ones
             matrix_part: ""
             files: >-
               tests/test_rls_screenings_live.py
@@ -211,6 +210,7 @@ jobs:
               tests/test_api_offers_live.py
               tests/test_triage_writers_live.py
               tests/test_rls_child_tables_live.py
+              tests/test_rules_live.py
               tests/test_phase2_e2e_live.py
     env:
       CAREFLOW_ENV: ci

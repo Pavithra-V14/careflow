@@ -45,6 +45,7 @@ from careflow.triage_store import (
     SqlReviewRecorder,
     SqlTriageProposer,
 )
+from tests.bounds import bounded
 from tests.db_helpers import ensure_app_role_sa
 from tests.pdf_factory import pdf
 from tests.test_api_referrals_live import GOOD, LETTER, RED_LETTER, Extractor, Retriever
@@ -97,16 +98,40 @@ async def world():
             {"i": rid, "a": a, "d": ids["doctor_a"], "n": ids["nurse_a"], "k": f"r-{rid}"},
         )
         lock = asyncio.Lock()
+        held = {"task": None, "depth": 0}  # the task that holds `lock` now: ONE connection serves everything, and the worker handler's own loader opens a session while the handler's session is open
+
+        @asynccontextmanager
+        async def exclusive():
+            """Take `lock`, or, if THIS task already holds it, nest inside (asyncio.Lock is not reentrant: the first run in CI hung here for 55 minutes). A wait for the lock is bounded."""
+            task = asyncio.current_task()
+            if held["task"] is task:
+                held["depth"] += 1
+                try:
+                    yield True
+                finally:
+                    held["depth"] -= 1
+                return
+            await asyncio.wait_for(lock.acquire(), 60)
+            held["task"], held["depth"] = task, 0
+            try:
+                yield False
+            finally:
+                held["task"] = None
+                lock.release()
 
         def worker_session_for(engine_, account):
             @asynccontextmanager
             async def session():
-                async with lock, conn.begin_nested():
-                    await conn.exec_driver_sql("set local role careflow_app")
-                    await set_request_claims(conn, {"sub": str(account), "role": "authenticated"})
-                    yield conn
-                    await conn.exec_driver_sql("reset role")
-                    await conn.execute(text("select set_config('request.jwt.claims', '', true)"))
+                async with exclusive() as nested:
+                    if nested:  # already inside a session of this task (same connection, role and claims): reuse it, and do not reset what the outer one set
+                        yield conn
+                        return
+                    async with conn.begin_nested():
+                        await conn.exec_driver_sql("set local role careflow_app")
+                        await set_request_claims(conn, {"sub": str(account), "role": "authenticated"})
+                        yield conn
+                        await conn.exec_driver_sql("reset role")
+                        await conn.execute(text("select set_config('request.jwt.claims', '', true)"))
 
             return session
 
@@ -131,7 +156,7 @@ async def world():
         )
 
         async def shared_db(claims=Depends(verified_claims)):
-            async with lock, conn.begin_nested():
+            async with exclusive(), conn.begin_nested():
                 await conn.exec_driver_sql("set local role careflow_app")
                 await set_request_claims(conn, claims)
                 yield conn
@@ -188,7 +213,7 @@ async def run_worker(w, worker):
     async with session() as conn:
         job = await queue.claim(conn, "e2e-worker", 120.0)
     assert job is not None, "no job was queued"
-    await w.handler(JobContext(job=job, budget=RunBudget(TickClock()), engine=object(), worker_account_id=w.ids[worker]))  # type: ignore[arg-type]
+    await bounded(w.handler(JobContext(job=job, budget=RunBudget(TickClock()), engine=object(), worker_account_id=w.ids[worker])), "the front door worker handler", 120.0)  # type: ignore[arg-type]
     async with session() as conn:
         await queue.acknowledge(conn, job.id, worker_id="e2e-worker")
 
