@@ -5,12 +5,13 @@ import { useTranslation } from 'react-i18next';
 import { unwrap, type ApiProblem } from '../apiState';
 import { useAuth } from '../auth/AuthProvider';
 import { useApiQuery, useIdempotentWrite } from '../hooks';
-import { CAN_CONFIRM_IDENTITY } from '../sections';
+import { CAN_CONFIRM_IDENTITY, CAN_REVOKE_IDENTITY } from '../sections';
 import { useSession } from '../session/SessionContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Badge, PageHeading, PlaceholderNote, Time, UUID, useWord } from '../ui/bits';
 import { NotAvailableToRole, ProblemText, QueryView } from '../ui/states';
 import { NotFoundPage } from './NotFoundPage';
+import { IdentityRevoke, type RevokeOutcome } from './IdentityRevoke';
 
 export function PatientRecordPage() {
   const { patientId = '' } = useParams();
@@ -30,6 +31,8 @@ function RecordView({ patientId }: { patientId: string }) {
   const queryClient = useQueryClient();
   const query = useApiQuery(['patient', patientId], () => unwrap(api.openPatient(patientId)));
   const [confirming, setConfirming] = useState(false);
+  // Kept here, not in the revoke control: once revoked the record is unverified and that control is no longer rendered.
+  const [revoked, setRevoked] = useState<RevokeOutcome | null>(null);
 
   const confirm = useIdempotentWrite(
     (_: void, key) => unwrap(api.confirmIdentity(patientId, { idempotencyKey: key })),
@@ -82,6 +85,16 @@ function RecordView({ patientId }: { patientId: string }) {
                 </button>
               </div>
             )}
+
+            {revoked && (
+              <div role="status" className="state state-ok">
+                <p>{t('patients.revoke.done')}</p>
+                {revoked !== 'unknown' && <p>{t(`patients.revoke.task.${revoked}`)}</p>}
+              </div>
+            )}
+
+            {/* Front desk only, and only for a record that is currently verified. The backend decides. */}
+            {hasRole(CAN_REVOKE_IDENTITY) && p.verified && !p.merged_into && <IdentityRevoke patientId={patientId} onDone={setRevoked} />}
 
             {confirming && (
               <ConfirmDialog

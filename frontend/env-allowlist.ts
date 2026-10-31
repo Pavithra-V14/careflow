@@ -7,6 +7,7 @@ export type ExposedEnvName = (typeof EXPOSED_ENV_NAMES)[number];
 export type ExposedEnv = Record<ExposedEnvName, string>;
 
 export const CONFIG_GLOBAL = '__CAREFLOW_PUBLIC_CONFIG__';
+export const FLAGS_GLOBAL = '__CAREFLOW_FLAGS__';
 
 export function pickExposedEnv(env: Record<string, string | undefined>): ExposedEnv {
   const out = {} as ExposedEnv;

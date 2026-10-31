@@ -4,6 +4,8 @@ import en from './en.json';
 import ta from './ta.json';
 import consoleEn from './console.en.json';
 import consoleTa from './console.ta.json';
+import f4En from './f4.en.json';
+import f4Ta from './f4.ta.json';
 
 type Tree = { [key: string]: string | Tree };
 
@@ -17,7 +19,10 @@ export function mergeTrees(base: Tree, extra: Tree): Tree {
   return out;
 }
 
-export const RESOURCES = { en: mergeTrees(en as Tree, consoleEn as Tree), ta: mergeTrees(ta as Tree, consoleTa as Tree) };
+export const RESOURCES = {
+  en: mergeTrees(mergeTrees(en as Tree, consoleEn as Tree), f4En as Tree),
+  ta: mergeTrees(mergeTrees(ta as Tree, consoleTa as Tree), f4Ta as Tree),
+};
 
 export const LANGUAGES = ['en', 'ta'] as const;
 export type Language = (typeof LANGUAGES)[number];

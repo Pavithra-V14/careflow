@@ -1,9 +1,13 @@
 node_modules/
 dist/
 dist-e2e/
+# Environment files hold the three public settings and must never be committed. `env.local` (no dot) is here because it is an easy
+# mistake on Windows, and it was committed once; tests/no-env-files.test.ts now fails if any env-like file is tracked or unignored.
 .env
 .env.*
 !.env.example
+env.local
+env.*.local
 test-results/
 playwright-report/
 *.tsbuildinfo

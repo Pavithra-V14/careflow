@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   define: {
+    __CAREFLOW_FLAGS__: JSON.stringify({ mergeActions: false }),
     __CAREFLOW_PUBLIC_CONFIG__: JSON.stringify({
       SUPABASE_URL: 'https://example.invalid',
       SUPABASE_PUBLISHABLE_KEY: 'test-publishable-key',

@@ -1,7 +1,8 @@
 // Turns an API result into data or ONE of a small set of problem kinds. The UI shows a fixed message per kind
 // (src/shared/i18n: problem.*), never the backend's body: a body can name a record, a rule or a reason.
+import { isStepUpChallenge } from '../shared/api/client';
 
-export type ProblemKind = 'unauthorized' | 'forbidden' | 'not_found' | 'conflict' | 'invalid' | 'rate_limited' | 'unavailable' | 'network' | 'unknown';
+export type ProblemKind = 'unauthorized' | 'step_up' | 'forbidden' | 'not_found' | 'conflict' | 'invalid' | 'rate_limited' | 'unavailable' | 'network' | 'unknown';
 
 export class ApiProblem extends Error {
   readonly kind: ProblemKind;
@@ -38,6 +39,8 @@ export async function unwrap<T>(pending: Promise<Result<T>>): Promise<T> {
     throw new ApiProblem('network');
   }
   if (result.response.ok && result.data !== undefined) return result.data;
+  // A step-up challenge that was cancelled or not satisfied is not a sign-out: nothing was changed and a fresh code is needed.
+  if (isStepUpChallenge(result.response)) throw new ApiProblem('step_up');
   throw new ApiProblem(result.response.ok ? 'unknown' : problemFromStatus(result.response.status));
 }
 

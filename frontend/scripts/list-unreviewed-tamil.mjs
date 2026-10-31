@@ -17,8 +17,9 @@ function flatten(tree, prefix = '') {
   return Object.entries(tree).flatMap(([k, v]) => (typeof v === 'string' ? [[prefix + k, v]] : flatten(v, `${prefix}${k}.`)));
 }
 
-const en = Object.fromEntries(flatten(merge(read('en.json'), read('console.en.json'))));
-const ta = Object.fromEntries(flatten(merge(read('ta.json'), read('console.ta.json'))));
+const all = (lang) => merge(merge(read(`${lang}.json`), read(`console.${lang}.json`)), read(`f4.${lang}.json`));
+const en = Object.fromEntries(flatten(all('en')));
+const ta = Object.fromEntries(flatten(all('ta')));
 const reviewed = new Set(read('ta-reviewed.json').reviewed);
 
 const escape = (s) => s.replaceAll('|', '\\|').replaceAll('\n', ' ');
@@ -34,7 +35,8 @@ const text = [
   '`src/shared/i18n/ta-reviewed.json` by a reviewer. CI fails if this file is out of date.',
   '',
   'Not translated on purpose, pending a clinician or a native reviewer: the clinical task kinds (`tasks.kind.red_flag`,',
-  '`tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`) and every `placeholder.*` string stay in English.',
+  '`tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the',
+  'identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.',
   '',
   `${rows.length} of ${Object.keys(ta).length} strings are unreviewed.`,
   '',

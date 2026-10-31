@@ -6,6 +6,12 @@ export type ProposeMergeIn = components['schemas']['ProposeMergeIn'];
 export type BeginUploadIn = components['schemas']['BeginUploadIn'];
 export type RegisterIn = components['schemas']['RegisterIn'];
 export type PatientSearchIn = components['schemas']['PatientSearchIn'];
+export type ReviewDecision = components['schemas']['ReviewIn']['decision'];
+export type RevokeReason = components['schemas']['RevokeIdentityIn']['reason'];
+type MergeQuery = NonNullable<paths['/v1/staff/identity/merges']['get']['parameters']['query']>;
+type DuplicateQuery = NonNullable<paths['/v1/staff/identity/possible-duplicates']['get']['parameters']['query']>;
+export type MergeStatus = NonNullable<MergeQuery['status']>;
+export type DuplicateStatus = NonNullable<DuplicateQuery['status']>;
 type TaskQuery = NonNullable<paths['/v1/staff/review-tasks']['get']['parameters']['query']>;
 export type ReviewTaskStatus = TaskQuery['status'];
 export type TaskRole = NonNullable<TaskQuery['assigned_role']>;
@@ -45,6 +51,11 @@ export const OPERATIONS = {
   listHolds: { method: 'get', path: '/v1/staff/scheduling/holds' },
   releaseHold: { method: 'post', path: '/v1/staff/scheduling/holds/{hold_id}/release' },
   draftOffer: { method: 'get', path: '/v1/staff/scheduling/offers/draft' },
+  reviewReferral: { method: 'post', path: '/v1/staff/referrals/{document_id}/review' },
+  revokeIdentity: { method: 'post', path: '/v1/staff/patients/{patient_id}/revoke-identity' },
+  listMerges: { method: 'get', path: '/v1/staff/identity/merges' },
+  openMerge: { method: 'get', path: '/v1/staff/identity/merges/{merge_id}' },
+  listDuplicates: { method: 'get', path: '/v1/staff/identity/possible-duplicates' },
 } as const satisfies Record<string, { method: 'get' | 'post'; path: keyof paths }>;
 
 export interface ApiOptions {
@@ -166,6 +177,21 @@ export function createApi(options: ApiOptions) {
       client.POST('/v1/staff/scheduling/holds/{hold_id}/release', { params: { path: { hold_id: holdId }, header: { 'X-Idempotency-Key': key(o) } } }),
     draftOffer: (clinicId: string, visitTypeId: string) =>
       client.GET('/v1/staff/scheduling/offers/draft', { params: { query: { clinic_id: clinicId, visit_type_id: visitTypeId } } }),
+
+    // ---- F4: referral decisions, identity revoke, merge and duplicate lists ---------------------------------------
+    reviewReferral: (documentId: string, decision: ReviewDecision, o?: WriteOptions) =>
+      client.POST('/v1/staff/referrals/{document_id}/review', {
+        params: { path: { document_id: documentId }, header: { 'X-Idempotency-Key': key(o) } },
+        body: { decision },
+      }),
+    revokeIdentity: (patientId: string, reason: RevokeReason, o?: WriteOptions) =>
+      client.POST('/v1/staff/patients/{patient_id}/revoke-identity', {
+        params: { path: { patient_id: patientId }, header: { 'X-Idempotency-Key': key(o) } },
+        body: { reason },
+      }),
+    listMerges: (status?: MergeStatus) => client.GET('/v1/staff/identity/merges', { params: { query: status ? { status } : {} } }),
+    openMerge: (mergeId: string) => client.GET('/v1/staff/identity/merges/{merge_id}', { params: { path: { merge_id: mergeId } } }),
+    listDuplicates: (status?: DuplicateStatus) => client.GET('/v1/staff/identity/possible-duplicates', { params: { query: status ? { status } : {} } }),
   };
 }
 

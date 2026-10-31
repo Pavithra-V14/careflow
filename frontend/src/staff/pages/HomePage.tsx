@@ -1,14 +1,10 @@
-import { lazy, Suspense } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { sectionsFor } from '../sections';
 import { useSession } from '../session/SessionContext';
 import { EmptyState } from '../ui/states';
 import { PageHeading } from '../ui/bits';
-
-// The claim spike panel exists only in development builds: the import is behind import.meta.env.DEV so the
-// production bundle never contains it (checked by scripts/check-bundle-secrets.mjs).
-const DevClaimSpike = import.meta.env.DEV ? lazy(() => import('../components/DevClaimSpike')) : null;
+import { DevSpikeSlot } from '../components/DevSpikeSlot';
 
 export function HomePage() {
   const { t } = useTranslation();
@@ -29,11 +25,7 @@ export function HomePage() {
           ))}
         </ul>
       )}
-      {DevClaimSpike && (
-        <Suspense fallback={null}>
-          <DevClaimSpike />
-        </Suspense>
-      )}
+      <DevSpikeSlot />
     </section>
   );
 }

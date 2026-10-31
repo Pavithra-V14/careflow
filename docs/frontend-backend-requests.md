@@ -43,10 +43,30 @@ decide the mechanism. Until then "active role" is a display and navigation choic
 A design proposal (no code yet, awaiting the owner's OK) is in `docs/design/active-role.md`: an `X-CareFlow-Active-Role` header, verified
 against the live grants in the database and used only to narrow. If adopted, production CORS must also allow that request header.
 
-### 4. Step-up claim shape (not a code change: a spike)
+### 4. Step-up claim shape: RECORDED (2026-10-30, dev project, a real token)
 
-Tracked in `docs/design/step-up-spike.md`. The frontend will decode a real access token's `aal` / `amr` / `iat` structure in
-code once F2 sign-in works, and report the structure only (values blanked) so it can be pasted to the backend session.
+Captured by the console's development-only claim panel from a real access token of a dev staff account after TOTP enrolment and
+a refresh (the token itself was never shown, logged or read by the frontend session). The panel prints structure with values
+blanked, plus, because the owner ticked the box, the `aal` level and the `amr` method names. Pasted by the owner:
+
+| What | Observed | Backend assumption (`careflow/auth.py`, `step-up-spike.md`) |
+|---|---|---|
+| `aal` | the string `"aal2"` | exactly `"aal2"`: **matches** |
+| `amr` | a list of 2 entries; each has exactly the keys `method` and `timestamp` | a non-empty list, every entry exactly `{method, timestamp}`: **matches** |
+| `amr[].method` | `"totp"` and `"password"` (totp listed first) | one entry named `"totp"`: **matches** |
+| `amr[].timestamp` | an integer with 10 digits (unix seconds) | an integer count of unix seconds: **matches** |
+| `iat` | an integer with 10 digits | not used |
+| timestamps vs `iat` | both amr timestamps are **before** `iat` | a timestamp in the future is refused: not triggered |
+| after one refresh | the amr timestamps are **unchanged** (`iat` moves) | a refresh keeps the original timestamp: **matches** |
+
+What this does NOT cover: the legacy string form of `amr` (not seen), a token from a LATER sign-in challenge (this one followed
+enrolment; the shape is expected to be the same but was not captured), a token older than the step-up window, and the backend
+accepting such a token end to end (the live merge route was not called). The window is measured from the original TOTP time and
+a refresh does not move it, so after `CAREFLOW_STEP_UP_MAX_AGE_SECONDS` a refreshed token is correctly stepped-down again.
+
+The backend session should record this in `docs/design/step-up-spike.md` (that page is the backend's; the frontend does not
+edit it). The frontend's merge approve and unmerge stay OFF until that is done and one live approve with a step-up has worked
+against the dev backend.
 
 ### 5. F3 console: what the screens need that the snapshot does not give them yet
 
@@ -80,6 +100,44 @@ depends on a guess. All F3 screens run only against mocks until a live backend i
   (`SUPABASE_URL`), and the CSP's `connect-src` allows only that and the API origin. If storage will live elsewhere, say so:
   `csp.ts` and the check in `UploadPage.tsx` both change.
 - **Names.** Lists show short ids (patients, holds, tasks); names are item 1 of `frontend-contract.md`.
+
+### 6. Type `Envelope.data` for tasks and offers, and name the reason words (requested by the owner)
+
+The backend should give the console typed shapes instead of free text, so the UI never has to treat them as strings:
+
+- **`Envelope.data`** (currently `object | array | null`) should be a typed schema per route: for the offer draft, the ranked
+  candidates and the draft message; for review tasks, a typed `provenance` per task kind (the document id of a referral hold,
+  the rule id of a red flag, and so on) in place of the untyped object.
+- **`Envelope.reason`** (currently free text, for example `not_configured: ...` plus the names of missing clinician-owned settings)
+  should be a closed set of reason words, listed as an enum in the schema, with any setting names in a separate typed field.
+  Each word then gets a reviewed English and Tamil label in the console, and the console shows no backend text.
+- **`kind`** on review tasks (and on holds and merges where applicable) should be an enum, so the console can label each kind
+  and stop carrying its own copy of which kinds can be resolved or are urgent.
+
+Until then the console shows only the `status` word of an envelope, never `reason` or `data`, and marks candidate details and
+sending "Coming soon".
+
+### 7. F4: questions the referral decision, revoke and merge screens raised
+
+All three screens are built to the snapshot; these are the places where the schema does not say enough.
+
+- **"Edit" is hidden (owner decision, 2026-10-30).** `POST /v1/staff/referrals/{id}/review` takes only `decision` (`approve`, `edit`,
+  `reject`) and records only the word. The console offers **approve and reject only**; "edit" is shown as "Coming soon" and
+  cannot be chosen or sent (a test pins it). What a reviewer may edit is a clinician question: **clinician item 26**. No reason
+  is collected or sent either (a clinician defines reason codes; the screen shows "PLACEHOLDER - clinician to define").
+- **What `review_task: on_record` means.** The revoke response is `raised`, `not_configured` or `on_record`. The console shows
+  "A review task was raised.", "No review task was raised: the task settings are not configured yet." and "A review task is
+  already on record." The third wording is my reading of the word; please confirm it.
+- **The revoke reasons are not final (clinician item 23; the clinic has not accepted them).** The route accepts `wrong_person`, `planted_or_suspect`, `mistaken_click`
+  (`docs/design/identity-confirmation-revoke.md` leaves the list open). The console shows them as given, in English in both
+  languages, with a marked placeholder saying the wording is not final.
+- **Merge approve and unmerge are built but OFF.** `mergeActions` is a compile-time flag that is false in every build except
+  `--mode e2e` (the mock browser build), pinned by tests. It stays off until the `aal` / `amr` claim shape has been seen in a
+  real token (`docs/design/step-up-spike.md`). Turning it on is a one-line change in `vite.config.ts` plus the test that pins it.
+- **Unmerge result.** `decisions_flagged` is shown as a count ("N earlier decisions were flagged for review."). Please confirm
+  that is what it counts, since the wording appears to staff.
+- **No propose-merge screen.** `POST /v1/staff/merges` exists but F4 does not build it (not asked for). A proposal made
+  elsewhere appears in the merge list as "Awaiting second approval".
 
 ## Decisions recorded here for later readers
 
