@@ -2817,7 +2817,7 @@ def test_a_patient_account_bound_to_a_record_cannot_open_it_or_read_its_label_an
         labels = client.post(PATIENT_LABELS, headers=token, json={"clinic_id": str(ids.clinic_a), "patient_ids": [str(bound)]})
         assert labels.status_code in (403, 404) and "Testperson" not in labels.text
     erased = new_real_patient(ids)
-    _run(_owner(lambda conn: conn.execute("update mpi.patients set erased_at = now(), name_ct = null, dob_ct = null, phone_ct = null where id = $1", erased)))
+    _run(_owner(lambda conn: conn.execute("update mpi.patients set erased_at = now(), name_ct = null, name_key_version = null, dob_ct = null, dob_key_version = null, phone_ct = null, phone_key_version = null where id = $1", erased)))
     fd = ids.people["front_desk_a"][0]
     assert client.get(PATIENT_VIEW.format(patient_id=erased), headers=bearer(mint(fd))).status_code == 404
     gone = client.post(PATIENT_LABELS, headers=bearer(mint(fd)), json={"clinic_id": str(ids.clinic_a), "patient_ids": [str(erased)]})
