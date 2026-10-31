@@ -14,6 +14,9 @@ const LIVE = process.env.CAREFLOW_LIVE === '1';
 const RECORD = process.env.CAREFLOW_LIVE_RECORD === '1';
 const spec = JSON.parse(readFileSync(resolve(import.meta.dirname, '../../openapi.snapshot.json'), 'utf8')) as Spec;
 const REPORT_DIR = resolve(import.meta.dirname, '../live-report');
+// One report per role signed in as: start with LIVE_LABEL=front_desk (or nurse, doctor). Letters, digits and underscores only.
+const LABEL = (process.env.LIVE_LABEL ?? '').replace(/[^a-z0-9_]/gi, '');
+const SUFFIX = LABEL ? `-${LABEL}` : '';
 
 test.skip(!LIVE, 'live run: use `npm run e2e:live` (never in CI)');
 
@@ -56,8 +59,8 @@ async function signInByHand(page: Page) {
 
 function save(calls: Call[], mode: string) {
   mkdirSync(REPORT_DIR, { recursive: true });
-  writeFileSync(resolve(REPORT_DIR, 'live-report.md'), renderReport(spec, calls, mode));
-  writeFileSync(resolve(REPORT_DIR, 'live-calls.json'), JSON.stringify(calls, null, 2));
+  writeFileSync(resolve(REPORT_DIR, `live-report${SUFFIX}.md`), renderReport(spec, calls, mode));
+  writeFileSync(resolve(REPORT_DIR, `live-calls${SUFFIX}.json`), JSON.stringify(calls, null, 2));
   console.log(`\n>>> Report written to frontend/live-report/live-report.md (${calls.length} calls). It contains no values.\n`);
 }
 
