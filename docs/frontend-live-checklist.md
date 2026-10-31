@@ -40,7 +40,7 @@ no workflow can start it.
 | Patient search (front desk) | `POST /v1/staff/patients/search` | `{clinic_id, name, dob, phone?}`, **no key** | 200; 403; 422; 429; 503 | **do by hand** (it needs a real person's details): `label`, `labels_withheld`, `truncated` exist? (requests item 5); 429 behaviour |
 | Patient record | `GET /v1/staff/patients/{patient_id}` | id | 200; 404; 403; 429; 503 | `latest_identity_event` words; `merged_into` |
 | Confirm identity | `POST .../{patient_id}/confirm-identity` | key, no body | 200; 409; 403 | no step-up demanded |
-| Revoke identity | `POST .../{patient_id}/revoke-identity` | key; `{reason}` | 200 shows `review_task`; 409; 403 | `review_task` words and what `on_record` means; reasons accepted |
+| Revoke identity | `POST .../{patient_id}/revoke-identity` | key; `{reason}` | 200 shows `review_task`; 409; 403 | `review_task` words (`on_record` = nothing new recorded, confirmed); reasons accepted |
 | Scheduling lists | `GET /v1/staff/scheduling/providers`, `/locations`, `/visit-types`, `/priority-levels` | `include_inactive` only when ticked | 200; 403 | fields present; inactive filter |
 | Holds | `GET /v1/staff/scheduling/holds?status=` | `status` (default active) | 200; 403 | status words |
 | Release a hold | `POST /v1/staff/scheduling/holds/{hold_id}/release` | key, no body | 200; 409 (booked or expired, shown calmly); 403 | 409 wording |

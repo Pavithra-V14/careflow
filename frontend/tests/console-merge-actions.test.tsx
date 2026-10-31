@@ -99,7 +99,7 @@ describe('merge approve and unmerge (flag on in this file only)', () => {
     const a = await openConsole({ hash, routes: [detail({ status: 'active', second_approved_by: ID.user2 }), route] });
     await user.click(await screen.findByRole('button', { name: 'Unmerge' }));
     await user.click(within(screen.getByRole('dialog', { name: 'Unmerge these records?' })).getByRole('button', { name: 'Unmerge' }));
-    expect(await screen.findByText('The link was broken. 2 earlier decisions were flagged for review.')).toBeInTheDocument();
+    expect(await screen.findByText('The link was broken. 2 bookings, holds, waitlist entries and match-review rows were recorded while the link was active; a review task lists them, and nothing is undone.')).toBeInTheDocument();
     a.unmount();
     flagged = 0;
     await openConsole({ hash, routes: [detail({ status: 'active' }), route] });

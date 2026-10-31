@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-418 of 418 strings are unreviewed.
+419 of 419 strings are unreviewed.
 
 | Key | English | Tamil |
 |---|---|---|
@@ -77,7 +77,7 @@ identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholde
 | `identity.emptyDuplicates` | There are no possible duplicates to show. | காட்டுவதற்குச் சாத்தியமான நகல்கள் இல்லை. |
 | `identity.emptyMerges` | There are no merges to show. | காட்டுவதற்கு இணைப்புகள் இல்லை. |
 | `identity.filter` | Show items that are | இந்த நிலையிலுள்ளவற்றைக் காட்டு |
-| `identity.flagged` | {{n}} earlier decisions were flagged for review. | {{n}} முந்தைய முடிவுகள் மதிப்பாய்வுக்காகக் குறிக்கப்பட்டன. |
+| `identity.flagged` | {{n}} bookings, holds, waitlist entries and match-review rows were recorded while the link was active; a review task lists them, and nothing is undone. | இணைப்பு செயலில் இருந்தபோது {{n}} முன்பதிவுகள், ஒதுக்கீடுகள், காத்திருப்புப் பட்டியல் பதிவுகள் மற்றும் பொருத்த-மதிப்பாய்வு வரிசைகள் பதிவாகின; ஒரு மதிப்பாய்வுப் பணி அவற்றைப் பட்டியலிடுகிறது, எதுவும் மாற்றப்படாது. |
 | `identity.lists` | Identity lists | அடையாளப் பட்டியல்கள் |
 | `identity.mergeStatus.active` | Active | செயலில் |
 | `identity.mergeStatus.awaiting_second_approval` | Awaiting second approval | இரண்டாவது ஒப்புதலுக்காகக் காத்திருக்கிறது |
@@ -174,6 +174,7 @@ identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholde
 | `patients.rateLimited` | Too many searches. Wait a moment and try again. | அதிகத் தேடல்கள். சற்று காத்திருந்து மீண்டும் முயற்சிக்கவும். |
 | `patients.record` | Patient record | நோயாளர் பதிவு |
 | `patients.results` | Search results | தேடல் முடிவுகள் |
+| `patients.revoke.accepted` | The request was accepted. Check the record for its current state. | கோரிக்கை ஏற்கப்பட்டது. பதிவின் தற்போதைய நிலையைச் சரிபார்க்கவும். |
 | `patients.revoke.body` | This moves the record back to unverified, so a match on it is reviewed by a person. Nothing that is already linked is undone. | இது பதிவை மீண்டும் சரிபார்க்கப்படாத நிலைக்கு மாற்றுகிறது; அதனால் அதில் ஏற்படும் பொருத்தத்தை ஒரு நபர் மதிப்பாய்வு செய்வார். ஏற்கனவே இணைக்கப்பட்டவை எதுவும் மாற்றப்படாது. |
 | `patients.revoke.button` | Revoke confirmation | உறுதிப்படுத்தலைத் திரும்பப் பெறு |
 | `patients.revoke.chooseFirst` | Choose a reason first. | முதலில் ஒரு காரணத்தைத் தேர்ந்தெடுக்கவும். |
@@ -184,7 +185,7 @@ identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholde
 | `patients.revoke.reasons.planted_or_suspect` | Planted or suspect | Planted or suspect |
 | `patients.revoke.reasons.wrong_person` | Wrong person | Wrong person |
 | `patients.revoke.task.not_configured` | No review task was raised: the task settings are not configured yet. | மதிப்பாய்வுப் பணி உருவாக்கப்படவில்லை: பணி அமைப்புகள் இன்னும் அமைக்கப்படவில்லை. |
-| `patients.revoke.task.on_record` | A review task is already on record. | ஒரு மதிப்பாய்வுப் பணி ஏற்கனவே பதிவில் உள்ளது. |
+| `patients.revoke.task.on_record` | Nothing new was recorded: this was already done, or the record was already unverified. | புதிதாக எதுவும் பதிவு செய்யப்படவில்லை: இது ஏற்கனவே செய்யப்பட்டது, அல்லது பதிவு ஏற்கனவே சரிபார்க்கப்படாத நிலையில் இருந்தது. |
 | `patients.revoke.task.raised` | A review task was raised. | ஒரு மதிப்பாய்வுப் பணி உருவாக்கப்பட்டது. |
 | `patients.revoke.title` | Revoke this identity confirmation? | இந்த அடையாள உறுதிப்படுத்தலைத் திரும்பப் பெறவா? |
 | `patients.search` | Search | தேடு |
