@@ -269,6 +269,22 @@ STEP_UP_WINDOW = 1800
 UPLOADS = FakeUpload()  # the matrix app's storage: the document routes' cases play the browser against it
 
 
+def _matrix_interpreter():
+    """A FAKE decision service (phi_approved, free) so the reply-interpretation route gets past its 503 and the committed half can show 401/404/422: no case here reaches it (random message ids)."""
+    from decimal import Decimal as _D
+
+    from careflow.decision import DecisionService, InMemoryDecisionRecorder
+    from careflow.gateway import Gateway, InMemorySpendLedger, ModelRow, SpendLimits
+    from careflow.ports import AdapterResult, DecisionResult, Usage
+
+    async def engine(request):
+        return AdapterResult(DecisionResult("unclear", {o: 1 / len(request.options) for o in request.options}, 0.2, "fake", False, "fake"), Usage(1, 1))
+
+    zero = _D(0)
+    row = ModelRow("decision", "fake", "fake-decision-1", "phi_approved", 1, zero, zero, zero, zero)
+    return DecisionService(Gateway([row], {("fake", "fake-decision-1"): engine}, InMemorySpendLedger(), SpendLimits(clinic_daily_usd=_D(1)), origin="test"), InMemoryDecisionRecorder())
+
+
 @pytest.fixture(scope="module")
 def app() -> FastAPI:
     settings = Settings(supabase_url=PROJECT, database_url_app=APP_URL or "", step_up_max_age_seconds=STEP_UP_WINDOW)
@@ -276,6 +292,7 @@ def app() -> FastAPI:
     return create_app(
         settings, jwks=fake_jwks_client(), vault=TEST_VAULT, front_door=FrontDoorComponents(None, None, None, None, None, None, None, None, None),
         document_intake=DocumentIntake(UPLOADS, profile="demo"),  # a fake storage in the demo profile with no scanner: registration reports scan=not_checked
+        reply_interpreter=_matrix_interpreter(),
     )
 
 
@@ -891,6 +908,28 @@ def _referral_cases(ids, template: str, body) -> list[tuple]:
 
 def referral_run_cases(ids) -> list[tuple]:
     return _referral_cases(ids, RUN_REFERRAL, None)
+
+
+INTERPRET = "/v1/staff/scheduling/offers/interpret-reply"
+
+
+def interpret_reply_cases(ids) -> list[tuple]:
+    """The COMMITTED half of POST .../offers/interpret-reply: random message ids, so every identity gets the one fixed 404 (nothing exists, nothing is written or needs cleaning up) plus 401 and 422. The 200 / 403 /
+    404 split on a real, encrypted, append-only message is in tests/test_api_screen_message_live.py (SPLIT_HARNESS), where the red-flag order, the audit row and the fake model are exercised too."""
+    body = lambda: {"message_id": str(uuid.uuid4())}
+    cases = [
+        _case(ids, f"{p} asking about a message that does not exist gets the one fixed 404", bearer(mint(ids.no_account if p == "no account" else ids.people[p][0])), 404, INTERPRET, json=body(), body=_fixed(404))
+        for p in [*ids.people, "no account"]
+    ]
+    fd = "front_desk_a"
+    cases += [
+        _case(ids, "a missing X-Idempotency-Key is rejected", fd, 422, INTERPRET, json=body(), key=None, body=_fixed(422)),
+        _case(ids, "a blank X-Idempotency-Key is rejected", fd, 422, INTERPRET, json=body(), key="   ", body=_fixed(422)),
+        _case(ids, "a message id that is not a uuid is rejected", fd, 422, INTERPRET, json={"message_id": "nope"}, body=_fixed(422)),
+        _case(ids, "an empty body is rejected", fd, 422, INTERPRET, json={}, body=_fixed(422)),
+        _case(ids, "a body that names the actor is rejected (the actor is the signed-in account)", fd, 422, INTERPRET, json={**body(), "actor_id": str(uuid.uuid4())}, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, INTERPRET, body())
 
 
 def referral_review_cases(ids) -> list[tuple]:
@@ -1720,6 +1759,7 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", READ): message_read_cases,
     ("POST", RUN_REFERRAL): referral_run_cases,
     ("POST", REVIEW_REFERRAL): referral_review_cases,
+    ("POST", INTERPRET): interpret_reply_cases,
 }
 
 
@@ -1743,6 +1783,8 @@ SPLIT_HARNESS: dict[tuple[str, str], str] = {
     # Both Front Door run routes: the committed half above (random document ids: 401, 404, 422) and the dedicated half (existing documents, the worker, the whole run).
     ("POST", RUN_REFERRAL): "test_api_referrals_live.py",
     ("POST", REVIEW_REFERRAL): "test_api_referrals_live.py",
+    # Reply interpretation: the committed half above (random message ids) and the dedicated half (real encrypted messages, the rules first, the fake model) in the screening harness.
+    ("POST", INTERPRET): "test_api_screen_message_live.py",
 }
 
 

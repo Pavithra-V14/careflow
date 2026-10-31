@@ -59,7 +59,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from careflow import identity, mpi, offers, review_tasks
+from careflow import identity, mpi, offers, reply_interpretation, review_tasks
 from careflow.audit import write_audit
 from careflow.auth import (
     AuthError,
@@ -73,6 +73,7 @@ from careflow.cors import middleware_kwargs, parse_origins
 from careflow.crypto import CryptoError, DemographicVault
 from careflow.db import make_app_engine, set_request_claims
 from careflow.dead_letters import raise_dead_letter_tasks
+from careflow.decision import DecisionService
 from careflow.demo_phase3 import refuse_demo_outside_demo, scheduling_settings_for
 from careflow.documents import (
     DocumentIntake,
@@ -1158,6 +1159,64 @@ async def send_offer_route(
     )
 
 
+# ---- reply interpretation, FAKES ONLY (careflow/reply_interpretation.py; docs/design/phase3-scheduling-agent.md section 5) ---------------------------------------------------------
+#
+# `POST /v1/staff/scheduling/offers/interpret-reply`: a front-desk person asks what a patient's reply to an offer means. The deterministic red-flag rules screen the reply FIRST (a red flag or an
+# unassessable reply raises the nurse task and NO model is asked); only a clear patient reply on the appointments topic is put to the `decision` tier. The answer is a SUGGESTION with a closed
+# reason word when there is none; it never contains the reply, and nothing books or is sent. With no decision service wired (no real engine is approved: the durable spend ledger is a hard blocker
+# for a real call) the route answers 503. Front desk of the message's clinic only: another role that can SEE the message gets 403, anyone who cannot gets the one fixed 404.
+
+
+class InterpretReplyIn(_Body):
+    message_id: uuid.UUID
+
+
+class InterpretReplyOut(_Out):
+    """Ids, closed words and numbers only: never the reply or any patient text."""
+
+    message_id: uuid.UUID
+    screening_id: uuid.UUID
+    outcome: Literal["red_flag", "unassessable", "clear"]
+    replayed: bool
+    suggestion: Literal["accept", "decline", "other_time", "question", "unclear"] | None
+    confidence: float | None  # only a CALIBRATED confidence; None means unknown
+    calibrated: bool | None
+    engine: str | None
+    reason: Literal["red_flag", "unassessable", "not_a_patient_reply", "no_route", "spend_ceiling", "engine_failed"] | None
+    needs_person: bool
+
+
+@scheduling.post("/offers/interpret-reply", response_model=InterpretReplyOut)
+async def interpret_reply_route(body: InterpretReplyIn, idempotency_key: IdempotencyKey, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims)) -> InterpretReplyOut:
+    """Suggest what a patient's reply means. 404 if you cannot see the message, 403 unless you are front desk of its clinic, 409 if the body was erased, 503 if reply interpretation or the encryption keys are
+    not configured. The red-flag rules always run first; `suggestion` is null with a `reason` when a person must read the reply."""
+    vault: DemographicVault | None = request.app.state.vault
+    service = request.app.state.reply_interpreter
+    if vault is None or service is None:
+        log.error("reply interpretation is unavailable: no decision service or no encryption keys are configured")
+        raise HTTPException(status_code=503, detail="reply interpretation is not available")
+    row = (await conn.execute(text("select clinic_id, origin from msg.messages where id = :i"), {"i": body.message_id})).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")  # missing and invisible are one answer
+    if not await _holds_role(conn, claims, row.clinic_id, ("front_desk",)):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    actor = uuid.UUID(claims["sub"])
+    try:
+        result = await reply_interpretation.interpret_reply(conn, vault, _screening_engine, service, body.message_id, actor_id=actor, idempotency_key=idempotency_key)
+    except (MessageNotFound, ScreeningNotPermitted):
+        raise HTTPException(status_code=404, detail="not found") from None
+    except MessageErased:
+        raise HTTPException(status_code=409, detail="the message body was erased") from None
+    await write_audit(
+        conn, clinic_id=row.clinic_id, origin=row.origin, actor_id=actor, actor_role="front_desk", action="offer.interpret_reply", resource_type="message", resource_id=body.message_id,
+        details={"outcome": result.outcome, "suggestion": result.suggestion or "none", "reason": result.reason or "none"}, idempotency_key=f"audit:interpret-reply:{body.message_id}:{idempotency_key}",
+    )
+    return InterpretReplyOut(
+        message_id=result.message_id, screening_id=result.screening_id, outcome=result.outcome, replayed=result.replayed, suggestion=result.suggestion,  # type: ignore[arg-type]
+        confidence=result.confidence, calibrated=result.calibrated, engine=result.engine, reason=result.reason, needs_person=result.needs_person,
+    )
+
+
 # ---- documents: begin an upload, register it (careflow/documents.py; docs/design/uploads-supabase-storage.md) -------------------------------------------------
 #
 # Two steps, both by a front-desk person or a nurse of the clinic. BEGIN hands the browser a short-lived signed URL for a path THE SERVER chose (derived from the clinic and the idempotency key).
@@ -2025,7 +2084,7 @@ async def open_referral(document_id: uuid.UUID, conn: TxConn, claims: dict[str, 
 def create_app(
     settings: Settings | None = None, *, jwks: JWKSClient | None = None, engine: AsyncEngine | None = None,
     vault: DemographicVault | None = None, clock: Callable[[], float] = time.time, front_door: FrontDoorComponents | None = None,
-    front_door_session_for: Callable[..., Any] = worker_session, document_intake: DocumentIntake | None = None,
+    front_door_session_for: Callable[..., Any] = worker_session, document_intake: DocumentIntake | None = None, reply_interpreter: DecisionService | None = None,
 ) -> FastAPI:
     """Build the app. `jwks`, `engine`, `vault` and `clock` (for the step-up window) can be injected (tests do); otherwise they come from
     settings / the environment. `front_door` holds the Front Door's stand-in components; with None the run and review routes answer 503 and no handler is registered."""
@@ -2045,6 +2104,7 @@ def create_app(
         app.state.wired_adapters = frozenset()  # (provider, model_id) pairs with a wired adapter: none yet
         app.state.malware_scanner_configured = False  # nothing sets it: no scanner exists (BUILD-SPEC.md 11.5); clinical stays not ready
         app.state.front_door = front_door
+        app.state.reply_interpreter = reply_interpreter  # None unless a decision service is injected (FAKES ONLY today: no real engine is approved): the route answers 503
         app.state.document_intake = document_intake  # None until a storage adapter exists (needs the bucket policy: an owner decision): the upload routes answer 503
         app.state.poker = Poker()  # routes that enqueue call `app.state.poker.poke()` after their transaction commits (7.4)
         handlers = {FRONT_DOOR_TASK: front_door_handler(front_door, session_for=front_door_session_for)} if front_door is not None else {}

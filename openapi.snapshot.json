@@ -746,6 +746,138 @@
         "title": "IngestOut",
         "type": "object"
       },
+      "InterpretReplyIn": {
+        "additionalProperties": false,
+        "properties": {
+          "message_id": {
+            "format": "uuid",
+            "title": "Message Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message_id"
+        ],
+        "title": "InterpretReplyIn",
+        "type": "object"
+      },
+      "InterpretReplyOut": {
+        "additionalProperties": false,
+        "description": "Ids, closed words and numbers only: never the reply or any patient text.",
+        "properties": {
+          "calibrated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calibrated"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "engine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine"
+          },
+          "message_id": {
+            "format": "uuid",
+            "title": "Message Id",
+            "type": "string"
+          },
+          "needs_person": {
+            "title": "Needs Person",
+            "type": "boolean"
+          },
+          "outcome": {
+            "enum": [
+              "red_flag",
+              "unassessable",
+              "clear"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "red_flag",
+                  "unassessable",
+                  "not_a_patient_reply",
+                  "no_route",
+                  "spend_ceiling",
+                  "engine_failed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "screening_id": {
+            "format": "uuid",
+            "title": "Screening Id",
+            "type": "string"
+          },
+          "suggestion": {
+            "anyOf": [
+              {
+                "enum": [
+                  "accept",
+                  "decline",
+                  "other_time",
+                  "question",
+                  "unclear"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggestion"
+          }
+        },
+        "required": [
+          "message_id",
+          "screening_id",
+          "outcome",
+          "replayed",
+          "suggestion",
+          "confidence",
+          "calibrated",
+          "engine",
+          "reason",
+          "needs_person"
+        ],
+        "title": "InterpretReplyOut",
+        "type": "object"
+      },
       "LocationList": {
         "additionalProperties": false,
         "properties": {
@@ -4657,6 +4789,69 @@
           }
         ],
         "summary": "Draft Offer",
+        "tags": [
+          "staff scheduling"
+        ]
+      }
+    },
+    "/v1/staff/scheduling/offers/interpret-reply": {
+      "post": {
+        "description": "Suggest what a patient's reply means. 404 if you cannot see the message, 403 unless you are front desk of its clinic, 409 if the body was erased, 503 if reply interpretation or the encryption keys are\nnot configured. The red-flag rules always run first; `suggestion` is null with a `reason` when a person must read the reply.",
+        "operationId": "interpret_reply_route_v1_staff_scheduling_offers_interpret_reply_post",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InterpretReplyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterpretReplyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Interpret Reply Route",
         "tags": [
           "staff scheduling"
         ]
