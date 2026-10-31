@@ -24,17 +24,23 @@ const reviewed = new Set(read('ta-reviewed.json').reviewed);
 const ai = read('ta-ai-review.json');
 const aiFlags = new Map(ai.flags.map((f) => [f.key, f]));
 const aiIssues = new Map(ai.issues.map((i) => [i.key, i]));
+const aiCorrected = new Map(ai.corrected.map((c) => [c.key, c]));
+const aiAddressed = new Set(ai.addressedFlags);
 
 // What the AI review said about one string. Never "reviewed": the label is always "pending native review".
 function aiNote(key) {
   if (en[key] === ta[key]) return 'kept in English by design';
   const parts = [];
-  const issue = aiIssues.get(key);
-  if (issue) parts.push(`**${issue.verdict}**: ${issue.note}`);
-  else if (ai.verdicts[key] === 'minor-drift') parts.push('minor drift');
-  else if (!(key in ai.verdicts) && !aiFlags.has(key)) parts.push('ok');
+  const fixed = aiCorrected.get(key);
+  if (fixed) parts.push(`corrected after AI review (${fixed.reason}); blind re-check: ${fixed.recheck}`);
+  else {
+    const issue = aiIssues.get(key);
+    if (issue) parts.push(`**${issue.verdict}**: ${issue.note}`);
+    else if (ai.verdicts[key] === 'minor-drift') parts.push('minor drift');
+    else if (!(key in ai.verdicts) && !aiFlags.has(key)) parts.push('ok');
+  }
   const flag = aiFlags.get(key);
-  if (flag && !issue) parts.push(`flag (${flag.kind}): ${flag.note}`);
+  if (flag && !aiAddressed.has(key) && !aiIssues.has(key)) parts.push(`flag (${flag.kind}): ${flag.note}`);
   return parts.join('; ') || 'ok';
 }
 
@@ -60,15 +66,23 @@ const text = [
   '',
   `Done ${ai.reviewedOn}. ${ai.method}`,
   '',
-  `Result: ${ai.counts.match} match, ${ai.counts['minor-drift']} minor drift, ${ai.counts['meaning-changed']} meaning changed, ${ai.counts.wrong} wrong; ${ai.flags.length} strings flagged for a native reviewer; ${ai.glossary.length} terms used inconsistently.`,
+  `First pass result: ${ai.counts.match} match, ${ai.counts['minor-drift']} minor drift, ${ai.counts['meaning-changed']} meaning changed, ${ai.counts.wrong} wrong.`,
+  `After the corrections (${ai.corrected.length} strings changed, ${ai.correctedOn}) a blind re-check found ${ai.recheckCounts.match} match, ${ai.recheckCounts['minor-drift']} minor drift, ${ai.recheckCounts['meaning-changed']} meaning changed, ${ai.recheckCounts.wrong} wrong.`,
+  `${ai.flags.filter((f) => !aiAddressed.has(f.key)).length} strings are still flagged for a native reviewer, and ${ai.glossary.length} terms are used inconsistently.`,
   '',
-  '### Meaning problems (suggested Tamil is an AI suggestion, not applied)',
+  '### Corrected after the AI review (the Tamil was changed; every string stays unreviewed)',
   '',
-  '| Key | Verdict | Problem | Suggested Tamil |',
-  '|---|---|---|---|',
-  ...ai.issues.map((i) => `| \`${i.key}\` | ${i.verdict} | ${escape(i.note)} | ${escape(i.suggestedTamil || '')} |`),
+  '| Key | Why | Blind re-check |',
+  '|---|---|---|',
+  ...ai.corrected.map((c) => `| \`${c.key}\` | ${c.reason} | ${c.recheck} |`),
   '',
-  '### Terms used inconsistently',
+  'Terms standardised: ' + ai.standardised.join(', ') + '.',
+  '',
+  '### Points for the native reviewer from the re-check',
+  '',
+  ...ai.nativeReviewerNotes.map((n) => `- \`${n.key}\`: ${escape(n.note)}`),
+  '',
+  '### Terms still used inconsistently (left for the native reviewer)',
   '',
   '| Concept | Tamil terms used | Suggestion |',
   '|---|---|---|',

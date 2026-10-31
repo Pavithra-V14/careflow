@@ -11,28 +11,47 @@ identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholde
 
 ## AI-reviewed, pending native review
 
-Done 2026-10-31. Two fresh AI passes, neither a native speaker. Pass 1 back-translated the Tamil into English without seeing the English source and flagged Tamil problems. Pass 2 compared the English source with that back-translation (meaning check), checked that recurring terms are translated consistently, and triaged pass 1 flags. 391 strings were checked; 28 are kept in English by design. Nothing here replaces a native reviewer, and no string was changed because of it.
+Done 2026-10-31. Three fresh AI passes, none a native speaker. Pass 1 back-translated the Tamil into English without seeing the English source and flagged Tamil problems. Pass 2 compared the English source with that back-translation (meaning check), checked that recurring terms are translated consistently, and triaged pass 1's flags. 391 strings were checked; 28 are kept in English by design. On the owner's instruction the seven meaning problems were then corrected with pass 2's suggested Tamil, and the terms for proposal (முன்மொழிவு) and resolve (the தீர் root) were standardised; 17 strings changed. Pass 3 back-translated those 17 blind and compared them: no meaning problem remained, but it raised four points for a native reviewer. Hold, clinic and results-versus-decision were left for the native reviewer and stay flagged. Nothing here replaces a native reviewer, and every string is still unreviewed.
 
-Result: 299 match, 85 minor drift, 4 meaning changed, 3 wrong; 29 strings flagged for a native reviewer; 5 terms used inconsistently.
+First pass result: 299 match, 85 minor drift, 4 meaning changed, 3 wrong.
+After the corrections (17 strings changed, 2026-10-31) a blind re-check found 9 match, 8 minor drift, 0 meaning changed, 0 wrong.
+21 strings are still flagged for a native reviewer, and 3 terms are used inconsistently.
 
-### Meaning problems (suggested Tamil is an AI suggestion, not applied)
+### Corrected after the AI review (the Tamil was changed; every string stays unreviewed)
 
-| Key | Verdict | Problem | Suggested Tamil |
-|---|---|---|---|
-| `dev.title` | meaning-changed | Technical term changed: "claim" (token claims) became a word meaning request; a developer would think this shows request structure, not token claims. | உருவாக்குநர்: கிளெய்ம் அமைப்பு |
-| `referrals.proposalAbstained` | meaning-changed | "Abstained" (the system deliberately gave no proposal) became "avoided/skipped", which can read as a step that was omitted or failed. | முன்மொழிவு அளிக்கவில்லை |
-| `scheduling.col.rank` | meaning-changed | "Rank" (order of precedence) became a word meaning quality/grade; a higher value could be read as better quality rather than higher precedence. | தரவரிசை |
-| `scheduling.offerStatus.empty` | wrong | The word used means an election candidate; "No candidates" for an offer draft is mistranslated. | பொருத்தமானவை இல்லை |
-| `scheduling.offerCandidates` | wrong | The word used means an election candidate, not a candidate slot or patient. | பொருத்தமானவற்றின் விவரங்கள் |
-| `identity.col.candidate` | wrong | The word used means an election candidate, not a candidate record for duplicate review. | பரிசீலனைக்குரிய பதிவு |
-| `identity.col.other` | meaning-changed | Direction reversed: English column shows the record this one may duplicate; Tamil reads "possible duplicate of this", so staff could take the other record to be the duplicate. | எந்தப் பதிவின் சாத்தியமான நகல் |
+| Key | Why | Blind re-check |
+|---|---|---|
+| `scheduling.offerStatus.empty` | meaning problem | minor-drift |
+| `scheduling.offerCandidates` | meaning problem | minor-drift |
+| `identity.col.candidate` | meaning problem | minor-drift |
+| `identity.col.other` | meaning problem | match |
+| `scheduling.col.rank` | meaning problem | match |
+| `referrals.proposalAbstained` | meaning problem | minor-drift |
+| `dev.title` | meaning problem | minor-drift |
+| `referrals.proposal` | term standardised | minor-drift |
+| `tasks.status.resolved` | term standardised | match |
+| `tasks.resolvedAt` | term standardised | minor-drift |
+| `tasks.closed` | term standardised | minor-drift |
+| `tasks.resolve` | term standardised | match |
+| `tasks.closedElsewhere` | term standardised | match |
+| `tasks.resolveTitle` | term standardised | match |
+| `tasks.resolveBody` | term standardised | match |
+| `tasks.conflictAck` | term standardised | match |
+| `tasks.conflictResolve` | term standardised | match |
 
-### Terms used inconsistently
+Terms standardised: proposal, resolve / resolved.
+
+### Points for the native reviewer from the re-check
+
+- `scheduling.offerStatus.empty / scheduling.offerCandidates`: bare adjectives (பொருத்தமானவை) with no noun: the referent is unclear on its own
+- `identity.col.other`: the corrected wording is interrogative in form ("of which record"); confirm it reads as a column heading
+- `referrals.proposal`: வகைப்படுத்தல் means classification; "triage" is a distinct clinical concept, so a clinician or native reviewer should choose the word
+- `identity.col.candidate vs scheduling.*`: "candidate" is now rendered two different ways (பரிசீலனைக்குரிய பதிவு versus பொருத்தமான...); decide whether they should match
+
+### Terms still used inconsistently (left for the native reviewer)
 
 | Concept | Tamil terms used | Suggestion |
 |---|---|---|
-| proposal | வகைப்படுத்தல் பரிந்துரை (recommendation) x1; முன்மொழிவு x1; முன்மொழி- (propose) x3 | Use முன்மொழிவு / முன்மொழி throughout so proposal is not confused with பரிந்துரை (referral). |
-| resolve / resolved | முடி / முடிந்தவை (tasks) x9; தீர்க்கப்பட்டது (identity) x2 | Standardise on the தீர்- root (தீர்க்கப்பட்டது) for resolved status; avoid முடி, which also means hair. |
 | hold | நிறுத்தம் (referral hold) x4; ஒதுக்கீடு (slot hold) x6 | Use one clear term per hold type, identically everywhere (e.g. நிறுத்திவைப்பு for referral holds, தற்காலிக ஒதுக்கீடு for slot holds). |
 | clinic / hospital | மருத்துவமனை x5; கிளினிக் x1 | Source says "clinic" in several strings but Tamil uses மருத்துவமனை there and கிளினிக் in shell.clinic; standardise on one. |
 | decision / results | முடிவு (decision) x8; முடிவுகள் (search results) x2 | முடிவு means both decision and search results; use a different word for results (e.g. பொருத்தங்கள்). |
@@ -68,7 +87,7 @@ Result: 299 match, 85 minor drift, 4 meaning changed, 3 wrong; 29 strings flagge
 | `dev.note` | Development builds only. Shows the structure of aal, amr and iat with values blanked. It never shows the token. | உருவாக்கப் பதிப்புகளில் மட்டும். aal, amr, iat ஆகியவற்றின் அமைப்பை மதிப்புகள் மறைக்கப்பட்டு காட்டும். டோக்கனைக் காட்டாது. | minor drift |
 | `dev.refresh` | Refresh session, then capture | அமர்வைப் புதுப்பித்து, பின் பெறுக | minor drift |
 | `dev.reveal` | Also show enum-like values (the aal level and amr method names) | enum போன்ற மதிப்புகளையும் காட்டு (aal நிலை, amr முறைப் பெயர்கள்) | ok |
-| `dev.title` | Developer: claim structure | உருவாக்குநர்: கோரிக்கை அமைப்பு | **meaning-changed**: Technical term changed: "claim" (token claims) became a word meaning request; a developer would think this shows request structure, not token claims. |
+| `dev.title` | Developer: claim structure | உருவாக்குநர்: கிளெய்ம் அமைப்பு | corrected after AI review (meaning problem); blind re-check: minor-drift |
 | `env.live` | LIVE | LIVE | kept in English by design |
 | `env.test` | TEST | TEST | kept in English by design |
 | `env.unknown` | Environment unknown | சூழல் தெரியவில்லை | ok |
@@ -83,12 +102,12 @@ Result: 299 match, 85 minor drift, 4 meaning changed, 3 wrong; 29 strings flagge
 | `identity.back` | Back to merges | இணைப்புகளுக்குத் திரும்பு | minor drift |
 | `identity.col.activated` | Active since | செயலில் உள்ள நேரம் | minor drift |
 | `identity.col.approvedBy` | Approved by | ஒப்புதல் அளித்தவர் | ok |
-| `identity.col.candidate` | Candidate | வேட்பாளர் | **wrong**: The word used means an election candidate, not a candidate record for duplicate review. |
+| `identity.col.candidate` | Candidate | பரிசீலனைக்குரிய பதிவு | corrected after AI review (meaning problem); blind re-check: minor-drift |
 | `identity.col.created` | Created | உருவாக்கப்பட்டது | ok |
 | `identity.col.master` | Kept record | வைத்திருக்கும் பதிவு | minor drift; flag (ambiguous): Does not clearly say surviving/primary record, which matters for who is kept in a merge. |
 | `identity.col.matched` | Matched on | பொருந்திய விவரம் | ok |
 | `identity.col.merge` | Merge | இணைப்பு | minor drift |
-| `identity.col.other` | Possible duplicate of | இதன் சாத்தியமான நகல் | **meaning-changed**: Direction reversed: English column shows the record this one may duplicate; Tamil reads "possible duplicate of this", so staff could take the other record to be the duplicate. |
+| `identity.col.other` | Possible duplicate of | எந்தப் பதிவின் சாத்தியமான நகல் | corrected after AI review (meaning problem); blind re-check: match |
 | `identity.col.patient` | Record | பதிவு | ok |
 | `identity.col.proposedBy` | Proposed by | முன்மொழிந்தவர் | ok |
 | `identity.col.reason` | Reason | காரணம் | ok |
@@ -273,11 +292,11 @@ Result: 299 match, 85 minor drift, 4 meaning changed, 3 wrong; 29 strings flagge
 | `referrals.hiddenFromRole` | Not shown to your role | உங்கள் பங்கிற்குக் காட்டப்படாது | minor drift |
 | `referrals.holds` | Holds | நிறுத்தங்கள் | minor drift; flag (ambiguous): Stop wording for a hold; different term from slot holds. |
 | `referrals.noHolds` | No holds. | நிறுத்தங்கள் இல்லை. | minor drift |
-| `referrals.noProposal` | There is no proposal for this referral. | இந்தப் பரிந்துரைக்கு முன்மொழிவு இல்லை. | flag (ambiguous): Proposal term differs from the heading term in the same screen. |
+| `referrals.noProposal` | There is no proposal for this referral. | இந்தப் பரிந்துரைக்கு முன்மொழிவு இல்லை. | ok |
 | `referrals.notDecided` | Not decided yet | இன்னும் முடிவு செய்யப்படவில்லை | ok |
 | `referrals.open` | Open referral | பரிந்துரையைத் திற | ok |
-| `referrals.proposal` | Triage proposal | வகைப்படுத்தல் பரிந்துரை | minor drift; flag (ambiguous): Same word as for referral, causing confusion; triage reduced to categorisation. |
-| `referrals.proposalAbstained` | Abstained | தவிர்க்கப்பட்டது | **meaning-changed**: "Abstained" (the system deliberately gave no proposal) became "avoided/skipped", which can read as a step that was omitted or failed. |
+| `referrals.proposal` | Triage proposal | வகைப்படுத்தல் முன்மொழிவு | corrected after AI review (term standardised); blind re-check: minor-drift |
+| `referrals.proposalAbstained` | Abstained | முன்மொழிவு அளிக்கவில்லை | corrected after AI review (meaning problem); blind re-check: minor-drift |
 | `referrals.proposalMode` | Mode | முறை | ok |
 | `referrals.registeredBy` | Registered by | பதிவு செய்தவர் | ok |
 | `referrals.review.confirmBody` | You are about to record the decision "{{decision}}" for this referral. It is kept under your name. | இந்தப் பரிந்துரைக்கு "{{decision}}" என்ற முடிவை நீங்கள் பதிவு செய்யப் போகிறீர்கள். அது உங்கள் பெயரில் வைக்கப்படும். | minor drift |
@@ -311,7 +330,7 @@ Result: 299 match, 85 minor drift, 4 meaning changed, 3 wrong; 29 strings flagge
 | `scheduling.col.label` | Label | குறிப்பு | minor drift; flag (ambiguous): Same label/note term issue. |
 | `scheduling.col.name` | Name | பெயர் | ok |
 | `scheduling.col.patient` | Patient | நோயாளர் | ok |
-| `scheduling.col.rank` | Rank | தரம் | **meaning-changed**: "Rank" (order of precedence) became a word meaning quality/grade; a higher value could be read as better quality rather than higher precedence. |
+| `scheduling.col.rank` | Rank | தரவரிசை | corrected after AI review (meaning problem); blind re-check: match |
 | `scheduling.col.slot` | Slot | நேரம் | minor drift |
 | `scheduling.col.status` | Status | நிலை | ok |
 | `scheduling.col.visitType` | Visit type | வருகை வகை | ok |
@@ -327,9 +346,9 @@ Result: 299 match, 85 minor drift, 4 meaning changed, 3 wrong; 29 strings flagge
 | `scheduling.locations` | Locations | இடங்கள் | minor drift |
 | `scheduling.minutes` | min | நிமி | ok |
 | `scheduling.noHolds` | There are no holds to show. | காட்டுவதற்கு ஒதுக்கீடுகள் இல்லை. | minor drift |
-| `scheduling.offerCandidates` | Candidate details | வேட்பாளர் விவரங்கள் | **wrong**: The word used means an election candidate, not a candidate slot or patient. |
+| `scheduling.offerCandidates` | Candidate details | பொருத்தமானவற்றின் விவரங்கள் | corrected after AI review (meaning problem); blind re-check: minor-drift |
 | `scheduling.offerStatus.degraded` | Partly available | ஓரளவு கிடைக்கிறது | ok |
-| `scheduling.offerStatus.empty` | No candidates | வேட்பாளர்கள் இல்லை | **wrong**: The word used means an election candidate; "No candidates" for an offer draft is mistranslated. |
+| `scheduling.offerStatus.empty` | No candidates | பொருத்தமானவை இல்லை | corrected after AI review (meaning problem); blind re-check: minor-drift |
 | `scheduling.offerStatus.ok` | A draft is ready | வரைவு தயாராக உள்ளது | ok |
 | `scheduling.offerStatus.unavailable` | Not set up yet | இன்னும் அமைக்கப்படவில்லை | ok |
 | `scheduling.offers` | Offers | வாய்ப்புகள் | minor drift; flag (ambiguous): Means opportunities rather than offers. |
@@ -396,16 +415,16 @@ Result: 299 match, 85 minor drift, 4 meaning changed, 3 wrong; 29 strings flagge
 | `tasks.acknowledgedBy` | Acknowledged by | ஏற்றுக்கொண்டவர் | ok |
 | `tasks.actions` | Actions | செயல்கள் | ok |
 | `tasks.back` | Back to tasks | பணிகளுக்குத் திரும்பு | ok |
-| `tasks.closed` | This task is closed. | இந்தப் பணி முடிக்கப்பட்டது. | minor drift |
-| `tasks.closedElsewhere` | This kind of task is closed through its own screen, not here. | இந்த வகைப் பணி இங்கே அல்ல, அதன் சொந்தத் திரையில் முடிக்கப்படும். | minor drift |
+| `tasks.closed` | This task is closed. | இந்தப் பணி தீர்க்கப்பட்டது. | corrected after AI review (term standardised); blind re-check: minor-drift |
+| `tasks.closedElsewhere` | This kind of task is closed through its own screen, not here. | இந்த வகைப் பணி இங்கே அல்ல, அதன் சொந்தத் திரையில் தீர்க்கப்படும். | corrected after AI review (term standardised); blind re-check: match |
 | `tasks.col.assigned` | Assigned to | ஒதுக்கப்பட்டவர் | ok |
 | `tasks.col.created` | Created | உருவாக்கப்பட்டது | ok |
 | `tasks.col.kind` | Kind | வகை | ok |
 | `tasks.col.priority` | Priority | முன்னுரிமை | ok |
 | `tasks.col.status` | Status | நிலை | ok |
 | `tasks.col.task` | Task | பணி | ok |
-| `tasks.conflictAck` | Someone else holds this task, or it is already closed. | இந்தப் பணியை வேறொருவர் வைத்துள்ளார், அல்லது ஏற்கனவே முடிக்கப்பட்டது. | ok |
-| `tasks.conflictResolve` | This task cannot be closed here, or someone else changed it. | இந்தப் பணியை இங்கே முடிக்க முடியாது, அல்லது வேறொருவர் மாற்றியுள்ளார். | minor drift |
+| `tasks.conflictAck` | Someone else holds this task, or it is already closed. | இந்தப் பணியை வேறொருவர் வைத்துள்ளார், அல்லது ஏற்கனவே தீர்க்கப்பட்டது. | corrected after AI review (term standardised); blind re-check: match |
+| `tasks.conflictResolve` | This task cannot be closed here, or someone else changed it. | இந்தப் பணியை இங்கே தீர்க்க முடியாது, அல்லது வேறொருவர் மாற்றியுள்ளார். | corrected after AI review (term standardised); blind re-check: match |
 | `tasks.detail` | Task | பணி | ok |
 | `tasks.empty` | There are no tasks to show. | காட்டுவதற்குப் பணிகள் இல்லை. | ok |
 | `tasks.filter` | Show tasks that are | இந்த நிலையிலுள்ள பணிகளைக் காட்டு | minor drift |
@@ -423,14 +442,14 @@ Result: 299 match, 85 minor drift, 4 meaning changed, 3 wrong; 29 strings flagge
 | `tasks.priority.standard` | Standard | வழக்கமான | ok |
 | `tasks.provenance` | Where it came from | இது எங்கிருந்து வந்தது | ok |
 | `tasks.reasonCodes` | Reason codes | காரணக் குறியீடுகள் | ok |
-| `tasks.resolve` | Resolve | முடி | minor drift; flag (ambiguous): Single short verb that is also the word for hair; inconsistent with the resolved term used for identity. |
-| `tasks.resolveBody` | This closes the task. | இது பணியை முடிக்கிறது. | minor drift |
-| `tasks.resolveTitle` | Resolve this task? | இந்தப் பணியை முடிக்கவா? | ok |
-| `tasks.resolvedAt` | Closed at | முடிக்கப்பட்ட நேரம் | minor drift |
+| `tasks.resolve` | Resolve | தீர்க்கவும் | corrected after AI review (term standardised); blind re-check: match |
+| `tasks.resolveBody` | This closes the task. | இது பணியைத் தீர்க்கிறது. | corrected after AI review (term standardised); blind re-check: match |
+| `tasks.resolveTitle` | Resolve this task? | இந்தப் பணியைத் தீர்க்கவா? | corrected after AI review (term standardised); blind re-check: match |
+| `tasks.resolvedAt` | Closed at | தீர்க்கப்பட்ட நேரம் | corrected after AI review (term standardised); blind re-check: minor-drift |
 | `tasks.source` | Source message | மூலச் செய்தி | ok |
 | `tasks.status.acknowledged` | Acknowledged | ஏற்றுக்கொள்ளப்பட்டவை | minor drift |
 | `tasks.status.open` | Open | திறந்தவை | ok |
-| `tasks.status.resolved` | Resolved | முடிந்தவை | minor drift |
+| `tasks.status.resolved` | Resolved | தீர்க்கப்பட்டவை | corrected after AI review (term standardised); blind re-check: match |
 | `tasks.title` | Tasks | பணிகள் | ok |
 | `tasks.urgent` | Urgent | அவசரம் | ok |
 | `tasks.urgentNote` | Shown first because of its kind or priority. | வகை அல்லது முன்னுரிமை காரணமாக முதலில் காட்டப்படுகிறது. | ok |
