@@ -1,6 +1,16 @@
 # Active role: narrowing a caller's grants per request
 
-**Status: design proposal. No code, no migration, no grant. Waiting for the owner's OK.**
+**Status: BUILT (owner decisions 2026-10-31), branch `active-role`: migration 0028, `careflow/active_role.py`, the readers moved onto the helpers, the tests of section 8. Phase 1 only (the header is optional).**
+
+### As built: where it differs from the proposal below (read this first)
+- **One statement, no extra round trip.** With a header, `db_conn` runs `select iam.active_grant_ok(set_config('request.jwt.claims', :c, true))`: the claims (identity + the server's own `careflow_active`) are set AND the grant is verified in the same statement (the function's argument is the `set_config` call, so it is evaluated first; the function is plpgsql, so it is never inlined). Without a header it is the same single `set_config` as before.
+- **More than five direct readers.** The code had twelve Python readers of `iam.staff_roles`, not five: `/v1/iam/me`, `_readable_clinics`, the `register_patient` gate, `_task_reader`, `_acting_role`, `_front_desk_gate`, `_holds_role`, `_staff_reader`, `_referral_reader`, `documents.py` register, `messages.py` read, and `ops_checks.py`. All but `/me` (exempt on purpose) and `ops_checks.py` (an operational report, not a request path) now go through `iam.has_clinic_role`, `iam.has_any_role` or `iam.effective_roles`. `tests/test_active_role.py` fails on any new file that names `staff_roles`.
+- **The 0016 approval trigger is NOT moved onto the helpers.** It checks OTHER accounts (`created_by`, `approved_by`), not the caller, which section 9 of this note already says must keep its meaning; the helpers resolve `auth.uid()` only. It is on the inventory's allowlist with that reason. (The 0024 exclusivity trigger likewise.)
+- **`iam.active_role()` is not built** (nothing uses it yet). `msg.record_screening` (0013) still inserts its audit row without an active role; `details.role_scope` is written by the Python audit writers (`write_audit`, `messages.read_stored_message`) via `iam.role_scope()`. Follow-up, with the SQL writers.
+- **New grants (the only ones):** EXECUTE on `iam.effective_roles(uuid)`, `iam.active_grant_ok(text)` and `iam.role_scope()` to `careflow_app`; `iam.narrowing_on` and `iam.grant_is_active` are granted to nobody and used only inside the SECURITY DEFINER helpers.
+- **Tests:** `tests/test_active_role.py` (offline), `tests/test_active_role_live.py` (the helpers against the database, never committed) and `tests/test_active_role_matrix_live.py` (the header dimension of EVERY staff route in `MATRIX`, built from the main matrix's own cases; its own CI shard).
+
+### The proposal (kept as approved)
 Raised by the frontend (F2, `docs/frontend-backend-requests.md` item 3). BUILD-SPEC 19.3 says a staff user with several roles
 "picks the active one rather than holding all permissions simultaneously" (least privilege). Today the staff console shows that
 choice but the API ignores it: every request is authorised against **all** of the caller's live grants.

@@ -81,7 +81,8 @@ async def write_audit(
             result = await conn.execute(
                 text(
                     "insert into audit.log (origin, clinic_id, actor_id, actor_role, action, resource_type, resource_id, details, idempotency_key) "
-                    "values (:o, :c, :a, :r, :act, :rt, :ri, cast(:d as jsonb), :k)"
+                    # details.role_scope: 'active' when the request carried a verified X-CareFlow-Active-Role (narrowed), else 'all_grants' (docs/design/active-role.md section 6). Set in SQL from the same claims the policies read.
+                    "values (:o, :c, :a, :r, :act, :rt, :ri, cast(:d as jsonb) || jsonb_build_object('role_scope', iam.role_scope()), :k)"
                 ),
                 {"o": origin, "c": clinic_id, "a": actor_id, "r": actor_role, "act": action, "rt": resource_type, "ri": str(resource_id), "d": json.dumps(clean), "k": idempotency_key},
             )

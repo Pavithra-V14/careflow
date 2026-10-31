@@ -51,7 +51,7 @@ class Conn:
         self.calls.append((sql, params))
         if "from msg.messages" in sql:
             return _Res(row=self.row)
-        if "from iam.staff_roles" in sql:
+        if "iam.effective_roles" in sql:
             return _Res(rows=[(r,) for r in self.roles])
         if "insert into audit.log" in sql:
             if self.fail_audit:
@@ -90,7 +90,7 @@ def test_a_read_returns_the_text_and_writes_one_audit_row_with_ids_only(vault):
 def test_the_audit_row_is_written_after_the_decrypt_and_is_the_last_statement(vault):
     conn = Conn(stored(vault))
     read(conn, vault)
-    kinds = ["audit" if "audit.log" in sql else "roles" if "staff_roles" in sql else "message" for sql, _ in conn.calls]
+    kinds = ["audit" if "audit.log" in sql else "roles" if "effective_roles" in sql else "message" for sql, _ in conn.calls]
     assert kinds == ["message", "roles", "audit"]
 
 

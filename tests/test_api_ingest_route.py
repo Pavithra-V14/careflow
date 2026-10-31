@@ -51,6 +51,9 @@ class _Result:
     def first(self):
         return self._row
 
+    def scalar(self):
+        return self._row is not None
+
 
 class FakeConn:
     """Answers the route's two lookups: the clinic's origin (None = invisible) and the front-desk check."""
@@ -62,7 +65,7 @@ class FakeConn:
         sql = str(statement)
         if "from iam.clinics" in sql:
             return _Result(None if self.origin is None else _Row(self.origin))
-        if "from iam.staff_roles" in sql:
+        if "iam.has_clinic_role" in sql:
             return _Result(_Row(1) if self.front_desk else None)
         raise AssertionError(f"unexpected statement: {sql}")
 
