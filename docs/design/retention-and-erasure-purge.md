@@ -1,6 +1,11 @@
 # The purge: the exact role, function, grants and tests (DESIGN ONLY: no code, no migration, nothing applied)
 
-Requested by the owner, 2026-10-31, following `retention-and-erasure.md` (shape approved 2026-10-30; periods NOT decided). **The owner signs off the grants in section 3 before any code is written.** Retention periods stay REQUIRED settings with NO defaults.
+Requested by the owner, 2026-10-31, following `retention-and-erasure.md` (shape approved 2026-10-30; periods NOT decided). **SHAPE APPROVED by the owner on 2026-10-31. NO CODE YET: the retention periods and the sign-off of the grants wait for the privacy owner and a clinician.** Retention periods stay REQUIRED settings with NO defaults.
+
+## Owner conditions of 2026-10-31 (binding on whatever is built)
+1. **No scheduled job for the demo.** The purge is run BY HAND by a person: always the dry run first, then the real run with the expected-count guard (`p_expected_max`, the number from the reviewed dry run). Section 6's scheduled job is a later decision and is not built for the demo.
+2. **The role may not erase anything inside a retention period.** Every function refuses a cutoff that is not strictly older than the clinic's REQUIRED retention setting for that family (an unset setting = the function refuses; there is no default), in addition to the engineering floor of section 5. A row younger than the cutoff is never selected, whatever argument is passed.
+3. **The role may NEVER touch audit rows or review decisions.** No function, grant, trigger exception or code path of the purge reaches `audit.log` or `agents.review_decisions` (nor `agents.triage_proposals`, `mpi.identity_confirmations`): their triggers stay exactly as they are, the exception of section 4 is written for the checkpoint tables only, and test 8 below proves those tables are byte-identical after a full run. The ONLY thing the purge writes to `audit.log` is its own one-row-per-call record (an insert; it never reads or changes an existing audit row).
 
 ## 0. What this note settles, and what it leaves open
 Settles: the one role, the functions, the exact grants, how an append-only table allows a deletion that nobody else can trigger, what each function may erase and what it must never touch, who may call it, its audit trail, and the tests that prove it can touch nothing else.
@@ -56,7 +61,7 @@ A forged session setting is useless (the trigger does not read one); a caller th
 
 ## 6. Who may call it, and from where
 - **Who:** only the `careflow_purge` login. No application route calls it; no human session does (a person may PAUSE the job by removing its schedule, but cannot run a one-off delete of another range through the application).
-- **From where:** a scheduled job outside the web application (`python -m careflow.retention`, not yet written), which reads the periods from REQUIRED settings (below), refuses to run when any is unset, and always does the dry run first, printing counts. WHERE it runs is the same open decision as the malware-scanner worker machine: it must not be GitHub Actions against production, and it adds no hosted scheduler without the owner's approval (rule 13). Until decided, the fallback is the owner running it by hand.
+- **From where (DEMO: by hand, no schedule: owner condition 1).** A scheduled job, WHEN one is later approved, would be one outside the web application (`python -m careflow.retention`, not yet written), which reads the periods from REQUIRED settings (below), refuses to run when any is unset, and always does the dry run first, printing counts. WHERE it runs is the same open decision as the malware-scanner worker machine: it must not be GitHub Actions against production, and it adds no hosted scheduler without the owner's approval (rule 13). Until decided, the fallback is the owner running it by hand.
 - **Settings (names only; NO defaults; unset = the job refuses and says which):** `CAREFLOW_RETENTION_CHECKPOINTS_DAYS`, `CAREFLOW_RETENTION_QUEUE_DAYS`, `DATABASE_URL_PURGE`. The 90-day figure of spec 9.4 stays a documented starting value, not a code default.
 
 ## 7. Audit trail
@@ -71,7 +76,8 @@ One `audit.log` row per function call (dry runs included), written by the functi
 6. A dry run deletes nothing and writes one audit row; the audit row of a real run carries counts only (a test greps it for ids and text); a second identical run deletes nothing.
 7. The function deletes only for ITS clinic: rows of another clinic with the same age survive.
 8. `audit.log`, `agents.review_decisions`, `agents.triage_proposals`, `mpi.identity_confirmations`, `agents.review_tasks` are byte-identical before and after a full run (row counts and a checksum over their primary keys).
-9. The CI migrate job's catalog check (extended) fails if `careflow_purge` ever gains any privilege other than the ones in section 3.
+9. A cutoff inside the clinic's retention period is refused (and an unset period refuses): nothing younger than the period is ever deleted, for any argument.
+10. The CI migrate job's catalog check (extended) fails if `careflow_purge` ever gains any privilege other than the ones in section 3.
 
 ## 9. Residuals, stated
 The table owner (or a superuser) can still disable the triggers, as for every append-only table here. A bug in a purge predicate deletes working state permanently: hence dry run first, the expected-count guard, the floor, and a first production run reviewed by a person. Checkpoint bytes are msgpack: the database cannot confirm they hold no patient text, so deletion removes them but the no-text guarantee still rests on the graph code and its byte-grep test.
