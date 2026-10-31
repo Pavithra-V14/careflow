@@ -9,424 +9,454 @@ identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholde
 
 419 of 419 strings are unreviewed.
 
-| Key | English | Tamil |
+## AI-reviewed, pending native review
+
+Done 2026-10-31. Two fresh AI passes, neither a native speaker. Pass 1 back-translated the Tamil into English without seeing the English source and flagged Tamil problems. Pass 2 compared the English source with that back-translation (meaning check), checked that recurring terms are translated consistently, and triaged pass 1 flags. 391 strings were checked; 28 are kept in English by design. Nothing here replaces a native reviewer, and no string was changed because of it.
+
+Result: 299 match, 85 minor drift, 4 meaning changed, 3 wrong; 29 strings flagged for a native reviewer; 5 terms used inconsistently.
+
+### Meaning problems (suggested Tamil is an AI suggestion, not applied)
+
+| Key | Verdict | Problem | Suggested Tamil |
+|---|---|---|---|
+| `dev.title` | meaning-changed | Technical term changed: "claim" (token claims) became a word meaning request; a developer would think this shows request structure, not token claims. | உருவாக்குநர்: கிளெய்ம் அமைப்பு |
+| `referrals.proposalAbstained` | meaning-changed | "Abstained" (the system deliberately gave no proposal) became "avoided/skipped", which can read as a step that was omitted or failed. | முன்மொழிவு அளிக்கவில்லை |
+| `scheduling.col.rank` | meaning-changed | "Rank" (order of precedence) became a word meaning quality/grade; a higher value could be read as better quality rather than higher precedence. | தரவரிசை |
+| `scheduling.offerStatus.empty` | wrong | The word used means an election candidate; "No candidates" for an offer draft is mistranslated. | பொருத்தமானவை இல்லை |
+| `scheduling.offerCandidates` | wrong | The word used means an election candidate, not a candidate slot or patient. | பொருத்தமானவற்றின் விவரங்கள் |
+| `identity.col.candidate` | wrong | The word used means an election candidate, not a candidate record for duplicate review. | பரிசீலனைக்குரிய பதிவு |
+| `identity.col.other` | meaning-changed | Direction reversed: English column shows the record this one may duplicate; Tamil reads "possible duplicate of this", so staff could take the other record to be the duplicate. | எந்தப் பதிவின் சாத்தியமான நகல் |
+
+### Terms used inconsistently
+
+| Concept | Tamil terms used | Suggestion |
 |---|---|---|
-| `app.hospitalName` | [PLACEHOLDER: hospital name] | [PLACEHOLDER: மருத்துவமனையின் பெயர்] |
-| `app.patientTitle` | Patient portal | நோயாளர் தளம் |
-| `app.staffTitle` | Staff console | பணியாளர் தளம் |
-| `common.cancel` | Cancel | ரத்து செய் |
-| `common.comingSoon` | Coming soon | விரைவில் வரும் |
-| `common.emergencyBanner` | In an emergency call 108 | அவசரநிலையில் 108 ஐ அழைக்கவும் |
-| `common.genericError` | Something went wrong. | ஏதோ தவறு ஏற்பட்டது. |
-| `common.language` | Language | மொழி |
-| `common.loading` | Loading… | ஏற்றுகிறது… |
-| `common.moreExist` | More results exist than are shown. | காட்டப்பட்டதை விட அதிக முடிவுகள் உள்ளன. |
-| `common.no` | No | இல்லை |
-| `common.notConfigured` | This site is not configured yet. | இந்தத் தளம் இன்னும் அமைக்கப்படவில்லை. |
-| `common.notFoundTitle` | Not found | கிடைக்கவில்லை |
-| `common.refresh` | Refresh | புதுப்பி |
-| `common.retry` | Try again | மீண்டும் முயற்சிக்கவும் |
-| `common.signIn` | Sign in | உள்நுழைக |
-| `common.signOut` | Sign out | வெளியேறுக |
-| `common.signUp` | Sign up | பதிவு செய்க |
-| `common.skipToContent` | Skip to main content | முதன்மை உள்ளடக்கத்திற்குச் செல்க |
-| `common.staffSignIn` | Staff sign in | பணியாளர் உள்நுழைவு |
-| `common.working` | Working… | செயல்படுகிறது… |
-| `common.yes` | Yes | ஆம் |
-| `dev.capture` | Capture claim structure | கோரிக்கை அமைப்பைப் பெறுக |
-| `dev.failed` | Could not read the session. | அமர்வைப் படிக்க முடியவில்லை. |
-| `dev.note` | Development builds only. Shows the structure of aal, amr and iat with values blanked. It never shows the token. | உருவாக்கப் பதிப்புகளில் மட்டும். aal, amr, iat ஆகியவற்றின் அமைப்பை மதிப்புகள் மறைக்கப்பட்டு காட்டும். டோக்கனைக் காட்டாது. |
-| `dev.refresh` | Refresh session, then capture | அமர்வைப் புதுப்பித்து, பின் பெறுக |
-| `dev.reveal` | Also show enum-like values (the aal level and amr method names) | enum போன்ற மதிப்புகளையும் காட்டு (aal நிலை, amr முறைப் பெயர்கள்) |
-| `dev.title` | Developer: claim structure | உருவாக்குநர்: கோரிக்கை அமைப்பு |
-| `env.live` | LIVE | LIVE |
-| `env.test` | TEST | TEST |
-| `env.unknown` | Environment unknown | சூழல் தெரியவில்லை |
-| `identity.actions` | Actions | செயல்கள் |
-| `identity.actionsSoon` | Approve and unmerge | ஒப்புதல் மற்றும் இணைப்பு நீக்கம் |
-| `identity.all` | All | அனைத்தும் |
-| `identity.approve` | Approve | ஒப்புதல் அளி |
-| `identity.approveBody` | This links the two records. It asks for a fresh authenticator code first. | இது இரண்டு பதிவுகளையும் இணைக்கிறது. முதலில் புதிய அங்கீகாரக் குறியீடு கேட்கப்படும். |
-| `identity.approveConflict` | That approval was refused. It may already be approved, or you may have proposed it. Refresh and try again. | அந்த ஒப்புதல் மறுக்கப்பட்டது. அது ஏற்கனவே அளிக்கப்பட்டிருக்கலாம், அல்லது நீங்களே முன்மொழிந்திருக்கலாம். புதுப்பித்து மீண்டும் முயற்சிக்கவும். |
-| `identity.approveTitle` | Approve this merge? | இந்த இணைப்புக்கு ஒப்புதல் அளிக்கவா? |
-| `identity.approved` | The merge was approved. | இணைப்புக்கு ஒப்புதல் அளிக்கப்பட்டது. |
-| `identity.back` | Back to merges | இணைப்புகளுக்குத் திரும்பு |
-| `identity.col.activated` | Active since | செயலில் உள்ள நேரம் |
-| `identity.col.approvedBy` | Approved by | ஒப்புதல் அளித்தவர் |
-| `identity.col.candidate` | Candidate | வேட்பாளர் |
-| `identity.col.created` | Created | உருவாக்கப்பட்டது |
-| `identity.col.master` | Kept record | வைத்திருக்கும் பதிவு |
-| `identity.col.matched` | Matched on | பொருந்திய விவரம் |
-| `identity.col.merge` | Merge | இணைப்பு |
-| `identity.col.other` | Possible duplicate of | இதன் சாத்தியமான நகல் |
-| `identity.col.patient` | Record | பதிவு |
-| `identity.col.proposedBy` | Proposed by | முன்மொழிந்தவர் |
-| `identity.col.reason` | Reason | காரணம் |
-| `identity.col.resolved` | Resolved | தீர்க்கப்பட்டது |
-| `identity.col.status` | Status | நிலை |
-| `identity.col.subordinate` | Linked record | இணைக்கப்பட்ட பதிவு |
-| `identity.col.unmerged` | Unmerged at | இணைப்பு நீக்கிய நேரம் |
-| `identity.col.unmergedBy` | Unmerged by | இணைப்பை நீக்கியவர் |
-| `identity.detail` | Merge | இணைப்பு |
-| `identity.differentPerson` | A different person from the one who proposed this merge must approve it. | இந்த இணைப்பை முன்மொழிந்தவரிலிருந்து வேறொருவர் ஒப்புதல் அளிக்க வேண்டும். |
-| `identity.dupReason.ambiguous` | Ambiguous | தெளிவற்றது |
-| `identity.dupReason.near_match` | Near match | நெருங்கிய பொருத்தம் |
-| `identity.dupStatus.pending` | Pending | நிலுவையில் |
-| `identity.dupStatus.resolved` | Resolved | தீர்க்கப்பட்டது |
-| `identity.duplicates` | Possible duplicates | சாத்தியமான நகல்கள் |
-| `identity.emptyDuplicates` | There are no possible duplicates to show. | காட்டுவதற்குச் சாத்தியமான நகல்கள் இல்லை. |
-| `identity.emptyMerges` | There are no merges to show. | காட்டுவதற்கு இணைப்புகள் இல்லை. |
-| `identity.filter` | Show items that are | இந்த நிலையிலுள்ளவற்றைக் காட்டு |
-| `identity.flagged` | {{n}} bookings, holds, waitlist entries and match-review rows were recorded while the link was active; a review task lists them, and nothing is undone. | இணைப்பு செயலில் இருந்தபோது {{n}} முன்பதிவுகள், ஒதுக்கீடுகள், காத்திருப்புப் பட்டியல் பதிவுகள் மற்றும் பொருத்த-மதிப்பாய்வு வரிசைகள் பதிவாகின; ஒரு மதிப்பாய்வுப் பணி அவற்றைப் பட்டியலிடுகிறது, எதுவும் மாற்றப்படாது. |
-| `identity.lists` | Identity lists | அடையாளப் பட்டியல்கள் |
-| `identity.mergeStatus.active` | Active | செயலில் |
-| `identity.mergeStatus.awaiting_second_approval` | Awaiting second approval | இரண்டாவது ஒப்புதலுக்காகக் காத்திருக்கிறது |
-| `identity.mergeStatus.unmerged` | Unmerged | இணைப்பு நீக்கப்பட்டது |
-| `identity.merges` | Merges | இணைப்புகள் |
-| `identity.none` | None | எதுவுமில்லை |
-| `identity.openMerge` | Open merge | இணைப்பைத் திற |
-| `identity.title` | Identity | அடையாளம் |
-| `identity.unmerge` | Unmerge | இணைப்பை நீக்கு |
-| `identity.unmergeBody` | This breaks the link between the two records. It asks for a fresh authenticator code first. | இது இரண்டு பதிவுகளுக்கிடையிலான இணைப்பை உடைக்கிறது. முதலில் புதிய அங்கீகாரக் குறியீடு கேட்கப்படும். |
-| `identity.unmergeConflict` | That could not be done. Refresh and try again. | அதைச் செய்ய முடியவில்லை. புதுப்பித்து மீண்டும் முயற்சிக்கவும். |
-| `identity.unmergeTitle` | Unmerge these records? | இந்தப் பதிவுகளின் இணைப்பை நீக்கவா? |
-| `identity.unmerged` | The link was broken. | இணைப்பு உடைக்கப்பட்டது. |
-| `landing.about.heading` | About the hospital | மருத்துவமனை பற்றி |
-| `landing.account` | Account | கணக்கு |
-| `landing.departments.heading` | Departments and doctors | துறைகள் மற்றும் மருத்துவர்கள் |
-| `landing.emergencyLabel` | Emergency information | அவசரகாலத் தகவல் |
-| `landing.faq.a1` | Patient sign-up is not available yet. When it opens, you will enter your mobile number and we will send a one-time code to confirm it. | நோயாளர் பதிவு இன்னும் கிடைக்கவில்லை. அது தொடங்கும்போது, உங்கள் கைபேசி எண்ணை உள்ளிடுவீர்கள்; அதை உறுதிப்படுத்த ஒருமுறைக் குறியீடு அனுப்புவோம். |
-| `landing.faq.a2` | Yes. Use the language menu at the top of any page to switch between English and Tamil. | ஆம். எந்தப் பக்கத்தின் மேலேயும் உள்ள மொழி தேர்வைப் பயன்படுத்தி ஆங்கிலம், தமிழ் இடையே மாறலாம். |
-| `landing.faq.heading` | Frequently asked questions | அடிக்கடி கேட்கப்படும் கேள்விகள் |
-| `landing.faq.q1` | How do I create an account? | கணக்கை எவ்வாறு உருவாக்குவது? |
-| `landing.faq.q2` | Can I use the portal in Tamil? | தளத்தைத் தமிழில் பயன்படுத்தலாமா? |
-| `landing.faq.q3` | How do I raise a concern about my data or my care? | என் தரவு அல்லது சிகிச்சை குறித்த கவலையை எவ்வாறு தெரிவிப்பது? |
-| `landing.faq.q4` | How is my personal information used? | என் தனிப்பட்ட தகவல் எவ்வாறு பயன்படுத்தப்படுகிறது? |
-| `landing.features.book` | Book an appointment | சந்திப்பு நேரத்தை முன்பதிவு செய்யுங்கள் |
-| `landing.features.family` | Manage appointments for family members | குடும்ப உறுப்பினர்களுக்கான சந்திப்புகளை நிர்வகியுங்கள் |
-| `landing.features.heading` | What you can do here | இங்கே நீங்கள் செய்யக்கூடியவை |
-| `landing.features.language` | Use English or Tamil | ஆங்கிலம் அல்லது தமிழைப் பயன்படுத்துங்கள் |
-| `landing.features.messages` | Send and read messages with the clinic | மருத்துவமனையுடன் செய்திகளை அனுப்பவும் படிக்கவும் |
-| `landing.features.offers` | Receive appointment offers by SMS or email | எஸ்எம்எஸ் அல்லது மின்னஞ்சல் மூலம் சந்திப்பு வாய்ப்புகளைப் பெறுங்கள் |
-| `landing.features.records` | See your records after your first visit | முதல் வருகைக்குப் பிறகு உங்கள் பதிவுகளைப் பாருங்கள் |
-| `landing.footer.branding` | Placeholder branding: the name, colours and logo are stand-ins until the hospital supplies its own. | பெயர், நிறங்கள், சின்னம் ஆகியவை தற்காலிகமானவை; மருத்துவமனை தனது சொந்தத்தை வழங்கும் வரை இவ்வாறே இருக்கும். |
-| `landing.footer.grievance` | Grievance contact | குறைதீர்ப்புத் தொடர்பு |
-| `landing.footer.privacyNotice` | Privacy notice | தனியுரிமை அறிவிப்பு |
-| `landing.how.heading` | How it works | இது எவ்வாறு செயல்படுகிறது |
-| `landing.how.step1Body` | Sign up with your mobile number. We send a one-time code to confirm it. | உங்கள் கைபேசி எண்ணுடன் பதிவு செய்யுங்கள். அதை உறுதிப்படுத்த ஒருமுறைக் குறியீடு அனுப்புவோம். |
-| `landing.how.step1Title` | Create your account | உங்கள் கணக்கை உருவாக்குங்கள் |
-| `landing.how.step2Body` | Choose a time that suits you, or accept a time the clinic offers. | உங்களுக்கு ஏற்ற நேரத்தைத் தேர்ந்தெடுங்கள், அல்லது மருத்துவமனை வழங்கும் நேரத்தை ஏற்றுக்கொள்ளுங்கள். |
-| `landing.how.step2Title` | Book or accept an appointment | சந்திப்பை முன்பதிவு செய்யுங்கள் அல்லது ஏற்றுக்கொள்ளுங்கள் |
-| `landing.how.step3Body` | Get messages and reminders about your visit in the portal. | உங்கள் வருகை குறித்த செய்திகளையும் நினைவூட்டல்களையும் தளத்தில் பெறுங்கள். |
-| `landing.how.step3Title` | Stay in touch | தொடர்பில் இருங்கள் |
-| `landing.location.address` | Address | முகவரி |
-| `landing.location.heading` | Location and timings | இடம் மற்றும் நேரங்கள் |
-| `landing.location.hours` | Opening hours | நேரங்கள் |
-| `landing.location.phone` | Phone | தொலைபேசி |
-| `landing.privacy.heading` | Our privacy promise | எங்கள் தனியுரிமை உறுதிமொழி |
-| `landing.privacy.readNotice` | Read the privacy notice | தனியுரிமை அறிவிப்பைப் படிக்கவும் |
-| `languages.en` | English | English |
-| `languages.ta` | தமிழ் | தமிழ் |
-| `nav.home` | Home | முகப்பு |
-| `nav.identity` | Identity | அடையாளம் |
-| `nav.label` | Sections | பிரிவுகள் |
-| `nav.none` | No sections are available to your role. | உங்கள் பங்கிற்குக் கிடைக்கும் பிரிவுகள் எதுவும் இல்லை. |
-| `nav.patients` | Patients | நோயாளர்கள் |
-| `nav.referrals` | Referrals | பரிந்துரைகள் |
-| `nav.scheduling` | Scheduling | நேர அட்டவணை |
-| `nav.tasks` | Tasks | பணிகள் |
-| `pages.backHome` | Back to the home page | முகப்புப் பக்கத்திற்குத் திரும்பு |
-| `pages.notAvailableSignIn` | Patient sign-in is not available yet. | நோயாளர் உள்நுழைவு இன்னும் கிடைக்கவில்லை. |
-| `pages.notAvailableSignUp` | Patient sign-up is not available yet. | நோயாளர் பதிவு இன்னும் கிடைக்கவில்லை. |
-| `pages.privacyTitle` | Privacy notice | தனியுரிமை அறிவிப்பு |
-| `pages.signInTitle` | Sign in | உள்நுழைக |
-| `pages.signUpTitle` | Sign up | பதிவு செய்க |
-| `patients.back` | Back to patients | நோயாளர்களுக்குத் திரும்பு |
-| `patients.col.label` | Label | குறிப்பு |
-| `patients.col.matched` | Matched on | பொருந்திய விவரம் |
-| `patients.col.record` | Record | பதிவு |
-| `patients.col.verified` | Verified | சரிபார்க்கப்பட்டது |
-| `patients.col.via` | Registered via | பதிவு செய்த வழி |
-| `patients.confirm` | Confirm identity | அடையாளத்தை உறுதிப்படுத்து |
-| `patients.confirmBody` | This records that you confirmed this patient's identity. It is kept under your name. | இந்த நோயாளரின் அடையாளத்தை நீங்கள் உறுதிப்படுத்தியதை இது பதிவு செய்கிறது. அது உங்கள் பெயரில் வைக்கப்படும். |
-| `patients.confirmConflict` | That confirmation conflicts with an earlier request. Refresh and try again. | அந்த உறுதிப்படுத்தல் முந்தைய கோரிக்கையுடன் முரண்படுகிறது. புதுப்பித்து மீண்டும் முயற்சிக்கவும். |
-| `patients.confirmTitle` | Confirm this identity? | இந்த அடையாளத்தை உறுதிப்படுத்தவா? |
-| `patients.dob` | Date of birth | பிறந்த தேதி |
-| `patients.event.confirm` | Confirmed | உறுதிப்படுத்தப்பட்டது |
-| `patients.event.revoke` | Confirmation revoked | உறுதிப்படுத்தல் திரும்பப் பெறப்பட்டது |
-| `patients.invalidInput` | Check the date of birth and phone number. | பிறந்த தேதி மற்றும் தொலைபேசி எண்ணைச் சரிபார்க்கவும். |
-| `patients.labelsWithheld` | Labels are withheld for these results. | இந்த முடிவுகளுக்கான குறிப்புகள் மறைக்கப்பட்டுள்ளன. |
-| `patients.latestEvent` | Latest identity event | சமீபத்திய அடையாள நிகழ்வு |
-| `patients.matchedKind.name_dob` | Name and date of birth | பெயர் மற்றும் பிறந்த தேதி |
-| `patients.matchedKind.phone` | Phone | தொலைபேசி |
-| `patients.mergedInto` | This record was merged into another. | இந்தப் பதிவு வேறொரு பதிவில் இணைக்கப்பட்டது. |
-| `patients.name` | Full name | முழுப் பெயர் |
-| `patients.noEvent` | None | எதுவுமில்லை |
-| `patients.noMatch` | No matching record was found. | பொருந்தும் பதிவு எதுவும் கிடைக்கவில்லை. |
-| `patients.notVerified` | Not verified | சரிபார்க்கப்படவில்லை |
-| `patients.open` | Open | திற |
-| `patients.openId` | Record id | பதிவு அடையாள எண் |
-| `patients.openInvalid` | That is not a record id. | அது பதிவு அடையாள எண் அல்ல. |
-| `patients.openMerged` | Open that record | அந்தப் பதிவைத் திற |
-| `patients.openRecord` | Open record | பதிவைத் திற |
-| `patients.openTitle` | Open a record by id | அடையாள எண்ணால் பதிவைத் திற |
-| `patients.phone` | Phone number (optional) | தொலைபேசி எண் (விருப்பம்) |
-| `patients.rateLimited` | Too many searches. Wait a moment and try again. | அதிகத் தேடல்கள். சற்று காத்திருந்து மீண்டும் முயற்சிக்கவும். |
-| `patients.record` | Patient record | நோயாளர் பதிவு |
-| `patients.results` | Search results | தேடல் முடிவுகள் |
-| `patients.revoke.accepted` | The request was accepted. Check the record for its current state. | கோரிக்கை ஏற்கப்பட்டது. பதிவின் தற்போதைய நிலையைச் சரிபார்க்கவும். |
-| `patients.revoke.body` | This moves the record back to unverified, so a match on it is reviewed by a person. Nothing that is already linked is undone. | இது பதிவை மீண்டும் சரிபார்க்கப்படாத நிலைக்கு மாற்றுகிறது; அதனால் அதில் ஏற்படும் பொருத்தத்தை ஒரு நபர் மதிப்பாய்வு செய்வார். ஏற்கனவே இணைக்கப்பட்டவை எதுவும் மாற்றப்படாது. |
-| `patients.revoke.button` | Revoke confirmation | உறுதிப்படுத்தலைத் திரும்பப் பெறு |
-| `patients.revoke.chooseFirst` | Choose a reason first. | முதலில் ஒரு காரணத்தைத் தேர்ந்தெடுக்கவும். |
-| `patients.revoke.conflict` | That revoke conflicts with an earlier request. Refresh and try again. | அந்தத் திரும்பப் பெறுதல் முந்தைய கோரிக்கையுடன் முரண்படுகிறது. புதுப்பித்து மீண்டும் முயற்சிக்கவும். |
-| `patients.revoke.done` | The confirmation was revoked. | உறுதிப்படுத்தல் திரும்பப் பெறப்பட்டது. |
-| `patients.revoke.reason` | Reason | காரணம் |
-| `patients.revoke.reasons.mistaken_click` | Mistaken click | Mistaken click |
-| `patients.revoke.reasons.planted_or_suspect` | Planted or suspect | Planted or suspect |
-| `patients.revoke.reasons.wrong_person` | Wrong person | Wrong person |
-| `patients.revoke.task.not_configured` | No review task was raised: the task settings are not configured yet. | மதிப்பாய்வுப் பணி உருவாக்கப்படவில்லை: பணி அமைப்புகள் இன்னும் அமைக்கப்படவில்லை. |
-| `patients.revoke.task.on_record` | Nothing new was recorded: this was already done, or the record was already unverified. | புதிதாக எதுவும் பதிவு செய்யப்படவில்லை: இது ஏற்கனவே செய்யப்பட்டது, அல்லது பதிவு ஏற்கனவே சரிபார்க்கப்படாத நிலையில் இருந்தது. |
-| `patients.revoke.task.raised` | A review task was raised. | ஒரு மதிப்பாய்வுப் பணி உருவாக்கப்பட்டது. |
-| `patients.revoke.title` | Revoke this identity confirmation? | இந்த அடையாள உறுதிப்படுத்தலைத் திரும்பப் பெறவா? |
-| `patients.search` | Search | தேடு |
-| `patients.searchHint` | Search finds a record only for exactly these details. Nothing typed here is saved. | இந்த விவரங்களுக்குச் சரியாகப் பொருந்தும் பதிவை மட்டுமே தேடல் கண்டறியும். இங்கே தட்டச்சு செய்தது எதுவும் சேமிக்கப்படாது. |
-| `patients.searchTitle` | Search | தேடல் |
-| `patients.title` | Patients | நோயாளர்கள் |
-| `patients.truncated` | More matches exist than are shown. | காட்டப்பட்டதை விட அதிகப் பொருத்தங்கள் உள்ளன. |
-| `patients.unavailable` | Search is not available right now. Try again later. | தேடல் இப்போது கிடைக்கவில்லை. பின்னர் மீண்டும் முயற்சிக்கவும். |
-| `patients.verified` | Verified | சரிபார்க்கப்பட்டது |
-| `patients.via.front_desk` | Front desk | வரவேற்பு மேசை |
-| `patients.via.referral_worker` | Referral worker | பரிந்துரைப் பணியாளர் |
-| `patients.withheld` | Withheld | மறைக்கப்பட்டது |
-| `placeholder.about` | [PLACEHOLDER: about the hospital. Content must be supplied by the hospital.] | [PLACEHOLDER: about the hospital. Content must be supplied by the hospital.] |
-| `placeholder.address` | [PLACEHOLDER: address] | [PLACEHOLDER: address] |
-| `placeholder.departments` | [PLACEHOLDER: departments and doctors. Content must be supplied by the hospital.] | [PLACEHOLDER: departments and doctors. Content must be supplied by the hospital.] |
-| `placeholder.faqGrievance` | [PLACEHOLDER: how to raise a concern or a data request. Wording to be supplied by the hospital and its legal counsel.] | [PLACEHOLDER: how to raise a concern or a data request. Wording to be supplied by the hospital and its legal counsel.] |
-| `placeholder.faqPrivacy` | [PLACEHOLDER: how personal information is used. Wording to be supplied by the hospital and its legal counsel.] | [PLACEHOLDER: how personal information is used. Wording to be supplied by the hospital and its legal counsel.] |
-| `placeholder.grievance` | [PLACEHOLDER: grievance officer name and contact details. To be supplied by the hospital.] | [PLACEHOLDER: grievance officer name and contact details. To be supplied by the hospital.] |
-| `placeholder.hours` | [PLACEHOLDER: opening hours] | [PLACEHOLDER: opening hours] |
-| `placeholder.identityChecks` | [PLACEHOLDER: what must be checked before confirming an identity. To be written by the clinic.] | [PLACEHOLDER: what must be checked before confirming an identity. To be written by the clinic.] |
-| `placeholder.phone` | [PLACEHOLDER: phone number] | [PLACEHOLDER: phone number] |
-| `placeholder.privacyNotice` | [PLACEHOLDER: privacy notice. To be supplied by the hospital and approved by its legal counsel.] | [PLACEHOLDER: privacy notice. To be supplied by the hospital and approved by its legal counsel.] |
-| `placeholder.privacyPromise` | [PLACEHOLDER: privacy promise wording. To be written and approved by the hospital and its legal counsel.] | [PLACEHOLDER: privacy promise wording. To be written and approved by the hospital and its legal counsel.] |
-| `placeholder.reasonCodes` | PLACEHOLDER - clinician to define | PLACEHOLDER - clinician to define |
-| `placeholder.reviewReasons` | PLACEHOLDER - clinician to define | PLACEHOLDER - clinician to define |
-| `placeholder.revokeReasons` | [PLACEHOLDER: the wording of these reasons is not final. To be confirmed by the clinic.] | [PLACEHOLDER: the wording of these reasons is not final. To be confirmed by the clinic.] |
-| `placeholder.taskClose` | PLACEHOLDER - clinician to define how this kind of task is closed. It cannot be closed here. | PLACEHOLDER - clinician to define how this kind of task is closed. It cannot be closed here. |
-| `problem.conflict` | That conflicts with the current state. Refresh and try again. | இது தற்போதைய நிலையுடன் முரண்படுகிறது. புதுப்பித்து மீண்டும் முயற்சிக்கவும். |
-| `problem.forbidden` | This is not available to your role. | இது உங்கள் பங்கிற்குக் கிடைக்காது. |
-| `problem.invalid` | Check what you entered and try again. | நீங்கள் உள்ளிட்டதைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும். |
-| `problem.network` | The connection failed. Check it and try again. | இணைப்பு தோல்வியடைந்தது. இணைப்பைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும். |
-| `problem.not_found` | That could not be found. | அது கிடைக்கவில்லை. |
-| `problem.rate_limited` | Too many requests. Wait a moment and try again. | அதிக கோரிக்கைகள். சற்று காத்திருந்து மீண்டும் முயற்சிக்கவும். |
-| `problem.retry` | Try again | மீண்டும் முயற்சிக்கவும் |
-| `problem.step_up` | A fresh authenticator code is needed to do this. Nothing was changed. | இதைச் செய்ய புதிய அங்கீகாரக் குறியீடு தேவை. எதுவும் மாற்றப்படவில்லை. |
-| `problem.unauthorized` | Please sign in again. | தயவுசெய்து மீண்டும் உள்நுழையவும். |
-| `problem.unavailable` | This is not available right now. Try again in a moment. | இது இப்போது கிடைக்கவில்லை. சிறிது நேரம் கழித்து மீண்டும் முயற்சிக்கவும். |
-| `problem.unknown` | Something went wrong. Try again. | ஏதோ தவறு ஏற்பட்டது. மீண்டும் முயற்சிக்கவும். |
-| `profiles.clinical` | Clinical | மருத்துவப் பயன்பாடு |
-| `profiles.demo` | Demo | டெமோ |
-| `referrals.back` | Back to referrals | பரிந்துரைகளுக்குத் திரும்பு |
-| `referrals.card` | Card | அட்டை |
-| `referrals.col.decision` | Decision | முடிவு |
-| `referrals.col.document` | Document | ஆவணம் |
-| `referrals.col.holds` | Open holds | திறந்த நிறுத்தங்கள் |
-| `referrals.col.received` | Received | பெறப்பட்டது |
-| `referrals.col.state` | State | நிலை |
-| `referrals.col.type` | Type | வகை |
-| `referrals.decided` | Decided | முடிவு செய்யப்பட்டது |
-| `referrals.decision.approve` | Approve | Approve |
-| `referrals.decision.edit` | Edit | Edit |
-| `referrals.decision.reject` | Reject | Reject |
-| `referrals.detail` | Referral | பரிந்துரை |
-| `referrals.empty` | There are no referrals to show. | காட்டுவதற்குப் பரிந்துரைகள் இல்லை. |
-| `referrals.hiddenFromRole` | Not shown to your role | உங்கள் பங்கிற்குக் காட்டப்படாது |
-| `referrals.holds` | Holds | நிறுத்தங்கள் |
-| `referrals.noHolds` | No holds. | நிறுத்தங்கள் இல்லை. |
-| `referrals.noProposal` | There is no proposal for this referral. | இந்தப் பரிந்துரைக்கு முன்மொழிவு இல்லை. |
-| `referrals.notDecided` | Not decided yet | இன்னும் முடிவு செய்யப்படவில்லை |
-| `referrals.open` | Open referral | பரிந்துரையைத் திற |
-| `referrals.proposal` | Triage proposal | வகைப்படுத்தல் பரிந்துரை |
-| `referrals.proposalAbstained` | Abstained | தவிர்க்கப்பட்டது |
-| `referrals.proposalMode` | Mode | முறை |
-| `referrals.registeredBy` | Registered by | பதிவு செய்தவர் |
-| `referrals.review.confirmBody` | You are about to record the decision "{{decision}}" for this referral. It is kept under your name. | இந்தப் பரிந்துரைக்கு "{{decision}}" என்ற முடிவை நீங்கள் பதிவு செய்யப் போகிறீர்கள். அது உங்கள் பெயரில் வைக்கப்படும். |
-| `referrals.review.confirmTitle` | Record this decision? | இந்த முடிவைப் பதிவு செய்யவா? |
-| `referrals.review.conflict` | The referral is not waiting for a decision, or a different decision is already recorded. Refresh and try again. | பரிந்துரை முடிவுக்காகக் காத்திருக்கவில்லை, அல்லது வேறொரு முடிவு ஏற்கனவே பதிவாகியுள்ளது. புதுப்பித்து மீண்டும் முயற்சிக்கவும். |
-| `referrals.review.decidedNote` | A decision has already been recorded. | ஒரு முடிவு ஏற்கனவே பதிவு செய்யப்பட்டுள்ளது. |
-| `referrals.review.done` | The decision was recorded. | முடிவு பதிவு செய்யப்பட்டது. |
-| `referrals.review.help` | Choose a decision for this referral. Nothing is chosen for you. | இந்தப் பரிந்துரைக்கு ஒரு முடிவைத் தேர்ந்தெடுங்கள். உங்களுக்காக எதுவும் தேர்ந்தெடுக்கப்படவில்லை. |
-| `referrals.review.legend` | Decision | முடிவு |
-| `referrals.review.reasons` | Reasons | காரணங்கள் |
-| `referrals.review.record` | Record decision | முடிவைப் பதிவு செய் |
-| `referrals.review.title` | Record a decision | முடிவைப் பதிவு செய் |
-| `referrals.title` | Referrals | பரிந்துரைகள் |
-| `referrals.upload` | Upload a document | ஆவணத்தைப் பதிவேற்று |
-| `referrals.version` | version | பதிப்பு |
-| `roles.admin` | Admin | நிர்வாகி |
-| `roles.auditor` | Auditor | தணிக்கையாளர் |
-| `roles.business_owner` | Business owner | வணிக உரிமையாளர் |
-| `roles.doctor` | Doctor | மருத்துவர் |
-| `roles.front_desk` | Front desk | வரவேற்பு மேசை |
-| `roles.guardian` | Guardian | பாதுகாவலர் |
-| `roles.nurse` | Nurse | செவிலியர் |
-| `roles.patient` | Patient | நோயாளர் |
-| `scheduling.active` | Active | செயலில் |
-| `scheduling.choose` | Choose a visit type | ஒரு வருகை வகையைத் தேர்ந்தெடுக்கவும் |
-| `scheduling.col.action` | Action | செயல் |
-| `scheduling.col.code` | Code | குறியீடு |
-| `scheduling.col.duration` | Length | நீளம் |
-| `scheduling.col.expires` | Expires | காலாவதி |
-| `scheduling.col.hold` | Hold | ஒதுக்கீடு |
-| `scheduling.col.label` | Label | குறிப்பு |
-| `scheduling.col.name` | Name | பெயர் |
-| `scheduling.col.patient` | Patient | நோயாளர் |
-| `scheduling.col.rank` | Rank | தரம் |
-| `scheduling.col.slot` | Slot | நேரம் |
-| `scheduling.col.status` | Status | நிலை |
-| `scheduling.col.visitType` | Visit type | வருகை வகை |
-| `scheduling.empty` | Nothing to show. | காட்டுவதற்கு எதுவும் இல்லை. |
-| `scheduling.holdFilter` | Show holds that are | இந்த நிலையிலுள்ள ஒதுக்கீடுகளைக் காட்டு |
-| `scheduling.holdStatus.active` | Active | செயலில் |
-| `scheduling.holdStatus.converted` | Booked | முன்பதிவானது |
-| `scheduling.holdStatus.expired` | Expired | காலாவதியானது |
-| `scheduling.holdStatus.released` | Released | விடுவிக்கப்பட்டது |
-| `scheduling.holds` | Holds | ஒதுக்கீடுகள் |
-| `scheduling.inactive` | Inactive | செயலற்றது |
-| `scheduling.lists` | Scheduling lists | அட்டவணைப் பட்டியல்கள் |
-| `scheduling.locations` | Locations | இடங்கள் |
-| `scheduling.minutes` | min | நிமி |
-| `scheduling.noHolds` | There are no holds to show. | காட்டுவதற்கு ஒதுக்கீடுகள் இல்லை. |
-| `scheduling.offerCandidates` | Candidate details | வேட்பாளர் விவரங்கள் |
-| `scheduling.offerStatus.degraded` | Partly available | ஓரளவு கிடைக்கிறது |
-| `scheduling.offerStatus.empty` | No candidates | வேட்பாளர்கள் இல்லை |
-| `scheduling.offerStatus.ok` | A draft is ready | வரைவு தயாராக உள்ளது |
-| `scheduling.offerStatus.unavailable` | Not set up yet | இன்னும் அமைக்கப்படவில்லை |
-| `scheduling.offers` | Offers | வாய்ப்புகள் |
-| `scheduling.offersNote` | A read-only view of the draft offer. It is computed when you ask and stored nowhere. | வரைவு வாய்ப்பின் படிக்க-மட்டும் பார்வை. நீங்கள் கேட்கும்போது கணக்கிடப்படுகிறது, எங்கும் சேமிக்கப்படுவதில்லை. |
-| `scheduling.priorityLevels` | Priority levels | முன்னுரிமை நிலைகள் |
-| `scheduling.providers` | Providers | வழங்குநர்கள் |
-| `scheduling.release` | Release | விடுவி |
-| `scheduling.releaseBody` | The slot is given back now. | நேரம் இப்போதே திருப்பி வழங்கப்படும். |
-| `scheduling.releaseConflict` | This hold was already booked or has expired. The list will refresh. | இந்த ஒதுக்கீடு ஏற்கனவே முன்பதிவாகிவிட்டது அல்லது காலாவதியானது. பட்டியல் புதுப்பிக்கப்படும். |
-| `scheduling.releaseTitle` | Release this hold? | இந்த ஒதுக்கீட்டை விடுவிக்கவா? |
-| `scheduling.sendOffer` | Send offer | வாய்ப்பை அனுப்பு |
-| `scheduling.showDraft` | Show draft | வரைவைக் காட்டு |
-| `scheduling.showInactive` | Show inactive | செயலற்றவற்றையும் காட்டு |
-| `scheduling.title` | Scheduling | நேர அட்டவணை |
-| `scheduling.visitTypes` | Visit types | வருகை வகைகள் |
-| `shell.activeRole` | Active role | தற்போதைய பங்கு |
-| `shell.changeRole` | Change role | பங்கை மாற்று |
-| `shell.clinic` | Clinic | கிளினிக் |
-| `shell.continue` | Continue | தொடரவும் |
-| `shell.environment` | Environment | சூழல் |
-| `shell.navLabel` | Session | அமர்வு |
-| `shell.pickHelp` | Pick the one role you need for this session. You can change it later. | இந்த அமர்வுக்குத் தேவையான ஒரே ஒரு பங்கைத் தேர்ந்தெடுங்கள். பின்னர் மாற்றலாம். |
-| `shell.pickTitle` | Choose your active role | உங்கள் தற்போதைய பங்கைத் தேர்ந்தெடுங்கள் |
-| `shell.profile` | Operating profile | இயக்க நிலை |
-| `shell.profileUnknown` | Operating profile unknown | இயக்க நிலை தெரியவில்லை |
-| `staff.account.signOut` | Sign out | வெளியேறுக |
-| `staff.account.unavailable` | This account cannot use the staff console. Contact your administrator. | இந்தக் கணக்கால் பணியாளர் தளத்தைப் பயன்படுத்த முடியாது. உங்கள் நிர்வாகியைத் தொடர்பு கொள்ளவும். |
-| `staff.console.error` | Your account details could not be loaded. | உங்கள் கணக்கு விவரங்களை ஏற்ற முடியவில்லை. |
-| `staff.console.loading` | Loading your account… | உங்கள் கணக்கை ஏற்றுகிறது… |
-| `staff.console.retry` | Try again | மீண்டும் முயற்சிக்கவும் |
-| `staff.console.welcome` | You are signed in. | நீங்கள் உள்நுழைந்துள்ளீர்கள். |
-| `staff.mfa.challenge.help` | Open your authenticator app and enter the current 6-digit code. | அங்கீகார செயலியைத் திறந்து தற்போதைய 6 இலக்கக் குறியீட்டை உள்ளிடுங்கள். |
-| `staff.mfa.challenge.submit` | Verify | சரிபார்க்கவும் |
-| `staff.mfa.challenge.title` | Enter your authenticator code | உங்கள் அங்கீகாரக் குறியீட்டை உள்ளிடுங்கள் |
-| `staff.mfa.code` | 6-digit code | 6 இலக்கக் குறியீடு |
-| `staff.mfa.codeHint` | Enter the 6 digits shown in your authenticator app. | உங்கள் அங்கீகார செயலியில் காட்டப்படும் 6 இலக்கங்களை உள்ளிடுங்கள். |
-| `staff.mfa.enrol.error` | Setup could not be started. | அமைப்பைத் தொடங்க முடியவில்லை. |
-| `staff.mfa.enrol.intro` | Staff accounts need a second step at every sign-in. Scan this QR code with an authenticator app. | பணியாளர் கணக்குகளுக்கு ஒவ்வொரு உள்நுழைவிலும் இரண்டாவது படி தேவை. ஒரு அங்கீகார செயலி மூலம் இந்த QR குறியீட்டை ஸ்கேன் செய்யுங்கள். |
-| `staff.mfa.enrol.manual` | Or enter this key in the app manually: | அல்லது இந்த விசையைச் செயலியில் கைமுறையாக உள்ளிடுங்கள்: |
-| `staff.mfa.enrol.preparing` | Preparing your setup… | உங்கள் அமைப்பைத் தயாரிக்கிறது… |
-| `staff.mfa.enrol.retry` | Try again | மீண்டும் முயற்சிக்கவும் |
-| `staff.mfa.enrol.scanAlt` | QR code for your authenticator app | அங்கீகார செயலிக்கான QR குறியீடு |
-| `staff.mfa.enrol.submit` | Verify and continue | சரிபார்த்து தொடரவும் |
-| `staff.mfa.enrol.title` | Set up your authenticator app | உங்கள் அங்கீகார செயலியை அமைக்கவும் |
-| `staff.mfa.failed` | That code was not accepted. Try again. | அந்தக் குறியீடு ஏற்கப்படவில்லை. மீண்டும் முயற்சிக்கவும். |
-| `staff.mfa.invalid` | Enter the 6-digit code. | 6 இலக்கக் குறியீட்டை உள்ளிடுங்கள். |
-| `staff.mfa.verifying` | Verifying… | சரிபார்க்கிறது… |
-| `staff.session.ended` | Please sign in again. | தயவுசெய்து மீண்டும் உள்நுழையவும். |
-| `staff.signIn.email` | Work email | பணி மின்னஞ்சல் |
-| `staff.signIn.failed` | Sign-in failed. Check your details and try again. | உள்நுழைவு தோல்வியடைந்தது. விவரங்களைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும். |
-| `staff.signIn.intro` | Sign in with your work email and password. | உங்கள் பணி மின்னஞ்சல் மற்றும் கடவுச்சொல்லுடன் உள்நுழையுங்கள். |
-| `staff.signIn.invitationOnly` | Accounts are created by invitation only. | கணக்குகள் அழைப்பின் மூலம் மட்டுமே உருவாக்கப்படும். |
-| `staff.signIn.password` | Password | கடவுச்சொல் |
-| `staff.signIn.submit` | Sign in | உள்நுழைக |
-| `staff.signIn.submitting` | Signing in… | உள்நுழைகிறது… |
-| `staff.signIn.title` | Staff sign in | பணியாளர் உள்நுழைவு |
-| `staff.stepUp.cancel` | Cancel | ரத்து செய் |
-| `staff.stepUp.help` | This action needs a fresh code from your authenticator app. | இந்தச் செயலுக்கு உங்கள் அங்கீகார செயலியிலிருந்து புதிய குறியீடு தேவை. |
-| `staff.stepUp.submit` | Confirm | உறுதிப்படுத்துக |
-| `staff.stepUp.title` | Confirm it is you | நீங்கள்தான் என உறுதிப்படுத்துங்கள் |
-| `tasks.ackBody` | You will be recorded as the person who took this task. | இந்தப் பணியை எடுத்தவராக நீங்கள் பதிவு செய்யப்படுவீர்கள். |
-| `tasks.ackTitle` | Acknowledge this task? | இந்தப் பணியை ஏற்றுக்கொள்ளவா? |
-| `tasks.acknowledge` | Acknowledge | ஏற்றுக்கொள் |
-| `tasks.acknowledgedBy` | Acknowledged by | ஏற்றுக்கொண்டவர் |
-| `tasks.actions` | Actions | செயல்கள் |
-| `tasks.back` | Back to tasks | பணிகளுக்குத் திரும்பு |
-| `tasks.closed` | This task is closed. | இந்தப் பணி முடிக்கப்பட்டது. |
-| `tasks.closedElsewhere` | This kind of task is closed through its own screen, not here. | இந்த வகைப் பணி இங்கே அல்ல, அதன் சொந்தத் திரையில் முடிக்கப்படும். |
-| `tasks.col.assigned` | Assigned to | ஒதுக்கப்பட்டவர் |
-| `tasks.col.created` | Created | உருவாக்கப்பட்டது |
-| `tasks.col.kind` | Kind | வகை |
-| `tasks.col.priority` | Priority | முன்னுரிமை |
-| `tasks.col.status` | Status | நிலை |
-| `tasks.col.task` | Task | பணி |
-| `tasks.conflictAck` | Someone else holds this task, or it is already closed. | இந்தப் பணியை வேறொருவர் வைத்துள்ளார், அல்லது ஏற்கனவே முடிக்கப்பட்டது. |
-| `tasks.conflictResolve` | This task cannot be closed here, or someone else changed it. | இந்தப் பணியை இங்கே முடிக்க முடியாது, அல்லது வேறொருவர் மாற்றியுள்ளார். |
-| `tasks.detail` | Task | பணி |
-| `tasks.empty` | There are no tasks to show. | காட்டுவதற்குப் பணிகள் இல்லை. |
-| `tasks.filter` | Show tasks that are | இந்த நிலையிலுள்ள பணிகளைக் காட்டு |
-| `tasks.kind.identity_confirmation_revoked` | Identity confirmation revoked | அடையாள உறுதிப்படுத்தல் திரும்பப் பெறப்பட்டது |
-| `tasks.kind.red_flag` | Red flag | Red flag |
-| `tasks.kind.referral_dead_letter` | Referral failed | பரிந்துரை தோல்வியடைந்தது |
-| `tasks.kind.referral_hold` | Referral hold | பரிந்துரை நிறுத்தம் |
-| `tasks.kind.screening_unassessable` | Unassessable | Unassessable |
-| `tasks.kind.triage_proposal` | Triage proposal | Triage proposal |
-| `tasks.kind.unmerge_review` | Unmerge review | இணைப்பு நீக்க மதிப்பாய்வு |
-| `tasks.noProvenance` | Nothing is recorded. | எதுவும் பதிவு செய்யப்படவில்லை. |
-| `tasks.open` | Open task | பணியைத் திற |
-| `tasks.openReferral` | Open the referral | பரிந்துரையைத் திற |
-| `tasks.priority.immediate` | Immediate | உடனடி |
-| `tasks.priority.standard` | Standard | வழக்கமான |
-| `tasks.provenance` | Where it came from | இது எங்கிருந்து வந்தது |
-| `tasks.reasonCodes` | Reason codes | காரணக் குறியீடுகள் |
-| `tasks.resolve` | Resolve | முடி |
-| `tasks.resolveBody` | This closes the task. | இது பணியை முடிக்கிறது. |
-| `tasks.resolveTitle` | Resolve this task? | இந்தப் பணியை முடிக்கவா? |
-| `tasks.resolvedAt` | Closed at | முடிக்கப்பட்ட நேரம் |
-| `tasks.source` | Source message | மூலச் செய்தி |
-| `tasks.status.acknowledged` | Acknowledged | ஏற்றுக்கொள்ளப்பட்டவை |
-| `tasks.status.open` | Open | திறந்தவை |
-| `tasks.status.resolved` | Resolved | முடிந்தவை |
-| `tasks.title` | Tasks | பணிகள் |
-| `tasks.urgent` | Urgent | அவசரம் |
-| `tasks.urgentNote` | Shown first because of its kind or priority. | வகை அல்லது முன்னுரிமை காரணமாக முதலில் காட்டப்படுகிறது. |
-| `tasks.you` | You | நீங்கள் |
-| `upload.another` | Upload another | மற்றொன்றைப் பதிவேற்று |
-| `upload.conflict` | That upload conflicts with an earlier one. Start again. | அந்தப் பதிவேற்றம் முந்தையதுடன் முரண்படுகிறது. மீண்டும் தொடங்கவும். |
-| `upload.done` | Uploaded | பதிவேற்றப்பட்டது |
-| `upload.file` | File | கோப்பு |
-| `upload.fileHint` | PDF, JPEG or PNG. | PDF, JPEG அல்லது PNG. |
-| `upload.invalid` | The file was not accepted. | கோப்பு ஏற்கப்படவில்லை. |
-| `upload.kind` | Kind of document | ஆவண வகை |
-| `upload.kinds.other` | Other | மற்றவை |
-| `upload.kinds.referral` | Referral | பரிந்துரை |
-| `upload.kinds.report` | Report | அறிக்கை |
-| `upload.local.empty` | That file is empty. | அந்தக் கோப்பு காலியாக உள்ளது. |
-| `upload.local.none` | Choose a file first. | முதலில் ஒரு கோப்பைத் தேர்ந்தெடுக்கவும். |
-| `upload.local.type` | Only PDF, JPEG or PNG files can be uploaded. | PDF, JPEG அல்லது PNG கோப்புகளை மட்டுமே பதிவேற்ற முடியும். |
-| `upload.notCheckedNote` | This file was not checked. | இந்தக் கோப்பு சரிபார்க்கப்படவில்லை. |
-| `upload.notScannedNote` | This file has not been scanned yet. | இந்தக் கோப்பு இன்னும் ஸ்கேன் செய்யப்படவில்லை. |
-| `upload.openIt` | Open the referral | பரிந்துரையைத் திற |
-| `upload.phase.checking` | Checking the file… | கோப்பைச் சரிபார்க்கிறது… |
-| `upload.phase.preparing` | Preparing the upload… | பதிவேற்றத்தைத் தயாரிக்கிறது… |
-| `upload.phase.sending` | Sending the file… | கோப்பை அனுப்புகிறது… |
-| `upload.scan.clean` | Clean | சுத்தம் |
-| `upload.scan.not_checked` | Not checked | சரிபார்க்கப்படவில்லை |
-| `upload.scan.not_scanned` | Not scanned yet | இன்னும் ஸ்கேன் செய்யப்படவில்லை |
-| `upload.scanStatus` | Scan status | ஸ்கேன் நிலை |
-| `upload.submit` | Upload | பதிவேற்று |
-| `upload.title` | Upload a document | ஆவணத்தைப் பதிவேற்று |
+| proposal | வகைப்படுத்தல் பரிந்துரை (recommendation) x1; முன்மொழிவு x1; முன்மொழி- (propose) x3 | Use முன்மொழிவு / முன்மொழி throughout so proposal is not confused with பரிந்துரை (referral). |
+| resolve / resolved | முடி / முடிந்தவை (tasks) x9; தீர்க்கப்பட்டது (identity) x2 | Standardise on the தீர்- root (தீர்க்கப்பட்டது) for resolved status; avoid முடி, which also means hair. |
+| hold | நிறுத்தம் (referral hold) x4; ஒதுக்கீடு (slot hold) x6 | Use one clear term per hold type, identically everywhere (e.g. நிறுத்திவைப்பு for referral holds, தற்காலிக ஒதுக்கீடு for slot holds). |
+| clinic / hospital | மருத்துவமனை x5; கிளினிக் x1 | Source says "clinic" in several strings but Tamil uses மருத்துவமனை there and கிளினிக் in shell.clinic; standardise on one. |
+| decision / results | முடிவு (decision) x8; முடிவுகள் (search results) x2 | முடிவு means both decision and search results; use a different word for results (e.g. பொருத்தங்கள்). |
+
+## All strings
+
+| Key | English | Tamil | AI review |
+|---|---|---|---|
+| `app.hospitalName` | [PLACEHOLDER: hospital name] | [PLACEHOLDER: மருத்துவமனையின் பெயர்] | ok |
+| `app.patientTitle` | Patient portal | நோயாளர் தளம் | ok |
+| `app.staffTitle` | Staff console | பணியாளர் தளம் | ok |
+| `common.cancel` | Cancel | ரத்து செய் | ok |
+| `common.comingSoon` | Coming soon | விரைவில் வரும் | ok |
+| `common.emergencyBanner` | In an emergency call 108 | அவசரநிலையில் 108 ஐ அழைக்கவும் | ok |
+| `common.genericError` | Something went wrong. | ஏதோ தவறு ஏற்பட்டது. | ok |
+| `common.language` | Language | மொழி | ok |
+| `common.loading` | Loading… | ஏற்றுகிறது… | ok |
+| `common.moreExist` | More results exist than are shown. | காட்டப்பட்டதை விட அதிக முடிவுகள் உள்ளன. | ok |
+| `common.no` | No | இல்லை | ok |
+| `common.notConfigured` | This site is not configured yet. | இந்தத் தளம் இன்னும் அமைக்கப்படவில்லை. | ok |
+| `common.notFoundTitle` | Not found | கிடைக்கவில்லை | ok |
+| `common.refresh` | Refresh | புதுப்பி | ok |
+| `common.retry` | Try again | மீண்டும் முயற்சிக்கவும் | ok |
+| `common.signIn` | Sign in | உள்நுழைக | ok |
+| `common.signOut` | Sign out | வெளியேறுக | ok |
+| `common.signUp` | Sign up | பதிவு செய்க | ok |
+| `common.skipToContent` | Skip to main content | முதன்மை உள்ளடக்கத்திற்குச் செல்க | minor drift |
+| `common.staffSignIn` | Staff sign in | பணியாளர் உள்நுழைவு | ok |
+| `common.working` | Working… | செயல்படுகிறது… | minor drift; flag (unnatural): Literal "it is functioning"; wording for a busy state should read as processing. |
+| `common.yes` | Yes | ஆம் | ok |
+| `dev.capture` | Capture claim structure | கோரிக்கை அமைப்பைப் பெறுக | minor drift |
+| `dev.failed` | Could not read the session. | அமர்வைப் படிக்க முடியவில்லை. | ok |
+| `dev.note` | Development builds only. Shows the structure of aal, amr and iat with values blanked. It never shows the token. | உருவாக்கப் பதிப்புகளில் மட்டும். aal, amr, iat ஆகியவற்றின் அமைப்பை மதிப்புகள் மறைக்கப்பட்டு காட்டும். டோக்கனைக் காட்டாது. | minor drift |
+| `dev.refresh` | Refresh session, then capture | அமர்வைப் புதுப்பித்து, பின் பெறுக | minor drift |
+| `dev.reveal` | Also show enum-like values (the aal level and amr method names) | enum போன்ற மதிப்புகளையும் காட்டு (aal நிலை, amr முறைப் பெயர்கள்) | ok |
+| `dev.title` | Developer: claim structure | உருவாக்குநர்: கோரிக்கை அமைப்பு | **meaning-changed**: Technical term changed: "claim" (token claims) became a word meaning request; a developer would think this shows request structure, not token claims. |
+| `env.live` | LIVE | LIVE | kept in English by design |
+| `env.test` | TEST | TEST | kept in English by design |
+| `env.unknown` | Environment unknown | சூழல் தெரியவில்லை | ok |
+| `identity.actions` | Actions | செயல்கள் | ok |
+| `identity.actionsSoon` | Approve and unmerge | ஒப்புதல் மற்றும் இணைப்பு நீக்கம் | minor drift |
+| `identity.all` | All | அனைத்தும் | ok |
+| `identity.approve` | Approve | ஒப்புதல் அளி | minor drift |
+| `identity.approveBody` | This links the two records. It asks for a fresh authenticator code first. | இது இரண்டு பதிவுகளையும் இணைக்கிறது. முதலில் புதிய அங்கீகாரக் குறியீடு கேட்கப்படும். | ok |
+| `identity.approveConflict` | That approval was refused. It may already be approved, or you may have proposed it. Refresh and try again. | அந்த ஒப்புதல் மறுக்கப்பட்டது. அது ஏற்கனவே அளிக்கப்பட்டிருக்கலாம், அல்லது நீங்களே முன்மொழிந்திருக்கலாம். புதுப்பித்து மீண்டும் முயற்சிக்கவும். | ok |
+| `identity.approveTitle` | Approve this merge? | இந்த இணைப்புக்கு ஒப்புதல் அளிக்கவா? | minor drift |
+| `identity.approved` | The merge was approved. | இணைப்புக்கு ஒப்புதல் அளிக்கப்பட்டது. | minor drift |
+| `identity.back` | Back to merges | இணைப்புகளுக்குத் திரும்பு | minor drift |
+| `identity.col.activated` | Active since | செயலில் உள்ள நேரம் | minor drift |
+| `identity.col.approvedBy` | Approved by | ஒப்புதல் அளித்தவர் | ok |
+| `identity.col.candidate` | Candidate | வேட்பாளர் | **wrong**: The word used means an election candidate, not a candidate record for duplicate review. |
+| `identity.col.created` | Created | உருவாக்கப்பட்டது | ok |
+| `identity.col.master` | Kept record | வைத்திருக்கும் பதிவு | minor drift; flag (ambiguous): Does not clearly say surviving/primary record, which matters for who is kept in a merge. |
+| `identity.col.matched` | Matched on | பொருந்திய விவரம் | ok |
+| `identity.col.merge` | Merge | இணைப்பு | minor drift |
+| `identity.col.other` | Possible duplicate of | இதன் சாத்தியமான நகல் | **meaning-changed**: Direction reversed: English column shows the record this one may duplicate; Tamil reads "possible duplicate of this", so staff could take the other record to be the duplicate. |
+| `identity.col.patient` | Record | பதிவு | ok |
+| `identity.col.proposedBy` | Proposed by | முன்மொழிந்தவர் | ok |
+| `identity.col.reason` | Reason | காரணம் | ok |
+| `identity.col.resolved` | Resolved | தீர்க்கப்பட்டது | ok |
+| `identity.col.status` | Status | நிலை | ok |
+| `identity.col.subordinate` | Linked record | இணைக்கப்பட்ட பதிவு | minor drift |
+| `identity.col.unmerged` | Unmerged at | இணைப்பு நீக்கிய நேரம் | minor drift |
+| `identity.col.unmergedBy` | Unmerged by | இணைப்பை நீக்கியவர் | minor drift |
+| `identity.detail` | Merge | இணைப்பு | minor drift |
+| `identity.differentPerson` | A different person from the one who proposed this merge must approve it. | இந்த இணைப்பை முன்மொழிந்தவரிலிருந்து வேறொருவர் ஒப்புதல் அளிக்க வேண்டும். | ok |
+| `identity.dupReason.ambiguous` | Ambiguous | தெளிவற்றது | minor drift |
+| `identity.dupReason.near_match` | Near match | நெருங்கிய பொருத்தம் | ok |
+| `identity.dupStatus.pending` | Pending | நிலுவையில் | ok |
+| `identity.dupStatus.resolved` | Resolved | தீர்க்கப்பட்டது | ok |
+| `identity.duplicates` | Possible duplicates | சாத்தியமான நகல்கள் | ok |
+| `identity.emptyDuplicates` | There are no possible duplicates to show. | காட்டுவதற்குச் சாத்தியமான நகல்கள் இல்லை. | ok |
+| `identity.emptyMerges` | There are no merges to show. | காட்டுவதற்கு இணைப்புகள் இல்லை. | minor drift |
+| `identity.filter` | Show items that are | இந்த நிலையிலுள்ளவற்றைக் காட்டு | ok |
+| `identity.flagged` | {{n}} bookings, holds, waitlist entries and match-review rows were recorded while the link was active; a review task lists them, and nothing is undone. | இணைப்பு செயலில் இருந்தபோது {{n}} முன்பதிவுகள், ஒதுக்கீடுகள், காத்திருப்புப் பட்டியல் பதிவுகள் மற்றும் பொருத்த-மதிப்பாய்வு வரிசைகள் பதிவாகின; ஒரு மதிப்பாய்வுப் பணி அவற்றைப் பட்டியலிடுகிறது, எதுவும் மாற்றப்படாது. | minor drift; flag (too-long): Very long run-on sentence stating what the system recorded; "rows" rendered as queues. |
+| `identity.lists` | Identity lists | அடையாளப் பட்டியல்கள் | ok |
+| `identity.mergeStatus.active` | Active | செயலில் | ok |
+| `identity.mergeStatus.awaiting_second_approval` | Awaiting second approval | இரண்டாவது ஒப்புதலுக்காகக் காத்திருக்கிறது | ok |
+| `identity.mergeStatus.unmerged` | Unmerged | இணைப்பு நீக்கப்பட்டது | minor drift |
+| `identity.merges` | Merges | இணைப்புகள் | minor drift |
+| `identity.none` | None | எதுவுமில்லை | ok |
+| `identity.openMerge` | Open merge | இணைப்பைத் திற | minor drift |
+| `identity.title` | Identity | அடையாளம் | ok |
+| `identity.unmerge` | Unmerge | இணைப்பை நீக்கு | minor drift |
+| `identity.unmergeBody` | This breaks the link between the two records. It asks for a fresh authenticator code first. | இது இரண்டு பதிவுகளுக்கிடையிலான இணைப்பை உடைக்கிறது. முதலில் புதிய அங்கீகாரக் குறியீடு கேட்கப்படும். | ok |
+| `identity.unmergeConflict` | That could not be done. Refresh and try again. | அதைச் செய்ய முடியவில்லை. புதுப்பித்து மீண்டும் முயற்சிக்கவும். | ok |
+| `identity.unmergeTitle` | Unmerge these records? | இந்தப் பதிவுகளின் இணைப்பை நீக்கவா? | minor drift |
+| `identity.unmerged` | The link was broken. | இணைப்பு உடைக்கப்பட்டது. | minor drift |
+| `landing.about.heading` | About the hospital | மருத்துவமனை பற்றி | ok |
+| `landing.account` | Account | கணக்கு | ok |
+| `landing.departments.heading` | Departments and doctors | துறைகள் மற்றும் மருத்துவர்கள் | ok |
+| `landing.emergencyLabel` | Emergency information | அவசரகாலத் தகவல் | ok |
+| `landing.faq.a1` | Patient sign-up is not available yet. When it opens, you will enter your mobile number and we will send a one-time code to confirm it. | நோயாளர் பதிவு இன்னும் கிடைக்கவில்லை. அது தொடங்கும்போது, உங்கள் கைபேசி எண்ணை உள்ளிடுவீர்கள்; அதை உறுதிப்படுத்த ஒருமுறைக் குறியீடு அனுப்புவோம். | ok |
+| `landing.faq.a2` | Yes. Use the language menu at the top of any page to switch between English and Tamil. | ஆம். எந்தப் பக்கத்தின் மேலேயும் உள்ள மொழி தேர்வைப் பயன்படுத்தி ஆங்கிலம், தமிழ் இடையே மாறலாம். | ok |
+| `landing.faq.heading` | Frequently asked questions | அடிக்கடி கேட்கப்படும் கேள்விகள் | ok |
+| `landing.faq.q1` | How do I create an account? | கணக்கை எவ்வாறு உருவாக்குவது? | ok |
+| `landing.faq.q2` | Can I use the portal in Tamil? | தளத்தைத் தமிழில் பயன்படுத்தலாமா? | ok |
+| `landing.faq.q3` | How do I raise a concern about my data or my care? | என் தரவு அல்லது சிகிச்சை குறித்த கவலையை எவ்வாறு தெரிவிப்பது? | ok |
+| `landing.faq.q4` | How is my personal information used? | என் தனிப்பட்ட தகவல் எவ்வாறு பயன்படுத்தப்படுகிறது? | ok |
+| `landing.features.book` | Book an appointment | சந்திப்பு நேரத்தை முன்பதிவு செய்யுங்கள் | minor drift |
+| `landing.features.family` | Manage appointments for family members | குடும்ப உறுப்பினர்களுக்கான சந்திப்புகளை நிர்வகியுங்கள் | ok |
+| `landing.features.heading` | What you can do here | இங்கே நீங்கள் செய்யக்கூடியவை | ok |
+| `landing.features.language` | Use English or Tamil | ஆங்கிலம் அல்லது தமிழைப் பயன்படுத்துங்கள் | ok |
+| `landing.features.messages` | Send and read messages with the clinic | மருத்துவமனையுடன் செய்திகளை அனுப்பவும் படிக்கவும் | ok |
+| `landing.features.offers` | Receive appointment offers by SMS or email | எஸ்எம்எஸ் அல்லது மின்னஞ்சல் மூலம் சந்திப்பு வாய்ப்புகளைப் பெறுங்கள் | ok |
+| `landing.features.records` | See your records after your first visit | முதல் வருகைக்குப் பிறகு உங்கள் பதிவுகளைப் பாருங்கள் | ok |
+| `landing.footer.branding` | Placeholder branding: the name, colours and logo are stand-ins until the hospital supplies its own. | பெயர், நிறங்கள், சின்னம் ஆகியவை தற்காலிகமானவை; மருத்துவமனை தனது சொந்தத்தை வழங்கும் வரை இவ்வாறே இருக்கும். | minor drift |
+| `landing.footer.grievance` | Grievance contact | குறைதீர்ப்புத் தொடர்பு | ok |
+| `landing.footer.privacyNotice` | Privacy notice | தனியுரிமை அறிவிப்பு | ok |
+| `landing.how.heading` | How it works | இது எவ்வாறு செயல்படுகிறது | ok |
+| `landing.how.step1Body` | Sign up with your mobile number. We send a one-time code to confirm it. | உங்கள் கைபேசி எண்ணுடன் பதிவு செய்யுங்கள். அதை உறுதிப்படுத்த ஒருமுறைக் குறியீடு அனுப்புவோம். | flag (unnatural): One-time code term is the standard OTP concept; confirm the phrase patients actually recognise. |
+| `landing.how.step1Title` | Create your account | உங்கள் கணக்கை உருவாக்குங்கள் | ok |
+| `landing.how.step2Body` | Choose a time that suits you, or accept a time the clinic offers. | உங்களுக்கு ஏற்ற நேரத்தைத் தேர்ந்தெடுங்கள், அல்லது மருத்துவமனை வழங்கும் நேரத்தை ஏற்றுக்கொள்ளுங்கள். | ok |
+| `landing.how.step2Title` | Book or accept an appointment | சந்திப்பை முன்பதிவு செய்யுங்கள் அல்லது ஏற்றுக்கொள்ளுங்கள் | ok |
+| `landing.how.step3Body` | Get messages and reminders about your visit in the portal. | உங்கள் வருகை குறித்த செய்திகளையும் நினைவூட்டல்களையும் தளத்தில் பெறுங்கள். | ok |
+| `landing.how.step3Title` | Stay in touch | தொடர்பில் இருங்கள் | ok |
+| `landing.location.address` | Address | முகவரி | ok |
+| `landing.location.heading` | Location and timings | இடம் மற்றும் நேரங்கள் | ok |
+| `landing.location.hours` | Opening hours | நேரங்கள் | minor drift |
+| `landing.location.phone` | Phone | தொலைபேசி | ok |
+| `landing.privacy.heading` | Our privacy promise | எங்கள் தனியுரிமை உறுதிமொழி | ok |
+| `landing.privacy.readNotice` | Read the privacy notice | தனியுரிமை அறிவிப்பைப் படிக்கவும் | ok |
+| `languages.en` | English | English | kept in English by design |
+| `languages.ta` | தமிழ் | தமிழ் | kept in English by design |
+| `nav.home` | Home | முகப்பு | ok |
+| `nav.identity` | Identity | அடையாளம் | ok |
+| `nav.label` | Sections | பிரிவுகள் | ok |
+| `nav.none` | No sections are available to your role. | உங்கள் பங்கிற்குக் கிடைக்கும் பிரிவுகள் எதுவும் இல்லை. | ok |
+| `nav.patients` | Patients | நோயாளர்கள் | ok |
+| `nav.referrals` | Referrals | பரிந்துரைகள் | ok |
+| `nav.scheduling` | Scheduling | நேர அட்டவணை | minor drift; flag (ambiguous): Timetable reads as a schedule table; a main navigation label should be unambiguous. |
+| `nav.tasks` | Tasks | பணிகள் | ok |
+| `pages.backHome` | Back to the home page | முகப்புப் பக்கத்திற்குத் திரும்பு | ok |
+| `pages.notAvailableSignIn` | Patient sign-in is not available yet. | நோயாளர் உள்நுழைவு இன்னும் கிடைக்கவில்லை. | ok |
+| `pages.notAvailableSignUp` | Patient sign-up is not available yet. | நோயாளர் பதிவு இன்னும் கிடைக்கவில்லை. | ok |
+| `pages.privacyTitle` | Privacy notice | தனியுரிமை அறிவிப்பு | ok |
+| `pages.signInTitle` | Sign in | உள்நுழைக | ok |
+| `pages.signUpTitle` | Sign up | பதிவு செய்க | ok |
+| `patients.back` | Back to patients | நோயாளர்களுக்குத் திரும்பு | ok |
+| `patients.col.label` | Label | குறிப்பு | minor drift; flag (ambiguous): Note/hint instead of label; withheld note text could be taken as clinical notes. |
+| `patients.col.matched` | Matched on | பொருந்திய விவரம் | ok |
+| `patients.col.record` | Record | பதிவு | ok |
+| `patients.col.verified` | Verified | சரிபார்க்கப்பட்டது | ok |
+| `patients.col.via` | Registered via | பதிவு செய்த வழி | minor drift |
+| `patients.confirm` | Confirm identity | அடையாளத்தை உறுதிப்படுத்து | ok |
+| `patients.confirmBody` | This records that you confirmed this patient's identity. It is kept under your name. | இந்த நோயாளரின் அடையாளத்தை நீங்கள் உறுதிப்படுத்தியதை இது பதிவு செய்கிறது. அது உங்கள் பெயரில் வைக்கப்படும். | minor drift |
+| `patients.confirmConflict` | That confirmation conflicts with an earlier request. Refresh and try again. | அந்த உறுதிப்படுத்தல் முந்தைய கோரிக்கையுடன் முரண்படுகிறது. புதுப்பித்து மீண்டும் முயற்சிக்கவும். | ok |
+| `patients.confirmTitle` | Confirm this identity? | இந்த அடையாளத்தை உறுதிப்படுத்தவா? | ok |
+| `patients.dob` | Date of birth | பிறந்த தேதி | ok |
+| `patients.event.confirm` | Confirmed | உறுதிப்படுத்தப்பட்டது | ok |
+| `patients.event.revoke` | Confirmation revoked | உறுதிப்படுத்தல் திரும்பப் பெறப்பட்டது | minor drift |
+| `patients.invalidInput` | Check the date of birth and phone number. | பிறந்த தேதி மற்றும் தொலைபேசி எண்ணைச் சரிபார்க்கவும். | ok |
+| `patients.labelsWithheld` | Labels are withheld for these results. | இந்த முடிவுகளுக்கான குறிப்புகள் மறைக்கப்பட்டுள்ளன. | minor drift |
+| `patients.latestEvent` | Latest identity event | சமீபத்திய அடையாள நிகழ்வு | ok |
+| `patients.matchedKind.name_dob` | Name and date of birth | பெயர் மற்றும் பிறந்த தேதி | ok |
+| `patients.matchedKind.phone` | Phone | தொலைபேசி | ok |
+| `patients.mergedInto` | This record was merged into another. | இந்தப் பதிவு வேறொரு பதிவில் இணைக்கப்பட்டது. | minor drift |
+| `patients.name` | Full name | முழுப் பெயர் | ok |
+| `patients.noEvent` | None | எதுவுமில்லை | ok |
+| `patients.noMatch` | No matching record was found. | பொருந்தும் பதிவு எதுவும் கிடைக்கவில்லை. | ok |
+| `patients.notVerified` | Not verified | சரிபார்க்கப்படவில்லை | ok |
+| `patients.open` | Open | திற | ok |
+| `patients.openId` | Record id | பதிவு அடையாள எண் | ok |
+| `patients.openInvalid` | That is not a record id. | அது பதிவு அடையாள எண் அல்ல. | ok |
+| `patients.openMerged` | Open that record | அந்தப் பதிவைத் திற | ok |
+| `patients.openRecord` | Open record | பதிவைத் திற | ok |
+| `patients.openTitle` | Open a record by id | அடையாள எண்ணால் பதிவைத் திற | minor drift |
+| `patients.phone` | Phone number (optional) | தொலைபேசி எண் (விருப்பம்) | ok |
+| `patients.rateLimited` | Too many searches. Wait a moment and try again. | அதிகத் தேடல்கள். சற்று காத்திருந்து மீண்டும் முயற்சிக்கவும். | ok |
+| `patients.record` | Patient record | நோயாளர் பதிவு | ok |
+| `patients.results` | Search results | தேடல் முடிவுகள் | ok |
+| `patients.revoke.accepted` | The request was accepted. Check the record for its current state. | கோரிக்கை ஏற்கப்பட்டது. பதிவின் தற்போதைய நிலையைச் சரிபார்க்கவும். | ok |
+| `patients.revoke.body` | This moves the record back to unverified, so a match on it is reviewed by a person. Nothing that is already linked is undone. | இது பதிவை மீண்டும் சரிபார்க்கப்படாத நிலைக்கு மாற்றுகிறது; அதனால் அதில் ஏற்படும் பொருத்தத்தை ஒரு நபர் மதிப்பாய்வு செய்வார். ஏற்கனவே இணைக்கப்பட்டவை எதுவும் மாற்றப்படாது. | minor drift; flag (unnatural): Awkward phrasing on a message describing what the system will do. |
+| `patients.revoke.button` | Revoke confirmation | உறுதிப்படுத்தலைத் திரும்பப் பெறு | ok |
+| `patients.revoke.chooseFirst` | Choose a reason first. | முதலில் ஒரு காரணத்தைத் தேர்ந்தெடுக்கவும். | ok |
+| `patients.revoke.conflict` | That revoke conflicts with an earlier request. Refresh and try again. | அந்தத் திரும்பப் பெறுதல் முந்தைய கோரிக்கையுடன் முரண்படுகிறது. புதுப்பித்து மீண்டும் முயற்சிக்கவும். | ok |
+| `patients.revoke.done` | The confirmation was revoked. | உறுதிப்படுத்தல் திரும்பப் பெறப்பட்டது. | ok |
+| `patients.revoke.reason` | Reason | காரணம் | ok |
+| `patients.revoke.reasons.mistaken_click` | Mistaken click | Mistaken click | kept in English by design |
+| `patients.revoke.reasons.planted_or_suspect` | Planted or suspect | Planted or suspect | kept in English by design |
+| `patients.revoke.reasons.wrong_person` | Wrong person | Wrong person | kept in English by design |
+| `patients.revoke.task.not_configured` | No review task was raised: the task settings are not configured yet. | மதிப்பாய்வுப் பணி உருவாக்கப்படவில்லை: பணி அமைப்புகள் இன்னும் அமைக்கப்படவில்லை. | ok |
+| `patients.revoke.task.on_record` | Nothing new was recorded: this was already done, or the record was already unverified. | புதிதாக எதுவும் பதிவு செய்யப்படவில்லை: இது ஏற்கனவே செய்யப்பட்டது, அல்லது பதிவு ஏற்கனவே சரிபார்க்கப்படாத நிலையில் இருந்தது. | ok |
+| `patients.revoke.task.raised` | A review task was raised. | ஒரு மதிப்பாய்வுப் பணி உருவாக்கப்பட்டது. | ok |
+| `patients.revoke.title` | Revoke this identity confirmation? | இந்த அடையாள உறுதிப்படுத்தலைத் திரும்பப் பெறவா? | ok |
+| `patients.search` | Search | தேடு | ok |
+| `patients.searchHint` | Search finds a record only for exactly these details. Nothing typed here is saved. | இந்த விவரங்களுக்குச் சரியாகப் பொருந்தும் பதிவை மட்டுமே தேடல் கண்டறியும். இங்கே தட்டச்சு செய்தது எதுவும் சேமிக்கப்படாது. | ok |
+| `patients.searchTitle` | Search | தேடல் | ok |
+| `patients.title` | Patients | நோயாளர்கள் | ok |
+| `patients.truncated` | More matches exist than are shown. | காட்டப்பட்டதை விட அதிகப் பொருத்தங்கள் உள்ளன. | ok |
+| `patients.unavailable` | Search is not available right now. Try again later. | தேடல் இப்போது கிடைக்கவில்லை. பின்னர் மீண்டும் முயற்சிக்கவும். | ok |
+| `patients.verified` | Verified | சரிபார்க்கப்பட்டது | ok |
+| `patients.via.front_desk` | Front desk | வரவேற்பு மேசை | ok |
+| `patients.via.referral_worker` | Referral worker | பரிந்துரைப் பணியாளர் | ok |
+| `patients.withheld` | Withheld | மறைக்கப்பட்டது | minor drift |
+| `placeholder.about` | [PLACEHOLDER: about the hospital. Content must be supplied by the hospital.] | [PLACEHOLDER: about the hospital. Content must be supplied by the hospital.] | kept in English by design |
+| `placeholder.address` | [PLACEHOLDER: address] | [PLACEHOLDER: address] | kept in English by design |
+| `placeholder.departments` | [PLACEHOLDER: departments and doctors. Content must be supplied by the hospital.] | [PLACEHOLDER: departments and doctors. Content must be supplied by the hospital.] | kept in English by design |
+| `placeholder.faqGrievance` | [PLACEHOLDER: how to raise a concern or a data request. Wording to be supplied by the hospital and its legal counsel.] | [PLACEHOLDER: how to raise a concern or a data request. Wording to be supplied by the hospital and its legal counsel.] | kept in English by design |
+| `placeholder.faqPrivacy` | [PLACEHOLDER: how personal information is used. Wording to be supplied by the hospital and its legal counsel.] | [PLACEHOLDER: how personal information is used. Wording to be supplied by the hospital and its legal counsel.] | kept in English by design |
+| `placeholder.grievance` | [PLACEHOLDER: grievance officer name and contact details. To be supplied by the hospital.] | [PLACEHOLDER: grievance officer name and contact details. To be supplied by the hospital.] | kept in English by design |
+| `placeholder.hours` | [PLACEHOLDER: opening hours] | [PLACEHOLDER: opening hours] | kept in English by design |
+| `placeholder.identityChecks` | [PLACEHOLDER: what must be checked before confirming an identity. To be written by the clinic.] | [PLACEHOLDER: what must be checked before confirming an identity. To be written by the clinic.] | kept in English by design |
+| `placeholder.phone` | [PLACEHOLDER: phone number] | [PLACEHOLDER: phone number] | kept in English by design |
+| `placeholder.privacyNotice` | [PLACEHOLDER: privacy notice. To be supplied by the hospital and approved by its legal counsel.] | [PLACEHOLDER: privacy notice. To be supplied by the hospital and approved by its legal counsel.] | kept in English by design |
+| `placeholder.privacyPromise` | [PLACEHOLDER: privacy promise wording. To be written and approved by the hospital and its legal counsel.] | [PLACEHOLDER: privacy promise wording. To be written and approved by the hospital and its legal counsel.] | kept in English by design |
+| `placeholder.reasonCodes` | PLACEHOLDER - clinician to define | PLACEHOLDER - clinician to define | kept in English by design |
+| `placeholder.reviewReasons` | PLACEHOLDER - clinician to define | PLACEHOLDER - clinician to define | kept in English by design |
+| `placeholder.revokeReasons` | [PLACEHOLDER: the wording of these reasons is not final. To be confirmed by the clinic.] | [PLACEHOLDER: the wording of these reasons is not final. To be confirmed by the clinic.] | kept in English by design |
+| `placeholder.taskClose` | PLACEHOLDER - clinician to define how this kind of task is closed. It cannot be closed here. | PLACEHOLDER - clinician to define how this kind of task is closed. It cannot be closed here. | kept in English by design |
+| `problem.conflict` | That conflicts with the current state. Refresh and try again. | இது தற்போதைய நிலையுடன் முரண்படுகிறது. புதுப்பித்து மீண்டும் முயற்சிக்கவும். | ok |
+| `problem.forbidden` | This is not available to your role. | இது உங்கள் பங்கிற்குக் கிடைக்காது. | ok |
+| `problem.invalid` | Check what you entered and try again. | நீங்கள் உள்ளிட்டதைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும். | ok |
+| `problem.network` | The connection failed. Check it and try again. | இணைப்பு தோல்வியடைந்தது. இணைப்பைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும். | ok |
+| `problem.not_found` | That could not be found. | அது கிடைக்கவில்லை. | ok |
+| `problem.rate_limited` | Too many requests. Wait a moment and try again. | அதிக கோரிக்கைகள். சற்று காத்திருந்து மீண்டும் முயற்சிக்கவும். | minor drift |
+| `problem.retry` | Try again | மீண்டும் முயற்சிக்கவும் | ok |
+| `problem.step_up` | A fresh authenticator code is needed to do this. Nothing was changed. | இதைச் செய்ய புதிய அங்கீகாரக் குறியீடு தேவை. எதுவும் மாற்றப்படவில்லை. | ok |
+| `problem.unauthorized` | Please sign in again. | தயவுசெய்து மீண்டும் உள்நுழையவும். | ok |
+| `problem.unavailable` | This is not available right now. Try again in a moment. | இது இப்போது கிடைக்கவில்லை. சிறிது நேரம் கழித்து மீண்டும் முயற்சிக்கவும். | ok |
+| `problem.unknown` | Something went wrong. Try again. | ஏதோ தவறு ஏற்பட்டது. மீண்டும் முயற்சிக்கவும். | ok |
+| `profiles.clinical` | Clinical | மருத்துவப் பயன்பாடு | minor drift |
+| `profiles.demo` | Demo | டெமோ | ok |
+| `referrals.back` | Back to referrals | பரிந்துரைகளுக்குத் திரும்பு | ok |
+| `referrals.card` | Card | அட்டை | ok |
+| `referrals.col.decision` | Decision | முடிவு | ok |
+| `referrals.col.document` | Document | ஆவணம் | ok |
+| `referrals.col.holds` | Open holds | திறந்த நிறுத்தங்கள் | minor drift; flag (ambiguous): Same hold term issue in the table heading. |
+| `referrals.col.received` | Received | பெறப்பட்டது | ok |
+| `referrals.col.state` | State | நிலை | ok |
+| `referrals.col.type` | Type | வகை | ok |
+| `referrals.decided` | Decided | முடிவு செய்யப்பட்டது | ok |
+| `referrals.decision.approve` | Approve | Approve | kept in English by design |
+| `referrals.decision.edit` | Edit | Edit | kept in English by design |
+| `referrals.decision.reject` | Reject | Reject | kept in English by design |
+| `referrals.detail` | Referral | பரிந்துரை | ok |
+| `referrals.empty` | There are no referrals to show. | காட்டுவதற்குப் பரிந்துரைகள் இல்லை. | ok |
+| `referrals.hiddenFromRole` | Not shown to your role | உங்கள் பங்கிற்குக் காட்டப்படாது | minor drift |
+| `referrals.holds` | Holds | நிறுத்தங்கள் | minor drift; flag (ambiguous): Stop wording for a hold; different term from slot holds. |
+| `referrals.noHolds` | No holds. | நிறுத்தங்கள் இல்லை. | minor drift |
+| `referrals.noProposal` | There is no proposal for this referral. | இந்தப் பரிந்துரைக்கு முன்மொழிவு இல்லை. | flag (ambiguous): Proposal term differs from the heading term in the same screen. |
+| `referrals.notDecided` | Not decided yet | இன்னும் முடிவு செய்யப்படவில்லை | ok |
+| `referrals.open` | Open referral | பரிந்துரையைத் திற | ok |
+| `referrals.proposal` | Triage proposal | வகைப்படுத்தல் பரிந்துரை | minor drift; flag (ambiguous): Same word as for referral, causing confusion; triage reduced to categorisation. |
+| `referrals.proposalAbstained` | Abstained | தவிர்க்கப்பட்டது | **meaning-changed**: "Abstained" (the system deliberately gave no proposal) became "avoided/skipped", which can read as a step that was omitted or failed. |
+| `referrals.proposalMode` | Mode | முறை | ok |
+| `referrals.registeredBy` | Registered by | பதிவு செய்தவர் | ok |
+| `referrals.review.confirmBody` | You are about to record the decision "{{decision}}" for this referral. It is kept under your name. | இந்தப் பரிந்துரைக்கு "{{decision}}" என்ற முடிவை நீங்கள் பதிவு செய்யப் போகிறீர்கள். அது உங்கள் பெயரில் வைக்கப்படும். | minor drift |
+| `referrals.review.confirmTitle` | Record this decision? | இந்த முடிவைப் பதிவு செய்யவா? | ok |
+| `referrals.review.conflict` | The referral is not waiting for a decision, or a different decision is already recorded. Refresh and try again. | பரிந்துரை முடிவுக்காகக் காத்திருக்கவில்லை, அல்லது வேறொரு முடிவு ஏற்கனவே பதிவாகியுள்ளது. புதுப்பித்து மீண்டும் முயற்சிக்கவும். | ok |
+| `referrals.review.decidedNote` | A decision has already been recorded. | ஒரு முடிவு ஏற்கனவே பதிவு செய்யப்பட்டுள்ளது. | ok |
+| `referrals.review.done` | The decision was recorded. | முடிவு பதிவு செய்யப்பட்டது. | ok |
+| `referrals.review.help` | Choose a decision for this referral. Nothing is chosen for you. | இந்தப் பரிந்துரைக்கு ஒரு முடிவைத் தேர்ந்தெடுங்கள். உங்களுக்காக எதுவும் தேர்ந்தெடுக்கப்படவில்லை. | minor drift |
+| `referrals.review.legend` | Decision | முடிவு | ok |
+| `referrals.review.reasons` | Reasons | காரணங்கள் | ok |
+| `referrals.review.record` | Record decision | முடிவைப் பதிவு செய் | ok |
+| `referrals.review.title` | Record a decision | முடிவைப் பதிவு செய் | ok |
+| `referrals.title` | Referrals | பரிந்துரைகள் | ok |
+| `referrals.upload` | Upload a document | ஆவணத்தைப் பதிவேற்று | ok |
+| `referrals.version` | version | பதிப்பு | ok |
+| `roles.admin` | Admin | நிர்வாகி | ok |
+| `roles.auditor` | Auditor | தணிக்கையாளர் | ok |
+| `roles.business_owner` | Business owner | வணிக உரிமையாளர் | ok |
+| `roles.doctor` | Doctor | மருத்துவர் | ok |
+| `roles.front_desk` | Front desk | வரவேற்பு மேசை | ok |
+| `roles.guardian` | Guardian | பாதுகாவலர் | ok |
+| `roles.nurse` | Nurse | செவிலியர் | ok |
+| `roles.patient` | Patient | நோயாளர் | ok |
+| `scheduling.active` | Active | செயலில் | ok |
+| `scheduling.choose` | Choose a visit type | ஒரு வருகை வகையைத் தேர்ந்தெடுக்கவும் | ok |
+| `scheduling.col.action` | Action | செயல் | ok |
+| `scheduling.col.code` | Code | குறியீடு | ok |
+| `scheduling.col.duration` | Length | நீளம் | minor drift; flag (unnatural): Word means physical length rather than time duration. |
+| `scheduling.col.expires` | Expires | காலாவதி | ok |
+| `scheduling.col.hold` | Hold | ஒதுக்கீடு | minor drift; flag (ambiguous): Same allocation-for-hold term issue. |
+| `scheduling.col.label` | Label | குறிப்பு | minor drift; flag (ambiguous): Same label/note term issue. |
+| `scheduling.col.name` | Name | பெயர் | ok |
+| `scheduling.col.patient` | Patient | நோயாளர் | ok |
+| `scheduling.col.rank` | Rank | தரம் | **meaning-changed**: "Rank" (order of precedence) became a word meaning quality/grade; a higher value could be read as better quality rather than higher precedence. |
+| `scheduling.col.slot` | Slot | நேரம் | minor drift |
+| `scheduling.col.status` | Status | நிலை | ok |
+| `scheduling.col.visitType` | Visit type | வருகை வகை | ok |
+| `scheduling.empty` | Nothing to show. | காட்டுவதற்கு எதுவும் இல்லை. | ok |
+| `scheduling.holdFilter` | Show holds that are | இந்த நிலையிலுள்ள ஒதுக்கீடுகளைக் காட்டு | minor drift |
+| `scheduling.holdStatus.active` | Active | செயலில் | ok |
+| `scheduling.holdStatus.converted` | Booked | முன்பதிவானது | minor drift |
+| `scheduling.holdStatus.expired` | Expired | காலாவதியானது | ok |
+| `scheduling.holdStatus.released` | Released | விடுவிக்கப்பட்டது | ok |
+| `scheduling.holds` | Holds | ஒதுக்கீடுகள் | minor drift; flag (ambiguous): Allocation/quota does not convey a held slot. |
+| `scheduling.inactive` | Inactive | செயலற்றது | ok |
+| `scheduling.lists` | Scheduling lists | அட்டவணைப் பட்டியல்கள் | minor drift |
+| `scheduling.locations` | Locations | இடங்கள் | minor drift |
+| `scheduling.minutes` | min | நிமி | ok |
+| `scheduling.noHolds` | There are no holds to show. | காட்டுவதற்கு ஒதுக்கீடுகள் இல்லை. | minor drift |
+| `scheduling.offerCandidates` | Candidate details | வேட்பாளர் விவரங்கள் | **wrong**: The word used means an election candidate, not a candidate slot or patient. |
+| `scheduling.offerStatus.degraded` | Partly available | ஓரளவு கிடைக்கிறது | ok |
+| `scheduling.offerStatus.empty` | No candidates | வேட்பாளர்கள் இல்லை | **wrong**: The word used means an election candidate; "No candidates" for an offer draft is mistranslated. |
+| `scheduling.offerStatus.ok` | A draft is ready | வரைவு தயாராக உள்ளது | ok |
+| `scheduling.offerStatus.unavailable` | Not set up yet | இன்னும் அமைக்கப்படவில்லை | ok |
+| `scheduling.offers` | Offers | வாய்ப்புகள் | minor drift; flag (ambiguous): Means opportunities rather than offers. |
+| `scheduling.offersNote` | A read-only view of the draft offer. It is computed when you ask and stored nowhere. | வரைவு வாய்ப்பின் படிக்க-மட்டும் பார்வை. நீங்கள் கேட்கும்போது கணக்கிடப்படுகிறது, எங்கும் சேமிக்கப்படுவதில்லை. | ok |
+| `scheduling.priorityLevels` | Priority levels | முன்னுரிமை நிலைகள் | ok |
+| `scheduling.providers` | Providers | வழங்குநர்கள் | minor drift; flag (ambiguous): May read as general suppliers rather than clinicians. |
+| `scheduling.release` | Release | விடுவி | ok |
+| `scheduling.releaseBody` | The slot is given back now. | நேரம் இப்போதே திருப்பி வழங்கப்படும். | minor drift |
+| `scheduling.releaseConflict` | This hold was already booked or has expired. The list will refresh. | இந்த ஒதுக்கீடு ஏற்கனவே முன்பதிவாகிவிட்டது அல்லது காலாவதியானது. பட்டியல் புதுப்பிக்கப்படும். | minor drift |
+| `scheduling.releaseTitle` | Release this hold? | இந்த ஒதுக்கீட்டை விடுவிக்கவா? | minor drift |
+| `scheduling.sendOffer` | Send offer | வாய்ப்பை அனுப்பு | ok |
+| `scheduling.showDraft` | Show draft | வரைவைக் காட்டு | ok |
+| `scheduling.showInactive` | Show inactive | செயலற்றவற்றையும் காட்டு | minor drift |
+| `scheduling.title` | Scheduling | நேர அட்டவணை | minor drift |
+| `scheduling.visitTypes` | Visit types | வருகை வகைகள் | ok |
+| `shell.activeRole` | Active role | தற்போதைய பங்கு | minor drift; flag (ambiguous): Role is a key concept used on many screens; the word chosen literally means share/part. |
+| `shell.changeRole` | Change role | பங்கை மாற்று | ok |
+| `shell.clinic` | Clinic | கிளினிக் | flag (mixed-language): Loanword while other strings use the Tamil word for hospital/clinic; inconsistent. |
+| `shell.continue` | Continue | தொடரவும் | ok |
+| `shell.environment` | Environment | சூழல் | ok |
+| `shell.navLabel` | Session | அமர்வு | ok |
+| `shell.pickHelp` | Pick the one role you need for this session. You can change it later. | இந்த அமர்வுக்குத் தேவையான ஒரே ஒரு பங்கைத் தேர்ந்தெடுங்கள். பின்னர் மாற்றலாம். | ok |
+| `shell.pickTitle` | Choose your active role | உங்கள் தற்போதைய பங்கைத் தேர்ந்தெடுங்கள் | ok |
+| `shell.profile` | Operating profile | இயக்க நிலை | minor drift |
+| `shell.profileUnknown` | Operating profile unknown | இயக்க நிலை தெரியவில்லை | minor drift |
+| `staff.account.signOut` | Sign out | வெளியேறுக | ok |
+| `staff.account.unavailable` | This account cannot use the staff console. Contact your administrator. | இந்தக் கணக்கால் பணியாளர் தளத்தைப் பயன்படுத்த முடியாது. உங்கள் நிர்வாகியைத் தொடர்பு கொள்ளவும். | ok |
+| `staff.console.error` | Your account details could not be loaded. | உங்கள் கணக்கு விவரங்களை ஏற்ற முடியவில்லை. | ok |
+| `staff.console.loading` | Loading your account… | உங்கள் கணக்கை ஏற்றுகிறது… | ok |
+| `staff.console.retry` | Try again | மீண்டும் முயற்சிக்கவும் | ok |
+| `staff.console.welcome` | You are signed in. | நீங்கள் உள்நுழைந்துள்ளீர்கள். | ok |
+| `staff.mfa.challenge.help` | Open your authenticator app and enter the current 6-digit code. | அங்கீகார செயலியைத் திறந்து தற்போதைய 6 இலக்கக் குறியீட்டை உள்ளிடுங்கள். | ok |
+| `staff.mfa.challenge.submit` | Verify | சரிபார்க்கவும் | minor drift |
+| `staff.mfa.challenge.title` | Enter your authenticator code | உங்கள் அங்கீகாரக் குறியீட்டை உள்ளிடுங்கள் | ok |
+| `staff.mfa.code` | 6-digit code | 6 இலக்கக் குறியீடு | ok |
+| `staff.mfa.codeHint` | Enter the 6 digits shown in your authenticator app. | உங்கள் அங்கீகார செயலியில் காட்டப்படும் 6 இலக்கங்களை உள்ளிடுங்கள். | ok |
+| `staff.mfa.enrol.error` | Setup could not be started. | அமைப்பைத் தொடங்க முடியவில்லை. | ok |
+| `staff.mfa.enrol.intro` | Staff accounts need a second step at every sign-in. Scan this QR code with an authenticator app. | பணியாளர் கணக்குகளுக்கு ஒவ்வொரு உள்நுழைவிலும் இரண்டாவது படி தேவை. ஒரு அங்கீகார செயலி மூலம் இந்த QR குறியீட்டை ஸ்கேன் செய்யுங்கள். | ok |
+| `staff.mfa.enrol.manual` | Or enter this key in the app manually: | அல்லது இந்த விசையைச் செயலியில் கைமுறையாக உள்ளிடுங்கள்: | ok |
+| `staff.mfa.enrol.preparing` | Preparing your setup… | உங்கள் அமைப்பைத் தயாரிக்கிறது… | ok |
+| `staff.mfa.enrol.retry` | Try again | மீண்டும் முயற்சிக்கவும் | ok |
+| `staff.mfa.enrol.scanAlt` | QR code for your authenticator app | அங்கீகார செயலிக்கான QR குறியீடு | ok |
+| `staff.mfa.enrol.submit` | Verify and continue | சரிபார்த்து தொடரவும் | ok |
+| `staff.mfa.enrol.title` | Set up your authenticator app | உங்கள் அங்கீகார செயலியை அமைக்கவும் | ok |
+| `staff.mfa.failed` | That code was not accepted. Try again. | அந்தக் குறியீடு ஏற்கப்படவில்லை. மீண்டும் முயற்சிக்கவும். | ok |
+| `staff.mfa.invalid` | Enter the 6-digit code. | 6 இலக்கக் குறியீட்டை உள்ளிடுங்கள். | minor drift |
+| `staff.mfa.verifying` | Verifying… | சரிபார்க்கிறது… | ok |
+| `staff.session.ended` | Please sign in again. | தயவுசெய்து மீண்டும் உள்நுழையவும். | ok |
+| `staff.signIn.email` | Work email | பணி மின்னஞ்சல் | ok |
+| `staff.signIn.failed` | Sign-in failed. Check your details and try again. | உள்நுழைவு தோல்வியடைந்தது. விவரங்களைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும். | ok |
+| `staff.signIn.intro` | Sign in with your work email and password. | உங்கள் பணி மின்னஞ்சல் மற்றும் கடவுச்சொல்லுடன் உள்நுழையுங்கள். | ok |
+| `staff.signIn.invitationOnly` | Accounts are created by invitation only. | கணக்குகள் அழைப்பின் மூலம் மட்டுமே உருவாக்கப்படும். | minor drift |
+| `staff.signIn.password` | Password | கடவுச்சொல் | ok |
+| `staff.signIn.submit` | Sign in | உள்நுழைக | ok |
+| `staff.signIn.submitting` | Signing in… | உள்நுழைகிறது… | ok |
+| `staff.signIn.title` | Staff sign in | பணியாளர் உள்நுழைவு | ok |
+| `staff.stepUp.cancel` | Cancel | ரத்து செய் | flag (register): Bare imperative sits next to a -க confirm button in the same dialog; mixed button forms. |
+| `staff.stepUp.help` | This action needs a fresh code from your authenticator app. | இந்தச் செயலுக்கு உங்கள் அங்கீகார செயலியிலிருந்து புதிய குறியீடு தேவை. | ok |
+| `staff.stepUp.submit` | Confirm | உறுதிப்படுத்துக | flag (register): Same dialog mixes -க confirm with bare-imperative cancel; app-wide button form inconsistency. |
+| `staff.stepUp.title` | Confirm it is you | நீங்கள்தான் என உறுதிப்படுத்துங்கள் | ok |
+| `tasks.ackBody` | You will be recorded as the person who took this task. | இந்தப் பணியை எடுத்தவராக நீங்கள் பதிவு செய்யப்படுவீர்கள். | ok |
+| `tasks.ackTitle` | Acknowledge this task? | இந்தப் பணியை ஏற்றுக்கொள்ளவா? | ok |
+| `tasks.acknowledge` | Acknowledge | ஏற்றுக்கொள் | minor drift; flag (register): Accept is not quite acknowledge and shares a word with accepting an appointment. |
+| `tasks.acknowledgedBy` | Acknowledged by | ஏற்றுக்கொண்டவர் | ok |
+| `tasks.actions` | Actions | செயல்கள் | ok |
+| `tasks.back` | Back to tasks | பணிகளுக்குத் திரும்பு | ok |
+| `tasks.closed` | This task is closed. | இந்தப் பணி முடிக்கப்பட்டது. | minor drift |
+| `tasks.closedElsewhere` | This kind of task is closed through its own screen, not here. | இந்த வகைப் பணி இங்கே அல்ல, அதன் சொந்தத் திரையில் முடிக்கப்படும். | minor drift |
+| `tasks.col.assigned` | Assigned to | ஒதுக்கப்பட்டவர் | ok |
+| `tasks.col.created` | Created | உருவாக்கப்பட்டது | ok |
+| `tasks.col.kind` | Kind | வகை | ok |
+| `tasks.col.priority` | Priority | முன்னுரிமை | ok |
+| `tasks.col.status` | Status | நிலை | ok |
+| `tasks.col.task` | Task | பணி | ok |
+| `tasks.conflictAck` | Someone else holds this task, or it is already closed. | இந்தப் பணியை வேறொருவர் வைத்துள்ளார், அல்லது ஏற்கனவே முடிக்கப்பட்டது. | ok |
+| `tasks.conflictResolve` | This task cannot be closed here, or someone else changed it. | இந்தப் பணியை இங்கே முடிக்க முடியாது, அல்லது வேறொருவர் மாற்றியுள்ளார். | minor drift |
+| `tasks.detail` | Task | பணி | ok |
+| `tasks.empty` | There are no tasks to show. | காட்டுவதற்குப் பணிகள் இல்லை. | ok |
+| `tasks.filter` | Show tasks that are | இந்த நிலையிலுள்ள பணிகளைக் காட்டு | minor drift |
+| `tasks.kind.identity_confirmation_revoked` | Identity confirmation revoked | அடையாள உறுதிப்படுத்தல் திரும்பப் பெறப்பட்டது | minor drift |
+| `tasks.kind.red_flag` | Red flag | Red flag | kept in English by design |
+| `tasks.kind.referral_dead_letter` | Referral failed | பரிந்துரை தோல்வியடைந்தது | ok |
+| `tasks.kind.referral_hold` | Referral hold | பரிந்துரை நிறுத்தம் | minor drift; flag (ambiguous): Same hold term issue. |
+| `tasks.kind.screening_unassessable` | Unassessable | Unassessable | kept in English by design |
+| `tasks.kind.triage_proposal` | Triage proposal | Triage proposal | kept in English by design |
+| `tasks.kind.unmerge_review` | Unmerge review | இணைப்பு நீக்க மதிப்பாய்வு | ok |
+| `tasks.noProvenance` | Nothing is recorded. | எதுவும் பதிவு செய்யப்படவில்லை. | ok |
+| `tasks.open` | Open task | பணியைத் திற | ok |
+| `tasks.openReferral` | Open the referral | பரிந்துரையைத் திற | ok |
+| `tasks.priority.immediate` | Immediate | உடனடி | ok |
+| `tasks.priority.standard` | Standard | வழக்கமான | ok |
+| `tasks.provenance` | Where it came from | இது எங்கிருந்து வந்தது | ok |
+| `tasks.reasonCodes` | Reason codes | காரணக் குறியீடுகள் | ok |
+| `tasks.resolve` | Resolve | முடி | minor drift; flag (ambiguous): Single short verb that is also the word for hair; inconsistent with the resolved term used for identity. |
+| `tasks.resolveBody` | This closes the task. | இது பணியை முடிக்கிறது. | minor drift |
+| `tasks.resolveTitle` | Resolve this task? | இந்தப் பணியை முடிக்கவா? | ok |
+| `tasks.resolvedAt` | Closed at | முடிக்கப்பட்ட நேரம் | minor drift |
+| `tasks.source` | Source message | மூலச் செய்தி | ok |
+| `tasks.status.acknowledged` | Acknowledged | ஏற்றுக்கொள்ளப்பட்டவை | minor drift |
+| `tasks.status.open` | Open | திறந்தவை | ok |
+| `tasks.status.resolved` | Resolved | முடிந்தவை | minor drift |
+| `tasks.title` | Tasks | பணிகள் | ok |
+| `tasks.urgent` | Urgent | அவசரம் | ok |
+| `tasks.urgentNote` | Shown first because of its kind or priority. | வகை அல்லது முன்னுரிமை காரணமாக முதலில் காட்டப்படுகிறது. | ok |
+| `tasks.you` | You | நீங்கள் | ok |
+| `upload.another` | Upload another | மற்றொன்றைப் பதிவேற்று | ok |
+| `upload.conflict` | That upload conflicts with an earlier one. Start again. | அந்தப் பதிவேற்றம் முந்தையதுடன் முரண்படுகிறது. மீண்டும் தொடங்கவும். | ok |
+| `upload.done` | Uploaded | பதிவேற்றப்பட்டது | ok |
+| `upload.file` | File | கோப்பு | ok |
+| `upload.fileHint` | PDF, JPEG or PNG. | PDF, JPEG அல்லது PNG. | ok |
+| `upload.invalid` | The file was not accepted. | கோப்பு ஏற்கப்படவில்லை. | ok |
+| `upload.kind` | Kind of document | ஆவண வகை | ok |
+| `upload.kinds.other` | Other | மற்றவை | ok |
+| `upload.kinds.referral` | Referral | பரிந்துரை | ok |
+| `upload.kinds.report` | Report | அறிக்கை | ok |
+| `upload.local.empty` | That file is empty. | அந்தக் கோப்பு காலியாக உள்ளது. | ok |
+| `upload.local.none` | Choose a file first. | முதலில் ஒரு கோப்பைத் தேர்ந்தெடுக்கவும். | ok |
+| `upload.local.type` | Only PDF, JPEG or PNG files can be uploaded. | PDF, JPEG அல்லது PNG கோப்புகளை மட்டுமே பதிவேற்ற முடியும். | ok |
+| `upload.notCheckedNote` | This file was not checked. | இந்தக் கோப்பு சரிபார்க்கப்படவில்லை. | minor drift |
+| `upload.notScannedNote` | This file has not been scanned yet. | இந்தக் கோப்பு இன்னும் ஸ்கேன் செய்யப்படவில்லை. | ok |
+| `upload.openIt` | Open the referral | பரிந்துரையைத் திற | ok |
+| `upload.phase.checking` | Checking the file… | கோப்பைச் சரிபார்க்கிறது… | ok |
+| `upload.phase.preparing` | Preparing the upload… | பதிவேற்றத்தைத் தயாரிக்கிறது… | ok |
+| `upload.phase.sending` | Sending the file… | கோப்பை அனுப்புகிறது… | ok |
+| `upload.scan.clean` | Clean | சுத்தம் | minor drift |
+| `upload.scan.not_checked` | Not checked | சரிபார்க்கப்படவில்லை | ok |
+| `upload.scan.not_scanned` | Not scanned yet | இன்னும் ஸ்கேன் செய்யப்படவில்லை | ok |
+| `upload.scanStatus` | Scan status | ஸ்கேன் நிலை | ok |
+| `upload.submit` | Upload | பதிவேற்று | ok |
+| `upload.title` | Upload a document | ஆவணத்தைப் பதிவேற்று | ok |

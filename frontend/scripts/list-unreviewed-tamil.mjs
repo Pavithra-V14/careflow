@@ -21,12 +21,28 @@ const all = (lang) => merge(merge(read(`${lang}.json`), read(`console.${lang}.js
 const en = Object.fromEntries(flatten(all('en')));
 const ta = Object.fromEntries(flatten(all('ta')));
 const reviewed = new Set(read('ta-reviewed.json').reviewed);
+const ai = read('ta-ai-review.json');
+const aiFlags = new Map(ai.flags.map((f) => [f.key, f]));
+const aiIssues = new Map(ai.issues.map((i) => [i.key, i]));
+
+// What the AI review said about one string. Never "reviewed": the label is always "pending native review".
+function aiNote(key) {
+  if (en[key] === ta[key]) return 'kept in English by design';
+  const parts = [];
+  const issue = aiIssues.get(key);
+  if (issue) parts.push(`**${issue.verdict}**: ${issue.note}`);
+  else if (ai.verdicts[key] === 'minor-drift') parts.push('minor drift');
+  else if (!(key in ai.verdicts) && !aiFlags.has(key)) parts.push('ok');
+  const flag = aiFlags.get(key);
+  if (flag && !issue) parts.push(`flag (${flag.kind}): ${flag.note}`);
+  return parts.join('; ') || 'ok';
+}
 
 const escape = (s) => s.replaceAll('|', '\\|').replaceAll('\n', ' ');
 const rows = Object.keys(ta)
   .filter((k) => !reviewed.has(k))
   .sort()
-  .map((k) => `| \`${k}\` | ${escape(en[k] ?? '')} | ${escape(ta[k] ?? '')} |`);
+  .map((k) => `| \`${k}\` | ${escape(en[k] ?? '')} | ${escape(ta[k] ?? '')} | ${escape(aiNote(k))} |`);
 
 const text = [
   '# Tamil strings awaiting native-speaker review',
@@ -40,8 +56,28 @@ const text = [
   '',
   `${rows.length} of ${Object.keys(ta).length} strings are unreviewed.`,
   '',
-  '| Key | English | Tamil |',
+  `## ${ai.label}`,
+  '',
+  `Done ${ai.reviewedOn}. ${ai.method}`,
+  '',
+  `Result: ${ai.counts.match} match, ${ai.counts['minor-drift']} minor drift, ${ai.counts['meaning-changed']} meaning changed, ${ai.counts.wrong} wrong; ${ai.flags.length} strings flagged for a native reviewer; ${ai.glossary.length} terms used inconsistently.`,
+  '',
+  '### Meaning problems (suggested Tamil is an AI suggestion, not applied)',
+  '',
+  '| Key | Verdict | Problem | Suggested Tamil |',
+  '|---|---|---|---|',
+  ...ai.issues.map((i) => `| \`${i.key}\` | ${i.verdict} | ${escape(i.note)} | ${escape(i.suggestedTamil || '')} |`),
+  '',
+  '### Terms used inconsistently',
+  '',
+  '| Concept | Tamil terms used | Suggestion |',
   '|---|---|---|',
+  ...ai.glossary.map((g) => `| ${escape(g.concept)} | ${escape(g.terms.join('; '))} | ${escape(g.recommendation)} |`),
+  '',
+  '## All strings',
+  '',
+  '| Key | English | Tamil | AI review |',
+  '|---|---|---|---|',
   ...rows,
   '',
 ].join('\n');

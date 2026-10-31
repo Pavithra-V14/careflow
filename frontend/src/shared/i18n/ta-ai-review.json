@@ -1,0 +1,339 @@
+{
+  "label": "AI-reviewed, pending native review",
+  "reviewedOn": "2026-10-31",
+  "method": "Two fresh AI passes, neither a native speaker. Pass 1 back-translated the Tamil into English without seeing the English source and flagged Tamil problems. Pass 2 compared the English source with that back-translation (meaning check), checked that recurring terms are translated consistently, and triaged pass 1 flags. 391 strings were checked; 28 are kept in English by design. Nothing here replaces a native reviewer, and no string was changed because of it.",
+  "counts": {
+    "match": 299,
+    "minor-drift": 85,
+    "meaning-changed": 4,
+    "wrong": 3
+  },
+  "verdicts": {
+    "common.skipToContent": "minor-drift",
+    "common.working": "minor-drift",
+    "landing.features.book": "minor-drift",
+    "landing.location.hours": "minor-drift",
+    "landing.footer.branding": "minor-drift",
+    "staff.signIn.invitationOnly": "minor-drift",
+    "staff.mfa.invalid": "minor-drift",
+    "staff.mfa.challenge.submit": "minor-drift",
+    "shell.activeRole": "minor-drift",
+    "shell.profileUnknown": "minor-drift",
+    "shell.profile": "minor-drift",
+    "profiles.clinical": "minor-drift",
+    "dev.title": "meaning-changed",
+    "dev.note": "minor-drift",
+    "dev.capture": "minor-drift",
+    "dev.refresh": "minor-drift",
+    "nav.scheduling": "minor-drift",
+    "problem.rate_limited": "minor-drift",
+    "referrals.holds": "minor-drift",
+    "referrals.noHolds": "minor-drift",
+    "referrals.proposal": "minor-drift",
+    "referrals.proposalAbstained": "meaning-changed",
+    "referrals.hiddenFromRole": "minor-drift",
+    "referrals.col.holds": "minor-drift",
+    "referrals.review.help": "minor-drift",
+    "referrals.review.confirmBody": "minor-drift",
+    "upload.scan.clean": "minor-drift",
+    "upload.notCheckedNote": "minor-drift",
+    "tasks.filter": "minor-drift",
+    "tasks.status.acknowledged": "minor-drift",
+    "tasks.status.resolved": "minor-drift",
+    "tasks.kind.referral_hold": "minor-drift",
+    "tasks.kind.identity_confirmation_revoked": "minor-drift",
+    "tasks.resolvedAt": "minor-drift",
+    "tasks.closed": "minor-drift",
+    "tasks.acknowledge": "minor-drift",
+    "tasks.resolve": "minor-drift",
+    "tasks.closedElsewhere": "minor-drift",
+    "tasks.resolveBody": "minor-drift",
+    "tasks.conflictResolve": "minor-drift",
+    "patients.labelsWithheld": "minor-drift",
+    "patients.withheld": "minor-drift",
+    "patients.col.label": "minor-drift",
+    "patients.col.via": "minor-drift",
+    "patients.openTitle": "minor-drift",
+    "patients.event.revoke": "minor-drift",
+    "patients.mergedInto": "minor-drift",
+    "patients.confirmBody": "minor-drift",
+    "patients.revoke.body": "minor-drift",
+    "scheduling.title": "minor-drift",
+    "scheduling.lists": "minor-drift",
+    "scheduling.providers": "minor-drift",
+    "scheduling.locations": "minor-drift",
+    "scheduling.holds": "minor-drift",
+    "scheduling.offers": "minor-drift",
+    "scheduling.showInactive": "minor-drift",
+    "scheduling.col.duration": "minor-drift",
+    "scheduling.col.rank": "meaning-changed",
+    "scheduling.col.label": "minor-drift",
+    "scheduling.col.hold": "minor-drift",
+    "scheduling.col.slot": "minor-drift",
+    "scheduling.holdFilter": "minor-drift",
+    "scheduling.holdStatus.converted": "minor-drift",
+    "scheduling.noHolds": "minor-drift",
+    "scheduling.releaseTitle": "minor-drift",
+    "scheduling.releaseBody": "minor-drift",
+    "scheduling.releaseConflict": "minor-drift",
+    "scheduling.offerStatus.empty": "wrong",
+    "scheduling.offerCandidates": "wrong",
+    "identity.merges": "minor-drift",
+    "identity.emptyMerges": "minor-drift",
+    "identity.col.candidate": "wrong",
+    "identity.col.other": "meaning-changed",
+    "identity.col.merge": "minor-drift",
+    "identity.col.master": "minor-drift",
+    "identity.col.subordinate": "minor-drift",
+    "identity.col.activated": "minor-drift",
+    "identity.col.unmerged": "minor-drift",
+    "identity.col.unmergedBy": "minor-drift",
+    "identity.dupReason.ambiguous": "minor-drift",
+    "identity.mergeStatus.unmerged": "minor-drift",
+    "identity.openMerge": "minor-drift",
+    "identity.detail": "minor-drift",
+    "identity.back": "minor-drift",
+    "identity.actionsSoon": "minor-drift",
+    "identity.approve": "minor-drift",
+    "identity.unmerge": "minor-drift",
+    "identity.approveTitle": "minor-drift",
+    "identity.unmergeTitle": "minor-drift",
+    "identity.approved": "minor-drift",
+    "identity.unmerged": "minor-drift",
+    "identity.flagged": "minor-drift"
+  },
+  "issues": [
+    {
+      "key": "dev.title",
+      "verdict": "meaning-changed",
+      "note": "Technical term changed: \"claim\" (token claims) became a word meaning request; a developer would think this shows request structure, not token claims.",
+      "suggestedTamil": "உருவாக்குநர்: கிளெய்ம் அமைப்பு"
+    },
+    {
+      "key": "referrals.proposalAbstained",
+      "verdict": "meaning-changed",
+      "note": "\"Abstained\" (the system deliberately gave no proposal) became \"avoided/skipped\", which can read as a step that was omitted or failed.",
+      "suggestedTamil": "முன்மொழிவு அளிக்கவில்லை"
+    },
+    {
+      "key": "scheduling.col.rank",
+      "verdict": "meaning-changed",
+      "note": "\"Rank\" (order of precedence) became a word meaning quality/grade; a higher value could be read as better quality rather than higher precedence.",
+      "suggestedTamil": "தரவரிசை"
+    },
+    {
+      "key": "scheduling.offerStatus.empty",
+      "verdict": "wrong",
+      "note": "The word used means an election candidate; \"No candidates\" for an offer draft is mistranslated.",
+      "suggestedTamil": "பொருத்தமானவை இல்லை"
+    },
+    {
+      "key": "scheduling.offerCandidates",
+      "verdict": "wrong",
+      "note": "The word used means an election candidate, not a candidate slot or patient.",
+      "suggestedTamil": "பொருத்தமானவற்றின் விவரங்கள்"
+    },
+    {
+      "key": "identity.col.candidate",
+      "verdict": "wrong",
+      "note": "The word used means an election candidate, not a candidate record for duplicate review.",
+      "suggestedTamil": "பரிசீலனைக்குரிய பதிவு"
+    },
+    {
+      "key": "identity.col.other",
+      "verdict": "meaning-changed",
+      "note": "Direction reversed: English column shows the record this one may duplicate; Tamil reads \"possible duplicate of this\", so staff could take the other record to be the duplicate.",
+      "suggestedTamil": "எந்தப் பதிவின் சாத்தியமான நகல்"
+    }
+  ],
+  "flags": [
+    {
+      "key": "common.working",
+      "kind": "unnatural",
+      "note": "Literal \"it is functioning\"; wording for a busy state should read as processing."
+    },
+    {
+      "key": "landing.how.step1Body",
+      "kind": "unnatural",
+      "note": "One-time code term is the standard OTP concept; confirm the phrase patients actually recognise."
+    },
+    {
+      "key": "staff.stepUp.submit",
+      "kind": "register",
+      "note": "Same dialog mixes -க confirm with bare-imperative cancel; app-wide button form inconsistency."
+    },
+    {
+      "key": "staff.stepUp.cancel",
+      "kind": "register",
+      "note": "Bare imperative sits next to a -க confirm button in the same dialog; mixed button forms."
+    },
+    {
+      "key": "shell.activeRole",
+      "kind": "ambiguous",
+      "note": "Role is a key concept used on many screens; the word chosen literally means share/part."
+    },
+    {
+      "key": "shell.clinic",
+      "kind": "mixed-language",
+      "note": "Loanword while other strings use the Tamil word for hospital/clinic; inconsistent."
+    },
+    {
+      "key": "nav.scheduling",
+      "kind": "ambiguous",
+      "note": "Timetable reads as a schedule table; a main navigation label should be unambiguous."
+    },
+    {
+      "key": "referrals.holds",
+      "kind": "ambiguous",
+      "note": "Stop wording for a hold; different term from slot holds."
+    },
+    {
+      "key": "referrals.col.holds",
+      "kind": "ambiguous",
+      "note": "Same hold term issue in the table heading."
+    },
+    {
+      "key": "referrals.proposal",
+      "kind": "ambiguous",
+      "note": "Same word as for referral, causing confusion; triage reduced to categorisation."
+    },
+    {
+      "key": "referrals.noProposal",
+      "kind": "ambiguous",
+      "note": "Proposal term differs from the heading term in the same screen."
+    },
+    {
+      "key": "referrals.proposalAbstained",
+      "kind": "unnatural",
+      "note": "Means skipped, not a deliberate no-proposal; verdict meaning-changed."
+    },
+    {
+      "key": "tasks.kind.referral_hold",
+      "kind": "ambiguous",
+      "note": "Same hold term issue."
+    },
+    {
+      "key": "tasks.acknowledge",
+      "kind": "register",
+      "note": "Accept is not quite acknowledge and shares a word with accepting an appointment."
+    },
+    {
+      "key": "tasks.resolve",
+      "kind": "ambiguous",
+      "note": "Single short verb that is also the word for hair; inconsistent with the resolved term used for identity."
+    },
+    {
+      "key": "patients.col.label",
+      "kind": "ambiguous",
+      "note": "Note/hint instead of label; withheld note text could be taken as clinical notes."
+    },
+    {
+      "key": "patients.revoke.body",
+      "kind": "unnatural",
+      "note": "Awkward phrasing on a message describing what the system will do."
+    },
+    {
+      "key": "scheduling.providers",
+      "kind": "ambiguous",
+      "note": "May read as general suppliers rather than clinicians."
+    },
+    {
+      "key": "scheduling.holds",
+      "kind": "ambiguous",
+      "note": "Allocation/quota does not convey a held slot."
+    },
+    {
+      "key": "scheduling.offers",
+      "kind": "ambiguous",
+      "note": "Means opportunities rather than offers."
+    },
+    {
+      "key": "scheduling.col.duration",
+      "kind": "unnatural",
+      "note": "Word means physical length rather than time duration."
+    },
+    {
+      "key": "scheduling.col.rank",
+      "kind": "ambiguous",
+      "note": "Means quality/grade rather than rank; verdict meaning-changed."
+    },
+    {
+      "key": "scheduling.col.label",
+      "kind": "ambiguous",
+      "note": "Same label/note term issue."
+    },
+    {
+      "key": "scheduling.col.hold",
+      "kind": "ambiguous",
+      "note": "Same allocation-for-hold term issue."
+    },
+    {
+      "key": "scheduling.offerStatus.empty",
+      "kind": "unnatural",
+      "note": "Election-candidate word; verdict wrong."
+    },
+    {
+      "key": "scheduling.offerCandidates",
+      "kind": "unnatural",
+      "note": "Election-candidate word; verdict wrong."
+    },
+    {
+      "key": "identity.col.candidate",
+      "kind": "unnatural",
+      "note": "Election-candidate word; verdict wrong."
+    },
+    {
+      "key": "identity.col.master",
+      "kind": "ambiguous",
+      "note": "Does not clearly say surviving/primary record, which matters for who is kept in a merge."
+    },
+    {
+      "key": "identity.flagged",
+      "kind": "too-long",
+      "note": "Very long run-on sentence stating what the system recorded; \"rows\" rendered as queues."
+    }
+  ],
+  "glossary": [
+    {
+      "concept": "proposal",
+      "terms": [
+        "வகைப்படுத்தல் பரிந்துரை (recommendation) x1",
+        "முன்மொழிவு x1",
+        "முன்மொழி- (propose) x3"
+      ],
+      "recommendation": "Use முன்மொழிவு / முன்மொழி throughout so proposal is not confused with பரிந்துரை (referral)."
+    },
+    {
+      "concept": "resolve / resolved",
+      "terms": [
+        "முடி / முடிந்தவை (tasks) x9",
+        "தீர்க்கப்பட்டது (identity) x2"
+      ],
+      "recommendation": "Standardise on the தீர்- root (தீர்க்கப்பட்டது) for resolved status; avoid முடி, which also means hair."
+    },
+    {
+      "concept": "hold",
+      "terms": [
+        "நிறுத்தம் (referral hold) x4",
+        "ஒதுக்கீடு (slot hold) x6"
+      ],
+      "recommendation": "Use one clear term per hold type, identically everywhere (e.g. நிறுத்திவைப்பு for referral holds, தற்காலிக ஒதுக்கீடு for slot holds)."
+    },
+    {
+      "concept": "clinic / hospital",
+      "terms": [
+        "மருத்துவமனை x5",
+        "கிளினிக் x1"
+      ],
+      "recommendation": "Source says \"clinic\" in several strings but Tamil uses மருத்துவமனை there and கிளினிக் in shell.clinic; standardise on one."
+    },
+    {
+      "concept": "decision / results",
+      "terms": [
+        "முடிவு (decision) x8",
+        "முடிவுகள் (search results) x2"
+      ],
+      "recommendation": "முடிவு means both decision and search results; use a different word for results (e.g. பொருத்தங்கள்)."
+    }
+  ]
+}
