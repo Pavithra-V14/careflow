@@ -99,3 +99,17 @@ calls:
     status: retired
     appendix_b: null
     notes: "Not an external call. Listed so a network transport is never wired by accident: tests/test_scheduling_agent.py::test_calling_a_server_in_process_opens_no_socket and the spike's tripwire test (docs/design/phase3-mcp-spike.md) pin it."
+
+  - id: supabase-storage
+    service: Supabase Storage (the project's own, same project as the database; a PRIVATE bucket)
+    host: "<SUPABASE_URL>/storage/v1 (the server) and the signed upload URL on the same host (the browser)"
+    source: careflow/adapters/storage.py
+    data_sent: "The bytes of uploaded referral documents (PDF, JPEG, PNG): the browser PUTs them to a short-lived signed upload URL the server obtained; the server reads them back and deletes them with its secret key. The object path is clinic and document ids only (no file name, no patient text). Requests have explicit timeouts (connect 5 s, read and write 30 s, 60 s per call)."
+    data_class: patient_plaintext
+    data_policy: synthetic_only
+    permitted_in_clinical: false
+    approved_by: "the project owner (instruction of 2026-10-30)"
+    approved_on: "2026-10-30"
+    status: approved
+    appendix_b: "Supabase Storage signed-upload behaviour: endpoints and response shapes, overwrite while the signed URL is valid, URL lifetime, bucket size and type limits, private bucket refusing unauthenticated reads (CONFIRMED against the real DEV project on 2026-10-30 by scripts/storage_spike.py, all strict expectations held; the application still builds the adapter only when CAREFLOW_STORAGE_VERIFIED records a date. The CI project's confirmation is the live test tests/test_storage_policies_live.py)"
+    notes: "APPROVED by the owner on 2026-10-30 for the DEV and CI projects with SYNTHETIC data only (data_policy synthetic_only). Not permitted in clinical: no real patient document until a separate decision on region (production must be an India region, 16.5) and the privacy owner's written confirmation (a pre-launch blocker). The scanner port runs before a document is shown as clean, and unscanned means held for a person (careflow/malware.py). Migration 0027 denies every direct operation on storage.objects and storage.buckets to anon and authenticated (docs/design/uploads-supabase-storage.md). The dev and CI projects are in Tokyo and synthetic-only."

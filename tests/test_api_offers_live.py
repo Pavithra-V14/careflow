@@ -85,8 +85,8 @@ async def world():
             "insert into iam.staff_roles (account_id, clinic_id, role, origin) values " + ", ".join(f"('{ids[key]}', '{c}', '{r}', 'test')" for key, (c, r) in who.items()) + ";",
         )
         pct = "'\\x" + "01" * 40 + "'::bytea"
-        provider, location, vt, vt_b, slot_ok, slot_2, slot_3 = (_u() for _ in range(7))
-        top, second, third = _u(), _u(), _u()
+        provider, location, vt, vt_b, slot_ok, slot_2, slot_3, slot_booked = (_u() for _ in range(8))
+        top, second, third, booker, booking = _u(), _u(), _u(), _u(), _u()
         now = datetime.now(UTC)
         start = (now + timedelta(days=30)).replace(minute=0, second=0, microsecond=0)
         await raw(
@@ -98,7 +98,7 @@ async def world():
             f"('{a}', 'level_one', 'Test one', 1, '{ids['doctor_a']}', 'test', 'o-pl1-{a}'), ('{a}', 'level_two', 'Test two', 2, '{ids['doctor_a']}', 'test', 'o-pl2-{a}'); "
             + " ".join(
                 f"insert into mpi.patients (id, clinic_id, name_ct, name_key_version, dob_ct, dob_key_version, origin, idempotency_key) values ('{p}', '{a}', {pct}, 1, {pct}, 1, 'test', 'o-p-{p}'); "
-                for p in (top, second, third)
+                for p in (top, second, third, booker)
             )
             + f"insert into sched.waitlist (clinic_id, patient_id, visit_type_id, priority_code, joined_at, origin, idempotency_key) values "
             f"('{a}', '{second}', '{vt}', 'level_two', '{(now - timedelta(days=3)).isoformat()}', 'test', 'o-w2-{second}'), "
@@ -108,7 +108,10 @@ async def world():
                 f"insert into sched.slots (id, clinic_id, provider_id, location_id, visit_type_id, starts_at, ends_at, status, origin, idempotency_key) values "
                 f"('{s}', '{a}', '{provider}', '{location}', '{vt}', '{(start + timedelta(hours=i)).isoformat()}', '{(start + timedelta(hours=i, minutes=30)).isoformat()}', 'open', 'test', 'o-s-{s}'); "
                 for i, s in enumerate((slot_ok, slot_2, slot_3))
-            ),
+            )
+            + f"insert into sched.slots (id, clinic_id, provider_id, location_id, visit_type_id, starts_at, ends_at, status, origin, idempotency_key) values "
+            f"('{slot_booked}', '{a}', '{provider}', '{location}', '{vt}', '{(start + timedelta(hours=9)).isoformat()}', '{(start + timedelta(hours=9, minutes=30)).isoformat()}', 'booked', 'test', 'o-s-{slot_booked}'); "
+            f"insert into sched.bookings (id, clinic_id, slot_id, patient_id, origin, idempotency_key) values ('{booking}', '{a}', '{slot_booked}', '{booker}', 'test', 'o-b-{booking}'); ",
         )
         app = create_app(Settings(supabase_url=PROJECT, database_url_app="postgresql://unused"), jwks=fake_jwks_client(), engine=object(), vault=vault)  # type: ignore[arg-type]
 
@@ -126,7 +129,7 @@ async def world():
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
                 yield type("World", (), {
-                    "conn": conn, "client": client, "ids": ids, "a": a, "b": b, "vt": vt, "vt_b": vt_b, "slots": [slot_ok, slot_2, slot_3], "top": top, "second": second, "third": third,
+                    "conn": conn, "client": client, "ids": ids, "a": a, "b": b, "vt": vt, "vt_b": vt_b, "slots": [slot_ok, slot_2, slot_3], "top": top, "second": second, "third": third, "booking": booking, "slot_booked": slot_booked,
                 })
     finally:
         await outer.rollback()
@@ -210,3 +213,23 @@ async def test_only_front_desk_of_the_clinic_may_draft_or_send_even_when_configu
         assert (await draft(w, who)).status_code == status, who
         assert (await w.client.post(SEND, headers=headers(w, who), json=send_body(w, w.slots[2], top))).status_code == status, who
     assert (await rows(w, "select count(*) from sched.holds where slot_id = :s", s=w.slots[2]))[0][0] == 0
+
+
+async def test_end_to_end_a_freed_slot_goes_to_the_higher_priority_patient_ahead_of_a_longer_waiting_lower_priority_one_and_booking_it_leaves_the_others_waiting(w):
+    """Phase 3 acceptance (BUILD-SPEC Appendix D): cancel -> ranked list -> draft -> send -> accept (book). Level one joined LATER than two level-two patients and must still be offered first."""
+    cancel = await w.client.post(f"/v1/staff/scheduling/bookings/{w.booking}/cancel", headers=headers(w, "fd_a"))
+    assert cancel.status_code == 200 and cancel.json()["slot_id"] == str(w.slot_booked)
+    assert [c["patient_id"] for c in cancel.json()["candidates"]] == [str(w.top), str(w.second), str(w.third)]  # rank first, then who joined first
+    assert [c["priority_code"] for c in cancel.json()["candidates"]] == ["level_one", "level_two", "level_two"]
+    assert (await rows(w, "select count(*) from sched.holds where clinic_id = :c", c=w.a))[0][0] == 0  # the cancel offered nobody
+    out = await draft(w)
+    assert out.json()["data"]["draft"]["candidate_patient_id"] == str(w.top)
+    top = await waitlist_id(w, w.top)
+    sent = await w.client.post(SEND, headers=headers(w, "fd_a"), json=send_body(w, w.slot_booked, top))
+    assert sent.status_code == 200 and sent.json()["patient_id"] == str(w.top)
+    longer_waiting = await w.client.post(f"/v1/staff/scheduling/slots/{w.slot_booked}/book", headers=headers(w, "fd_a"), json={"patient_id": str(w.second)})
+    assert longer_waiting.status_code == 409  # the slot is held for the higher-priority patient: the longer-waiting one cannot take it
+    accepted = await w.client.post(f"/v1/staff/scheduling/slots/{w.slot_booked}/book", headers=headers(w, "fd_a"), json={"patient_id": str(w.top)})
+    assert accepted.status_code == 200 and accepted.json()["patient_id"] == str(w.top) and accepted.json()["status"] == "confirmed"
+    states = {r[0]: r[1] for r in await rows(w, "select patient_id, status from sched.waitlist where clinic_id = :c", c=w.a)}
+    assert states[w.top] == "fulfilled" and states[w.second] == "waiting" and states[w.third] == "waiting"

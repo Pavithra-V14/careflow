@@ -162,3 +162,14 @@ def test_a_frontend_only_change_does_not_run_the_backend_workflow_but_any_other_
     for event in ("pull_request", "push"):
         assert triggers[event]["paths-ignore"] == ["frontend/**", ".github/workflows/frontend.yml"], event
         assert "paths" not in triggers[event]  # an allow-list would silently skip new backend directories
+
+
+def test_the_server_side_secret_key_reaches_only_the_shard_that_holds_the_files_that_need_it():
+    """The secret (server-side) key is given to the live test step of shard 3 ONLY, and the files that read it are all in that shard."""
+    job = WORKFLOW["jobs"]["live"]
+    assert "SUPABASE_SECRET_KEY" not in (job.get("env") or {}), "the key must not be in the job-wide env"
+    steps = [s for s in job["steps"] if "SUPABASE_SECRET_KEY" in (s.get("env") or {})]
+    assert len(steps) == 1 and "matrix.shard == 3" in steps[0]["env"]["SUPABASE_SECRET_KEY"]
+    needing = sorted(f"tests/{p.name}" for p in (ROOT / "tests").glob("*live*.py") if "SUPABASE_SECRET_KEY" in p.read_text(encoding="utf-8"))
+    shard3 = next(s for s in shards() if s["shard"] == 3)
+    assert needing and all(f in shard_files(shard3) for f in needing), f"files that read the secret key but are not in shard 3: {needing}"
