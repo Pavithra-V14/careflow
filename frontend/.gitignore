@@ -9,5 +9,7 @@ dist-e2e/
 env.local
 env.*.local
 test-results/
+test-results-live/
+live-report/
 playwright-report/
 *.tsbuildinfo
