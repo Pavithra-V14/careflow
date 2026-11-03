@@ -197,7 +197,8 @@ async def _seed_scheduling(ids, conn) -> None:
         "values ($1, $2, $3, $4, $5, $6, $7, $8, 'test', $9)",
         slots,
     )
-    bookings = [(uuid.uuid4(), sid, ids.patients_a[i % N_PATIENTS], k(f"bk{i}")) for i, sid in enumerate(pools["cancel"])]
+    # patients 40 to 44 are reserved (the cancel-candidates test asserts they have no booking, and 43/44 are the waiting pair): the seeded bookings cycle over the first 40 only
+    bookings = [(uuid.uuid4(), sid, ids.patients_a[i % 40], k(f"bk{i}")) for i, sid in enumerate(pools["cancel"])]
     await conn.executemany(
         "insert into sched.bookings (id, clinic_id, slot_id, patient_id, origin, idempotency_key) values ($1, $2, $3, $4, 'test', $5)",
         [(bid, a, sid, pid, key) for bid, sid, pid, key in bookings],
