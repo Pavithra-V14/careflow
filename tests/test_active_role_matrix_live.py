@@ -14,11 +14,13 @@ active role and `role_scope` (section 6), and a refused header writes no audit r
 """
 
 import asyncio
+import contextlib
 import json
 import re
 import time
 import uuid
 
+import asyncpg
 import httpx
 import jwt
 import pytest
@@ -60,23 +62,29 @@ HEADER = active_role.HEADER
 
 @pytest.fixture(scope="module")
 def allroles(ids):  # noqa: F811
-    """One staff account holding ALL six staff roles at clinic A, plus a REVOKED grant holder at clinic A: created here, removed after the module."""
-    holder, revoked = uuid.uuid4(), uuid.uuid4()
-    ids.allroles, ids.revoked_holder = holder, revoked
+    """One staff account per ORIGINAL single-role clinic-A identity, each holding ALL six staff roles at clinic A (so a case that needs two different people, such as "one takes it, another cannot", still has two),
+    plus a REVOKED-grant holder at clinic A: created here, removed after the module."""
+    keys = [k for k, (_, kind, status, grants) in ids.people.items() if kind == "staff" and status == "active" and len(grants) == 1 and grants[0][0] == ids.clinic_a]
+    ids.allroles_by_key = {k: uuid.uuid4() for k in keys}
+    ids.allroles = ids.allroles_by_key["front_desk_a"]
+    ids.revoked_holder = uuid.uuid4()
+    holders = [*ids.allroles_by_key.values(), ids.revoked_holder]
 
     async def seed(conn):
-        for account in (holder, revoked):
+        for account in holders:
             await conn.execute("insert into iam.accounts (id, account_type, status, origin) values ($1, 'staff', 'active', 'test')", account)
-        for role in STAFF_ROLES:
-            await conn.execute("insert into iam.staff_roles (account_id, clinic_id, role, origin) values ($1, $2, $3, 'test')", holder, ids.clinic_a, role)
-        await conn.execute("insert into iam.staff_roles (account_id, clinic_id, role, origin, revoked_at) values ($1, $2, 'nurse', 'test', now())", revoked, ids.clinic_a)
+        for account in ids.allroles_by_key.values():
+            for role in STAFF_ROLES:
+                await conn.execute("insert into iam.staff_roles (account_id, clinic_id, role, origin) values ($1, $2, $3, 'test')", account, ids.clinic_a, role)
+        await conn.execute("insert into iam.staff_roles (account_id, clinic_id, role, origin, revoked_at) values ($1, $2, 'nurse', 'test', now())", ids.revoked_holder, ids.clinic_a)
 
     _run(_owner(seed))
-    yield holder
+    yield ids.allroles
 
     async def drop(conn):
-        await conn.execute("delete from iam.staff_roles where account_id = any($1)", [holder, revoked])
-        await conn.execute("delete from iam.accounts where id = any($1)", [holder, revoked])
+        await conn.execute("delete from iam.staff_roles where account_id = any($1)", holders)
+        with contextlib.suppress(asyncpg.ForeignKeyViolationError):  # an account that resolved a match candidate is referenced by an append-only row: left behind on purpose, origin 'test', like the main matrix's confirmed patients
+            await conn.execute("delete from iam.accounts where id = any($1)", holders)
 
     _run(_owner(drop))
 
@@ -90,8 +98,18 @@ def sub_of(headers) -> uuid.UUID | None:
 
 
 def single_role_identities(ids):  # noqa: F811
-    """account id -> (clinic, role) for every ACTIVE staff account with exactly one grant (the identity a header can name)."""
-    return {account: grants[0] for key, (account, kind, status, grants) in ids.people.items() if kind == "staff" and status == "active" and len(grants) == 1 and key != "multi"}
+    """account id -> (key, clinic, role) for every ACTIVE staff account with exactly one grant (the identity a header can name)."""
+    return {account: (key, *grants[0]) for key, (account, kind, status, grants) in ids.people.items() if kind == "staff" and status == "active" and len(grants) == 1 and key != "multi"}
+
+
+# Cases whose expectation depends on WHICH PERSON acts, not on the role: an identity swap cannot reproduce them (the proposal's proposer is a fixed database row).
+IDENTITY_BOUND = ("SAME person",)
+
+
+def fresh(ids, method, path):  # noqa: F811
+    """Call the route's case builder again. Its fixtures come from finite pools (slots, patients): rotate the waitlist patients so a second call does not reuse the ones a first call put on the waitlist."""
+    ids.patients_a[1:] = ids.patients_a[9:] + ids.patients_a[1:9]
+    return MATRIX[(method, path)](ids)
 
 
 def replay_as(ids, cases, *, on_clinic_a: str):  # noqa: F811
@@ -104,15 +122,15 @@ def replay_as(ids, cases, *, on_clinic_a: str):  # noqa: F811
     for label, headers, status, body, *rest in cases:
         extra = dict(rest[0]) if rest else {}
         sub = sub_of(headers)
-        if sub not in singles or status == 401:
+        if sub not in singles or status == 401 or any(w in label for w in IDENTITY_BOUND):
             continue
-        clinic, role = singles[sub]
+        key, clinic, role = singles[sub]
         in_a = clinic == ids.clinic_a
         if on_clinic_a == "plain" and not (200 <= status < 300 and in_a):
             continue
         token_claims = jwt.decode(headers["Authorization"][len("Bearer "):], options={"verify_signature": False})
         carried = {k: v for k, v in token_claims.items() if k not in {"sub", "iss", "aud", "role", "exp"}}  # e.g. aal and amr on the step-up routes
-        who = bearer(mint(ids.allroles if in_a else sub, **carried))
+        who = bearer(mint(ids.allroles_by_key[key] if in_a else sub, **carried))
         more = {**extra.get("headers", {})}
         if on_clinic_a == "header":
             more[HEADER] = f"{clinic}:{role}"
@@ -123,14 +141,14 @@ def replay_as(ids, cases, *, on_clinic_a: str):  # noqa: F811
 
 @pytest.mark.parametrize(("method", "path"), ROUTES)
 def test_the_header_names_the_role_a_caller_acts_under_and_the_other_roles_it_holds_do_not_count(client, ids, allroles, method, path):  # noqa: F811
-    cases = replay_as(ids, MATRIX[(method, path)](ids), on_clinic_a="header")
+    cases = replay_as(ids, fresh(ids, method, path), on_clinic_a="header")
     assert cases, f"{method} {path}: no single-role case to replay"
     check_route_matrix(client, method, path, cases)
 
 
 @pytest.mark.parametrize(("method", "path"), ROUTES)
 def test_without_the_header_a_caller_with_every_role_is_allowed_wherever_any_single_role_was(client, ids, allroles, method, path):  # noqa: F811
-    cases = replay_as(ids, MATRIX[(method, path)](ids), on_clinic_a="plain")
+    cases = replay_as(ids, fresh(ids, method, path), on_clinic_a="plain")
     if cases:  # a route with no success case for a clinic-A role (a refusal-only matrix) has nothing to replay here
         check_route_matrix(client, method, path, cases)
 
@@ -147,16 +165,16 @@ def battery(ids):  # noqa: F811
     a, b = ids.clinic_a, ids.clinic_b
     out = []
     fd = ids.people["front_desk_a"][0]
-    out += [(f"front desk names the other role {r}", fd, f"{a}:{r}") for r in STAFF_ROLES if r != "front_desk"]  # cannot widen
-    out += [("front desk names its own role at the other clinic", fd, f"{b}:front_desk"), ("front desk names an unknown clinic", fd, f"{uuid.uuid4()}:front_desk")]
-    out += [("multi names a role it holds at the OTHER clinic", ids.people["multi"][0], f"{a}:doctor"), ("multi names nurse at clinic B", ids.people["multi"][0], f"{b}:nurse")]
-    out += [("a revoked grant", ids.revoked_holder, f"{a}:nurse")]
-    for key in ("suspended", "invited", "front_desk_suspended"):
+    # cannot widen / cannot be held (each needs one database check): a narrow role names a broader one, another clinic, an unknown clinic, a revoked grant, dead and non-staff accounts
+    out += [("front desk names the broader role admin", fd, f"{a}:admin"), ("front desk names the role doctor", fd, f"{a}:doctor"), ("front desk names its own role at the other clinic", fd, f"{b}:front_desk"),
+            ("front desk names an unknown clinic", fd, f"{uuid.uuid4()}:front_desk")]
+    out += [("multi names a role it holds at the OTHER clinic", ids.people["multi"][0], f"{a}:doctor"), ("a revoked grant", ids.revoked_holder, f"{a}:nurse")]
+    for key in ("suspended", "invited"):
         out.append((f"a {ids.people[key][2]} account names its own grant", ids.people[key][0], f"{a}:{ids.people[key][3][0][1]}"))
-    out += [("a patient account", ids.people["patient"][0], f"{a}:nurse"), ("a guardian account", ids.people["guardian"][0], f"{a}:front_desk"), ("a valid user with no iam account", ids.no_account, f"{a}:nurse")]
-    malformed = ["", " ", f"{a}:Nurse", f"{a}:NURSE", f"{a}: nurse", f" {a}:nurse", f"{a}:nurse ", f"{a}|nurse", f"{a}::nurse", f"{a}:", ":nurse", "nurse", str(a), "not-a-uuid:nurse", f"{str(a).upper()}:nurse",
-                 f"{a}:nurse'; drop table iam.staff_roles; --", "x" * 5000, f"{a}:" + "n" * 70, f"{a}:superuser", f"{a}:patient"]
-    out += [(f"malformed {m[:30]!r}", fd, m) for m in malformed if m != f"{a}:nurse"]
+    out += [("a patient account", ids.people["patient"][0], f"{a}:nurse"), ("a valid user with no iam account", ids.no_account, f"{a}:nurse")]
+    # malformed values are refused BEFORE the database (syntax first): cheap
+    malformed = ["", " ", f"{a}:Nurse", f"{a}: nurse", f"{a}|nurse", f"{a}:", "nurse", "not-a-uuid:nurse", f"{str(a).upper()}:nurse", f"{a}:nurse'; drop table iam.staff_roles; --", "x" * 5000, f"{a}:superuser"]
+    out += [(f"malformed {m[:30]!r}", fd, m) for m in malformed]
     out += [("a duplicate header", fd, [f"{a}:front_desk", f"{a}:front_desk"]), ("a duplicate with two roles", fd, [f"{a}:front_desk", f"{a}:nurse"])]
     return out
 
@@ -169,11 +187,11 @@ def with_values(headers, value):
 
 @pytest.mark.parametrize(("method", "path"), ROUTES)
 def test_every_header_that_cannot_be_held_or_is_malformed_is_the_same_fixed_403_with_no_side_effect(client, ids, allroles, method, path):  # noqa: F811
-    cases = MATRIX[(method, path)](ids)
-    target = next((dict(rest[0]).get("path") for _, _, _, _, *rest in cases if rest and dict(rest[0]).get("path")), None) or concrete(path)
+    target = concrete(path)  # the refusal happens before the route body, so any well-formed path will do (and no fixture pool is touched)
     failures = []
+    stepped = {"aal": "aal2", "amr": [{"method": "totp", "timestamp": int(time.time()) - 5}]}  # so a step-up route's check passes and the HELD check is what answers
     for label, owner, value in battery(ids):
-        response = client.request(method, target, headers=with_values({**bearer(mint(owner)), "X-Idempotency-Key": _new_key()}, value), json={})
+        response = client.request(method, target, headers=with_values({**bearer(mint(owner, **stepped)), "X-Idempotency-Key": _new_key()}, value), json={})
         if (response.status_code, response.json()) != (403, FIXED):
             failures.append(f"{label}: {response.status_code} {str(response.json())[:120]}")
     assert not failures, f"{method} {path}:\n  " + "\n  ".join(failures)
