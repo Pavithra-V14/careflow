@@ -136,3 +136,63 @@ def test_the_app_refuses_a_demo_labelled_scheduling_value_in_the_clinical_profil
     monkeypatch.setenv("CAREFLOW_SCHED_OFFER_MESSAGE_TEMPLATE", f"{DEMO_LABEL}. smuggled")
     with pytest.raises(DemoConfigRefused):
         create_app(settings())
+
+
+# ---- the patient-view limits (owner decision 2026-10-30): demo placeholders under the same gate, refusal and label rules ------------------------------------------------
+
+
+def test_the_patient_view_limits_have_labelled_demo_placeholders_and_load_only_under_the_gate():
+    from careflow.demo_phase3 import patient_view_placeholders
+
+    assert patient_view_placeholders(DEMO_ENV, "demo") == {"max_opens_per_minute": 30, "max_label_rows_per_minute": 200}
+    assert patient_view_placeholders({"CAREFLOW_PROFILE": "demo", DATA_POLICY_VARIABLE: "synthetic_only"}, "demo") == {}  # the switch is off: nothing is filled in
+    assert patient_view_placeholders({}, "clinical") == {}
+    data = yaml.safe_load(DEMO_FILE.read_text(encoding="utf-8"))["settings"]
+    for key in ("patient_view_max_opens_per_minute", "patient_view_max_label_rows_per_minute"):
+        assert set(data[key]) == {"value", "label"} and data[key]["label"] == DEMO_LABEL and isinstance(data[key]["value"], int) and data[key]["value"] > 0
+
+
+@pytest.mark.parametrize(
+    ("env", "profile"),
+    [
+        ({SWITCH: "1"}, "clinical"),
+        ({SWITCH: "1", "CAREFLOW_PROFILE": "demo", DATA_POLICY_VARIABLE: "phi_approved"}, "demo"),
+        ({SWITCH: "1", "CAREFLOW_PROFILE": "demo"}, "demo"),
+        ({SWITCH: "1", "CAREFLOW_PROFILE": "clinical", DATA_POLICY_VARIABLE: "synthetic_only"}, "clinical"),
+    ],
+)
+def test_the_patient_view_placeholders_are_refused_outside_demo_with_synthetic_data(env, profile):
+    from careflow.demo_phase3 import patient_view_placeholders
+
+    with pytest.raises(DemoConfigRefused):
+        patient_view_placeholders(env, profile)
+
+
+def test_the_real_view_config_takes_the_demo_limits_only_under_the_gate_and_an_explicit_value_always_wins(monkeypatch):
+    from types import SimpleNamespace
+
+    from careflow.app import patient_view_config
+
+    def build():
+        return patient_view_config(SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace())))  # type: ignore[arg-type]
+
+    for name in ("CAREFLOW_PATIENT_VIEW_MAX_OPENS_PER_MINUTE", "CAREFLOW_PATIENT_VIEW_MAX_LABEL_ROWS_PER_MINUTE", "CAREFLOW_PATIENT_VIEW_PAGE_LIMIT"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.chdir(__import__("os").path.dirname(__import__("os").path.abspath(__file__)))  # the repository's .env is not read
+    monkeypatch.setenv("CAREFLOW_PROFILE", "demo")
+    monkeypatch.setenv(DATA_POLICY_VARIABLE, "synthetic_only")
+    monkeypatch.delenv(SWITCH, raising=False)
+    off = build()
+    assert off.enabled and off.settings.max_opens_per_minute is None and off.settings.max_label_rows_per_minute is None  # the feature is on, the limits are unset: 503 on the view routes
+    monkeypatch.setenv(SWITCH, "1")
+    demo = build()
+    assert (demo.settings.max_opens_per_minute, demo.settings.max_label_rows_per_minute) == (30, 200) and demo.limiter and demo.label_limiter
+    monkeypatch.setenv("CAREFLOW_PATIENT_VIEW_MAX_OPENS_PER_MINUTE", "5")
+    explicit = build()
+    assert (explicit.settings.max_opens_per_minute, explicit.settings.max_label_rows_per_minute) == (5, 200)  # the explicit value wins, the other is the placeholder
+
+
+def test_the_env_example_lists_the_view_variable_names_without_values():
+    text = (DEMO_FILE.parent.parent / ".env.example").read_text(encoding="utf-8")
+    for name in ("CAREFLOW_PATIENT_VIEW_MAX_OPENS_PER_MINUTE", "CAREFLOW_PATIENT_VIEW_MAX_LABEL_ROWS_PER_MINUTE", "CAREFLOW_PATIENT_VIEW_PAGE_LIMIT"):
+        assert f"# {name}=\n" in text and f"\n{name}=" not in text  # named, commented out, no value

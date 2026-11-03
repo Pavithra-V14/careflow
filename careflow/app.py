@@ -33,7 +33,7 @@ import time
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager, contextmanager
-from datetime import datetime
+from datetime import UTC, date, datetime
 from typing import Annotated, Any, Final, Literal
 
 from dotenv import dotenv_values
@@ -53,13 +53,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from langgraph.types import Command
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from careflow import identity, mpi, offers, review_tasks
+from careflow import (
+    demo_phase3,
+    identity,
+    mpi,
+    offers,
+    openapi_errors,
+    patient_view,
+    review_tasks,
+)
+from careflow.adapters.storage import DOCUMENT_BUCKET, SupabaseUploadAdapter
 from careflow.audit import write_audit
 from careflow.auth import (
     AuthError,
@@ -1630,8 +1639,35 @@ class PatientSearchIn(_Body):
     phone: str | None = Field(default=None, max_length=40)
 
 
+def patient_view_config(request: Request) -> patient_view.PatientViewConfig:
+    """The deployment's view configuration (overridable in tests). Read once per app and kept: the limiters live on the app, one per configured limit, so a request cannot reset them. A setting with an
+    INVALID value does not break the other routes: it marks the config `misconfigured` (the view routes answer a fixed 503; search still works, without labels)."""
+    cache: dict[str, Any] = request.app.state.__dict__.setdefault("patient_view_cache", {})
+    if "config" not in cache:
+        try:
+            settings = patient_view.PatientViewSettings()
+            fill = {k: v for k, v in demo_phase3.patient_view_placeholders(os.environ, resolve_profile()).items() if getattr(settings, k) is None}  # an explicit value always wins
+            settings, bad = settings.model_copy(update=fill), False
+        except ValidationError:
+            settings, bad = patient_view.PatientViewSettings.model_construct(max_opens_per_minute=None, max_label_rows_per_minute=None, page_limit=1), True  # inert values (no validation, no env): nothing is served while `misconfigured`
+        opens = patient_view.OpenRateLimiter(settings.max_opens_per_minute) if settings.max_opens_per_minute is not None else None
+        rows = patient_view.OpenRateLimiter(settings.max_label_rows_per_minute) if settings.max_label_rows_per_minute is not None else None
+        cache["config"] = patient_view.PatientViewConfig(patient_view.feature_enabled(resolve_profile(), os.environ), settings, opens, rows, misconfigured=bad)
+    return cache["config"]
+
+
+class PatientLabelOut(_Out):
+    """One list row. The year of birth and the last four digits only; the full date and the full number appear only when one record is opened."""
+
+    patient_id: uuid.UUID
+    name: str
+    birth_year: int
+    phone_last4: str | None
+
+
 class PatientHitOut(_Out):
     patient_id: uuid.UUID
+    label: PatientLabelOut | None = None  # the list-row view (name, year of birth, last four digits); None outside the demo profile with synthetic data
     matched_kinds: list[Literal["name_dob", "phone"]]
     verified: bool
     registered_via: Literal["front_desk", "referral_worker"]
@@ -1639,6 +1675,8 @@ class PatientHitOut(_Out):
 
 class PatientSearchOut(_Out):
     items: list[PatientHitOut]
+    truncated: bool = False  # more exact matches than one page holds (the page limit, at most 25); there is no total count
+    labels_withheld: bool = False  # the feature is on but the labels were not produced (the per-user row budget is spent or not configured)
 
 
 class PatientStatusOut(_Out):
@@ -1652,7 +1690,10 @@ class PatientStatusOut(_Out):
 
 
 @staff_patients.post("/search", response_model=PatientSearchOut)
-async def search_patients(body: PatientSearchIn, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims)) -> PatientSearchOut:
+async def search_patients(
+    body: PatientSearchIn, response: Response, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims),
+    config: patient_view.PatientViewConfig = Depends(patient_view_config),
+) -> PatientSearchOut:
     """Find existing records for exactly these details. 404 for a clinic you cannot see, 403 unless you are front desk there, 422 for an invalid date of birth or phone (named, never echoed), 503 if
     the encryption keys are not configured. Read-only."""
     vault: DemographicVault | None = request.app.state.vault
@@ -1673,13 +1714,34 @@ async def search_patients(body: PatientSearchIn, conn: TxConn, request: Request,
         raise HTTPException(status_code=422, detail="a required field is missing or blank") from None
     except UnicodeError:
         raise HTTPException(status_code=422, detail="the name contains characters that cannot be stored") from None
+    response.headers["Cache-Control"] = "no-store"
+    labels: dict[uuid.UUID, Any] = {}
+    page = hits[: config.settings.page_limit]
+    # A label (the owner's name) is attached ONLY to a hit that matched on name and date of birth: a phone-only hit would reveal whose number it is. The rows are charged to the per-user row budget.
+    wanted = [h.patient_id for h in page if "name_dob" in h.matched_kinds]
+    withheld = False
+    if config.enabled and wanted:
+        ready = not config.misconfigured and config.label_limiter is not None and config.settings.max_label_rows_per_minute is not None
+        if ready and config.label_limiter.allow(uuid.UUID(claims["sub"]), len(wanted)):  # type: ignore[union-attr]
+            with _view_errors():
+                labels = {x.patient_id: x for x in await patient_view.patient_labels(conn, vault, body.clinic_id, wanted, page_limit=config.settings.page_limit)}
+        else:
+            withheld = True
     # One audit row per search: who, role, the KIND of search and how many results. Never the query text and never the results (owner decision 2026-10-30).
     await write_audit(
         conn, clinic_id=body.clinic_id, origin=origin, actor_id=uuid.UUID(claims["sub"]), actor_role="front_desk", action="patient.search", resource_type="clinic", resource_id=body.clinic_id,
-        details={"kind": "name_dob_phone" if body.phone else "name_dob", "results": len(hits)}, idempotency_key=f"audit:patient-search:{uuid.uuid4()}",
+        details={"kind": "name_dob_phone" if body.phone else "name_dob", "results": len(hits), "labels": len(labels)}, idempotency_key=f"audit:patient-search:{uuid.uuid4()}",
     )
     return PatientSearchOut(
-        items=[PatientHitOut(patient_id=h.patient_id, matched_kinds=list(h.matched_kinds), verified=h.verified, registered_via=h.registered_via) for h in hits]  # type: ignore[arg-type]
+        items=[
+            PatientHitOut(
+                patient_id=h.patient_id, matched_kinds=list(h.matched_kinds), verified=h.verified, registered_via=h.registered_via,  # type: ignore[arg-type]
+                label=(PatientLabelOut(patient_id=h.patient_id, name=labels[h.patient_id].name, birth_year=labels[h.patient_id].birth_year, phone_last4=labels[h.patient_id].phone_last4) if h.patient_id in labels else None),
+            )
+            for h in page
+        ],
+        truncated=len(hits) > len(page),
+        labels_withheld=withheld,
     )
 
 
@@ -1891,6 +1953,176 @@ async def release_hold_route(hold_id: uuid.UUID, idempotency_key: IdempotencyKey
     return ReleaseOut(hold_id=released.hold_id, slot_id=released.slot_id, status="released", replayed=released.replayed)
 
 
+# ---- the audit-log reader (auditor only) -----------------------------------------------------------------------------------------------------------------------
+#
+# Reads `audit.log` under the existing policy `log_select_auditor` (an auditor of the row's clinic; system rows with no clinic are invisible to the application role). Newest first, keyset paging by
+# the row id (`before_id`), filters on the closed columns only. Rows hold ids and closed words by the writer's rule (careflow/audit.py refuses free text); `reason` (the break-glass free-text column)
+# is NOT returned. Reading the log is not itself logged (it would be a row per read of the log).
+
+staff_audit = APIRouter(prefix="/v1/staff/audit", tags=["staff audit"])
+
+
+class AuditRowOut(_Out):
+    audit_id: int
+    occurred_at: datetime
+    origin: Literal["live", "test", "eval", "canary"]
+    clinic_id: uuid.UUID | None
+    actor_id: uuid.UUID | None
+    actor_role: str | None
+    action: str
+    resource_type: str | None
+    resource_id: str | None
+    details: dict[str, Any]
+
+
+class AuditList(_Out):
+    items: list[AuditRowOut]
+    limit: int
+    has_more: bool
+    next_before_id: int | None  # pass as `before_id` for the next (older) page
+
+
+_TOKEN_PATTERN = r"^[a-z0-9_:.\-]{1,64}$"
+
+
+@staff_audit.get("", response_model=AuditList)
+async def read_audit_log(
+    conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), action: Annotated[str | None, Query(pattern=_TOKEN_PATTERN)] = None,
+    resource_type: Annotated[str | None, Query(pattern=_TOKEN_PATTERN)] = None, resource_id: Annotated[str | None, Query(max_length=64, pattern=r"^[A-Za-z0-9_:.\-]+$")] = None,
+    actor_id: uuid.UUID | None = None, since: datetime | None = None, until: datetime | None = None, before_id: Annotated[int | None, Query(ge=1)] = None, limit: Limit = 100,
+) -> AuditList:
+    """Audit rows of the clinics you audit, newest first. 403 unless you are an auditor of some clinic."""
+    await _staff_reader(conn, claims, ("auditor",))
+    rows = (
+        await conn.execute(
+            text(
+                "select id, occurred_at, origin, clinic_id, actor_id, actor_role, action, resource_type, resource_id, details from audit.log "
+                "where (cast(:a as text) is null or action = :a) and (cast(:rt as text) is null or resource_type = :rt) and (cast(:ri as text) is null or resource_id = :ri) "
+                "and (cast(:u as uuid) is null or actor_id = :u) and (cast(:s as timestamptz) is null or occurred_at >= :s) and (cast(:e as timestamptz) is null or occurred_at < :e) "
+                "and (cast(:b as bigint) is null or id < :b) order by id desc limit :n"
+            ),
+            {"a": action, "rt": resource_type, "ri": resource_id, "u": actor_id, "s": since, "e": until, "b": before_id, "n": limit + 1},
+        )
+    ).all()
+    items = [
+        AuditRowOut(
+            audit_id=r.id, occurred_at=r.occurred_at, origin=r.origin, clinic_id=r.clinic_id, actor_id=r.actor_id, actor_role=r.actor_role, action=r.action,
+            resource_type=r.resource_type, resource_id=r.resource_id, details=dict(r.details),
+        )
+        for r in rows[:limit]
+    ]
+    return AuditList(items=items, limit=limit, has_more=len(rows) > limit, next_before_id=items[-1].audit_id if len(rows) > limit and items else None)
+
+
+# ---- patient view: label rows and the opened record (careflow/patient_view.py; docs/design/patient-view-fields.md) ----------------------------------------------
+#
+# DEMO PROFILE WITH SYNTHETIC DATA ONLY (503 anywhere else). A list row (`PatientLabelOut`) is the name, the YEAR of birth and the LAST FOUR digits of the phone, at most 25 rows per request, no total
+# count, no export. OPENING one record decrypts it fully (name, date of birth, phone) for front desk, nurse and doctor of its clinic, is rate-limited per user (a required setting with no default)
+# and writes an audit row holding who, role and the patient id, never the contents. Responses are `Cache-Control: no-store`.
+
+VIEW_ROLES: Final = ("front_desk", "nurse", "doctor")
+
+
+class LabelsIn(_Body):
+    clinic_id: uuid.UUID
+    patient_ids: list[uuid.UUID] = Field(min_length=1, max_length=patient_view.HARD_PAGE_CAP)
+
+
+class LabelsOut(_Out):
+    items: list[PatientLabelOut]  # only the records of that clinic you may see; an id you may not see is simply absent
+
+
+class PatientViewOut(_Out):
+    patient_id: uuid.UUID
+    clinic_id: uuid.UUID
+    name: str
+    date_of_birth: str  # ISO date
+    phone: str | None
+
+
+async def _view_gate(conn: AsyncConnection, claims: dict[str, Any], clinic_id: uuid.UUID) -> str:
+    """The clinic's origin after checking the caller is active front desk, nurse or doctor there: 404 if the clinic is invisible, 403 if visible but not one of those."""
+    clinic = (await conn.execute(text("select origin from iam.clinics where id = :c"), {"c": clinic_id})).first()
+    if clinic is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _holds_role(conn, claims, clinic_id, VIEW_ROLES):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    return clinic[0]
+
+
+@contextmanager
+def _view_errors() -> Iterator[None]:
+    try:
+        yield
+    except patient_view.ViewDisabled:
+        raise HTTPException(status_code=503, detail="patient view is disabled outside the demo profile with synthetic data") from None
+    except patient_view.ViewNotConfigured as exc:
+        raise HTTPException(status_code=503, detail=f"patient view is unavailable: {exc}") from None  # the exception's own fixed words: which setting is missing (open limit, list-row limit, or an invalid value)
+    except patient_view.CannotShow:
+        raise HTTPException(status_code=503, detail="this record cannot be shown") from None
+    except patient_view.PatientNotFound:
+        raise HTTPException(status_code=404, detail="not found") from None
+
+
+def _vault_or_503(request: Request) -> DemographicVault:
+    vault: DemographicVault | None = request.app.state.vault
+    if vault is None:
+        log.error("patient view is unavailable: no encryption keys are configured (deployment fault)")
+        raise HTTPException(status_code=503, detail="patient view is unavailable: encryption keys are not configured")
+    return vault
+
+
+@staff_patients.post("/labels", response_model=LabelsOut)
+async def patient_labels_route(
+    body: LabelsIn, response: Response, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims),
+    config: patient_view.PatientViewConfig = Depends(patient_view_config),
+) -> LabelsOut:
+    """List rows for up to 25 patients of one clinic: name, year of birth, last four digits of the phone. Read-only; one audit row with the COUNT only. 404 for a clinic you cannot see, 403 unless you
+    are front desk, nurse or doctor there, 422 for more than the page limit, 429 over your per-minute row budget, 503 outside the demo profile with synthetic data or while the budget is not configured."""
+    response.headers["Cache-Control"] = "no-store"
+    with _view_errors():
+        patient_view.require_ready(config, needs_label_limit=True)
+        vault = _vault_or_503(request)
+        origin = await _view_gate(conn, claims, body.clinic_id)
+        if len(set(body.patient_ids)) != len(body.patient_ids) or len(body.patient_ids) > config.settings.page_limit:
+            raise HTTPException(status_code=422, detail="too many or repeated patient ids for one page")
+        if config.label_limiter is not None and not config.label_limiter.allow(uuid.UUID(claims["sub"]), len(body.patient_ids)):
+            raise HTTPException(status_code=429, detail="too many list rows read; wait a moment")
+        labels = await patient_view.patient_labels(conn, vault, body.clinic_id, body.patient_ids, page_limit=config.settings.page_limit)
+    await write_audit(
+        conn, clinic_id=body.clinic_id, origin=origin, actor_id=uuid.UUID(claims["sub"]), actor_role=await _acting_role(conn, claims, body.clinic_id, VIEW_ROLES), action="patient.view_labels",
+        resource_type="clinic", resource_id=body.clinic_id, details={"count": len(labels)}, idempotency_key=f"audit:patient-view-labels:{uuid.uuid4()}",
+    )
+    return LabelsOut(items=[PatientLabelOut(patient_id=x.patient_id, name=x.name, birth_year=x.birth_year, phone_last4=x.phone_last4) for x in labels])
+
+
+@staff_patients.get("/{patient_id}/view", response_model=PatientViewOut)
+async def open_patient_record(
+    patient_id: uuid.UUID, response: Response, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims),
+    config: patient_view.PatientViewConfig = Depends(patient_view_config),
+) -> PatientViewOut:
+    """OPEN one record: full name, date of birth and phone, decrypted for front desk, nurse and doctor of its clinic, one audit row (who, role, patient id; never the contents). 404 if you cannot
+    see it (the same as a missing or erased one), 403 unless you are front desk, nurse or doctor of its clinic, 429 over your per-minute limit, 503 outside the demo profile with synthetic data or
+    while the limit is not configured."""
+    response.headers["Cache-Control"] = "no-store"
+    with _view_errors():
+        patient_view.require_ready(config, needs_open_limit=True)
+        vault = _vault_or_503(request)
+        row = (await conn.execute(text("select clinic_id, origin from mpi.patients where id = :i and erased_at is null"), {"i": patient_id})).first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="not found")
+        origin = await _view_gate(conn, claims, row[0])
+        actor = uuid.UUID(claims["sub"])
+        if config.limiter is not None and not config.limiter.allow(actor):
+            raise HTTPException(status_code=429, detail="too many records opened; wait a moment")
+        record = await patient_view.open_patient(conn, vault, patient_id)
+    await write_audit(
+        conn, clinic_id=row[0], origin=origin, actor_id=actor, actor_role=await _acting_role(conn, claims, row[0], VIEW_ROLES), action="patient.view", resource_type="patient",
+        resource_id=patient_id, details={"fields": "full"}, idempotency_key=f"audit:patient-view:{uuid.uuid4()}",
+    )
+    return PatientViewOut(patient_id=record.patient_id, clinic_id=record.clinic_id, name=record.name, date_of_birth=record.date_of_birth, phone=record.phone)
+
+
 # ---- the referral queue: list and open (what a reviewer sees BEFORE deciding) --------------------------------------------------------------------------
 #
 # Reads only, under the caller's own row-level security. A role sees only what its policies show: front desk cannot read triage proposals (migration 0018), so for front desk `proposal_visible` is
@@ -2022,6 +2254,35 @@ async def open_referral(document_id: uuid.UUID, conn: TxConn, claims: dict[str, 
     return ReferralDetailOut(**_referral_fields(r), holds=[ReferralHoldOut(task_id=h.id, assigned_role=h.assigned_role, status=h.status) for h in holds], proposal=proposal)
 
 
+def _intake_from_environment(supabase_url: str) -> tuple[DocumentIntake | None, Any]:
+    """The real document intake over Supabase Storage, or (None, None) so the upload routes answer 503. Built ONLY when ALL hold: `CAREFLOW_STORAGE_BUCKET` is set, `CAREFLOW_STORAGE_VERIFIED` names the
+    date the owner confirmed the real service with `scripts/storage_spike.py` (Appendix B: an external service's behaviour is confirmed by a real call before code depends on it), the profile is demo and the
+    data policy synthetic_only (owner decision 2026-10-30: dev and CI projects, synthetic data only), and the project's secret key is present. Anything missing is a logged reason and a 503, never a guess."""
+    bucket = (os.environ.get("CAREFLOW_STORAGE_BUCKET") or "").strip()
+    if not bucket:
+        return None, None
+    if bucket != DOCUMENT_BUCKET:
+        log.error("CAREFLOW_STORAGE_BUCKET must be %s: the storage policies protect that bucket only; uploads stay unavailable", DOCUMENT_BUCKET)
+        return None, None
+    verified = (os.environ.get("CAREFLOW_STORAGE_VERIFIED") or "").strip()
+    try:
+        recorded = date.fromisoformat(verified)
+        if recorded > datetime.now(UTC).date():
+            raise ValueError("a spike cannot have been recorded in the future")
+    except ValueError:
+        log.error("storage is configured but CAREFLOW_STORAGE_VERIFIED is not a date: uploads stay unavailable until the real-service spike is recorded")
+        return None, None
+    if not demo_phase3.demo_allowed(resolve_profile(), demo_phase3.data_policy(os.environ)):
+        log.error("storage is configured outside profile=demo with data_policy=synthetic_only: uploads stay unavailable")
+        return None, None
+    key = (os.environ.get("SUPABASE_SECRET_KEY") or "").strip()
+    if not key:
+        log.error("storage is configured but SUPABASE_SECRET_KEY is not set: uploads stay unavailable")
+        return None, None
+    adapter = SupabaseUploadAdapter(supabase_url, key, bucket)
+    return DocumentIntake(adapter, profile=resolve_profile()), adapter
+
+
 def create_app(
     settings: Settings | None = None, *, jwks: JWKSClient | None = None, engine: AsyncEngine | None = None,
     vault: DemographicVault | None = None, clock: Callable[[], float] = time.time, front_door: FrontDoorComponents | None = None,
@@ -2045,7 +2306,11 @@ def create_app(
         app.state.wired_adapters = frozenset()  # (provider, model_id) pairs with a wired adapter: none yet
         app.state.malware_scanner_configured = False  # nothing sets it: no scanner exists (BUILD-SPEC.md 11.5); clinical stays not ready
         app.state.front_door = front_door
-        app.state.document_intake = document_intake  # None until a storage adapter exists (needs the bucket policy: an owner decision): the upload routes answer 503
+        app.state.storage_adapter = None
+        intake = document_intake
+        if intake is None:
+            intake, app.state.storage_adapter = _intake_from_environment(cfg.supabase_url)
+        app.state.document_intake = intake  # None unless storage is configured AND verified (below): the upload routes answer 503
         app.state.poker = Poker()  # routes that enqueue call `app.state.poker.poke()` after their transaction commits (7.4)
         handlers = {FRONT_DOOR_TASK: front_door_handler(front_door, session_for=front_door_session_for)} if front_door is not None else {}
         sweeps = [lambda conn: raise_dead_letter_tasks(conn, front_door.dead_letters)] if front_door is not None else []  # a dead-lettered run is never silent
@@ -2067,6 +2332,8 @@ def create_app(
                 worker.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await worker
+            if app.state.storage_adapter is not None:
+                await app.state.storage_adapter.aclose()
             if engine is None:
                 await app.state.engine.dispose()
             if jwks is None:
@@ -2080,6 +2347,15 @@ def create_app(
         app.add_middleware(CORSMiddleware, **middleware_kwargs(origins))
     refuse_demo_outside_demo(os.environ, resolve_profile())  # the demo Phase 3 placeholders may never be present outside profile=demo + data_policy=synthetic_only
     app.add_exception_handler(RequestValidationError, _validation_error_handler)  # type: ignore[arg-type]
+
+    @app.middleware("http")
+    async def no_store_for_patient_routes(request: Request, call_next):
+        """Every response under /v1/staff/patients (errors and refusals included) is `Cache-Control: no-store`: these routes can carry a person's demographics."""
+        response = await call_next(request)
+        if request.url.path.startswith("/v1/staff/patients"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
     app.include_router(router)
     app.include_router(scheduling)
     app.include_router(staff_messages)
@@ -2089,7 +2365,9 @@ def create_app(
     app.include_router(staff_review_tasks)
     app.include_router(staff_documents)
     app.include_router(staff_identity)
+    app.include_router(staff_audit)
     app.include_router(health)
+    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
     return app
 
 

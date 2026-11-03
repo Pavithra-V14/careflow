@@ -113,6 +113,8 @@ ROUTES = {
     "send_offer_route": "offer.send",
     "release_hold_route": "hold.release",
     "search_patients": "patient.search",
+    "open_patient_record": "patient.view",
+    "patient_labels_route": "patient.view_labels",
     "register_document": "document.register",
 }
 
