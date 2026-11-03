@@ -151,7 +151,7 @@ async def world():
             recorder=SqlReviewRecorder(), holds=SqlHoldTaskWriter(priority="standard"), dead_letters=SqlDeadLetterTaskWriter(priority="standard"), retrieval_scope={"domain": "stand-in"}, profile="demo",
         )
         app = create_app(
-            Settings(supabase_url=PROJECT, database_url_app="postgresql://unused"), jwks=fake_jwks_client(), engine=object(), vault=vault,  # type: ignore[arg-type]
+            Settings(_env_file=None, supabase_url=PROJECT, database_url_app="postgresql://unused"), jwks=fake_jwks_client(), engine=object(), vault=vault,  # type: ignore[arg-type]
             front_door=components, front_door_session_for=worker_session_for, document_intake=intake,
         )
 

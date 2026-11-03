@@ -285,7 +285,7 @@ def _enable_patient_view(built: FastAPI) -> FastAPI:
 
 @pytest.fixture(scope="module")
 def app() -> FastAPI:
-    settings = Settings(supabase_url=PROJECT, database_url_app=APP_URL or "", step_up_max_age_seconds=STEP_UP_WINDOW)
+    settings = Settings(_env_file=None, supabase_url=PROJECT, database_url_app=APP_URL or "", step_up_max_age_seconds=STEP_UP_WINDOW)
     # Stand-in components (all None): the referral routes need SOME configured front door to get past their 503; the paths tested here (404, 422, 401) never touch a component.
     built = create_app(
         settings, jwks=fake_jwks_client(), vault=TEST_VAULT, front_door=FrontDoorComponents(None, None, None, None, None, None, None, None, None),
@@ -2009,7 +2009,7 @@ def _pool_test_app():
     are kept; only the pool's WAIT is longer than the app's 30 seconds. On the shared CI database a request can wait that long for a connection when the other two shards are busy (a pool
     timeout, never a wrong row, failed this test twice in CI: runs 40521334349 and 40879700466). No app pool setting changes: this builds the test's own engine. The caller disposes it."""
     engine = make_app_engine(APP_URL or "", pool_size=5, max_overflow=5, pool_pre_ping=True, pool_timeout=POOL_TIMEOUT_SECONDS)
-    settings = Settings(supabase_url=PROJECT, database_url_app=APP_URL or "", step_up_max_age_seconds=STEP_UP_WINDOW)
+    settings = Settings(_env_file=None, supabase_url=PROJECT, database_url_app=APP_URL or "", step_up_max_age_seconds=STEP_UP_WINDOW)
     return create_app(settings, jwks=fake_jwks_client(), vault=TEST_VAULT, front_door=FrontDoorComponents(None, None, None, None, None, None, None, None, None), engine=engine), engine
 
 
@@ -2468,7 +2468,7 @@ def test_merge_responses_carry_ids_and_statuses_only(client, ids):
 
 def test_the_step_up_check_is_off_the_database_path_when_the_window_is_unset(ids):
     """With no window configured the routes answer a visible 503 before touching the database, even for a stepped-up front desk token."""
-    settings = Settings(supabase_url=PROJECT, database_url_app=APP_URL or "", step_up_max_age_seconds=None)
+    settings = Settings(_env_file=None, supabase_url=PROJECT, database_url_app=APP_URL or "", step_up_max_age_seconds=None)
     unconfigured = create_app(settings, jwks=fake_jwks_client(), vault=TEST_VAULT)
     master, sub, _ = new_pair(ids)
     with TestClient(unconfigured, raise_server_exceptions=False) as c:
@@ -2587,7 +2587,7 @@ def test_an_unconfigured_storage_answers_503_and_a_clinical_profile_without_a_sc
     from careflow.app import Settings as _Settings
 
     def build(intake):
-        return create_app(_Settings(supabase_url=PROJECT, database_url_app=APP_URL or ""), jwks=fake_jwks_client(), vault=TEST_VAULT, document_intake=intake)
+        return create_app(_Settings(_env_file=None, supabase_url=PROJECT, database_url_app=APP_URL or ""), jwks=fake_jwks_client(), vault=TEST_VAULT, document_intake=intake)
 
     fd = ids.people["front_desk_a"][0]
     body = {"clinic_id": str(ids.clinic_a), "kind": "referral", "content_type": "application/pdf"}
