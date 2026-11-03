@@ -140,7 +140,7 @@ async def _seed() -> Identities:
     return ids
 
 
-POOL = {"hold": 40, "book": 40, "extra": 40, "cancel": 30}  # slots / bookings handed out one per test case
+POOL = {"hold": 90, "book": 90, "extra": 60, "cancel": 70}  # slots / bookings handed out one per test case
 N_PATIENTS = 45
 
 
