@@ -32,6 +32,8 @@ ACTIONS: Final = frozenset(
         "review_task.acknowledge",
         "review_task.resolve",
         "document.register",  # a front-desk person or nurse registered an uploaded document (careflow/documents.py)
+        "patient.view",  # a front-desk person, nurse or doctor OPENED one record in full: who, role, patient id; never the contents
+        "patient.view_labels",  # list rows decrypted for a page: the COUNT only
         "patient.search",  # a front-desk person searched for a patient: the KIND of search and the result count only, never the query or the results
         "hold.release",  # a front-desk person gave a held slot back before its time ran out
         "offer.send",  # a front-desk person sent an offer: the slot hold and the offer message (careflow/offers.py)

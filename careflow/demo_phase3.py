@@ -24,7 +24,10 @@ DEMO_FILE: Final = Path(__file__).resolve().parent.parent / "config" / "demo-pha
 SWITCH: Final = "CAREFLOW_DEMO_PHASE3"
 DATA_POLICY_VARIABLE: Final = "CAREFLOW_DATA_POLICY"
 SETTING_KEYS: Final = frozenset(
-    {"offer_expiry_seconds", "hold_lifetime_seconds", "backfill_candidates", "priority_names", "offer_message_text", "scheduling_task_priority", "scheduling_task_role"}
+    {
+        "offer_expiry_seconds", "hold_lifetime_seconds", "backfill_candidates", "priority_names", "offer_message_text", "scheduling_task_priority", "scheduling_task_role",
+        "patient_view_max_opens_per_minute", "patient_view_max_label_rows_per_minute",
+    }
 )
 _TRUE: Final = {"1", "true", "yes", "on"}
 
@@ -66,6 +69,8 @@ class DemoPhase3:
     offer_message_text: Mapping[str, str]
     scheduling_task_priority: str
     scheduling_task_role: str
+    patient_view_max_opens_per_minute: int
+    patient_view_max_label_rows_per_minute: int
 
     def scheduling_settings(self) -> SchedulingSettings:
         """The Scheduling agent's settings with the demo values filled in. The accept-confidence threshold stays unset: no demo value exists for it."""
@@ -106,7 +111,8 @@ def load_demo_phase3(profile: str, policy: str | None, *, path: Path = DEMO_FILE
     return DemoPhase3(
         offer_expiry_seconds=int(v["offer_expiry_seconds"]), hold_lifetime_seconds=int(v["hold_lifetime_seconds"]), backfill_candidates=int(v["backfill_candidates"]),
         priority_names=tuple(str(n) for n in v["priority_names"]), offer_message_text=dict(text), scheduling_task_priority=str(v["scheduling_task_priority"]),
-        scheduling_task_role=str(v["scheduling_task_role"]),
+        scheduling_task_role=str(v["scheduling_task_role"]), patient_view_max_opens_per_minute=int(v["patient_view_max_opens_per_minute"]),
+        patient_view_max_label_rows_per_minute=int(v["patient_view_max_label_rows_per_minute"]),
     )
 
 
@@ -117,3 +123,14 @@ def scheduling_settings_for(environ: Mapping[str, str] | None = None, profile: s
     if _switched_on(env):
         return load_demo_phase3(profile, data_policy(env)).scheduling_settings()
     return SchedulingSettings()  # type: ignore[call-arg]  # the clinician-owned values from the environment; unset means unset
+
+
+def patient_view_placeholders(environ: Mapping[str, str] | None = None, profile: str = "clinical") -> dict[str, int]:
+    """The DEMO ONLY limits for the patient view (`max_opens_per_minute`, `max_label_rows_per_minute`), or {} when the switch is off. Same gate and same refusal as the scheduling placeholders: the
+    switch set outside profile=demo with data_policy=synthetic_only is DemoConfigRefused. The caller fills only what the environment leaves unset: an explicit value always wins."""
+    env = os.environ if environ is None else environ
+    refuse_demo_outside_demo(env, profile)
+    if not _switched_on(env):
+        return {}
+    demo = load_demo_phase3(profile, data_policy(env))
+    return {"max_opens_per_minute": demo.patient_view_max_opens_per_minute, "max_label_rows_per_minute": demo.patient_view_max_label_rows_per_minute}
