@@ -20,7 +20,9 @@ hold the label); no clinical content is authored here (no thresholds, red-flag r
 
 It writes NO human decision: no agents.review_decisions row, no acknowledged or resolved task, no approval by a real person (a review decision is the one thing the project allows to become a training label, and
 those tables are append-only). The documents' `registered_by`, the priority levels' `approved_by` and the merge's FIRST signature are a placeholder account "demo seed (not a clinician)": status closed, no roles, cannot
-sign in. Acknowledged and resolved tasks, a second merge approval and every other decision are made BY HAND through the real routes.
+sign in. Acknowledged and resolved tasks, a second merge approval and every other decision are made BY HAND through the real routes. KNOWN WEAKENING (synthetic dev data only): once a real
+front-desk person gives the second approval, the active merge has one human and one non-human signature, where BUILD-SPEC 12.5 requires two people. The tables hold no free-text label, so the demo
+holds, bookings, slots and the merge carry no "demo" marker beyond their `demo-seed-v1` idempotency keys and origin `test`.
 
 Safe to re-run: every row has a fixed idempotency key that INCLUDES THE CLINIC and is inserted `on conflict (idempotency_key)` (or the table's named unique) `do nothing`; nothing is deleted or updated (the
 tables are append-only). A surprise constraint violation stops the run and rolls everything back instead of being skipped. Slots are added only when no future demo slot exists, so a re-run once the demo slots
@@ -46,6 +48,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
+from careflow import demo_phase3
 from careflow.crypto import DemographicVault
 from careflow.mpi import PatientIngestionPipeline
 
@@ -154,16 +157,17 @@ async def seed(conn: AsyncConnection, clinic: uuid.UUID, vault: DemographicVault
         result = await pipeline.ingest(conn, clinic_id=clinic, origin=origin, name=name, dob=dob, phone=phone, idempotency_key=f"{k}:patient:{i}")
         patient_ids.append(result.patient_id)
     say(f"patients: {len(patient_ids)} (fictional)")
-    pending = [r for r in (await conn.execute(text("select patient_id, candidate_patient_id, id from mpi.match_candidates where clinic_id = :c and patient_id = any(:p) and status = 'pending'"), {"c": clinic, "p": patient_ids[5:]})).all()]
-    if len(pending) != 2:
+    queued = [r for r in (await conn.execute(text("select patient_id, candidate_patient_id, id from mpi.match_candidates where clinic_id = :c and patient_id = any(:p)"), {"c": clinic, "p": patient_ids[5:]})).all()]
+    if len(queued) != 2:  # any STATUS is fine: a person may already have reviewed a pair, or approved the merge, since the last run
         raise Refused("refusing: the two possible-duplicate pairs were not queued for review as expected (the registration rules or an earlier run changed them)")
-    by_new = {r.patient_id: r for r in pending}
+    by_new = {r.patient_id: r for r in queued}
     proposal = by_new[patient_ids[6]]  # Golf is a possible duplicate of Charlie: a merge is PROPOSED for that pair by the placeholder (the first of the two signatures)
     await conn.execute(
         text("insert into mpi.merges (clinic_id, master_patient_id, subordinate_patient_id, candidate_id, approved_by, origin, idempotency_key) values (:c, :m, :s, :cand, :a, 'test', :k) on conflict (idempotency_key) do nothing"),
         {"c": clinic, "m": proposal.candidate_patient_id, "s": proposal.patient_id, "cand": proposal.id, "a": placeholder, "k": f"{k}:merge:proposal"},
     )
     say("possible duplicates: 2 pairs queued for review; 1 merge proposed by the placeholder, awaiting a real second approval")
+    say(f"  the placeholder account 'demo seed, not a clinician' is {placeholder} (closed, no roles, cannot sign in): a bare id is what the console shows as the proposer / registrar / approver of the demo rows")
 
     # ---- scheduling reference lists --------------------------------------------------------------------------------------------------------------------------------------
     for i, name in enumerate(("Demo Location North", "Demo Location South"), start=1):
@@ -188,8 +192,8 @@ async def seed(conn: AsyncConnection, clinic: uuid.UUID, vault: DemographicVault
     if not all(ids.values()):
         raise Refused("refusing: the demo locations, providers or visit types are missing after the insert")
     future = (await conn.execute(text("select count(*) from sched.slots where clinic_id = :c and idempotency_key like :p and starts_at > now()"), {"c": clinic, "p": f"{k}:slot:%"})).scalar_one()
+    day = (datetime.now(IST) + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
     if future == 0:
-        day = (datetime.now(IST) + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
         n = 0
         for d, provider in enumerate(ids["provider"]):
             for s in range(4):
@@ -200,9 +204,12 @@ async def seed(conn: AsyncConnection, clinic: uuid.UUID, vault: DemographicVault
                 )
                 n += done.rowcount or 0
         say(f"slots: {n} added (30 minutes each, tomorrow and the day after)")
+    else:
+        say("slots: future demo slots already exist (nothing added)")
+    hold_future = (await conn.execute(text("select count(*) from sched.slots where clinic_id = :c and idempotency_key like :p and starts_at > now()"), {"c": clinic, "p": f"{k}:slot:hold-%"})).scalar_one()
+    if hold_future == 0:
         # one hold in EACH of the four statuses, on afternoon slots of the first provider; the slot's own status follows the hold (an active hold holds it, a converted one is booked)
         afternoon = day.replace(hour=14)
-        now = datetime.now(UTC)
         for i, (hold_status, slot_status) in enumerate((("active", "held"), ("released", "open"), ("expired", "open"), ("converted", "booked"))):
             start = (afternoon + timedelta(minutes=30 * i)).astimezone(UTC)
             suffix = f"{start:%Y%m%d%H%M}:{hold_status}"
@@ -211,10 +218,10 @@ async def seed(conn: AsyncConnection, clinic: uuid.UUID, vault: DemographicVault
                 {"c": clinic, "p": ids["provider"][0], "l": ids["location"][0], "v": ids["visit-type"][0], "s": start, "e": start + timedelta(minutes=30), "st": slot_status, "k": f"{k}:slot:hold-{suffix}"},
             )
             slot_id = (await conn.execute(text("select id from sched.slots where clinic_id = :c and idempotency_key = :k"), {"c": clinic, "k": f"{k}:slot:hold-{suffix}"})).scalar_one()
-            lifetime = {"active": timedelta(hours=24), "released": timedelta(hours=1), "expired": timedelta(seconds=15), "converted": timedelta(hours=1)}[hold_status]
+            lifetime = {"active": 24 * 3600, "released": 3600, "expired": 60, "converted": 3600}[hold_status]  # seconds, from the DATABASE's clock (no client clock skew against its require_future_expiry trigger)
             await conn.execute(
-                text("insert into sched.holds (clinic_id, slot_id, patient_id, status, created_at, expires_at, origin, idempotency_key) values (:c, :sl, :p, :st, :ca, :ex, 'test', :k) on conflict (idempotency_key) do nothing"),
-                {"c": clinic, "sl": slot_id, "p": patient_ids[i], "st": hold_status, "ca": now - (timedelta(hours=2) if hold_status == "expired" else timedelta(0)), "ex": now + lifetime, "k": f"{k}:hold:{suffix}"},
+                text("insert into sched.holds (clinic_id, slot_id, patient_id, status, created_at, expires_at, origin, idempotency_key) values (:c, :sl, :p, :st, clock_timestamp() - make_interval(secs => :back), clock_timestamp() + make_interval(secs => :life), 'test', :k) on conflict (idempotency_key) do nothing"),
+                {"c": clinic, "sl": slot_id, "p": patient_ids[i], "st": hold_status, "back": 7200 if hold_status == "expired" else 0, "life": lifetime, "k": f"{k}:hold:{suffix}"},
             )
             if hold_status == "converted":
                 hold_id = (await conn.execute(text("select id from sched.holds where clinic_id = :c and idempotency_key = :k"), {"c": clinic, "k": f"{k}:hold:{suffix}"})).scalar_one()
@@ -224,7 +231,7 @@ async def seed(conn: AsyncConnection, clinic: uuid.UUID, vault: DemographicVault
                 )
         say("slot holds: 4 added, one in each status (active, released, expired, converted with its booking)")
     else:
-        say("slots: future demo slots already exist (nothing added)")
+        say("slot holds: future demo holds already exist (nothing added)")
 
     # ---- referral documents, OPEN triage proposals and review tasks (no human decision is invented) ------------------------------------------------------------------------
     documents = []
@@ -238,23 +245,24 @@ async def seed(conn: AsyncConnection, clinic: uuid.UUID, vault: DemographicVault
         )
         documents.append(doc)
     demo = {"demo": DEMO_LABEL}
+    pack = demo_phase3.load_demo_phase3("demo", "synthetic_only")  # the INVENTED demo values of config/demo-phase3.yaml, each labelled DEMO ONLY - NOT A CLINICAL DECISION
 
-    async def task(kind: str, role: str, doc: uuid.UUID, provenance: dict, key: str) -> uuid.UUID:
+    async def task(kind: str, role: str, priority: str, doc: uuid.UUID, provenance: dict, key: str) -> uuid.UUID:
         await conn.execute(
-            text("insert into agents.review_tasks (clinic_id, origin, kind, priority, assigned_role, source_message_id, provenance, idempotency_key) values (:c, 'test', :k, 'standard', :r, :s, cast(:p as jsonb), :ik) on conflict (idempotency_key) do nothing"),
-            {"c": clinic, "k": kind, "r": role, "s": f"document:{doc}", "p": json.dumps(provenance), "ik": key},
+            text("insert into agents.review_tasks (clinic_id, origin, kind, priority, assigned_role, source_message_id, provenance, idempotency_key) values (:c, 'test', :k, :pr, :r, :s, cast(:p as jsonb), :ik) on conflict (idempotency_key) do nothing"),
+            {"c": clinic, "k": kind, "pr": priority, "r": role, "s": f"document:{doc}", "p": json.dumps(provenance), "ik": key},
         )
         return (await conn.execute(text("select id from agents.review_tasks where idempotency_key = :ik and clinic_id = :c"), {"ik": key, "c": clinic})).scalar_one()
 
     # document 1 only registered (nothing has run); documents 2 and 3 have an OPEN proposal; document 4 is held. The priority 'standard', the role 'nurse' and the mode 'assisted' are invented demo values.
     for index, patient in ((1, patient_ids[0]), (2, patient_ids[1])):
         proposal = det(clinic, f"{SEED}:proposal:{index}")
-        review_task = await task("triage_proposal", "nurse", documents[index], {"proposal_id": str(proposal), **demo}, f"{k}:triage-task:{index}")
+        review_task = await task("triage_proposal", pack.triage_task_role, pack.triage_task_priority, documents[index], {"proposal_id": str(proposal), **demo}, f"{k}:triage-task:{index}")
         await conn.execute(
             text("insert into agents.triage_proposals (id, clinic_id, origin, document_id, patient_id, candidates, abstained, mode, review_task_id, idempotency_key) values (:i, :c, 'test', :d, :p, cast(:cand as jsonb), false, 'assisted', :t, :k) on conflict (clinic_id, idempotency_key) do nothing"),
             {"i": proposal, "c": clinic, "d": documents[index], "p": patient, "cand": json.dumps([{"card_id": "demo-synthetic-card-A", "version": 1}, {"card_id": "demo-synthetic-card-B", "version": 1}]), "t": review_task, "k": f"{k}:proposal-key:{index}"},
         )
-    await task("referral_hold", "nurse", documents[3], {"status": "held_unassessable", "reasons": ["screening_unassessable"], **demo}, f"{k}:hold-task:4")
+    await task("referral_hold", pack.triage_task_role, pack.hold_task_priority, documents[3], {"status": "held_unassessable", "reasons": ["screening_unassessable"], **demo}, f"{k}:hold-task:4")
     say("referrals: 4 documents (1 waiting to run, 2 with an OPEN proposal and review task, 1 held with an open hold task); no decision is recorded")
     say("every priority, role, mode and card id above is an INVENTED DEMO VALUE: " + DEMO_LABEL)
     say("")

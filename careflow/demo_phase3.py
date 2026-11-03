@@ -27,7 +27,7 @@ SETTING_KEYS: Final = frozenset(
     {
         "offer_expiry_seconds", "hold_lifetime_seconds", "backfill_candidates", "priority_names", "offer_message_text", "scheduling_task_priority", "scheduling_task_role",
         "patient_view_max_opens_per_minute", "patient_view_max_label_rows_per_minute",
-        "triage_task_role", "triage_task_priority", "hold_task_priority", "dead_letter_task_priority",
+        "triage_task_role", "triage_task_priority", "hold_task_priority", "dead_letter_task_priority", "triage_mode",
     }
 )
 _TRUE: Final = {"1", "true", "yes", "on"}
@@ -81,6 +81,7 @@ class DemoPhase3:
     triage_task_priority: str
     hold_task_priority: str
     dead_letter_task_priority: str
+    triage_mode: str  # shadow, assisted or autonomous: a governance choice, so a labelled demo value
 
     def scheduling_settings(self) -> SchedulingSettings:
         """The Scheduling agent's settings with the demo values filled in. The accept-confidence threshold stays unset: no demo value exists for it."""
@@ -124,7 +125,7 @@ def load_demo_phase3(profile: str, policy: str | None, *, path: Path = DEMO_FILE
         scheduling_task_role=str(v["scheduling_task_role"]), patient_view_max_opens_per_minute=int(v["patient_view_max_opens_per_minute"]),
         patient_view_max_label_rows_per_minute=int(v["patient_view_max_label_rows_per_minute"]),
         triage_task_role=str(v["triage_task_role"]), triage_task_priority=str(v["triage_task_priority"]), hold_task_priority=str(v["hold_task_priority"]),
-        dead_letter_task_priority=str(v["dead_letter_task_priority"]),
+        dead_letter_task_priority=str(v["dead_letter_task_priority"]), triage_mode=str(v["triage_mode"]),
     )
 
 

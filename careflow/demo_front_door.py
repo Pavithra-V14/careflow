@@ -1,7 +1,7 @@
 """FAKE Front Door components for the DEMO profile, SYNTHETIC data only (owner request 2026-11-03).
 
 So that the referral `run` and `review` routes answer on seeded data in the dev console, the app wires `FrontDoorComponents` built from FAKE stand-ins, NEVER from the hosted providers, and ONLY when ALL hold:
-profile `demo`, `CAREFLOW_DATA_POLICY=synthetic_only`, `CAREFLOW_DEMO_PHASE3` on (the same gate as every other demo placeholder, careflow/demo_phase3.py), and the encryption keys are loaded. In any
+profile `demo`, `CAREFLOW_DATA_POLICY=synthetic_only`, `CAREFLOW_DEMO_PHASE3` on (the same gate as every other demo placeholder, careflow/demo_phase3.py), and the encryption keys are loaded with a usable active key version. In any
 other profile `components_from_environment` returns None and the routes keep answering 503 (tests/test_demo_front_door.py).
 
 What is fake: the TEXT of a letter (a fictional letter is made up from the document's id, whatever file, if any, is stored), the EXTRACTOR (it reads that fictional text with a regular expression) and the
@@ -9,8 +9,13 @@ RETRIEVER (it proposes the fictional card ids `demo-synthetic-card-A/B`). What i
 triage store, the review recorder, the hold and dead-letter task writers: all under the worker's or the reviewer's own row-level security. The task priorities and the reviewing role are the DEMO ONLY
 placeholders of config/demo-phase3.yaml, labelled "DEMO ONLY - NOT A CLINICAL DECISION".
 
-HONEST LIMIT. With NO approved red-flag rule in the database (clinician-owned; nothing here authors one) every letter is UNASSESSABLE: the run ends in a hold and a hold task for a person, exactly as it must
-(unknown is not clear). A run reaches the review step only once an approved rule exists, so the review route has nothing to resume until then. A worker must also be running for a run to progress
+HONEST LIMITS.
+  * With NO usable red-flag rule at all (in the demo profile a rule is usable when it is APPROVED or a DRAFT; the rules are clinician-owned and nothing here authors one) every letter is UNASSESSABLE: the run ends in a
+    hold and a hold task for a person, exactly as it must (unknown is not clear). If any usable rule with criteria exists for the clinic, a letter that matches none of them is CLEAR (in the demo profile), the fake
+    extractor runs and the run pauses at review with a proposal.
+  * The text that is screened is the FICTIONAL letter below, never the content of an uploaded file: a "clear" here says nothing about what a real file contains. That is acceptable only because these components
+    exist only for synthetic data in the demo profile (and the screening holds any "clear" on a `live`-origin document).
+  * The fake retriever never abstains and its scores are made up; the review mode and task priorities are the labelled DEMO ONLY values of the pack. A worker must also be running for a run to progress
 (`CAREFLOW_RUN_WORKER` on and `CAREFLOW_WORKER_ACCOUNT_ID` naming a queue_worker account); without one a run stays queued.
 """
 
@@ -21,6 +26,7 @@ from typing import Final
 
 from careflow import demo_phase3
 from careflow.crypto import DemographicVault
+from careflow.dead_letters import SqlDeadLetterTaskWriter
 from careflow.front_door_runner import FrontDoorComponents
 from careflow.mpi import PatientIngestionPipeline
 from careflow.referral import ExtractedReferral
@@ -90,7 +96,7 @@ def components_from_environment(environ: Mapping[str, str], profile: str, *, vau
         extractor=DemoExtractor(),
         ingestor=PatientIngestionPipeline(vault, key_version=key_version, registrar="function"),
         retriever=DemoRetriever(),  # type: ignore[arg-type]
-        proposer=SqlTriageProposer(mode=ApprovalMode.ASSISTED, assigned_role=pack.triage_task_role, task_priority=pack.triage_task_priority),
+        proposer=SqlTriageProposer(mode=ApprovalMode(pack.triage_mode), assigned_role=pack.triage_task_role, task_priority=pack.triage_task_priority),
         recorder=SqlReviewRecorder(),
         holds=SqlHoldTaskWriter(priority=pack.hold_task_priority),
         dead_letters=_dead_letters(pack.dead_letter_task_priority),
@@ -99,7 +105,5 @@ def components_from_environment(environ: Mapping[str, str], profile: str, *, vau
     )
 
 
-def _dead_letters(priority: str):
-    from careflow.dead_letters import SqlDeadLetterTaskWriter
-
+def _dead_letters(priority: str) -> SqlDeadLetterTaskWriter:
     return SqlDeadLetterTaskWriter(priority=priority)

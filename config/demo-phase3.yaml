@@ -60,3 +60,6 @@ settings:
   dead_letter_task_priority:
     value: standard
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  triage_mode:
+    value: assisted
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
