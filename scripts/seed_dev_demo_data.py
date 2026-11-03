@@ -18,6 +18,9 @@ scheduling (locations, providers, visit types, the three DEMO-LEVEL priority lev
 placeholder account so that a real front-desk person can give the second approval, and four referral documents: one waiting to run, two with an OPEN triage proposal and review task, one held with an open hold task. Every priority, role, rationale, mode and card id is an INVENTED DEMO VALUE labelled "DEMO ONLY - NOT A CLINICAL DECISION" (inside provenance where a column cannot
 hold the label); no clinical content is authored here (no thresholds, red-flag rules, protocol card text, wording).
 
+It also writes ONE red-flag rule over invented, non-medical tokens as a DRAFT (`draft_unreviewed`, clinic-scoped, labelled DEMO ONLY - NOT A CLINICAL DECISION): no approver is named and nothing is approved, so only the demo
+profile uses it (a clinical profile ignores a draft and holds every letter as unassessable). With it in place a letter that matches no token is CLEAR in the demo profile and a demo run can reach the review step.
+
 It writes NO human decision: no agents.review_decisions row, no acknowledged or resolved task, no approval by a real person (a review decision is the one thing the project allows to become a training label, and
 those tables are append-only). The documents' `registered_by`, the priority levels' `approved_by` and the merge's FIRST signature are a placeholder account "demo seed (not a clinician)": status closed, no roles, cannot
 sign in. Acknowledged and resolved tasks, a second merge approval and every other decision are made BY HAND through the real routes. KNOWN WEAKENING (synthetic dev data only): once a real
@@ -50,7 +53,9 @@ from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 from careflow import demo_phase3
 from careflow.crypto import DemographicVault
+from careflow.demo_front_door import DEMO_RULE_CODE, DEMO_RULE_PHRASES
 from careflow.mpi import PatientIngestionPipeline
+from careflow.rules import PLACEHOLDER
 
 DEMO_LABEL = "DEMO ONLY - NOT A CLINICAL DECISION"
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -232,6 +237,17 @@ async def seed(conn: AsyncConnection, clinic: uuid.UUID, vault: DemographicVault
         say("slot holds: 4 added, one in each status (active, released, expired, converted with its booking)")
     else:
         say("slot holds: future demo holds already exist (nothing added)")
+
+    # ---- the DEMO red-flag rule: a DRAFT over invented non-medical tokens, scoped to this clinic. Never approved (status stays draft_unreviewed, no approver is named), so the clinical profile ignores it ----------
+    await conn.execute(
+        text(
+            "insert into kb.red_flag_rules (clinic_id, rule_code, version_id, status, phrases, patterns, governance_metadata, origin, idempotency_key) "
+            "values (:c, :code, 1, 'draft_unreviewed', cast(:ph as text[]), '{}', cast(:gm as jsonb), 'test', :k) on conflict (idempotency_key) do nothing"
+        ),
+        {"c": clinic, "code": DEMO_RULE_CODE, "ph": list(DEMO_RULE_PHRASES), "k": f"{k}:rule:demo",
+         "gm": json.dumps({"placeholder": PLACEHOLDER, "label": DEMO_LABEL, "note": "invented non-medical tokens for the demo; a DRAFT that only the demo profile uses; not approved by anyone"})},
+    )
+    say(f"red-flag rule: 1 DRAFT demo rule over invented tokens {list(DEMO_RULE_PHRASES)} (never approved; only the demo profile uses a draft); a letter containing a token would raise the immediate nurse task")
 
     # ---- referral documents, OPEN triage proposals and review tasks (no human decision is invented) ------------------------------------------------------------------------
     documents = []

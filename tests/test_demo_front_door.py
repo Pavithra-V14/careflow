@@ -183,3 +183,47 @@ def test_the_demo_switch_in_the_clinical_profile_is_still_refused_at_build_time(
 
     with pytest.raises(demo_phase3.DemoConfigRefused):
         demo_phase3.refuse_demo_outside_demo({"CAREFLOW_DEMO_PHASE3": "1", "CAREFLOW_DATA_POLICY": "synthetic_only"}, "clinical")
+
+
+# ---- the seeded DEMO draft rule: usable only in the demo profile, approved by nobody ----------------------------------------------------------------------------
+
+
+def _draft_row():
+    return {"id": uuid.uuid4(), "clinic_id": uuid.uuid4(), "rule_code": df.DEMO_RULE_CODE, "version_id": 1, "status": "draft_unreviewed", "phrases": list(df.DEMO_RULE_PHRASES), "patterns": []}
+
+
+def test_the_clinical_profile_ignores_the_draft_and_holds_every_letter_as_unassessable_while_only_the_demo_profile_uses_it():
+    from careflow import rules
+
+    row = _draft_row()
+    letters = [df.demo_letter(uuid.UUID(int=i)) for i in range(len(df.DEMO_PEOPLE))] + [f"a letter that names {df.DEMO_RULE_PHRASES[0]} in it"]
+
+    chosen, passed = rules.select_active_versions([row], "clinical")
+    assert chosen == [] and passed == 1  # a draft is passed over, and counted
+    clinical = rules.RuleSet(rules=(), profile="clinical", drafts_excluded=passed)
+    for letter in letters:
+        assert rules.evaluate_with(clinical, letter).outcome == "unassessable", letter  # unknown is not clear: even the letter that contains a token is NOT screened
+
+    chosen, passed = rules.select_active_versions([row], "demo")
+    compiled, problem = rules.compile_rule(row)
+    assert [c["rule_code"] for c in chosen] == [df.DEMO_RULE_CODE] and passed == 0 and problem is None and compiled is not None
+    demo = rules.RuleSet(rules=(compiled,), profile="demo", rule_set_hash=rules.rule_set_hash(chosen))
+    assert [rules.evaluate_with(demo, letter).outcome for letter in letters[:-1]] == ["clear"] * len(df.DEMO_PEOPLE)  # the fictional letters contain no token
+    assert rules.evaluate_with(demo, letters[-1]).outcome == "red_flag"  # and a letter that does is flagged
+
+
+def test_the_demo_rule_tokens_are_invented_and_non_medical():
+    import re
+
+    assert df.DEMO_RULE_PHRASES and all(re.fullmatch(r"zzdemo[a-z]+", p) for p in df.DEMO_RULE_PHRASES)  # nonsense tokens: nothing a clinician would recognise as a term
+
+
+def test_the_seed_inserts_the_rule_as_a_draft_and_records_no_approval_for_anyone():
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parent.parent / "scripts" / "seed_dev_demo_data.py").read_text(encoding="utf-8")
+    import ast
+
+    code = ast.unparse(ast.parse(source).body[1:])  # the code without the module docstring, however the docstring is laid out
+    assert "insert into kb.red_flag_rules" in code and "'draft_unreviewed'" in code
+    assert "'approved'" not in code and "approved_by_1" not in code and "approved_by_2" not in code and "approved_at" not in code and "authored_by" not in code

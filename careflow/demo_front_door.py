@@ -48,6 +48,10 @@ DEMO_PEOPLE: Final = (
     ("Demo Echo Sample", "2001-09-30", None),
 )
 DEMO_CARDS: Final = (("demo-synthetic-card-A", 1), ("demo-synthetic-card-B", 1))
+# The seeded DEMO red-flag rule (scripts/seed_dev_demo_data.py): INVENTED, NON-MEDICAL tokens that mean nothing, a DRAFT (`draft_unreviewed`, never approved: no route exists to approve a rule, and the seed records no
+# approval for anyone). The demo profile treats a draft as usable (careflow.rules.USABLE_STATUSES), the clinical profile does not. Labelled DEMO ONLY - NOT A CLINICAL DECISION in its own metadata.
+DEMO_RULE_CODE: Final = "demo_synthetic_tokens"
+DEMO_RULE_PHRASES: Final = ("zzdemoalpha", "zzdemobravo")
 _LETTER = re.compile(r"Patient: (?P<name>[^,]+), DOB (?P<dob>\d{4}-\d{2}-\d{2})(?:, Mobile (?P<phone>\d{10}))?")
 
 
