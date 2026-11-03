@@ -46,6 +46,7 @@ New in PR #9: `revoke-identity`, the four `review-tasks` routes, `offers/draft`,
 - Responses carry ids, closed words and times only. Patient names and dates of birth are encrypted at rest and **no route returns them**.
 - CORS origins come from configuration; in `clinical` an empty list means none.
 - Lists use `{items, limit, has_more}` with `limit` 1 to 500.
+- `GET /v1/iam/me` also returns `operating_profile`: the deployment's `CAREFLOW_PROFILE` restricted to `"demo"` or `"clinical"`; `null` when it is unset or anything else. It names the profile only (no other setting). The console shows its demo banner for `"demo"` and nothing for `null`.
 
 ## What the frontend will need that does not exist yet
 
