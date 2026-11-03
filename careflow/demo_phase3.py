@@ -27,6 +27,7 @@ SETTING_KEYS: Final = frozenset(
     {
         "offer_expiry_seconds", "hold_lifetime_seconds", "backfill_candidates", "priority_names", "offer_message_text", "scheduling_task_priority", "scheduling_task_role",
         "patient_view_max_opens_per_minute", "patient_view_max_label_rows_per_minute",
+        "triage_task_role", "triage_task_priority", "hold_task_priority", "dead_letter_task_priority",
     }
 )
 _TRUE: Final = {"1", "true", "yes", "on"}
@@ -46,6 +47,11 @@ def demo_allowed(profile: str, policy: str | None) -> bool:
 
 def _switched_on(environ: Mapping[str, str]) -> bool:
     return (environ.get(SWITCH) or "").strip().lower() in _TRUE
+
+
+def switched_on(environ: Mapping[str, str]) -> bool:
+    """Is CAREFLOW_DEMO_PHASE3 on? (The gate on profile and data policy is separate: `demo_allowed`.)"""
+    return _switched_on(environ)
 
 
 def _carries_label(environ: Mapping[str, str]) -> bool:
@@ -71,6 +77,10 @@ class DemoPhase3:
     scheduling_task_role: str
     patient_view_max_opens_per_minute: int
     patient_view_max_label_rows_per_minute: int
+    triage_task_role: str  # who reviews a triage proposal in the demo (an invented stand-in for a clinical-governance decision)
+    triage_task_priority: str
+    hold_task_priority: str
+    dead_letter_task_priority: str
 
     def scheduling_settings(self) -> SchedulingSettings:
         """The Scheduling agent's settings with the demo values filled in. The accept-confidence threshold stays unset: no demo value exists for it."""
@@ -113,6 +123,8 @@ def load_demo_phase3(profile: str, policy: str | None, *, path: Path = DEMO_FILE
         priority_names=tuple(str(n) for n in v["priority_names"]), offer_message_text=dict(text), scheduling_task_priority=str(v["scheduling_task_priority"]),
         scheduling_task_role=str(v["scheduling_task_role"]), patient_view_max_opens_per_minute=int(v["patient_view_max_opens_per_minute"]),
         patient_view_max_label_rows_per_minute=int(v["patient_view_max_label_rows_per_minute"]),
+        triage_task_role=str(v["triage_task_role"]), triage_task_priority=str(v["triage_task_priority"]), hold_task_priority=str(v["hold_task_priority"]),
+        dead_letter_task_priority=str(v["dead_letter_task_priority"]),
     )
 
 

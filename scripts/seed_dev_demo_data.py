@@ -13,12 +13,14 @@ What it refuses (owner decision 2026-10-31), before any connection is opened:
 A refusal prints fixed words; no secret is ever printed.
 
 What it writes, in ONE transaction (a failure leaves nothing; `--dry-run` runs everything and rolls it back): FICTIONAL patients (names that say "Demo ... Sample", dummy phone numbers), reference lists for
-scheduling (locations, providers, visit types, the three DEMO-LEVEL priority levels from config/demo-phase3.yaml, slots), and four referral documents: one waiting to run, two with an OPEN triage proposal and
-review task, one held with an open hold task. Every priority, role, rationale, mode and card id is an INVENTED DEMO VALUE labelled "DEMO ONLY - NOT A CLINICAL DECISION" (inside provenance where a column cannot
+scheduling (locations, providers, visit types, the three DEMO-LEVEL priority levels from config/demo-phase3.yaml, slots, and one slot hold in EACH of the four statuses: active, released, expired, converted
+(the converted one with its booking)), two POSSIBLE-DUPLICATE pairs of patients (a different name that shares a phone number: the same near-match the registration route queues for review), ONE MERGE PROPOSED by the
+placeholder account so that a real front-desk person can give the second approval, and four referral documents: one waiting to run, two with an OPEN triage proposal and review task, one held with an open hold task. Every priority, role, rationale, mode and card id is an INVENTED DEMO VALUE labelled "DEMO ONLY - NOT A CLINICAL DECISION" (inside provenance where a column cannot
 hold the label); no clinical content is authored here (no thresholds, red-flag rules, protocol card text, wording).
 
-It writes NO human decision: no agents.review_decisions row, no acknowledged or resolved task, nothing attributed to a real person (a review decision is the one thing the project allows to become a training label,
-and those tables are append-only). The documents' `registered_by` and the priority levels' `approved_by` are a placeholder account "demo seed (not a clinician)": status closed, no roles, cannot sign in.
+It writes NO human decision: no agents.review_decisions row, no acknowledged or resolved task, no approval by a real person (a review decision is the one thing the project allows to become a training label, and
+those tables are append-only). The documents' `registered_by`, the priority levels' `approved_by` and the merge's FIRST signature are a placeholder account "demo seed (not a clinician)": status closed, no roles, cannot
+sign in. Acknowledged and resolved tasks, a second merge approval and every other decision are made BY HAND through the real routes.
 
 Safe to re-run: every row has a fixed idempotency key that INCLUDES THE CLINIC and is inserted `on conflict (idempotency_key)` (or the table's named unique) `do nothing`; nothing is deleted or updated (the
 tables are append-only). A surprise constraint violation stops the run and rolls everything back instead of being skipped. Slots are added only when no future demo slot exists, so a re-run once the demo slots
@@ -61,6 +63,8 @@ PATIENTS = (
     ("Demo Charlie Sample", "1984-07-27", "+919000000003"),
     ("Demo Delta Sample", "1993-01-09", "+919000000004"),
     ("Demo Echo Sample", "2001-09-30", None),
+    ("Demo Foxtrot Sample", "1990-05-05", "+919000000001"),  # same phone as Alpha, a different person: a possible duplicate of Alpha (a near match, queued for review)
+    ("Demo Golf Sample", "1979-02-02", "+919000000003"),  # same phone as Charlie: a possible duplicate of Charlie, with a merge PROPOSED
 )
 
 
@@ -150,6 +154,16 @@ async def seed(conn: AsyncConnection, clinic: uuid.UUID, vault: DemographicVault
         result = await pipeline.ingest(conn, clinic_id=clinic, origin=origin, name=name, dob=dob, phone=phone, idempotency_key=f"{k}:patient:{i}")
         patient_ids.append(result.patient_id)
     say(f"patients: {len(patient_ids)} (fictional)")
+    pending = [r for r in (await conn.execute(text("select patient_id, candidate_patient_id, id from mpi.match_candidates where clinic_id = :c and patient_id = any(:p) and status = 'pending'"), {"c": clinic, "p": patient_ids[5:]})).all()]
+    if len(pending) != 2:
+        raise Refused("refusing: the two possible-duplicate pairs were not queued for review as expected (the registration rules or an earlier run changed them)")
+    by_new = {r.patient_id: r for r in pending}
+    proposal = by_new[patient_ids[6]]  # Golf is a possible duplicate of Charlie: a merge is PROPOSED for that pair by the placeholder (the first of the two signatures)
+    await conn.execute(
+        text("insert into mpi.merges (clinic_id, master_patient_id, subordinate_patient_id, candidate_id, approved_by, origin, idempotency_key) values (:c, :m, :s, :cand, :a, 'test', :k) on conflict (idempotency_key) do nothing"),
+        {"c": clinic, "m": proposal.candidate_patient_id, "s": proposal.patient_id, "cand": proposal.id, "a": placeholder, "k": f"{k}:merge:proposal"},
+    )
+    say("possible duplicates: 2 pairs queued for review; 1 merge proposed by the placeholder, awaiting a real second approval")
 
     # ---- scheduling reference lists --------------------------------------------------------------------------------------------------------------------------------------
     for i, name in enumerate(("Demo Location North", "Demo Location South"), start=1):
@@ -186,6 +200,29 @@ async def seed(conn: AsyncConnection, clinic: uuid.UUID, vault: DemographicVault
                 )
                 n += done.rowcount or 0
         say(f"slots: {n} added (30 minutes each, tomorrow and the day after)")
+        # one hold in EACH of the four statuses, on afternoon slots of the first provider; the slot's own status follows the hold (an active hold holds it, a converted one is booked)
+        afternoon = day.replace(hour=14)
+        now = datetime.now(UTC)
+        for i, (hold_status, slot_status) in enumerate((("active", "held"), ("released", "open"), ("expired", "open"), ("converted", "booked"))):
+            start = (afternoon + timedelta(minutes=30 * i)).astimezone(UTC)
+            suffix = f"{start:%Y%m%d%H%M}:{hold_status}"
+            await conn.execute(
+                text("insert into sched.slots (clinic_id, provider_id, location_id, visit_type_id, starts_at, ends_at, status, origin, idempotency_key) values (:c, :p, :l, :v, :s, :e, :st, 'test', :k) on conflict (idempotency_key) do nothing"),
+                {"c": clinic, "p": ids["provider"][0], "l": ids["location"][0], "v": ids["visit-type"][0], "s": start, "e": start + timedelta(minutes=30), "st": slot_status, "k": f"{k}:slot:hold-{suffix}"},
+            )
+            slot_id = (await conn.execute(text("select id from sched.slots where clinic_id = :c and idempotency_key = :k"), {"c": clinic, "k": f"{k}:slot:hold-{suffix}"})).scalar_one()
+            lifetime = {"active": timedelta(hours=24), "released": timedelta(hours=1), "expired": timedelta(seconds=15), "converted": timedelta(hours=1)}[hold_status]
+            await conn.execute(
+                text("insert into sched.holds (clinic_id, slot_id, patient_id, status, created_at, expires_at, origin, idempotency_key) values (:c, :sl, :p, :st, :ca, :ex, 'test', :k) on conflict (idempotency_key) do nothing"),
+                {"c": clinic, "sl": slot_id, "p": patient_ids[i], "st": hold_status, "ca": now - (timedelta(hours=2) if hold_status == "expired" else timedelta(0)), "ex": now + lifetime, "k": f"{k}:hold:{suffix}"},
+            )
+            if hold_status == "converted":
+                hold_id = (await conn.execute(text("select id from sched.holds where clinic_id = :c and idempotency_key = :k"), {"c": clinic, "k": f"{k}:hold:{suffix}"})).scalar_one()
+                await conn.execute(
+                    text("insert into sched.bookings (clinic_id, slot_id, patient_id, hold_id, origin, idempotency_key) values (:c, :sl, :p, :h, 'test', :k) on conflict (idempotency_key) do nothing"),
+                    {"c": clinic, "sl": slot_id, "p": patient_ids[i], "h": hold_id, "k": f"{k}:booking:{suffix}"},
+                )
+        say("slot holds: 4 added, one in each status (active, released, expired, converted with its booking)")
     else:
         say("slots: future demo slots already exist (nothing added)")
 
@@ -220,6 +257,10 @@ async def seed(conn: AsyncConnection, clinic: uuid.UUID, vault: DemographicVault
     await task("referral_hold", "nurse", documents[3], {"status": "held_unassessable", "reasons": ["screening_unassessable"], **demo}, f"{k}:hold-task:4")
     say("referrals: 4 documents (1 waiting to run, 2 with an OPEN proposal and review task, 1 held with an open hold task); no decision is recorded")
     say("every priority, role, mode and card id above is an INVENTED DEMO VALUE: " + DEMO_LABEL)
+    say("")
+    say("Patient search by hand (FICTIONAL demo values, not secrets): type the exact name and date of birth; the last four digits of the phone are shown on the list row.")
+    for name, dob, phone in PATIENTS:
+        say(f"  {name} | born {dob} | phone ends {phone[-4:] if phone else '(none)'}")
 
 
 async def main() -> int:

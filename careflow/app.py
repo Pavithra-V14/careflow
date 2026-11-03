@@ -60,6 +60,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from careflow import (
+    demo_front_door,
     demo_phase3,
     identity,
     mpi,
@@ -2305,15 +2306,27 @@ def create_app(
         app.state.worker_account_id = cfg.worker_account_id
         app.state.wired_adapters = frozenset()  # (provider, model_id) pairs with a wired adapter: none yet
         app.state.malware_scanner_configured = False  # nothing sets it: no scanner exists (BUILD-SPEC.md 11.5); clinical stays not ready
-        app.state.front_door = front_door
+        components = front_door
+        if components is None:  # the DEMO profile (synthetic data, switch on, keys loaded) wires FAKE components; any other profile leaves them unwired and the routes answer 503
+            try:
+                held = app.state.vault
+                versions = tuple(getattr(held, "key_versions", ()) or ())
+                key_version = cfg.active_key_version if cfg.active_key_version in versions else (versions[0] if len(versions) == 1 and cfg.active_key_version is None else None)
+                components = demo_front_door.components_from_environment(os.environ, resolve_profile(), vault=held, key_version=key_version)
+            except Exception:  # noqa: BLE001 - any fault in the demo configuration leaves the components unwired (the routes answer 503), never a startup crash
+                log.error("the demo Front Door components could not be built: the referral run and review routes stay unavailable")
+                components = None
+            if components is not None:
+                log.warning("DEMO PROFILE: the Front Door runs on FAKE letters, extractor and retriever (synthetic data only)")
+        app.state.front_door = components
         app.state.storage_adapter = None
         intake = document_intake
         if intake is None:
             intake, app.state.storage_adapter = _intake_from_environment(cfg.supabase_url)
         app.state.document_intake = intake  # None unless storage is configured AND verified (below): the upload routes answer 503
         app.state.poker = Poker()  # routes that enqueue call `app.state.poker.poke()` after their transaction commits (7.4)
-        handlers = {FRONT_DOOR_TASK: front_door_handler(front_door, session_for=front_door_session_for)} if front_door is not None else {}
-        sweeps = [lambda conn: raise_dead_letter_tasks(conn, front_door.dead_letters)] if front_door is not None else []  # a dead-lettered run is never silent
+        handlers = {FRONT_DOOR_TASK: front_door_handler(components, session_for=front_door_session_for)} if components is not None else {}
+        sweeps = [lambda conn: raise_dead_letter_tasks(conn, components.dead_letters)] if components is not None else []  # a dead-lettered run is never silent
         worker: asyncio.Task | None = None
         if cfg.run_worker:
             if cfg.worker_account_id is None:
