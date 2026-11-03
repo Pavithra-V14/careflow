@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { RESOURCES } from '../src/shared/i18n';
 import reviewedFile from '../src/shared/i18n/ta-reviewed.json';
+import aiReview from '../src/shared/i18n/ta-ai-review.json';
 
 const reviewed: { reviewed: string[] } = reviewedFile;
 
@@ -30,5 +31,47 @@ describe('Tamil review list', () => {
 
   it('marks the reason-code placeholder with the exact agreed words', () => {
     expect(en['placeholder.reasonCodes']).toBe('PLACEHOLDER - clinician to define');
+  });
+
+  describe('AI review (a second pair of eyes, never a sign-off)', () => {
+    it('is labelled exactly "AI-reviewed, pending native review" in the data and on the list', () => {
+      expect(aiReview.label).toBe('AI-reviewed, pending native review');
+      expect(list).toContain('## AI-reviewed, pending native review');
+    });
+
+    it('does not mark any string reviewed: the signed-off list is still empty and every string stays on the unreviewed list', () => {
+      expect(reviewed.reviewed).toEqual([]);
+      expect(list).toMatch(/\d+ of \d+ strings are unreviewed/);
+      const [done, total] = /(\d+) of (\d+) strings are unreviewed/.exec(list)?.slice(1).map(Number) ?? [];
+      expect(done).toBe(total);
+      expect(total).toBe(Object.keys(ta).length);
+    });
+
+    it('only talks about keys that exist, and every corrected string and every flag is shown in the list', () => {
+      for (const k of [...Object.keys(aiReview.verdicts), ...aiReview.issues.map((i) => i.key), ...aiReview.flags.map((f) => f.key), ...aiReview.corrected.map((c) => c.key)]) expect(ta, k).toHaveProperty(k);
+      for (const c of aiReview.corrected) expect(list, c.key).toContain(`\`${c.key}\``);
+    });
+
+    it('applied the seven corrections exactly as suggested, and a blind re-check found no meaning problem in any corrected string', () => {
+      for (const i of aiReview.issues) {
+        expect(i.applied, i.key).toBe(true);
+        expect(ta[i.key], i.key).toBe(i.suggestedTamil);
+      }
+      expect(aiReview.issues).toHaveLength(7);
+      expect(aiReview.corrected.every((c) => c.recheck === 'match' || c.recheck === 'minor-drift')).toBe(true);
+      expect(aiReview.recheckCounts['meaning-changed']).toBe(0);
+      expect(aiReview.recheckCounts.wrong).toBe(0);
+    });
+
+    it('standardised proposal on முன்மொழிவு and resolve on the தீர் root, and left hold, clinic and results-versus-decision flagged', () => {
+      for (const k of ['referrals.proposal', 'referrals.proposalAbstained']) expect(ta[k], k).toContain('முன்மொழிவு');
+      for (const k of ['tasks.status.resolved', 'tasks.resolvedAt', 'tasks.closed', 'tasks.resolve', 'tasks.closedElsewhere', 'tasks.resolveTitle', 'tasks.resolveBody', 'tasks.conflictAck', 'tasks.conflictResolve']) expect(ta[k], k).toContain('தீர்');
+      expect(aiReview.glossary.map((g) => g.concept).sort()).toEqual(['clinic / hospital', 'decision / results', 'hold']);
+    });
+
+    it('says no native speaker was involved and that every string is still unreviewed', () => {
+      expect(aiReview.method).toMatch(/none a native speaker/);
+      expect(aiReview.method).toMatch(/every string is still unreviewed/);
+    });
   });
 });

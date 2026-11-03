@@ -87,9 +87,17 @@ function RecordView({ patientId }: { patientId: string }) {
             )}
 
             {revoked && (
-              <div role="status" className="state state-ok">
-                <p>{t('patients.revoke.done')}</p>
-                {revoked !== 'unknown' && <p>{t(`patients.revoke.task.${revoked}`)}</p>}
+              // `on_record` means NOTHING NEW was recorded (a replayed key, or the record was already unverified): it must not be
+              // shown as "revoked", and an unknown word is never read as success either. Both get a neutral box, not the green one.
+              <div role="status" className={revoked === 'raised' || revoked === 'not_configured' ? 'state state-ok' : 'state'}>
+                {revoked === 'raised' || revoked === 'not_configured' ? (
+                  <>
+                    <p>{t('patients.revoke.done')}</p>
+                    <p>{t(`patients.revoke.task.${revoked}`)}</p>
+                  </>
+                ) : (
+                  <p>{revoked === 'on_record' ? t('patients.revoke.task.on_record') : t('patients.revoke.accepted')}</p>
+                )}
               </div>
             )}
 

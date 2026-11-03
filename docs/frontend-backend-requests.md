@@ -125,19 +125,34 @@ All three screens are built to the snapshot; these are the places where the sche
   `reject`) and records only the word. The console offers **approve and reject only**; "edit" is shown as "Coming soon" and
   cannot be chosen or sent (a test pins it). What a reviewer may edit is a clinician question: **clinician item 26**. No reason
   is collected or sent either (a clinician defines reason codes; the screen shows "PLACEHOLDER - clinician to define").
-- **What `review_task: on_record` means.** The revoke response is `raised`, `not_configured` or `on_record`. The console shows
-  "A review task was raised.", "No review task was raised: the task settings are not configured yet." and "A review task is
-  already on record." The third wording is my reading of the word; please confirm it.
+- **`review_task: on_record` (confirmed by the backend).** It means NOTHING NEW was recorded: a replayed key, or the record was already
+  unverified. It does not mean a review task exists. The console says "Nothing new was recorded: this was already done, or the
+  record was already unverified." and does not say the confirmation was revoked. An unknown word is never read as success either.
 - **The revoke reasons are not final (clinician item 23; the clinic has not accepted them).** The route accepts `wrong_person`, `planted_or_suspect`, `mistaken_click`
   (`docs/design/identity-confirmation-revoke.md` leaves the list open). The console shows them as given, in English in both
   languages, with a marked placeholder saying the wording is not final.
 - **Merge approve and unmerge are built but OFF.** `mergeActions` is a compile-time flag that is false in every build except
   `--mode e2e` (the mock browser build), pinned by tests. It stays off until the `aal` / `amr` claim shape has been seen in a
   real token (`docs/design/step-up-spike.md`). Turning it on is a one-line change in `vite.config.ts` plus the test that pins it.
-- **Unmerge result.** `decisions_flagged` is shown as a count ("N earlier decisions were flagged for review."). Please confirm
-  that is what it counts, since the wording appears to staff.
+- **Unmerge `decisions_flagged` (confirmed by the backend).** It counts bookings, holds, waitlist entries and match-review rows
+  recorded while the link was active (capped at 500 per kind); a review task lists them and nothing is undone. The console says
+  exactly that. The cap means a count of 500 or more per kind is a floor, not a total; the screen does not try to tell.
 - **No propose-merge screen.** `POST /v1/staff/merges` exists but F4 does not build it (not asked for). A proposal made
   elsewhere appears in the merge list as "Awaiting second approval".
+
+### 8. F5 live pass: the dev seed needs rows for four lists
+
+The front-desk live run (dev clinic `7246aea2-97cd-4405-994c-46fa5a1652ee`) found these lists EMPTY, so the shape of their rows and the
+detail screens behind them were never checked against the backend:
+
+- review tasks (`/v1/staff/review-tasks`, all three statuses) and the task detail screen
+- slot holds (`/v1/scheduling/holds`, all four statuses)
+- identity merges (`/v1/identity/merges`) and the merge detail screen
+- possible duplicates (`/v1/identity/possible-duplicates`)
+
+The seed already there has 5 fictional patients, 2 locations, 2 providers, 2 visit types, 3 priority levels, 8 slots and 4 referral
+documents, with no human decisions. Once the seed gives each of these lists at least one row, the front-desk pass is re-run to cover
+the referral queue, tasks, holds, merges and duplicates. Until then the nurse and doctor passes report these lists as "no rows to check".
 
 ## Decisions recorded here for later readers
 

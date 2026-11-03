@@ -96,6 +96,14 @@ is sent; a cancelled step-up says "a fresh code is needed, nothing was changed" 
 production. It is not an environment variable of any name (`tests/flags.test.ts` plants several and checks). Turn it on only after
 the step-up claim spike is recorded.
 
+## Live integration pass (F5), by hand, never in CI
+
+`npm run e2e:live` opens a headed browser against the running dev server and backend. You sign in yourself; it then walks every
+screen read-only and writes `frontend/live-report/live-report.md` (git-ignored): each call's status and where the response differs
+from the OpenAPI schema, with no values. `npm run e2e:live -- --record` records while you use the console yourself, for the writes
+the walk never makes. It refuses to start unless the dev server and the backend answer. What each screen calls and what to check
+is in `../docs/frontend-live-checklist.md`; `tests/live-tools.test.ts` pins that no workflow can start it.
+
 ### Remaining prerequisites for a LIVE sign-in test against the dev project
 
 1. `frontend/.env.local` in place with `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` and `CAREFLOW_API_BASE_URL` (you create it).

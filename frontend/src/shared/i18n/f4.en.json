@@ -38,8 +38,9 @@
       "task": {
         "raised": "A review task was raised.",
         "not_configured": "No review task was raised: the task settings are not configured yet.",
-        "on_record": "A review task is already on record."
-      }
+        "on_record": "Nothing new was recorded: this was already done, or the record was already unverified."
+      },
+      "accepted": "The request was accepted. Check the record for its current state."
     }
   },
   "identity": {
@@ -99,7 +100,7 @@
     "unmergeConflict": "That could not be done. Refresh and try again.",
     "approved": "The merge was approved.",
     "unmerged": "The link was broken.",
-    "flagged": "{{n}} earlier decisions were flagged for review."
+    "flagged": "{{n}} bookings, holds, waitlist entries and match-review rows were recorded while the link was active; a review task lists them, and nothing is undone."
   },
   "placeholder": {
     "reviewReasons": "PLACEHOLDER - clinician to define",

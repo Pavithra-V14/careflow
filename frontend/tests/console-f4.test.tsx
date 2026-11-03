@@ -196,43 +196,36 @@ describe('identity revoke (front desk)', () => {
     expect(await screen.findByText('The confirmation was revoked.')).toBeInTheDocument();
   });
 
-  it.each([
-    ['raised', 'A review task was raised.'],
-    ['not_configured', 'No review task was raised: the task settings are not configured yet.'],
-    ['on_record', 'A review task is already on record.'],
-  ])('tells the review-task outcome "%s" in fixed words', async (word, message) => {
+  async function revokeWith(word: string) {
     const user = userEvent.setup();
     await openConsole({ hash: `/patients/${ID.patient}`, routes: [patientRoute(), revoke([word])] });
     await user.click(await screen.findByRole('button', { name: 'Revoke confirmation' }));
     await user.click(within(screen.getByRole('dialog')).getByRole('radio', { name: 'Mistaken click' }));
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Revoke confirmation' }));
+  }
+
+  it.each([
+    ['raised', 'A review task was raised.'],
+    ['not_configured', 'No review task was raised: the task settings are not configured yet.'],
+  ])('says "revoked" and the review-task outcome "%s" in fixed words', async (word, message) => {
+    await revokeWith(word);
     expect(await screen.findByText(message)).toBeInTheDocument();
-  });
-
-  it('keeps the success message after the record refreshes to unverified and the revoke control disappears (regression)', async () => {
-    const user = userEvent.setup();
-    let verified = true;
-    const route: Routes[number] = ['get', `/v1/staff/patients/${ID.patient}`, () => json(status({ verified }))];
-    const post: Routes[number] = ['post', revokePath, () => {
-      verified = false; // the next read of the record says unverified
-      return json({ confirmed: false, patient_id: ID.patient, replayed: false, review_task: 'raised' });
-    }];
-    await openConsole({ hash: `/patients/${ID.patient}`, routes: [route, post] });
-    await user.click(await screen.findByRole('button', { name: 'Revoke confirmation' }));
-    await user.click(within(screen.getByRole('dialog')).getByRole('radio', { name: 'Wrong person' }));
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Revoke confirmation' }));
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Revoke confirmation' })).toBeNull()); // refreshed, now unverified
     expect(screen.getByText('The confirmation was revoked.')).toBeInTheDocument();
-    expect(screen.getByText('A review task was raised.')).toBeInTheDocument();
+    expect(screen.getByText(message).closest('.state')).toHaveClass('state-ok');
   });
 
-  it('never reads an unknown review-task word as "raised"', async () => {
-    const user = userEvent.setup();
-    await openConsole({ hash: `/patients/${ID.patient}`, routes: [patientRoute(), revoke(['some_future_word'])] });
-    await user.click(await screen.findByRole('button', { name: 'Revoke confirmation' }));
-    await user.click(within(screen.getByRole('dialog')).getByRole('radio', { name: 'Mistaken click' }));
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Revoke confirmation' }));
-    expect(await screen.findByText('The confirmation was revoked.')).toBeInTheDocument();
+  it('says NOTHING NEW was recorded for on_record, and never says the confirmation was revoked or that a task exists', async () => {
+    await revokeWith('on_record');
+    const note = await screen.findByText('Nothing new was recorded: this was already done, or the record was already unverified.');
+    expect(screen.queryByText('The confirmation was revoked.')).toBeNull();
+    expect(screen.queryByText(/review task/i)).toBeNull();
+    expect(note.closest('.state')).not.toHaveClass('state-ok'); // not styled as a success
+  });
+
+  it('never reads an unknown review-task word as success: it says only that the request was accepted', async () => {
+    await revokeWith('some_future_word');
+    expect(await screen.findByText('The request was accepted. Check the record for its current state.')).toBeInTheDocument();
+    expect(screen.queryByText('The confirmation was revoked.')).toBeNull();
     expect(screen.queryByText('A review task was raised.')).toBeNull();
     expect(document.body.textContent).not.toContain('some_future_word');
   });

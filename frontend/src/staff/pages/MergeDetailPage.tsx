@@ -137,6 +137,8 @@ function MergeActions({ merge, mergeId }: { merge: Merge; mergeId: string }) {
   const approve = useIdempotentWrite((_: void, key) => unwrap(api.approveMerge(mergeId, { idempotencyKey: key })), () => done(t('identity.approved')));
   const unmerge = useIdempotentWrite(
     (_: void, key) => unwrap(api.unmerge(mergeId, { idempotencyKey: key })),
+    // decisions_flagged counts bookings, holds, waitlist entries and match-review rows recorded while the link was active (capped at
+    // 500 per kind by the backend). A review task lists them and nothing is undone: the wording says exactly that.
     (r) => done(r.decisions_flagged > 0 ? `${t('identity.unmerged')} ${t('identity.flagged', { n: r.decisions_flagged })}` : t('identity.unmerged')),
   );
 
