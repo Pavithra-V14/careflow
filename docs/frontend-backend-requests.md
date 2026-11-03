@@ -140,6 +140,20 @@ All three screens are built to the snapshot; these are the places where the sche
 - **No propose-merge screen.** `POST /v1/staff/merges` exists but F4 does not build it (not asked for). A proposal made
   elsewhere appears in the merge list as "Awaiting second approval".
 
+### 8. F5 live pass: the dev seed needs rows for four lists
+
+The front-desk live run (dev clinic `7246aea2-97cd-4405-994c-46fa5a1652ee`) found these lists EMPTY, so the shape of their rows and the
+detail screens behind them were never checked against the backend:
+
+- review tasks (`/v1/staff/review-tasks`, all three statuses) and the task detail screen
+- slot holds (`/v1/scheduling/holds`, all four statuses)
+- identity merges (`/v1/identity/merges`) and the merge detail screen
+- possible duplicates (`/v1/identity/possible-duplicates`)
+
+The seed already there has 5 fictional patients, 2 locations, 2 providers, 2 visit types, 3 priority levels, 8 slots and 4 referral
+documents, with no human decisions. Once the seed gives each of these lists at least one row, the front-desk pass is re-run to cover
+the referral queue, tasks, holds, merges and duplicates. Until then the nurse and doctor passes report these lists as "no rows to check".
+
 ## Decisions recorded here for later readers
 
 - **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;
