@@ -7,6 +7,10 @@
 # LOADS ONLY WHEN CAREFLOW_PROFILE=demo AND CAREFLOW_DATA_POLICY=synthetic_only AND CAREFLOW_DEMO_PHASE3=1 (careflow/demo_phase3.py). In any other profile, or with any other data policy,
 # the application REFUSES TO START if CAREFLOW_DEMO_PHASE3 is set or a scheduling setting carries the label below.
 #
+# ALSO HERE (owner decision 2026-10-30): the two per-user limits of the patient view (careflow/patient_view.py; docs/design/patient-view-fields.md). They are required settings with no default, so
+# the demo would answer 503 on every view route without a placeholder; an explicit CAREFLOW_PATIENT_VIEW_* value in the environment always wins over these. They are privacy-throttle
+# stand-ins for the synthetic demo, not recommendations for a clinic.
+#
 # DELIBERATELY ABSENT, even for demo: red-flag rules, thresholds, emergency wording, protocol cards, unit synonyms, identity rules, the accept-confidence threshold.
 
 label: "DEMO ONLY - NOT A CLINICAL DECISION"
@@ -37,4 +41,10 @@ settings:
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
   scheduling_task_role:
     value: front_desk
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  patient_view_max_opens_per_minute:
+    value: 30
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  patient_view_max_label_rows_per_minute:
+    value: 200
     label: "DEMO ONLY - NOT A CLINICAL DECISION"

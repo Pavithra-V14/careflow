@@ -269,14 +269,29 @@ STEP_UP_WINDOW = 1800
 UPLOADS = FakeUpload()  # the matrix app's storage: the document routes' cases play the browser against it
 
 
+def _enable_patient_view(built: FastAPI) -> FastAPI:
+    """The matrix app has the patient-view feature ON with stand-in settings (test inputs): the disabled and unconfigured behaviours are tested by overriding this."""
+    from careflow.app import patient_view_config
+    from careflow.patient_view import (
+        OpenRateLimiter,
+        PatientViewConfig,
+        PatientViewSettings,
+    )
+
+    config = PatientViewConfig(True, PatientViewSettings(_env_file=None, max_opens_per_minute=10_000, max_label_rows_per_minute=10_000), OpenRateLimiter(10_000), OpenRateLimiter(10_000))
+    built.dependency_overrides[patient_view_config] = lambda: config
+    return built
+
+
 @pytest.fixture(scope="module")
 def app() -> FastAPI:
     settings = Settings(supabase_url=PROJECT, database_url_app=APP_URL or "", step_up_max_age_seconds=STEP_UP_WINDOW)
     # Stand-in components (all None): the referral routes need SOME configured front door to get past their 503; the paths tested here (404, 422, 401) never touch a component.
-    return create_app(
+    built = create_app(
         settings, jwks=fake_jwks_client(), vault=TEST_VAULT, front_door=FrontDoorComponents(None, None, None, None, None, None, None, None, None),
         document_intake=DocumentIntake(UPLOADS, profile="demo"),  # a fake storage in the demo profile with no scanner: registration reports scan=not_checked
     )
+    return _enable_patient_view(built)
 
 
 @pytest.fixture(scope="module")
@@ -1444,8 +1459,8 @@ async def _revoke_event(conn, clinic, patient, by):
 def patient_search_cases(ids) -> list[tuple]:
     body = lambda **o: {"clinic_id": str(ids.clinic_a), "name": "Nobody Atall", "dob": "1990-01-01", "phone": "9876500001", **o}
     cases = [
-        _case(ids, "front desk searches for a person nobody registered: an empty list, not an error", "front_desk_a", 200, PATIENT_SEARCH, json=body(), key=None, body=lambda b: b == {"items": []}),
-        _case(ids, "the phone is optional", "front_desk_a", 200, PATIENT_SEARCH, json={k: v for k, v in body().items() if k != "phone"}, key=None, body=lambda b: b == {"items": []}),
+        _case(ids, "front desk searches for a person nobody registered: an empty list, not an error", "front_desk_a", 200, PATIENT_SEARCH, json=body(), key=None, body=lambda b: b == {"items": [], "truncated": False, "labels_withheld": False}),
+        _case(ids, "the phone is optional", "front_desk_a", 200, PATIENT_SEARCH, json={k: v for k, v in body().items() if k != "phone"}, key=None, body=lambda b: b == {"items": [], "truncated": False, "labels_withheld": False}),
         _case(ids, "a date of birth in the future is refused with a named message", "front_desk_a", 422, PATIENT_SEARCH, json=body(dob="2999-01-01"), key=None,
               body=lambda b: b == {"detail": "date of birth must be a real past date in YYYY-MM-DD form"}),
         _case(ids, "a phone that is not an Indian mobile is refused with a named message", "front_desk_a", 422, PATIENT_SEARCH, json=body(phone="123"), key=None,
@@ -1680,6 +1695,140 @@ def hold_release_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(refused), None)
 
 
+# ---- /v1/staff/audit (the audit-log reader) --------------------------------------------------------------------------------------------------------------------
+#
+# Auditor of the clinic only (the existing select policy); every other identity is refused with 403 before any query. Newest first, keyset paging, filters on closed columns. `reason` is never
+# returned. The cases write their own probe rows as the owner (audit.log is append-only, so they stay; nothing reads an action named `matrix.probe`).
+
+AUDIT = "/v1/staff/audit"
+
+
+def _probe_rows(ids, n):
+    async def make(conn):
+        marks = []
+        for _ in range(n):
+            mark = uuid.uuid4().hex
+            await conn.execute(
+                "insert into audit.log (origin, clinic_id, actor_id, actor_role, action, resource_type, resource_id, details, idempotency_key) "
+                "values ('test', $1, $2, 'front_desk', 'matrix.probe', 'probe', $3, '{\"n\": 1}'::jsonb, $4)",
+                ids.clinic_a, ids.people["front_desk_a"][0], mark, f"matrix-probe-{mark}",
+            )
+            marks.append(mark)
+        return marks
+
+    return _run(_owner(make))
+
+
+def audit_reader_cases(ids) -> list[tuple]:
+    marks = _probe_rows(ids, 3)
+    fd = str(ids.people["front_desk_a"][0])
+    only = lambda items, n: len(items) == n and all(i["action"] == "matrix.probe" for i in items)
+    shape = {"audit_id", "occurred_at", "origin", "clinic_id", "actor_id", "actor_role", "action", "resource_type", "resource_id", "details"}
+    cases = [
+        _case(ids, "the auditor lists the probe rows by action, newest first, with closed columns only", "auditor_a", 200, AUDIT + "?action=matrix.probe", key=None,
+              body=_page_audit(lambda b: only(b["items"], 3) and [i["resource_id"] for i in b["items"]] == marks[::-1] and all(set(i) == shape for i in b["items"]) and all(i["clinic_id"] == str(ids.clinic_a) for i in b["items"]))),
+        _case(ids, "filter by resource id", "auditor_a", 200, AUDIT + f"?resource_id={marks[1]}", key=None, body=_page_audit(lambda b: [i["resource_id"] for i in b["items"]] == [marks[1]])),
+        _case(ids, "filter by actor", "auditor_a", 200, AUDIT + f"?action=matrix.probe&actor_id={fd}", key=None, body=_page_audit(lambda b: only(b["items"], 3))),
+        _case(ids, "filter by another actor finds nothing", "auditor_a", 200, AUDIT + f"?action=matrix.probe&actor_id={uuid.uuid4()}", key=None, body=_page_audit(lambda b: b["items"] == [])),
+        _case(ids, "a window in the future finds nothing", "auditor_a", 200, AUDIT + "?action=matrix.probe&since=2999-01-01T00:00:00Z", key=None, body=_page_audit(lambda b: b["items"] == [])),
+        _case(ids, "a window ending before the rows finds nothing", "auditor_a", 200, AUDIT + "?action=matrix.probe&until=2000-01-01T00:00:00Z", key=None, body=_page_audit(lambda b: b["items"] == [])),
+        _case(ids, "limit=2 returns two rows, says there are more and names the next page", "auditor_a", 200, AUDIT + "?action=matrix.probe&limit=2", key=None,
+              body=_page_audit(lambda b: len(b["items"]) == 2 and b["has_more"] is True and b["next_before_id"] == b["items"][-1]["audit_id"])),
+        _case(ids, "nobody is written to by reading: an unknown action finds nothing", "auditor_a", 200, AUDIT + "?action=no.such.action", key=None, body=_page_audit(lambda b: b["items"] == [])),
+        _case(ids, "an action with capital letters is rejected", "auditor_a", 422, AUDIT + "?action=Bad%20Action", key=None, body=_fixed(422)),
+        _case(ids, "before_id=0 is rejected", "auditor_a", 422, AUDIT + "?before_id=0", key=None, body=_fixed(422)),
+        _case(ids, "an actor id that is not a uuid is rejected", "auditor_a", 422, AUDIT + "?actor_id=nope", key=None, body=_fixed(422)),
+        _case(ids, "a time that is not a time is rejected", "auditor_a", 422, AUDIT + "?since=yesterday", key=None, body=_fixed(422)),
+        _case(ids, "limit=0 is rejected", "auditor_a", 422, AUDIT + "?limit=0", key=None, body=_fixed(422)),
+    ]
+    denied = [p for p in ids.people if p != "auditor_a"]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, AUDIT, key=None, body=READ_403_BODY) for p in denied]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, AUDIT, key=None, body=READ_403_BODY))
+    return cases + _unauthenticated(ids, AUDIT, None)
+
+
+def _page_audit(check):
+    """The paging envelope of the audit list is well formed (items, limit, has_more, next_before_id) and `check(body)` holds."""
+    return lambda b: set(b) == {"items", "limit", "has_more", "next_before_id"} and isinstance(b["items"], list) and check(b)
+
+
+# ---- /v1/staff/patients/{id}/view and /v1/staff/patients/labels (patient view; DEMO profile with synthetic data only) -------------------------------------------
+#
+# The matrix app is built with the view feature ON (a stand-in config below) so the role cases can see real answers; the disabled, unconfigured and rate-limited behaviours are the live tests after the
+# matrix. Opening one record: front desk, nurse and doctor of the clinic (and `multi`, a nurse here) get the full record; everyone else cannot even see the patient (404), so the refusal is the same
+# as for a missing record. Labels: the same three roles of that clinic; who SEES the clinic row but holds none of them (admin, business owner, auditor) gets 403, everyone else 404. Rows carry the
+# name, the year of birth and the last four digits of the phone only.
+
+PATIENT_VIEW = "/v1/staff/patients/{patient_id}/view"
+PATIENT_LABELS = "/v1/staff/patients/labels"
+VIEW_READERS = ("front_desk_a", "nurse_a", "doctor_a", "multi")
+LABEL_VISIBLE_NOT_ALLOWED = {r: 403 for r in ("admin_a", "business_owner_a", "auditor_a")}
+SYNTHETIC = {"name": "Zed Testperson", "dob": "1977-07-07", "phone": "+919876500123"}
+
+
+async def _new_real_patient(conn, clinic, **person):
+    """A synthetic patient whose demographics are REALLY encrypted with the matrix vault (so the view routes can decrypt them), written by the owner."""
+    person = {**SYNTHETIC, **person}
+    pid = uuid.uuid4()
+    enc = lambda value, field: TEST_VAULT.encrypt(value, field=field, key_version=1)
+    await conn.execute(
+        "insert into mpi.patients (id, clinic_id, name_ct, name_key_version, dob_ct, dob_key_version, phone_ct, phone_key_version, origin, idempotency_key) values ($1, $2, $3, 1, $4, 1, $5, 1, 'test', $6)",
+        pid, clinic, enc(person["name"], "name"), enc(person["dob"], "dob"), enc(person["phone"], "phone"), f"matrix-real-{uuid.uuid4().hex}",
+    )
+    return pid
+
+
+def new_real_patient(ids, **person):
+    return _run(_owner(lambda conn: _new_real_patient(conn, ids.clinic_a, **person)))
+
+
+def patient_view_cases(ids) -> list[tuple]:
+    pid = new_real_patient(ids)
+    path = lambda p: PATIENT_VIEW.format(patient_id=p)
+    full = lambda b: b == {"patient_id": str(pid), "clinic_id": str(ids.clinic_a), "name": SYNTHETIC["name"], "date_of_birth": SYNTHETIC["dob"], "phone": SYNTHETIC["phone"]}
+    cases = [_case(ids, f"{who} opens the record in full", who, 200, path(pid), key=None, body=full) for who in VIEW_READERS]
+    cases += [
+        _case(ids, "the response is marked no-store", "front_desk_a", 200, path(pid), key=None, body=full),
+        _case(ids, "a reader of another clinic gets the same 404 as a missing record", "front_desk_b", 404, path(pid), key=None, body=_fixed(404)),
+        _case(ids, "an unknown record is not found", "nurse_a", 404, path(uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "a patient id that is not a uuid is rejected", "nurse_a", 422, path("nope"), key=None, body=_fixed(422)),
+    ]
+    others = [p for p in ids.people if p not in (*VIEW_READERS, "front_desk_b")]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) cannot see the record: the same 404", p, 404, path(pid), key=None, body=_fixed(404)) for p in others]
+    cases.append(_case(ids, "valid user with no iam account gets the same 404", bearer(mint(ids.no_account)), 404, path(pid), key=None, body=_fixed(404)))
+    return cases + _unauthenticated(ids, path(pid), None)
+
+
+def patient_labels_cases(ids) -> list[tuple]:
+    a, b = new_real_patient(ids), new_real_patient(ids, name="Yara Sample", dob="1962-01-30", phone="+919000011111")
+    foreign = _run(_owner(lambda conn: _new_real_patient(conn, ids.clinic_b)))
+    body = lambda *p, **o: {"clinic_id": str(ids.clinic_a), "patient_ids": [str(x) for x in p], **o}
+    rows = lambda b_: sorted(b_["items"], key=lambda i: i["patient_id"])
+    expect = sorted(
+        [{"patient_id": str(a), "name": SYNTHETIC["name"], "birth_year": 1977, "phone_last4": "0123"}, {"patient_id": str(b), "name": "Yara Sample", "birth_year": 1962, "phone_last4": "1111"}],
+        key=lambda i: i["patient_id"],
+    )
+    cases = [_case(ids, f"{who} reads two list rows: name, year of birth, last four digits", who, 200, PATIENT_LABELS, json=body(a, b), key=None, body=lambda x: rows(x) == expect) for who in VIEW_READERS]
+    cases += [
+        _case(ids, "no full date of birth and no full phone appear in a row", "front_desk_a", 200, PATIENT_LABELS, json=body(a), key=None,
+              body=lambda x: set(x["items"][0]) == {"patient_id", "name", "birth_year", "phone_last4"} and SYNTHETIC["dob"] not in str(x) and SYNTHETIC["phone"] not in str(x)),
+        _case(ids, "an id of another clinic is simply absent", "front_desk_a", 200, PATIENT_LABELS, json=body(a, foreign), key=None, body=lambda x: [i["patient_id"] for i in x["items"]] == [str(a)]),
+        _case(ids, "an id nobody has is simply absent", "front_desk_a", 200, PATIENT_LABELS, json=body(uuid.uuid4()), key=None, body=lambda x: x == {"items": []}),
+        _case(ids, "more than 25 ids is rejected (the hard page cap)", "front_desk_a", 422, PATIENT_LABELS, json=body(*[uuid.uuid4() for _ in range(26)]), key=None, body=_fixed(422)),
+        _case(ids, "an empty list is rejected", "front_desk_a", 422, PATIENT_LABELS, json=body(), key=None, body=_fixed(422)),
+        _case(ids, "a repeated id is rejected", "front_desk_a", 422, PATIENT_LABELS, json=body(a, a), key=None, body=lambda x: x == {"detail": "too many or repeated patient ids for one page"}),
+        _case(ids, "an unknown field is rejected", "front_desk_a", 422, PATIENT_LABELS, json=body(a, export=True), key=None, body=_fixed(422)),
+        _case(ids, "an unknown clinic is not found", "front_desk_a", 404, PATIENT_LABELS, json=body(a, clinic_id=str(uuid.uuid4())), key=None, body=_fixed(404)),
+    ]
+    for p in [*ids.people, "no account"]:
+        if p in VIEW_READERS:
+            continue
+        status = LABEL_VISIBLE_NOT_ALLOWED.get(p, 404)
+        who = bearer(mint(ids.no_account)) if p == "no account" else p
+        cases.append(_case(ids, f"{p} is refused", who, status, PATIENT_LABELS, json=body(a), key=None, body=_fixed(status)))
+    return cases + _unauthenticated(ids, PATIENT_LABELS, body(a))
+
+
 # One entry per route: add the new route's cases here in the same change that adds the route.
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
@@ -1713,10 +1862,13 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", DUPLICATES): duplicate_list_cases,
     ("GET", MERGE_LIST): merge_list_cases,
     ("GET", MERGE_OPEN): merge_open_cases,
+    ("GET", AUDIT): audit_reader_cases,
     ("GET", HOLDS): hold_list_cases,
     ("POST", HOLD_RELEASE): hold_release_cases,
     ("POST", PATIENT_SEARCH): patient_search_cases,
     ("GET", PATIENT_STATUS): patient_status_cases,
+    ("GET", PATIENT_VIEW): patient_view_cases,
+    ("POST", PATIENT_LABELS): patient_labels_cases,
     ("GET", READ): message_read_cases,
     ("POST", RUN_REFERRAL): referral_run_cases,
     ("POST", REVIEW_REFERRAL): referral_review_cases,
@@ -2458,9 +2610,12 @@ def test_a_registered_person_is_found_by_exact_details_with_flags_only_and_a_wor
     found = client.post(PATIENT_SEARCH, headers=headers, json={"clinic_id": str(ids.clinic_a), **person})
     assert found.status_code == 200
     (hit,) = [i for i in found.json()["items"] if i["patient_id"] == pid]
-    assert hit == {"patient_id": pid, "matched_kinds": ["name_dob", "phone"], "verified": True, "registered_via": "front_desk"}
-    assert not ({"name", "dob", "phone"} & set(hit))  # no stored identifier is returned
-    assert person["name"] not in found.text and person["dob"] not in found.text and person["phone"] not in found.text
+    assert hit == {
+        "patient_id": pid, "matched_kinds": ["name_dob", "phone"], "verified": True, "registered_via": "front_desk",
+        "label": {"patient_id": pid, "name": person["name"], "birth_year": 1984, "phone_last4": "3999"},
+    }
+    assert not ({"name", "dob", "phone"} & set(hit))  # the stored identifiers are not top-level fields
+    assert person["dob"] not in found.text and person["phone"] not in found.text  # the list label has the name, the YEAR and the last four digits; never the full date or the full number
     name_only = client.post(PATIENT_SEARCH, headers=headers, json={"clinic_id": str(ids.clinic_a), "name": person["name"], "dob": person["dob"]})
     assert [i["matched_kinds"] for i in name_only.json()["items"] if i["patient_id"] == pid] == [["name_dob"]]
     # another clinic's front desk cannot search this clinic, and a different person finds nothing
@@ -2475,8 +2630,9 @@ def test_a_registered_person_is_found_by_exact_details_with_flags_only_and_a_wor
     rows = _run(_fetch("select actor_id, actor_role, details, resource_id from audit.log where action = 'patient.search' and clinic_id = $1 order by id", ids.clinic_a))
     assert len(rows) >= 3 and all((r["actor_id"], r["actor_role"]) == (fd, "front_desk") for r in rows)
     parsed = [json.loads(r["details"]) if isinstance(r["details"], str) else r["details"] for r in rows]
-    assert {"kind": "name_dob_phone", "results": 1} in parsed and {"kind": "name_dob", "results": 1} in parsed  # (the third search, another name with the same phone, finds the number's owner: one phone-only hit)
-    assert all(set(d) == {"kind", "results"} for d in parsed)
+    assert {"kind": "name_dob_phone", "labels": 1, "results": 1} in parsed and {"kind": "name_dob", "labels": 1, "results": 1} in parsed  # (the third search, another name with the same phone, finds the number's owner: one phone-only hit, no label)
+    assert {"kind": "name_dob_phone", "labels": 0, "results": 1} in parsed
+    assert all(set(d) == {"kind", "labels", "results"} for d in parsed)  # counts only, never ids or text
     blob = json.dumps([[str(r["resource_id"]), d] for r, d in zip(rows, parsed, strict=True)])
     assert person["name"] not in blob and person["dob"] not in blob and person["phone"] not in blob and pid not in blob
 
@@ -2496,6 +2652,207 @@ def test_releasing_a_hold_reopens_its_slot_writes_one_audit_row_and_the_slot_can
     assert again.status_code == 200  # the slot is free to be held again
     refused = client.post(HOLD_RELEASE.format(hold_id=again.json()["hold_id"]), headers={**bearer(mint(ids.people["nurse_a"][0])), "X-Idempotency-Key": _new_key()})
     assert refused.status_code == 403 and _run(_fetch("select status from sched.holds where id = $1", uuid.UUID(again.json()["hold_id"])))[0]["status"] == "active"
+
+
+def _view_override(client, *, enabled=True, settings=None):
+    from careflow.app import patient_view_config
+    from careflow.patient_view import (
+        OpenRateLimiter,
+        PatientViewConfig,
+        PatientViewSettings,
+    )
+
+    # test inputs only: stand-ins for the engineering and required settings
+    configured = PatientViewSettings(_env_file=None, **{"max_opens_per_minute": 100, "max_label_rows_per_minute": 1000, **(settings or {})})
+    config = PatientViewConfig(
+        enabled, configured, None if configured.max_opens_per_minute is None else OpenRateLimiter(configured.max_opens_per_minute),
+        None if configured.max_label_rows_per_minute is None else OpenRateLimiter(configured.max_label_rows_per_minute),
+    )
+    _PRIOR_VIEW_OVERRIDE[id(client.app)] = client.app.dependency_overrides.get(patient_view_config)  # the module-wide stand-in (_enable_patient_view): put back afterwards, never dropped
+    client.app.dependency_overrides[patient_view_config] = lambda: config
+    return patient_view_config
+
+
+_PRIOR_VIEW_OVERRIDE: dict[int, object] = {}
+
+
+def _end_view_override(client, key):
+    prior = _PRIOR_VIEW_OVERRIDE.pop(id(client.app), None)
+    if prior is None:
+        client.app.dependency_overrides.pop(key, None)
+    else:
+        client.app.dependency_overrides[key] = prior
+
+
+def test_opening_a_record_is_audited_without_its_contents_and_is_rate_limited_per_user_with_a_required_setting(client, ids):
+    pid = new_real_patient(ids, name="Quentin Auditprobe", dob="1955-05-05", phone="+919111122222")
+    fd, nurse = ids.people["front_desk_a"][0], ids.people["nurse_a"][0]
+    key = _view_override(client, settings={"max_opens_per_minute": 2})
+    try:
+        url = PATIENT_VIEW.format(patient_id=pid)
+        first = client.get(url, headers=bearer(mint(fd)))
+        assert first.status_code == 200 and first.headers["cache-control"] == "no-store" and first.json()["phone"] == "+919111122222"
+        assert client.get(url, headers=bearer(mint(fd))).status_code == 200
+        third = client.get(url, headers=bearer(mint(fd)))
+        assert third.status_code == 429 and third.json() == {"detail": "too many records opened; wait a moment"}  # the limit is per user:
+        assert client.get(url, headers=bearer(mint(nurse))).status_code == 200  # another user is not affected
+        rows = _run(_fetch("select actor_id, actor_role, details, resource_id from audit.log where action = 'patient.view' and resource_id = $1 order by id", str(pid)))
+        assert [(r["actor_id"], r["actor_role"]) for r in rows] == [(fd, "front_desk"), (fd, "front_desk"), (nurse, "nurse")]  # the refused third open wrote nothing
+        blob = json.dumps([[str(r["resource_id"]), str(r["details"])] for r in rows])
+        assert "Quentin" not in blob and "1955" not in blob and "9111122222" not in blob  # who, role and the patient id; never the contents
+    finally:
+        _end_view_override(client, key)
+    # the required setting has no default: unset, opening is unavailable (never unlimited); list rows do not need it
+    key = _view_override(client, settings={"max_opens_per_minute": None})
+    try:
+        unset = client.get(PATIENT_VIEW.format(patient_id=pid), headers=bearer(mint(fd)))
+        assert unset.status_code == 503 and unset.json() == {"detail": "patient view is unavailable: the per-user open rate limit is not configured"}
+        rows_ok = client.post(PATIENT_LABELS, headers=bearer(mint(fd)), json={"clinic_id": str(ids.clinic_a), "patient_ids": [str(pid)]})
+        assert rows_ok.status_code == 200 and rows_ok.json()["items"][0]["name"] == "Quentin Auditprobe"
+    finally:
+        _end_view_override(client, key)
+    from careflow.patient_view import PatientViewSettings
+
+    assert PatientViewSettings(_env_file=None).max_opens_per_minute is None  # no default anywhere
+
+
+def test_outside_the_demo_profile_with_synthetic_data_nothing_is_decrypted_and_search_rows_carry_no_label(client, ids):
+    fd = ids.people["front_desk_a"][0]
+    pid = new_real_patient(ids)
+    key = _view_override(client, enabled=False)
+    try:
+        for response in (
+            client.get(PATIENT_VIEW.format(patient_id=pid), headers=bearer(mint(fd))),
+            client.post(PATIENT_LABELS, headers=bearer(mint(fd)), json={"clinic_id": str(ids.clinic_a), "patient_ids": [str(pid)]}),
+        ):
+            assert response.status_code == 503 and response.json() == {"detail": "patient view is disabled outside the demo profile with synthetic data"}
+        search = client.post(PATIENT_SEARCH, headers=bearer(mint(fd)), json={"clinic_id": str(ids.clinic_a), "name": "Nobody Atall", "dob": "1990-01-01"})
+        assert search.status_code == 200 and search.json() == {"items": [], "truncated": False, "labels_withheld": False}
+    finally:
+        _end_view_override(client, key)
+
+
+def test_list_rows_are_audited_with_the_count_only_and_the_page_limit_setting_can_lower_the_cap_but_never_raise_it(client, ids):
+    from careflow.patient_view import HARD_PAGE_CAP, PatientViewSettings
+
+    fd = ids.people["front_desk_a"][0]
+    a, b = new_real_patient(ids), new_real_patient(ids)
+    key = _view_override(client, settings={"page_limit": 1})
+    try:
+        refused = client.post(PATIENT_LABELS, headers=bearer(mint(fd)), json={"clinic_id": str(ids.clinic_a), "patient_ids": [str(a), str(b)]})
+        assert refused.status_code == 422  # the setting lowered the page to one row
+        ok = client.post(PATIENT_LABELS, headers=bearer(mint(fd)), json={"clinic_id": str(ids.clinic_a), "patient_ids": [str(a)]})
+        assert ok.status_code == 200 and ok.headers["cache-control"] == "no-store"
+    finally:
+        _end_view_override(client, key)
+    rows = _run(_fetch("select actor_role, details, resource_type from audit.log where action = 'patient.view_labels' and clinic_id = $1 and actor_id = $2 order by id", ids.clinic_a, fd))  # this user's rows only: other tests of the clinic read labels as nurse and doctor
+    parsed = [json.loads(r["details"]) if isinstance(r["details"], str) else r["details"] for r in rows]
+    assert {"count": 1} in parsed and all(set(d) == {"count"} for d in parsed) and all(r["actor_role"] == "front_desk" for r in rows)  # a count, never ids
+    assert HARD_PAGE_CAP == 25
+    with pytest.raises(ValueError):
+        PatientViewSettings(_env_file=None, page_limit=26)  # the cap cannot be raised by configuration
+
+
+def test_search_rows_carry_the_list_label_when_the_feature_is_on(client, ids):
+    fd = ids.people["front_desk_a"][0]
+    person = {"name": "Odile Searchprobe", "dob": "1990-02-02", "phone": "9876500777"}
+    client.post("/v1/staff/patients", headers={**bearer(mint(fd)), "X-Idempotency-Key": _new_key()}, json={"clinic_id": str(ids.clinic_a), **person})
+    found = client.post(PATIENT_SEARCH, headers=bearer(mint(fd)), json={"clinic_id": str(ids.clinic_a), **person})
+    assert found.status_code == 200 and found.headers["cache-control"] == "no-store" and found.json()["truncated"] is False
+    (hit,) = found.json()["items"]
+    assert hit["label"] == {"patient_id": hit["patient_id"], "name": "Odile Searchprobe", "birth_year": 1990, "phone_last4": "0777"}
+    assert "1990-02-02" not in found.text and "9876500777" not in found.text  # not the full date, not the full number
+
+
+def test_the_list_row_budget_is_required_per_user_and_counted_in_rows_for_the_label_read_and_for_search_labels(client, ids):
+    fd, nurse = ids.people["front_desk_a"][0], ids.people["nurse_a"][0]
+    patients = [new_real_patient(ids) for _ in range(3)]
+    body = lambda *p: {"clinic_id": str(ids.clinic_a), "patient_ids": [str(x) for x in p]}
+    key = _view_override(client, settings={"max_label_rows_per_minute": 4})
+    try:
+        assert client.post(PATIENT_LABELS, headers=bearer(mint(fd)), json=body(*patients)).status_code == 200  # 3 rows
+        over = client.post(PATIENT_LABELS, headers=bearer(mint(fd)), json=body(*patients[:2]))  # 3 + 2 > 4
+        assert over.status_code == 429 and over.json() == {"detail": "too many list rows read; wait a moment"}
+        assert client.post(PATIENT_LABELS, headers=bearer(mint(fd)), json=body(patients[0])).status_code == 200  # 3 + 1 = 4: the refused call charged nothing
+        assert client.post(PATIENT_LABELS, headers=bearer(mint(nurse)), json=body(*patients)).status_code == 200  # another user has their own budget
+        # search labels draw on the SAME budget: the front desk user has spent it, so the hit comes back without a label and says so
+        person = {"name": "Budget Probe", "dob": "1981-01-01", "phone": "9876500888"}
+        client.post("/v1/staff/patients", headers={**bearer(mint(fd)), "X-Idempotency-Key": _new_key()}, json={"clinic_id": str(ids.clinic_a), **person})
+        found = client.post(PATIENT_SEARCH, headers=bearer(mint(fd)), json={"clinic_id": str(ids.clinic_a), **person})
+        assert found.status_code == 200 and found.json()["labels_withheld"] is True and all(i["label"] is None for i in found.json()["items"]) and found.json()["items"]
+    finally:
+        _end_view_override(client, key)
+    key = _view_override(client, settings={"max_label_rows_per_minute": None})
+    try:
+        unset = client.post(PATIENT_LABELS, headers=bearer(mint(fd)), json=body(patients[0]))
+        assert unset.status_code == 503 and unset.json() == {"detail": "patient view is unavailable: the per-user list-row limit is not configured"}
+        assert client.get(PATIENT_VIEW.format(patient_id=patients[0]), headers=bearer(mint(fd))).status_code == 200  # opening is a separate setting
+    finally:
+        _end_view_override(client, key)
+
+
+def test_a_phone_only_hit_carries_no_label_so_a_number_cannot_be_turned_into_a_name(client, ids):
+    fd = ids.people["front_desk_a"][0]
+    owner = {"name": "Phone Owner", "dob": "1970-10-10", "phone": "9876500999"}
+    client.post("/v1/staff/patients", headers={**bearer(mint(fd)), "X-Idempotency-Key": _new_key()}, json={"clinic_id": str(ids.clinic_a), **owner})
+    probe = client.post(PATIENT_SEARCH, headers=bearer(mint(fd)), json={"clinic_id": str(ids.clinic_a), "name": "Somebody Different", "dob": "1999-09-09", "phone": owner["phone"]})
+    assert probe.status_code == 200
+    phone_only = [i for i in probe.json()["items"] if i["matched_kinds"] == ["phone"]]
+    assert phone_only and all(i["label"] is None for i in phone_only)  # found by the number alone: no name is revealed
+    assert "Phone Owner" not in probe.text
+
+
+def test_a_patient_account_bound_to_a_record_cannot_open_it_or_read_its_label_and_an_erased_record_is_gone(client, ids):
+    async def bind(conn, account):
+        pid = await _new_real_patient(conn, ids.clinic_a)
+        await conn.execute("update mpi.patients set account_id = $1 where id = $2", account, pid)
+        return pid
+
+    for key in ("patient",):  # a guardian account cannot be bound to a record at all (migration 0012 refuses it), so the bound case is a patient account
+        account = ids.people[key][0]
+        bound = _run(_owner(lambda conn, a=account: bind(conn, a)))
+        token = bearer(mint(account))
+        opened = client.get(PATIENT_VIEW.format(patient_id=bound), headers=token)
+        assert opened.status_code in (403, 404) and "Testperson" not in opened.text and SYNTHETIC["dob"] not in opened.text  # can see its own row, but is not staff: nothing is decrypted
+        labels = client.post(PATIENT_LABELS, headers=token, json={"clinic_id": str(ids.clinic_a), "patient_ids": [str(bound)]})
+        assert labels.status_code in (403, 404) and "Testperson" not in labels.text
+    erased = new_real_patient(ids)
+    _run(_owner(lambda conn: conn.execute("update mpi.patients set erased_at = now(), name_ct = null, name_key_version = null, dob_ct = null, dob_key_version = null, phone_ct = null, phone_key_version = null where id = $1", erased)))
+    fd = ids.people["front_desk_a"][0]
+    assert client.get(PATIENT_VIEW.format(patient_id=erased), headers=bearer(mint(fd))).status_code == 404
+    gone = client.post(PATIENT_LABELS, headers=bearer(mint(fd)), json={"clinic_id": str(ids.clinic_a), "patient_ids": [str(erased)]})
+    assert gone.status_code == 200 and gone.json() == {"items": []}
+
+
+def test_a_record_that_cannot_be_decrypted_is_a_fixed_503_with_no_audit_row_and_every_response_is_no_store_errors_included(client, ids):
+    fd = ids.people["front_desk_a"][0]
+
+    async def damaged(conn):
+        pid = await _new_real_patient(conn, ids.clinic_a)
+        await conn.execute("update mpi.patients set dob_ct = $2 where id = $1", pid, b"\x00" * 40)
+        return pid
+
+    pid = _run(_owner(damaged))
+    broken = client.get(PATIENT_VIEW.format(patient_id=pid), headers=bearer(mint(fd)))
+    assert broken.status_code == 503 and broken.json() == {"detail": "this record cannot be shown"} and broken.headers["cache-control"] == "no-store"
+    assert _run(_fetch("select count(*) as n from audit.log where action = 'patient.view' and resource_id = $1", str(pid)))[0]["n"] == 0
+    for response in (
+        client.get(PATIENT_VIEW.format(patient_id=uuid.uuid4()), headers=bearer(mint(fd))),  # 404
+        client.get(PATIENT_VIEW.format(patient_id="nope"), headers=bearer(mint(fd))),  # 422
+        client.get(PATIENT_VIEW.format(patient_id=pid)),  # 401
+        client.post(PATIENT_LABELS, headers=bearer(mint(ids.people["admin_a"][0])), json={"clinic_id": str(ids.clinic_a), "patient_ids": [str(pid)]}),  # 403
+    ):
+        assert response.status_code in (401, 403, 404, 422) and response.headers["cache-control"] == "no-store", response.status_code
+
+
+def test_nurse_and_doctor_label_reads_are_audited_with_their_own_role_and_the_count_only(client, ids):
+    patient = new_real_patient(ids)
+    for who, role in (("nurse_a", "nurse"), ("doctor_a", "doctor")):
+        account = ids.people[who][0]
+        ok = client.post(PATIENT_LABELS, headers=bearer(mint(account)), json={"clinic_id": str(ids.clinic_a), "patient_ids": [str(patient)]})
+        assert ok.status_code == 200
+        rows = _run(_fetch("select actor_role, details from audit.log where action = 'patient.view_labels' and actor_id = $1", account))
+        assert rows and {r["actor_role"] for r in rows} == {role}
 
 
 # ---- message reads: the committed half's behaviour -----------------------------------------------------------------------------------------
