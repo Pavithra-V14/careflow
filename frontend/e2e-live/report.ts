@@ -17,6 +17,36 @@ export interface Call {
   queryNames: string[];
   activeRoleHeaderSent: boolean;
   issues: Issue[];
+  /** Number of rows when the response is a list (`items`); undefined for anything else. A count, never a value. */
+  itemCount?: number;
+  /** Field paths present in the response (names only). */
+  fields?: string[];
+}
+
+/**
+ * Fields the console reads that are NOT in the schema (docs/frontend-backend-requests.md items 2 and 5). The console handles their
+ * absence; the live run says whether the backend has started sending them.
+ */
+export const CONSOLE_READS_BEYOND_SCHEMA: { template: string; path: string }[] = [
+  { template: '/v1/iam/me', path: '$.roles[].clinic_name' },
+  { template: '/v1/iam/me', path: '$.roles[].clinic_origin' },
+  { template: '/v1/iam/me', path: '$.operating_profile' },
+  { template: '/v1/staff/patients/search', path: '$.items[].label' },
+  { template: '/v1/staff/patients/search', path: '$.labels_withheld' },
+  { template: '/v1/staff/patients/search', path: '$.truncated' },
+];
+
+/** Lists that came back with no rows: their item shape was NOT checked, so a clean result for them proves nothing about rows. */
+export function emptyLists(calls: Call[]): string[] {
+  return [...new Set(calls.filter((c) => c.itemCount === 0 && c.status === 200).map((c) => `${c.method} ${c.template}`))];
+}
+
+export function beyondSchema(calls: Call[]): { template: string; path: string; state: string }[] {
+  return CONSOLE_READS_BEYOND_SCHEMA.map((r) => {
+    const made = calls.filter((c) => c.template === r.template && c.status === 200 && c.fields !== undefined);
+    if (made.length === 0) return { ...r, state: 'not called (or an empty response) in this run' };
+    return { ...r, state: made.some((c) => c.fields?.includes(r.path)) ? 'PRESENT' : 'absent' };
+  });
 }
 
 /** Statuses the console shows a fixed message for. A refusal with one of these is the backend working, not a mismatch. */
@@ -66,7 +96,8 @@ export function notExercised(calls: Call[]): string[] {
 export function renderReport(spec: Spec, calls: Call[], mode: string): string {
   const f = findings(spec, calls);
   const errors = f.filter((x) => x.kind !== 'schema note');
-  const rows = calls.map((c) => `| ${c.phase} | ${c.method} | \`${c.template}\` | ${c.status} | ${c.queryNames.join(', ') || '–'} | ${c.method === 'GET' ? 'n/a' : c.hasIdempotencyKey ? 'yes' : 'NO'} | ${c.issues.filter((i) => i.severity === 'error').length} |`);
+  const rows = calls.map((c) => `| ${c.phase} | ${c.method} | \`${c.template}\` | ${c.status} | ${c.queryNames.join(', ') || '–'} | ${c.itemCount ?? '–'} | ${c.method === 'GET' ? 'n/a' : c.hasIdempotencyKey ? 'yes' : 'NO'} | ${c.issues.filter((i) => i.severity === 'error').length} |`);
+  const empty = emptyLists(calls);
   return [
     '# Live run report',
     '',
@@ -78,14 +109,26 @@ export function renderReport(spec: Spec, calls: Call[], mode: string): string {
     '',
     ...(f.length === 0 ? ['None.'] : ['| Kind | Where | Detail |', '|---|---|---|', ...f.map((x) => `| ${x.kind} | \`${x.where}\` | ${x.detail.replaceAll('|', '/')} |`)]),
     '',
+    '## Coverage: lists that came back EMPTY',
+    '',
+    'For these the response had no rows, so the shape of a row was not checked. A clean result here proves nothing about rows; the matching detail screens were not opened either.',
+    '',
+    ...(empty.length === 0 ? ['None: every list had rows.'] : empty.map((x) => `- \`${x}\``)),
+    '',
+    '## Fields the console reads that the schema does not list',
+    '',
+    '| Route | Field | In this run |',
+    '|---|---|---|',
+    ...beyondSchema(calls).map((b) => `| \`${b.template}\` | \`${b.path}\` | ${b.state} |`),
+    '',
     '## Calls this run did not make',
     '',
     ...notExercised(calls).map((x) => `- \`${x}\``),
     '',
     '## Every call recorded',
     '',
-    '| Step | Method | Path | Status | Query names | Key sent | Schema errors |',
-    '|---|---|---|---|---|---|---|',
+    '| Step | Method | Path | Status | Query names | Rows | Key sent | Schema errors |',
+    '|---|---|---|---|---|---|---|---|',
     ...rows,
     '',
   ].join('\n');

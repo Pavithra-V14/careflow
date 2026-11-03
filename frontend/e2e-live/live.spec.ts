@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { checkAgainst, matchTemplate, responseSchema, type Spec } from './schemaCheck';
+import { checkAgainst, fieldPaths, matchTemplate, responseSchema, type Spec } from './schemaCheck';
 import { renderReport, type Call } from './report';
 
 // LIVE integration pass against a RUNNING backend. Run by hand with `npm run e2e:live`; never in CI (the isolation test
@@ -21,6 +21,11 @@ const SUFFIX = LABEL ? `-${LABEL}` : '';
 test.skip(!LIVE, 'live run: use `npm run e2e:live` (never in CI)');
 
 function watch(page: Page, calls: Call[], phase: { current: string }) {
+  // The step a request belongs to is the one showing when it was SENT; a response can arrive after the walk has moved on.
+  const sentDuring = new Map<unknown, string>();
+  page.on('request', (req) => {
+    sentDuring.set(req, phase.current);
+  });
   page.on('response', (res) => {
     void (async () => {
       const url = new URL(res.url());
@@ -30,14 +35,21 @@ function watch(page: Page, calls: Call[], phase: { current: string }) {
       if (method === 'OPTIONS') return;
       const template = matchTemplate(spec, url.pathname) ?? '?';
       let issues: Call['issues'] = [];
+      let itemCount: number | undefined;
+      let fields: string[] | undefined;
       if (res.ok() && template !== '?') {
         const schema = responseSchema(spec, method, template);
         const body: unknown = await res.json().catch(() => undefined);
         if (schema && body !== undefined) issues = checkAgainst(spec, schema, body);
+        if (body !== undefined) {
+          fields = fieldPaths(body);
+          const items = (body as { items?: unknown }).items;
+          if (Array.isArray(items)) itemCount = items.length;
+        }
       }
       const headers = req.headers();
       calls.push({
-        phase: phase.current,
+        phase: sentDuring.get(req) ?? phase.current,
         method,
         template,
         status: res.status(),
@@ -45,6 +57,8 @@ function watch(page: Page, calls: Call[], phase: { current: string }) {
         queryNames: [...url.searchParams.keys()],
         activeRoleHeaderSent: Boolean(headers['x-careflow-active-role']),
         issues,
+        ...(itemCount !== undefined ? { itemCount } : {}),
+        ...(fields ? { fields } : {}),
       });
     })();
   });
@@ -92,40 +106,76 @@ test('walk every screen, read-only, and record each call', async ({ page }) => {
     return true;
   };
 
-  phase.current = 'home (account)';
-  await visit('referrals list', '#/referrals');
-  if (await clickIf('referral detail', page.locator('main tbody a').first())) await page.goBack();
+  // One failing step must not lose the rest of the run: each step is tried on its own, a failure is noted by name only (never
+  // by page content), and the report is written however the walk ends.
+  const incomplete: string[] = [];
+  const step = async (name: string, fn: () => Promise<unknown>) => {
+    try {
+      await fn();
+    } catch {
+      incomplete.push(name);
+    }
+  };
+  const optionalHref = async (locator: ReturnType<Page['locator']>) => ((await locator.count()) > 0 ? await locator.first().getAttribute('href', { timeout: 5000 }) : null);
 
-  await visit('tasks (open)', '#/tasks');
-  for (const status of ['Acknowledged', 'Resolved']) await clickIf(`tasks (${status.toLowerCase()})`, page.getByRole('button', { name: status, exact: true }));
-  await visit('tasks (open) again', '#/tasks');
-  await clickIf('task detail', page.locator('main tbody a').first());
-
-  await visit('patients page (no search: it needs personal data, do it by hand)', '#/patients');
-
-  for (const list of ['providers', 'locations', 'visit-types', 'priority-levels']) {
-    await visit(`scheduling ${list}`, `#/scheduling/${list}`);
-    await clickIf(`scheduling ${list} (inactive)`, page.getByRole('checkbox'));
+  try {
+    phase.current = 'home (account)';
+    await step('referrals', async () => {
+      await visit('referrals list', '#/referrals');
+      if (await clickIf('referral detail', page.locator('main tbody a').first())) await page.goBack();
+    });
+    await step('tasks', async () => {
+      await visit('tasks (open)', '#/tasks');
+      for (const status of ['Acknowledged', 'Resolved']) await clickIf(`tasks (${status.toLowerCase()})`, page.getByRole('button', { name: status, exact: true }));
+      await visit('tasks (open) again', '#/tasks');
+      await clickIf('task detail', page.locator('main tbody a').first());
+    });
+    await step('patients page', () => visit('patients page (no search: it needs personal data, do it by hand)', '#/patients'));
+    for (const list of ['providers', 'locations', 'visit-types', 'priority-levels']) {
+      await step(`scheduling ${list}`, async () => {
+        await visit(`scheduling ${list}`, `#/scheduling/${list}`);
+        await clickIf(`scheduling ${list} (inactive)`, page.getByRole('checkbox'));
+      });
+    }
+    await step('holds', async () => {
+      await visit('scheduling holds (active)', '#/scheduling/holds');
+      for (const status of ['Released', 'Expired', 'Booked']) await clickIf(`holds (${status.toLowerCase()})`, page.getByRole('button', { name: status, exact: true }));
+    });
+    await step('offers', async () => {
+      await visit('scheduling offers', '#/scheduling/offers');
+      const select = page.locator('main select');
+      if ((await select.count()) > 0 && (await select.locator('option').count()) > 1) {
+        phase.current = 'offer draft (read-only)';
+        await select.selectOption({ index: 1 });
+        await page.getByRole('button', { name: /show draft|வரைவைக் காட்டு/i }).click();
+        await settle(page);
+      }
+    });
+    let patientLink: string | null = null;
+    await step('identity merges', async () => {
+      await visit('identity merges', '#/identity/merges');
+      patientLink = await optionalHref(page.locator('main a[href^="#/patients/"]'));
+      if (await clickIf('merge detail', page.locator('main tbody th a').first())) await page.goBack();
+    });
+    await step('identity duplicates', async () => {
+      await visit('identity duplicates', '#/identity/duplicates');
+      await clickIf('duplicates (resolved)', page.getByRole('button', { name: 'Resolved', exact: true }));
+    });
+    if (patientLink) await step('patient record', () => visit('patient record (opened from a merge)', patientLink as string));
+  } finally {
+    // What the shell itself shows (closed words: the role label and the LIVE / TEST / unknown badge), so a clinic_origin the console
+    // does not recognise (the database also allows eval and canary) is visible in the report as "Environment unknown".
+    let shell = '';
+    try {
+      const text = async (sel: string) => ((await page.locator(sel).first().textContent({ timeout: 3000 })) ?? '').replace(/\s+/g, ' ').trim();
+      shell = `role "${await text('.role-badge')}", environment badge "${await text('.env-badge')}", ${await text('.session-bar .profile')}`;
+    } catch {
+      /* the page may already be closed */
+    }
+    const base = incomplete.length === 0 ? 'read-only walk' : `read-only walk; steps that did not complete: ${incomplete.join(', ')}`;
+    save(calls, shell ? `${base}. The shell showed: ${shell}` : base);
   }
-  await visit('scheduling holds (active)', '#/scheduling/holds');
-  for (const status of ['Released', 'Expired', 'Booked']) await clickIf(`holds (${status.toLowerCase()})`, page.getByRole('button', { name: status, exact: true }));
-  await visit('scheduling offers', '#/scheduling/offers');
-  const select = page.locator('main select');
-  if ((await select.count()) > 0 && (await select.locator('option').count()) > 1) {
-    phase.current = 'offer draft (read-only)';
-    await select.selectOption({ index: 1 });
-    await page.getByRole('button', { name: /show draft|வரைவைக் காட்டு/i }).click();
-    await settle(page);
-  }
-
-  await visit('identity merges', '#/identity/merges');
-  const patientLink = await page.locator('main a[href^="#/patients/"]').first().getAttribute('href');
-  if (await clickIf('merge detail', page.locator('main tbody th a').first())) await page.goBack();
-  await visit('identity duplicates', '#/identity/duplicates');
-  await clickIf('duplicates (resolved)', page.getByRole('button', { name: 'Resolved', exact: true }));
-  if (patientLink) await visit('patient record (opened from a merge)', patientLink);
-
-  save(calls, 'read-only walk');
+  if (incomplete.length > 0) console.log(`>>> Steps that did not complete (nothing from the page is recorded): ${incomplete.join(', ')}`);
 
   // The walk must never change anything. A write here means the recorder or a screen did something it should not.
   const writes = calls.filter((c) => !['GET', 'HEAD'].includes(c.method));

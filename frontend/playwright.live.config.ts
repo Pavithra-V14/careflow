@@ -11,5 +11,6 @@ export default defineConfig({
   retries: 0,
   timeout: 20 * 60_000,
   reporter: [['list']],
-  use: { baseURL: process.env.LIVE_BASE_URL ?? 'http://127.0.0.1:5173', browserName: 'chromium', headless: false },
+  // No action may wait forever: a missing element fails its step in 15 seconds instead of hanging the run.
+  use: { actionTimeout: 15_000, navigationTimeout: 30_000, baseURL: process.env.LIVE_BASE_URL ?? 'http://127.0.0.1:5173', browserName: 'chromium', headless: false },
 });

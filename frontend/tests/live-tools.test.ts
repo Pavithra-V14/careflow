@@ -1,8 +1,8 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { checkAgainst, matchTemplate, responseSchema, type Spec } from '../e2e-live/schemaCheck';
-import { findings, notExercised, renderReport, type Call } from '../e2e-live/report';
+import { checkAgainst, fieldPaths, matchTemplate, responseSchema, type Spec } from '../e2e-live/schemaCheck';
+import { beyondSchema, emptyLists, findings, notExercised, renderReport, type Call } from '../e2e-live/report';
 import { OPERATIONS } from '../src/shared/api/client';
 
 // Tests of the LIVE-run tooling itself (e2e-live/). The live run is manual and never in CI, so what it relies on must be
@@ -99,6 +99,29 @@ describe('live report', () => {
     const text = renderReport(spec, [call({ issues: [{ path: '$.x', problem: 'required field is missing', severity: 'error' }] })], 'test');
     expect(text).toContain('1 finding(s)');
     expect(text).toContain('No values are recorded');
+  });
+});
+
+describe('live report coverage', () => {
+  it('lists field paths and never a value', () => {
+    const paths = fieldPaths({ roles: [{ clinic_id: 'PLANTED-ID', clinic_name: 'PLANTED-NAME' }], operating_profile: 'PLANTED-PROFILE' });
+    expect(paths).toEqual(expect.arrayContaining(['$.roles', '$.roles[].clinic_id', '$.roles[].clinic_name', '$.operating_profile']));
+    expect(JSON.stringify(paths)).not.toContain('PLANTED');
+  });
+
+  it('says which lists came back empty, because their rows were never checked', () => {
+    const calls = [call({ template: '/v1/staff/referrals', itemCount: 0 }), call({ template: '/v1/staff/review-tasks', itemCount: 3 }), call({ template: '/v1/staff/scheduling/holds' })];
+    expect(emptyLists(calls)).toEqual(['GET /v1/staff/referrals']);
+    expect(renderReport(spec, calls, 'test')).toContain('lists that came back EMPTY');
+  });
+
+  it('reports whether the fields the console reads beyond the schema are present, absent, or untested', () => {
+    const me = call({ template: '/v1/iam/me', fields: ['$.account_id', '$.roles[].clinic_id', '$.roles[].clinic_name'] });
+    const state = (path: string) => beyondSchema([me]).find((b) => b.path === path)?.state;
+    expect(state('$.roles[].clinic_name')).toBe('PRESENT');
+    expect(state('$.roles[].clinic_origin')).toBe('absent');
+    expect(state('$.operating_profile')).toBe('absent');
+    expect(state('$.items[].label')).toMatch(/not called/); // search was not run
   });
 });
 

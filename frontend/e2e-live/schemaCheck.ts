@@ -100,3 +100,20 @@ export function matchTemplate(spec: Spec, concretePath: string): string | undefi
     return t.length === parts.length && t.every((seg, i) => (seg.startsWith('{') && seg.endsWith('}') ? (parts[i] ?? '').length > 0 : seg === parts[i]));
   });
 }
+
+/**
+ * The field PATHS present in a response (names only, arrays shown as `[]`), to see which optional fields a backend really sends.
+ * Never a value. Bounded so a large response cannot make a large report.
+ */
+export function fieldPaths(value: unknown, prefix = '$', depth = 0, out = new Set<string>()): string[] {
+  if (out.size >= 120 || depth > 5) return [...out];
+  if (Array.isArray(value)) {
+    for (const item of value.slice(0, 20)) fieldPaths(item, `${prefix}[]`, depth + 1, out);
+  } else if (value !== null && typeof value === 'object') {
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out.add(`${prefix}.${k}`);
+      fieldPaths(v, `${prefix}.${k}`, depth + 1, out);
+    }
+  }
+  return [...out];
+}
