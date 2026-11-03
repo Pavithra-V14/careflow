@@ -127,7 +127,8 @@ test('walk every screen, read-only, and record each call', async ({ page }) => {
     await step('tasks', async () => {
       await visit('tasks (open)', '#/tasks');
       for (const status of ['Acknowledged', 'Resolved']) await clickIf(`tasks (${status.toLowerCase()})`, page.getByRole('button', { name: status, exact: true }));
-      await visit('tasks (open) again', '#/tasks');
+      // The hash is already #/tasks, so visiting it again would leave the Resolved filter showing: switch back to Open instead.
+      await clickIf('tasks (open) again', page.getByRole('button', { name: 'Open', exact: true }));
       await clickIf('task detail', page.locator('main tbody a').first());
     });
     await step('patients page', () => visit('patients page (no search: it needs personal data, do it by hand)', '#/patients'));
