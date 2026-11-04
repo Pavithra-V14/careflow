@@ -212,10 +212,14 @@ jobs:
               tests/test_rls_child_tables_live.py
               tests/test_rules_live.py
               tests/test_phase2_e2e_live.py
-          - shard: 5  # the ACTIVE ROLE (docs/design/active-role.md): the database tests (never committed) and the header dimension of every staff route through the role matrix (its own seeded world). Estimated 15-25 min: measure on its first run.
-            matrix_part: ""
+          - shard: 5  # the ACTIVE ROLE (docs/design/active-role.md): the database tests (never committed) and PART 1 of the header dimension of every staff route (its own seeded world). The whole file measured 58.5 min on run 41652369869 (too close to the 60-minute timeout), so it is split in two parts like the role matrix: expect about 30 min each.
+            matrix_part: "1/2"
             files: >-
               tests/test_active_role_live.py
+              tests/test_active_role_matrix_live.py
+          - shard: 6  # PART 2 of the header dimension (see shard 5)
+            matrix_part: "2/2"
+            files: >-
               tests/test_active_role_matrix_live.py
     env:
       CAREFLOW_ENV: ci
