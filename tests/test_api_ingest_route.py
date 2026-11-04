@@ -102,7 +102,7 @@ def make_client(*, conn=None, vault="default", settings_kwargs=None, authenticat
         return {"sub": str(uuid.uuid4()), "role": "authenticated"}
 
     app = create_app(
-        Settings(supabase_url=PROJECT, database_url_app="postgresql://unused", **(settings_kwargs or {})),
+        Settings(_env_file=None, supabase_url=PROJECT, database_url_app="postgresql://unused", **(settings_kwargs or {})),
         jwks=JWKSClient(PROJECT + "/auth/v1/.well-known/jwks.json"), engine=object(),  # type: ignore[arg-type]
         vault=_vault() if vault == "default" else vault,
     )
@@ -329,7 +329,7 @@ def test_one_loaded_version_needs_no_configuration():
 
 def test_the_active_key_version_can_be_set_from_the_environment(monkeypatch):
     monkeypatch.setenv("CAREFLOW_ACTIVE_KEY_VERSION", "2")
-    assert Settings(supabase_url=PROJECT, database_url_app="postgresql://x").active_key_version == 2
+    assert Settings(_env_file=None, supabase_url=PROJECT, database_url_app="postgresql://x").active_key_version == 2
 
 
 # ---- structure -----------------------------------------------------------------------------------------------------------------------------
@@ -350,7 +350,7 @@ def test_the_request_model_forbids_unknown_fields_so_origin_cannot_be_supplied()
 
 
 def test_the_route_is_a_post_with_the_required_idempotency_header_in_the_schema():
-    spec = create_app(Settings(supabase_url=PROJECT, database_url_app="postgresql://unused")).openapi()
+    spec = create_app(Settings(_env_file=None, supabase_url=PROJECT, database_url_app="postgresql://unused")).openapi()
     op = spec["paths"]["/v1/staff/patients"]["post"]
     header = [p for p in op["parameters"] if p["in"] == "header"]
     assert [p["name"] for p in header] == ["X-Idempotency-Key"] and header[0]["required"] is True

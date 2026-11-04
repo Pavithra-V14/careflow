@@ -148,7 +148,7 @@ async def world():
         await raw(conn, "select set_config('request.jwt.claims', '', true);")
 
         app = create_app(
-            Settings(supabase_url=PROJECT, database_url_app="postgresql://unused"), jwks=fake_jwks_client(), engine=object(),  # type: ignore[arg-type]
+            Settings(_env_file=None, supabase_url=PROJECT, database_url_app="postgresql://unused"), jwks=fake_jwks_client(), engine=object(),  # type: ignore[arg-type]
             vault=vault,
         )
 

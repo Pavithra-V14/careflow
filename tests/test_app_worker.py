@@ -31,7 +31,7 @@ def client(monkeypatch, started, **settings):
 
     monkeypatch.setattr(app_module, "worker_loop", fake_loop)
     app = create_app(
-        Settings(supabase_url=PROJECT, database_url_app="postgresql://unused", **settings),
+        Settings(_env_file=None, supabase_url=PROJECT, database_url_app="postgresql://unused", **settings),
         jwks=JWKSClient(PROJECT + "/auth/v1/.well-known/jwks.json"), engine=object(),  # type: ignore[arg-type]
     )
     return TestClient(app, raise_server_exceptions=False), app
