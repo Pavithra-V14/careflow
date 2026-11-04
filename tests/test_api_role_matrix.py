@@ -879,6 +879,42 @@ def message_read_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(), None)
 
 
+# ---- GET /v1/staff/messages/threads and /threads/{thread_id}/messages: the COMMITTED half of a split matrix --------------------------------------------------------
+#
+# These list threads and message HEADERS (never a body). Who sees which topic needs stored messages (append-only), so that half is in tests/test_api_read_message_live.py. This half runs on
+# the real pooler role with nothing stored: the readers (front desk, nurse, doctor) get an empty list or the one fixed 404 for an unknown thread, every other identity the one fixed 403, and the
+# authentication and validation failures are pinned.
+
+THREADS = "/v1/staff/messages/threads"
+THREAD_HEADERS = "/v1/staff/messages/threads/{thread_id}/messages"
+THREAD_READERS = ("front_desk_a", "nurse_a", "doctor_a", "multi", "front_desk_b")
+
+
+def thread_list_cases(ids) -> list[tuple]:
+    fixed403 = lambda b: b == {"detail": "your role may not read this"}
+    cases = [_case(ids, f"{who} lists threads: none exist, an empty page", who, 200, THREADS, key=None, body=_page(ids, check=lambda items: items == [])) for who in THREAD_READERS]
+    denied = [p for p in ids.people if p not in THREAD_READERS]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, THREADS, key=None, body=fixed403) for p in denied]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, THREADS, key=None, body=fixed403))
+    cases += [
+        _case(ids, "an unknown topic is rejected", "front_desk_a", 422, THREADS + "?topic=bogus", key=None, body=_fixed(422)),
+        _case(ids, "limit=0 is rejected", "front_desk_a", 422, THREADS + "?limit=0", key=None, body=_fixed(422)),
+        _case(ids, "a patient id that is not a uuid is rejected", "front_desk_a", 422, THREADS + "?patient_id=nope", key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, THREADS, None)
+
+
+def thread_headers_cases(ids) -> list[tuple]:
+    path = lambda: THREAD_HEADERS.format(thread_id=uuid.uuid4())
+    fixed403 = lambda b: b == {"detail": "your role may not read this"}
+    cases = [_case(ids, f"{who} asking for an unknown thread gets the one fixed 404", who, 404, path(), key=None, body=_fixed(404)) for who in THREAD_READERS]
+    denied = [p for p in ids.people if p not in THREAD_READERS]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path(), key=None, body=fixed403) for p in denied]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, path(), key=None, body=fixed403))
+    cases.append(_case(ids, "a thread id that is not a uuid is rejected", "front_desk_a", 422, THREAD_HEADERS.format(thread_id="nope"), key=None, body=_fixed(422)))
+    return cases + _unauthenticated(ids, path(), None)
+
+
 # ---- POST /v1/staff/referrals/{document_id}/run and /review: the COMMITTED half of a split matrix --------------------------------------------------------
 #
 # A run needs a registered referral document, and docs.documents (like the checkpoint and decision tables a run writes) is append-only for every role, so a committed fixture could
@@ -1872,6 +1908,8 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", PATIENT_VIEW): patient_view_cases,
     ("POST", PATIENT_LABELS): patient_labels_cases,
     ("GET", READ): message_read_cases,
+    ("GET", THREADS): thread_list_cases,
+    ("GET", THREAD_HEADERS): thread_headers_cases,
     ("POST", RUN_REFERRAL): referral_run_cases,
     ("POST", REVIEW_REFERRAL): referral_review_cases,
 }
@@ -1894,6 +1932,8 @@ SEPARATE_HARNESS: dict[tuple[str, str], str] = {
 # route MUST also be in MATRIX, and the dedicated half must cover every required role on every topic.
 SPLIT_HARNESS: dict[tuple[str, str], str] = {
     ("GET", READ): "test_api_read_message_live.py",
+    ("GET", THREADS): "test_api_read_message_live.py",
+    ("GET", THREAD_HEADERS): "test_api_read_message_live.py",
     # Both Front Door run routes: the committed half above (random document ids: 401, 404, 422) and the dedicated half (existing documents, the worker, the whole run).
     ("POST", RUN_REFERRAL): "test_api_referrals_live.py",
     ("POST", REVIEW_REFERRAL): "test_api_referrals_live.py",

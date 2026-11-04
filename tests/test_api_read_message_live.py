@@ -60,7 +60,16 @@ READS = {
 # the role the audit row names for a successful read
 AUDITED_AS = {"nurse_a": "nurse", "doctor_a": "doctor", "fd_a": "front_desk", "multi": "nurse"}
 # Read by tests/test_api_role_matrix.py::test_split_routes_have_both_halves_and_the_dedicated_half_covers_every_role_on_every_topic
-COVERED_GRID = {("GET", "/v1/staff/messages/{message_id}"): {who: tuple(TOPICS) for who in READS}}
+COVERED_GRID = {
+    ("GET", "/v1/staff/messages/{message_id}"): {who: tuple(TOPICS) for who in READS},
+    # the two list routes: the same roles on the same three topics (who sees which thread, and which headers)
+    ("GET", "/v1/staff/messages/threads"): {who: tuple(TOPICS) for who in READS},
+    ("GET", "/v1/staff/messages/threads/{thread_id}/messages"): {who: tuple(TOPICS) for who in READS},
+}
+THREADS = "/v1/staff/messages/threads"
+HEADERS = "/v1/staff/messages/threads/{}/messages"
+# a role that holds front desk, nurse or doctor somewhere may use the list routes (RLS decides which topics); everyone else is 403
+LIST_READERS = {"nurse_a", "doctor_a", "fd_a", "multi", "nurse_b", "fd_b"}
 
 
 async def get(w, who, message, *, token=None):
@@ -221,6 +230,85 @@ async def test_a_refused_read_logs_one_line_of_ids_only(w, caplog):
     await get(w, "fd_a", w.messages["care"])
     lines = [x.getMessage() for x in caplog.records if x.name == "careflow.app" and x.levelno == 30]
     assert len(lines) == 1 and str(w.messages["care"]) in lines[0] and str(w.ids["fd_a"]) in lines[0] and PRIVATE not in caplog.text
+
+
+# ---- the list routes: threads, and the headers of one thread (no bodies) ---------------------------------------------------------------------------------
+
+
+async def list_get(w, who, path, **params):
+    return await w.client.get(path, headers=bearer(mint(w.ids[who])), params=params)
+
+
+@pytest.mark.parametrize("who", list(READS))
+async def test_who_sees_which_thread_and_which_headers(w, who):
+    r = await list_get(w, who, THREADS)
+    if who not in LIST_READERS:
+        assert (r.status_code, r.json()) == (403, {"detail": "your role may not read this"}), who
+    else:
+        assert r.status_code == 200, (who, r.text)
+        seen = {i["thread_id"] for i in r.json()["items"]}
+        for topic in TOPICS:
+            assert (str(w.thread[topic]) in seen) is (topic in READS[who]), (who, topic)
+    for topic in TOPICS:
+        h = await list_get(w, who, HEADERS.format(w.thread[topic]))
+        if who not in LIST_READERS:
+            assert (h.status_code, h.json()) == (403, {"detail": "your role may not read this"}), (who, topic)
+        elif topic in READS[who]:
+            assert h.status_code == 200 and h.json()["items"], (who, topic, h.text)
+        else:
+            assert (h.status_code, h.json()) == (404, {"detail": "not found"}), (who, topic)  # the same 404 as an unknown thread
+
+
+async def test_a_header_carries_no_text_no_ciphertext_and_no_key_and_the_erased_one_says_so(w, caplog):
+    caplog.set_level("DEBUG")
+    r = await list_get(w, "nurse_a", HEADERS.format(w.thread["care"]))
+    assert r.status_code == 200 and "cache-control" not in r.headers
+    items = r.json()["items"]
+    assert {i["message_id"] for i in items} == {str(w.messages[k]) for k in ("care", "tampered", "erased", "other_key")}
+    assert all(set(i) == {"message_id", "thread_id", "topic", "sender_kind", "created_at", "erased"} for i in items)
+    assert {i["message_id"]: i["erased"] for i in items}[str(w.messages["erased"])] is True
+    assert sum(i["erased"] for i in items) == 1
+    assert PRIVATE not in r.text and PRIVATE not in caplog.text and "body" not in r.text
+    assert [i["created_at"] for i in items] == sorted((i["created_at"] for i in items), reverse=True)  # newest first
+
+
+async def test_a_thread_list_counts_messages_filters_pages_and_reads_write_no_audit_row(w):
+    before = len(await rows(w, "select 1 from audit.log where actor_id = :a", a=w.ids["nurse_a"]))
+    everything = (await list_get(w, "nurse_a", THREADS)).json()
+    assert {i["thread_id"] for i in everything["items"]} == {str(w.thread[t]) for t in TOPICS} and everything["has_more"] is False
+    by_topic = {i["topic"]: i for i in everything["items"]}
+    assert (by_topic["care"]["message_count"], by_topic["appointments"]["message_count"], by_topic["safety"]["message_count"]) == (4, 1, 1)
+    assert all(i["last_message_at"] is not None and i["status"] == "open" for i in everything["items"])
+    patient = by_topic["care"]["patient_id"]
+    assert {i["thread_id"] for i in (await list_get(w, "nurse_a", THREADS, patient_id=patient)).json()["items"]} == {str(w.thread[t]) for t in TOPICS}
+    assert (await list_get(w, "nurse_a", THREADS, patient_id=str(uuid.uuid4()))).json()["items"] == []
+    only = (await list_get(w, "nurse_a", THREADS, topic="safety")).json()["items"]
+    assert [i["thread_id"] for i in only] == [str(w.thread["safety"])]
+    page = (await list_get(w, "nurse_a", THREADS, limit=2)).json()
+    assert len(page["items"]) == 2 and page["has_more"] is True and page["limit"] == 2
+    older = (await list_get(w, "nurse_a", THREADS, before=page["items"][-1]["created_at"])).json()
+    assert {i["thread_id"] for i in page["items"]}.isdisjoint(i["thread_id"] for i in older["items"])
+    assert (await list_get(w, "nurse_a", THREADS, topic="bogus")).status_code == 422 and (await list_get(w, "nurse_a", THREADS, limit=0)).status_code == 422
+    assert len(await rows(w, "select 1 from audit.log where actor_id = :a", a=w.ids["nurse_a"])) == before  # headers hold no text, so reading them is not an audit event
+
+
+async def test_another_clinics_staff_see_no_thread_and_an_unknown_thread_is_the_same_404(w):
+    assert (await list_get(w, "nurse_b", THREADS)).json()["items"] == []
+    unknown = await list_get(w, "nurse_a", HEADERS.format(uuid.uuid4()))
+    foreign = await list_get(w, "nurse_b", HEADERS.format(w.thread["care"]))
+    assert {(r.status_code, r.text) for r in (unknown, foreign)} == {(404, '{"detail":"not found"}')}
+    assert (await list_get(w, "nurse_a", HEADERS.format("nope"))).status_code == 422
+
+
+async def test_the_list_routes_need_authentication_first(w):
+    sub = w.ids["nurse_a"]
+    for path in (THREADS, HEADERS.format(w.thread["care"])):
+        for label, headers in (
+            ("no header", {}), ("garbage", bearer("not.a.jwt")), ("expired", bearer(mint(sub, exp=int(time.time()) - 3600))),
+            ("other key", bearer(mint(sub, key=ATTACKER))), ("anonymous role", bearer(mint(sub, role="anon"))),
+        ):
+            r = await w.client.get(path, headers=headers)
+            assert r.status_code == 401 and PRIVATE not in r.text, (path, label)
 
 
 async def test_there_is_no_route_level_role_gate_a_database_role_change_applies_on_the_next_request(w):
