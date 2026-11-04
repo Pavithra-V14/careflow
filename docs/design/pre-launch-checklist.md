@@ -55,5 +55,22 @@ Items 1 to 18 keep the numbers of `phase2-status.md` ("PRE-LAUNCH BLOCKERS"); 19
 | 33 | Appendix B items depended on in a non-test path were each verified by a real call (step-up claim shape: recorded 2026-10-30 on a dev token; storage signed-upload spike done; hosted provider calls verified for the synthetic demo only) | IN PROGRESS | E | re-verify any remaining Appendix B item before it is depended on |
 | 34 | Voice, Care Journey, Visit Readiness, care-gap panel (flagged phases) | OPEN, not started | C + V | clinician content; a voice engine approval; phase order |
 
+## E. Added from the 2026-11-04 whole-codebase review (`review-2026-11-04.md`)
+| # | Item | Status | Owner | What closes it |
+|---|---|---|---|---|
+| 35 | Merge state machine: one front-desk user can re-activate an unmerged merge with no second approval and rebuild chains (review H1) | OPEN | E (new migration, reviewer pass) | a status-transition trigger and a flat-link re-check on activation; a live test |
+| 36 | Front desk holds broad UPDATE on patient ciphertext columns and `erased_at`, on identity tokens and on match candidates, unaudited (review M1) | OPEN | E + O (a grant change needs sign-off) | column-level grants; an audited erasure path |
+| 37 | A merge is not tied to the reviewed candidate pair (review M2) | OPEN | E (migration) | a constraint tying candidate, master and subordinate |
+| 38 | `audit.log` insert policy lets any app session forge rows for any clinic; a pre-planted key makes `write_audit` return silently (review M3) | OPEN | E + O | require a staff role of the row's clinic; scope the key |
+| 39 | Staff can insert arbitrary queue rows and read `payload` / `last_error` (review M4) | OPEN | E + O | narrow the insert grant; prove tracebacks are scrubbed |
+| 40 | Append-only triggers do not fire under `session_replication_role = replica` (restore, logical replication); several ledgers are not delete-proof against the owner (review L2, L3) | OPEN | E | `ENABLE ALWAYS` on the triggers; decide the owner-delete rule before the restore drill (item 28) |
+| 41 | No instruction-injection classifier and no PII masking before retrieval on the Front Door path (spec 11.1, 11.3) | OPEN | E + C | build and gate it; it blocks the `injection_undetected` hard gate and any hosted retriever on patient text |
+| 42 | Outbox and the event-to-job supervisor have no producer; expired holds are never swept in production; referral intake is manual (spec 7.4) | OPEN | E (design note first) | decide the producers; schedule the sweeps |
+| 43 | Tamil strings are unreviewed (419 of 419), including the emergency banner | OPEN | C + O | a reviewed `ta-reviewed.json`, the emergency banner first |
+| 44 | Staff MFA is enforced only in the frontend; the database does not require `aal2` on non-merge staff routes | OPEN (recorded) | O | decide whether the policy is needed before launch |
+| 45 | Slot, provider and location creation has no route | OPEN (recorded) | O | decide who creates them and how (needs a design note) |
+| 46 | No Python dependency vulnerability scan in CI (spec 21); no visual-regression tests (spec 19) | OPEN | E (a scanner is an external tool: ask first) | choose the tool |
+| 47 | The safety-net second opinion and its fail-closed path are unbuilt (spec 5.2, 16.2); it can only escalate, so rules-first is intact | OPEN | E + C | design with the clinicians |
+
 ## How to use this file
 When an item changes, change it HERE and in its source in the same commit. A new pre-launch blocker is added here first. Do not close an item on an assertion: put the evidence (a merged PR, a recorded spike, a signed sheet entry) in the "What closes it" cell.
