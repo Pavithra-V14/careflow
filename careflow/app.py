@@ -1112,6 +1112,7 @@ class ReviewTaskOut(_Out):
     acknowledged_by: uuid.UUID | None
     acknowledged_at: datetime | None
     resolved_at: datetime | None
+    resolvable: bool  # True when the resolve route may close this kind (review_tasks.RESOLVABLE_KINDS); the console reads this instead of carrying its own copy of the list. The server still decides: a 409 stays a 409.
 
 
 class ReviewTaskDetailOut(ReviewTaskOut):
@@ -1136,7 +1137,7 @@ class ReviewTaskTransitionOut(_Out):
 def _task_out(r: review_tasks.TaskRow) -> dict[str, Any]:
     return {
         "task_id": r.id, "clinic_id": r.clinic_id, "kind": r.kind, "priority": r.priority, "assigned_role": r.assigned_role, "status": r.status, "created_at": r.created_at,
-        "acknowledged_by": r.acknowledged_by, "acknowledged_at": r.acknowledged_at, "resolved_at": r.resolved_at,
+        "acknowledged_by": r.acknowledged_by, "acknowledged_at": r.acknowledged_at, "resolved_at": r.resolved_at, "resolvable": r.kind in review_tasks.RESOLVABLE_KINDS,
     }
 
 

@@ -2315,6 +2315,10 @@
             "title": "Provenance",
             "type": "object"
           },
+          "resolvable": {
+            "title": "Resolvable",
+            "type": "boolean"
+          },
           "resolved_at": {
             "anyOf": [
               {
@@ -2357,6 +2361,7 @@
           "acknowledged_by",
           "acknowledged_at",
           "resolved_at",
+          "resolvable",
           "source_message_id",
           "provenance"
         ],
@@ -2449,6 +2454,10 @@
             "title": "Priority",
             "type": "string"
           },
+          "resolvable": {
+            "title": "Resolvable",
+            "type": "boolean"
+          },
           "resolved_at": {
             "anyOf": [
               {
@@ -2486,7 +2495,8 @@
           "created_at",
           "acknowledged_by",
           "acknowledged_at",
-          "resolved_at"
+          "resolved_at",
+          "resolvable"
         ],
         "title": "ReviewTaskOut",
         "type": "object"
