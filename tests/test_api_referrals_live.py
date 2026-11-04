@@ -53,7 +53,7 @@ from careflow.triage_store import (
     SqlReviewRecorder,
     SqlTriageProposer,
 )
-from tests.db_helpers import ensure_app_role_sa
+from tests.db_helpers import ensure_app_role_sa, without_scope
 from tests.needles import NEEDLES, assert_not_leaked
 from tests.test_api_role_matrix import ATTACKER, PROJECT, bearer, fake_jwks_client, mint
 
@@ -513,6 +513,7 @@ async def test_a_recorded_review_decision_writes_exactly_one_audit_row_as_the_re
     assert ok.status_code == 200 and ok.json()["replayed"] is False
     ((actor, role, action, rtype, rid, details, clinic),) = await rows(w, audit, d=str(doc))
     assert (actor, role, action, rtype, rid, clinic) == (w.ids["nurse_a"], "nurse", "referral.review_decision", "document", str(doc), w.a)
+    details = without_scope(details)
     assert details == {"decision": "approve"}  # an id-free closed word: no name, no date, no letter text
     assert_not_leaked(str(details), label="the audit details")
     again = await post(w, "nurse_a", REVIEW.format(doc), json={"decision": "approve"}, key="audit-review-1")

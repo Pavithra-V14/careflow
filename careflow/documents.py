@@ -221,17 +221,9 @@ class DocumentIntake:
 
         # Authorise BEFORE touching storage, so a caller who may not register here cannot even make the server look at (or delete) an object.
         # Row-level security remains the real enforcement; this keeps a refused caller away from storage.
-        allowed = (
-            await conn.execute(
-                text(
-                    "select 1 from iam.staff_roles sr join iam.accounts a on a.id = sr.account_id "
-                    "where sr.account_id = :u and sr.clinic_id = :c and sr.role in ('front_desk', 'nurse') and sr.revoked_at is null "
-                    "and a.status = 'active' and a.account_type = 'staff'"
-                ),
-                {"u": registered_by, "c": clinic_id},
-            )
-        ).first()
-        if allowed is None:
+        # Through the RLS helper (migration 0028): the caller is the signed-in account (auth.uid()), and an active-role header narrows it.
+        allowed = (await conn.execute(text("select iam.has_clinic_role(:c, array['front_desk', 'nurse'])"), {"c": clinic_id})).scalar()
+        if not allowed:
             raise NotPermitted("only front desk and nurse of the clinic may register documents")
 
         prior = await self._existing(conn, clinic_id, key)

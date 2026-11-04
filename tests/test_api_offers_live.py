@@ -10,7 +10,6 @@ What it does not cover (same documented exception as the screen harness, docs/de
 """
 
 import base64
-import json
 import os
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -35,7 +34,7 @@ from careflow.app import (
 from careflow.crypto import DemographicVault
 from careflow.db import set_request_claims
 from careflow.scheduling_agent import SchedulingSettings
-from tests.db_helpers import ensure_app_role_sa
+from tests.db_helpers import ensure_app_role_sa, without_scope
 from tests.test_api_role_matrix import PROJECT, bearer, fake_jwks_client, mint
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -187,7 +186,7 @@ async def test_a_send_holds_the_slot_for_the_candidate_and_records_the_template_
     assert (msg.topic, msg.sender_kind, msg.recorded_by) == ("appointments", "staff", w.ids["fd_a"]) and TEMPLATE.encode() not in bytes(msg.body_ct)
     (audit,) = await rows(w, "select actor_id, actor_role, details, clinic_id from audit.log where resource_type = 'offer' and resource_id = :r and action = 'offer.send'", r=ok.json()["hold_id"])
     assert (audit.actor_id, audit.actor_role, audit.clinic_id) == (w.ids["fd_a"], "front_desk", w.a)
-    details = json.loads(audit.details) if isinstance(audit.details, str) else audit.details
+    details = without_scope(audit.details)
     assert details == {"slot_id": str(w.slots[0]), "patient_id": str(w.top), "replayed": False}
     assert len(await rows(w, "select 1 from audit.log where resource_id = :r and action = 'offer.send'", r=ok.json()["hold_id"])) == 1  # the replay wrote no second row
 

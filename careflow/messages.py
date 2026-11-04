@@ -224,12 +224,10 @@ async def read_stored_message(conn: AsyncConnection, vault: DemographicVault, me
         for r in (
             await conn.execute(
                 text(
-                    "select sr.role from iam.staff_roles sr join iam.accounts a on a.id = sr.account_id "
-                    "where sr.account_id = :u and sr.clinic_id = :c and sr.revoked_at is null "
-                    "and a.status = 'active' and a.account_type = 'staff' "
-                    "and (sr.role in ('nurse', 'doctor') or (sr.role = 'front_desk' and cast(:t as text) in ('appointments', 'safety')))"
+                    "select r from unnest(iam.effective_roles(:c)) as r "
+                    "where (r in ('nurse', 'doctor') or (r = 'front_desk' and cast(:t as text) in ('appointments', 'safety')))"
                 ),
-                {"u": actor_id, "c": row.clinic_id, "t": row.topic},
+                {"c": row.clinic_id, "t": row.topic},
             )
         ).all()
     }
@@ -245,7 +243,7 @@ async def read_stored_message(conn: AsyncConnection, vault: DemographicVault, me
     await conn.execute(
         text(
             "insert into audit.log (origin, clinic_id, actor_id, actor_role, action, resource_type, resource_id, details, idempotency_key) "
-            "values (:o, :c, :a, :r, 'message.read', 'msg.messages', :m, cast(:d as jsonb), :k)"
+            "values (:o, :c, :a, :r, 'message.read', 'msg.messages', :m, cast(:d as jsonb) || jsonb_build_object('role_scope', iam.role_scope()), :k)"
         ),
         {
             "o": row.origin, "c": row.clinic_id, "a": actor_id, "r": role, "m": str(row.id),

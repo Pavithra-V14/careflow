@@ -27,6 +27,7 @@ missing.
 
 import asyncio
 import contextlib
+import json
 import logging
 import os
 import time
@@ -60,6 +61,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from careflow import (
+    active_role,
     demo_phase3,
     identity,
     mpi,
@@ -200,18 +202,58 @@ async def verified_claims(
         raise HTTPException(status_code=503, detail="authentication temporarily unavailable") from None
 
 
-async def db_conn(request: Request, claims: dict[str, Any] = Depends(verified_claims)) -> AsyncIterator[AsyncConnection]:
+async def active_role_request(request: Request, claims: dict[str, Any] = Depends(verified_claims)) -> active_role.ActiveRole | None:
+    """The optional X-CareFlow-Active-Role header, parsed strictly with NO database work (docs/design/active-role.md). Authentication comes first (401), then this syntax check (the one fixed 403), then
+    the step-up check, then the database. Absent header: None (every live grant counts, as before)."""
+    try:
+        return active_role.parse(request.headers.getlist(active_role.HEADER))
+    except active_role.ActiveRoleRefused as exc:
+        log.info("active role refused: %s", exc.reason)  # a reason CODE; never the header value
+        raise _active_role_refusal() from None
+
+
+def _active_role_refusal() -> HTTPException:
+    return HTTPException(status_code=active_role.REFUSAL_STATUS, detail=active_role.REFUSAL_BODY["detail"])
+
+
+async def _begin_request(conn: AsyncConnection, claims: dict[str, Any], active: active_role.ActiveRole | None) -> None:
+    """First statement(s) of the request's transaction. Any `careflow_active` in the token is dropped. With an accepted header, ONE statement sets the claims and asks the database whether the caller holds
+    that grant LIVE (iam.active_grant_ok; its argument is the set_config call, so the claims are in force before the check runs): no extra round trip. A 'no' is the one fixed 403 and the transaction rolls back."""
+    scoped = active_role.claims_with_active(claims, active)
+    if active is None:
+        await set_request_claims(conn, scoped)
+        return
+    ok = (await conn.execute(text("select iam.active_grant_ok(set_config('request.jwt.claims', :c, true))"), {"c": json.dumps(scoped)})).scalar()
+    if ok is not True:
+        log.info("active role refused: not_held")
+        raise _active_role_refusal()
+
+
+async def db_conn(
+    request: Request, claims: dict[str, Any] = Depends(verified_claims), active: active_role.ActiveRole | None = Depends(active_role_request)
+) -> AsyncIterator[AsyncConnection]:
     engine: AsyncEngine = request.app.state.engine
     async with engine.connect() as conn, conn.begin():
-        await set_request_claims(conn, claims)  # first statement of the transaction, before any query
+        await _begin_request(conn, claims, active)  # before any query
+        yield conn
+
+
+async def db_conn_all_grants(request: Request, claims: dict[str, Any] = Depends(verified_claims)) -> AsyncIterator[AsyncConnection]:
+    """Like db_conn but IGNORING the active-role header (GET /v1/iam/me only: the console needs every grant to offer its picker, and /me must keep working when its remembered role was revoked)."""
+    engine: AsyncEngine = request.app.state.engine
+    async with engine.connect() as conn, conn.begin():
+        await _begin_request(conn, claims, None)
         yield conn
 
 
 # Commit before the response goes out (see the lifecycle note above).
 TxConn = Annotated[AsyncConnection, Depends(db_conn, scope="function")]
+TxConnAllGrants = Annotated[AsyncConnection, Depends(db_conn_all_grants, scope="function")]
 
 
-async def require_step_up(request: Request, claims: dict[str, Any] = Depends(verified_claims)) -> None:
+async def require_step_up(
+    request: Request, claims: dict[str, Any] = Depends(verified_claims), _active: active_role.ActiveRole | None = Depends(active_role_request)
+) -> None:
     """Step-up re-authentication (BUILD-SPEC 18.1): a second factor verified within CAREFLOW_STEP_UP_MAX_AGE_SECONDS. The decision is the pure
     careflow.auth.step_up_failure; this wrapper supplies the configured window and the clock. A refusal is ONE fixed 401 with
     `WWW-Authenticate: step-up` and no reason; the reason code goes to the log, never a claim value. It runs before any database work.
@@ -245,7 +287,8 @@ class Me(BaseModel):
 
 
 @router.get("/v1/iam/me", response_model=Me)
-async def me(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> Me:
+async def me(conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> Me:
+    # EVERY live grant, whatever X-CareFlow-Active-Role says: the header is ignored here on purpose (TxConnAllGrants). Kept out of the docstring so the OpenAPI snapshot is unchanged.
     """The caller's own active profile: account type, status, and live staff role grants.
 
     A valid token alone is not enough: the caller needs an ACTIVE row in iam.accounts. A person who signed
@@ -441,15 +484,19 @@ SCHEDULING_READERS = ("front_desk", "nurse", "doctor")
 Limit = Annotated[int, Query(ge=1, le=500)]
 
 
+async def _clinic_role_held(conn: AsyncConnection, clinic_id: uuid.UUID, roles: tuple[str, ...]) -> bool:
+    """Does the caller hold one of `roles` at this clinic NOW, counting only the ACTIVE role when the request carried one? One definition of "effective role", in SQL (iam.has_clinic_role, migration 0028)."""
+    return bool((await conn.execute(text("select iam.has_clinic_role(:c, cast(:r as text[]))"), {"c": clinic_id, "r": list(roles)})).scalar())
+
+
+async def _any_role_held(conn: AsyncConnection, roles: tuple[str, ...]) -> bool:
+    """Does the caller hold one of `roles` at ANY clinic now (the active role only, when the request carried one)? (iam.has_any_role, migration 0028)."""
+    return bool((await conn.execute(text("select iam.has_any_role(cast(:r as text[]))"), {"r": list(roles)})).scalar())
+
+
 async def _readable_clinics(conn: AsyncConnection, claims: dict[str, Any]) -> list[uuid.UUID]:
-    rows = await conn.execute(
-        text(
-            "select distinct sr.clinic_id from iam.staff_roles sr join iam.accounts a on a.id = sr.account_id "
-            "where sr.account_id = :u and sr.revoked_at is null and sr.role = any(:roles) "
-            "and a.status = 'active' and a.account_type = 'staff'"
-        ),
-        {"u": uuid.UUID(claims["sub"]), "roles": list(SCHEDULING_READERS)},
-    )
+    # Through the RLS helper (migration 0028), so the active-role header narrows the list to the active clinic. A clinic row is visible to its own staff (clinics_select_own_staff).
+    rows = await conn.execute(text("select c.id from iam.clinics c where iam.has_clinic_role(c.id, cast(:roles as text[])) order by c.id"), {"roles": list(SCHEDULING_READERS)})
     clinics = [r[0] for r in rows]
     if not clinics:
         raise HTTPException(status_code=403, detail="your role may not read this")
@@ -835,17 +882,7 @@ async def register_patient(
     clinic = (await conn.execute(text("select origin from iam.clinics where id = :c"), {"c": body.clinic_id})).first()
     if clinic is None:
         raise HTTPException(status_code=404, detail="not found")
-    is_front_desk = (
-        await conn.execute(
-            text(
-                "select 1 from iam.staff_roles sr join iam.accounts a on a.id = sr.account_id "
-                "where sr.account_id = :u and sr.clinic_id = :c and sr.role = 'front_desk' and sr.revoked_at is null "
-                "and a.status = 'active' and a.account_type = 'staff'"
-            ),
-            {"u": uuid.UUID(claims["sub"]), "c": body.clinic_id},
-        )
-    ).first()
-    if is_front_desk is None:
+    if not await _clinic_role_held(conn, body.clinic_id, ("front_desk",)):
         raise HTTPException(status_code=403, detail="your role may not register patients")
     try:
         result = await PatientIngestionPipeline(vault, key_version=key_version).ingest(
@@ -1012,16 +1049,7 @@ def _task_out(r: review_tasks.TaskRow) -> dict[str, Any]:
 
 async def _task_reader(conn: AsyncConnection, claims: dict[str, Any]) -> None:
     """403 unless the caller actively holds a task-reading staff role somewhere (row-level security then narrows what they see)."""
-    held = (
-        await conn.execute(
-            text(
-                "select 1 from iam.staff_roles sr join iam.accounts a on a.id = sr.account_id where sr.account_id = :u and sr.revoked_at is null "
-                "and sr.role = any(cast(:r as text[])) and a.status = 'active' and a.account_type = 'staff' limit 1"
-            ),
-            {"u": uuid.UUID(claims["sub"]), "r": list(TASK_READERS)},
-        )
-    ).first()
-    if held is None:
+    if not await _any_role_held(conn, TASK_READERS):
         raise HTTPException(status_code=403, detail="your role may not read this")
 
 
@@ -1349,15 +1377,8 @@ async def _acting_role(conn: AsyncConnection, claims: dict[str, Any], clinic_id:
     """The first of `roles` the caller actively holds in this clinic (for the audit row). Every caller has already been authorised for one of them; if none is found the audit row is not
     written and the request fails closed (a decision without an audit row must not commit)."""
     row = (
-        await conn.execute(
-            text(
-                "select sr.role from iam.staff_roles sr join iam.accounts a on a.id = sr.account_id "
-                "where sr.account_id = :u and sr.clinic_id = :c and sr.role = any(cast(:r as text[])) and sr.revoked_at is null "
-                "and a.status = 'active' and a.account_type = 'staff' order by sr.role limit 1"
-            ),
-            {"u": uuid.UUID(claims["sub"]), "c": clinic_id, "r": list(roles)},
-        )
-    ).first()
+        await conn.execute(text("select r from unnest(iam.effective_roles(:c)) as r where r = any(cast(:r as text[])) order by r limit 1"), {"c": clinic_id, "r": list(roles)})
+    ).first()  # the roles that count under the active claim (migration 0028): the audit row names the role actually used
     if row is None:
         raise HTTPException(status_code=403, detail="your role may not do this")
     return row[0]
@@ -1368,17 +1389,7 @@ async def _front_desk_gate(conn: AsyncConnection, claims: dict[str, Any], clinic
     clinic = (await conn.execute(text("select origin from iam.clinics where id = :c"), {"c": clinic_id})).first()
     if clinic is None:
         raise HTTPException(status_code=404, detail="not found")
-    is_front_desk = (
-        await conn.execute(
-            text(
-                "select 1 from iam.staff_roles sr join iam.accounts a on a.id = sr.account_id "
-                "where sr.account_id = :u and sr.clinic_id = :c and sr.role = 'front_desk' and sr.revoked_at is null "
-                "and a.status = 'active' and a.account_type = 'staff'"
-            ),
-            {"u": uuid.UUID(claims["sub"]), "c": clinic_id},
-        )
-    ).first()
-    if is_front_desk is None:
+    if not await _clinic_role_held(conn, clinic_id, ("front_desk",)):
         raise HTTPException(status_code=403, detail="your role may not do this")
     return clinic[0]
 
@@ -1529,16 +1540,7 @@ async def _referral_document(conn: AsyncConnection, document_id: uuid.UUID):
 
 
 async def _holds_role(conn: AsyncConnection, claims: dict[str, Any], clinic_id: uuid.UUID, roles: tuple[str, ...]) -> bool:
-    return (
-        await conn.execute(
-            text(
-                "select 1 from iam.staff_roles sr join iam.accounts a on a.id = sr.account_id "
-                "where sr.account_id = :u and sr.clinic_id = :c and sr.role = any(cast(:r as text[])) and sr.revoked_at is null "
-                "and a.status = 'active' and a.account_type = 'staff'"
-            ),
-            {"u": uuid.UUID(claims["sub"]), "c": clinic_id, "r": list(roles)},
-        )
-    ).first() is not None
+    return await _clinic_role_held(conn, clinic_id, roles)
 
 
 def _front_door(request: Request) -> FrontDoorComponents:
@@ -1811,16 +1813,7 @@ class MergeList(_Out):
 
 
 async def _staff_reader(conn: AsyncConnection, claims: dict[str, Any], roles: tuple[str, ...]) -> None:
-    held = (
-        await conn.execute(
-            text(
-                "select 1 from iam.staff_roles sr join iam.accounts a on a.id = sr.account_id where sr.account_id = :u and sr.revoked_at is null "
-                "and sr.role = any(cast(:r as text[])) and a.status = 'active' and a.account_type = 'staff' limit 1"
-            ),
-            {"u": uuid.UUID(claims["sub"]), "r": list(roles)},
-        )
-    ).first()
-    if held is None:
+    if not await _any_role_held(conn, roles):
         raise HTTPException(status_code=403, detail="your role may not read this")
 
 
@@ -2195,16 +2188,7 @@ _REFERRAL_SELECT = """
 
 
 async def _referral_reader(conn: AsyncConnection, claims: dict[str, Any]) -> None:
-    held = (
-        await conn.execute(
-            text(
-                "select 1 from iam.staff_roles sr join iam.accounts a on a.id = sr.account_id where sr.account_id = :u and sr.revoked_at is null "
-                "and sr.role = any(cast(:r as text[])) and a.status = 'active' and a.account_type = 'staff' limit 1"
-            ),
-            {"u": uuid.UUID(claims["sub"]), "r": list(REFERRAL_READERS)},
-        )
-    ).first()
-    if held is None:
+    if not await _any_role_held(conn, REFERRAL_READERS):
         raise HTTPException(status_code=403, detail="your role may not read this")
 
 

@@ -32,6 +32,7 @@ import uuid
 import pytest
 from sqlalchemy import text
 
+from tests.db_helpers import without_scope
 from tests.test_api_role_matrix import ATTACKER, bearer, mint
 from tests.test_api_screen_message_live import (  # noqa: F401  (fixtures)
     MIGRATOR,
@@ -130,7 +131,7 @@ async def test_every_successful_read_writes_exactly_one_audit_row_with_ids_only(
         after = await audit_rows(w, mid)
         assert len(after) == before + 1, who
         actor, role, origin, clinic, details, key, rtype, rid, action = after[-1]
-        details = details if isinstance(details, dict) else json.loads(details)
+        details = without_scope(details)
         assert (actor, role, origin, clinic, rtype, rid, action) == (w.ids[who], audited_as, "test", w.a, "msg.messages", str(mid), "message.read")
         assert details == {"thread_id": str(w.thread["appointments"]), "topic": "appointments"}
         assert key.startswith("message-read:") and uuid.UUID(key.removeprefix("message-read:"))

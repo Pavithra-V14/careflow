@@ -17,7 +17,7 @@ from collections.abc import Sequence
 ORIGIN_RE = re.compile(r"^(https?)://([A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)(?::([0-9]{1,5}))?$")
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1"})
 ALLOW_METHODS = ("GET", "POST", "OPTIONS")
-ALLOW_HEADERS = ("Authorization", "Content-Type", "X-Idempotency-Key")
+ALLOW_HEADERS = ("Authorization", "Content-Type", "X-Idempotency-Key", "X-CareFlow-Active-Role")  # the last one narrows a caller to one clinic and role (careflow/active_role.py)
 # Response headers a browser script may read: a 401 carries WWW-Authenticate (the step-up and token-expiry signals), which the browser hides from cross-origin code unless it is exposed.
 EXPOSE_HEADERS = ("WWW-Authenticate",)
 MAX_AGE_SECONDS = 600
