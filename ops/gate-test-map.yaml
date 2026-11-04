@@ -1,0 +1,15 @@
+# Which CI test files are the evidence for which hard gate of BUILD-SPEC.md 14.3 (read by scripts/gate_evidence.py). Engineering's mapping, not a clinical one. A gate passes only if at least one test
+# from its files ran and NONE failed, errored or was skipped. A gate with no entry here, or whose files did not run, stays NOT MEASURED. The gold-set gates (red-flag recall, urgent recall, injection,
+# unverified facts, wrong merge, three-engine contract, voice) have NO entry: they need clinician-authored sets.
+clinic_isolation_tests:
+  - tests/test_api_role_matrix.py
+  - tests/test_rls_child_tables_live.py
+  - tests/test_rls_iam_audit_live.py
+  - tests/test_rls_mpi_scheduling_live.py
+double_booking_tests:
+  - tests/test_scheduling_live.py
+  - tests/test_scheduling_concurrency_live.py
+idempotency_tests:
+  - tests/test_queue_live.py
+  - tests/test_mpi_live.py
+  - tests/test_identity_live.py
