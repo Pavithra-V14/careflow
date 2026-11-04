@@ -197,26 +197,57 @@ async def test_app_role_cannot_write_iam(db):
         await db.execute("rollback to savepoint s")  # also restores the migrator role
 
 
-async def _audit_insert(conn, actor, claim_uid, key):
+async def _audit_insert(conn, actor, claim_uid, key, clinic=None):
     """Insert as careflow_app. On failure the transaction is aborted; the caller rolls back to its
     own savepoint, which also restores the migrator role."""
     await as_app(conn, claim_uid)
     await conn.execute(
-        "insert into audit.log (origin, actor_id, action, idempotency_key) values ('test', $1, 'test.action', $2)",
-        actor, key,
+        "insert into audit.log (origin, clinic_id, actor_id, action, idempotency_key) values ('test', $3, $1, 'test.action', $2)",
+        actor, key, clinic,
     )
     await back_to_migrator(conn)
 
 
-async def test_audit_insert_only_as_self(db):
-    _, _, p = await seed(db)
-    await _audit_insert(db, p["nurse_a"], p["nurse_a"], "k-self")  # own id: allowed
-    await _audit_insert(db, None, None, "k-system")  # no identity, system row: allowed
-    for actor, claim, key in ((p["admin_a"], p["nurse_a"], "k-forged"), (None, p["nurse_a"], "k-anon-forge")):
+async def test_audit_insert_only_as_self_in_the_callers_own_clinic(db):
+    """0030 (review M3): the actor is the signed-in caller, the row names a clinic, and the caller holds a live grant AT THAT clinic."""
+    a, b, p = await seed(db)
+    await _audit_insert(db, p["nurse_a"], p["nurse_a"], "k-self", a)  # own id, own clinic: allowed
+    refused = (
+        (p["admin_a"], p["nurse_a"], "k-forged", a),  # another person's id
+        (None, p["nurse_a"], "k-anon-forge", a),  # no actor while signed in
+        (None, None, "k-system", a),  # no identity at all: the application role no longer writes system rows
+        (p["nurse_a"], p["nurse_a"], "k-no-clinic", None),  # no clinic
+        (p["nurse_a"], p["nurse_a"], "k-other-clinic", b),  # a clinic where the caller holds no grant
+        (p["admin_b"], p["admin_b"], "k-b-into-a", a),  # a clinic B admin writing a clinic A row
+        (p["suspended_a"], p["suspended_a"], "k-suspended", a),  # a suspended account
+        (p["patient"], p["patient"], "k-patient", a),  # a patient account
+        (p["auditor_a"], p["auditor_a"], "k-auditor", a),  # an auditor does not write into the trail it reads
+    )
+    for actor, claim, key, clinic in refused:
         await db.execute("savepoint f")
         with pytest.raises(asyncpg.PostgresError):
-            await _audit_insert(db, actor, claim, key)
+            await _audit_insert(db, actor, claim, key, clinic)
         await db.execute("rollback to savepoint f")
+    assert await db.fetchval("select count(*) from audit.log where idempotency_key like 'k-%' and idempotency_key <> 'k-self'") == 0
+
+
+async def test_the_queue_accepts_only_a_clean_new_job_from_a_producer(db):
+    """0030 (review M4, writes): a producer cannot insert a job that pretends to be claimed, completed, dead-lettered, retried or errored."""
+    a, _, p = await seed(db)
+    sql = "insert into ops.queue (clinic_id, origin, task_type, payload, idempotency_key{cols}) values ($1, 'test', 'demo.task', '{{}}'::jsonb, $2{vals})"
+    await as_app(db, p["nurse_a"])
+    await db.execute(sql.format(cols="", vals=""), a, f"q-clean-{_u()}")  # control: a clean job is accepted
+    await back_to_migrator(db)
+    pretending = (
+        (", state", ", 'claimed'"), (", state", ", 'completed'"), (", attempt_count", ", 3"), (", claimed_by", ", 'worker-1'"),
+        (", last_error", ", 'boom'"), (", dead_lettered_at", ", now()"), (", completed_at", ", now()"), (", claimed_at", ", now()"),
+    )
+    for cols, vals in pretending:
+        await db.execute("savepoint q")
+        with pytest.raises(asyncpg.PostgresError):
+            await as_app(db, p["nurse_a"])
+            await db.execute(sql.format(cols=cols, vals=vals), a, f"q-bad-{_u()}")
+        await db.execute("rollback to savepoint q")
 
 
 async def test_audit_idempotency_key_rejects_duplicates(db):
