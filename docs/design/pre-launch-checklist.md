@@ -58,18 +58,18 @@ Items 1 to 18 keep the numbers of `phase2-status.md` ("PRE-LAUNCH BLOCKERS"); 19
 ## E. Added from the 2026-11-04 whole-codebase review (`review-2026-11-04.md`)
 | # | Item | Status | Owner | What closes it |
 |---|---|---|---|---|
-| 35 | Merge state machine: one front-desk user can re-activate an unmerged merge with no second approval and rebuild chains (review H1) | OPEN | E (new migration, reviewer pass) | a status-transition trigger and a flat-link re-check on activation; a live test |
+| 35 | Merge state machine: one front-desk user can re-activate an unmerged merge with no second approval and rebuild chains (review H1) | BUILT, awaiting CI and merge: migration 0029 on branch `mig-merge-hardening` (reviewer pass done) | E (new migration, reviewer pass) | a status-transition trigger and a flat-link re-check on activation; a live test |
 | 36 | Front desk holds broad UPDATE on patient ciphertext columns and `erased_at`, on identity tokens and on match candidates, unaudited (review M1) | OPEN | E + O (a grant change needs sign-off) | column-level grants; an audited erasure path |
-| 37 | A merge is not tied to the reviewed candidate pair (review M2) | OPEN | E (migration) | a constraint tying candidate, master and subordinate |
-| 38 | `audit.log` insert policy lets any app session forge rows for any clinic; a pre-planted key makes `write_audit` return silently (review M3) | OPEN | E + O | require a staff role of the row's clinic; scope the key |
-| 39 | Staff can insert arbitrary queue rows and read `payload` / `last_error` (review M4) | OPEN | E + O | narrow the insert grant; prove tracebacks are scrubbed |
+| 37 | A merge is not tied to the reviewed candidate pair (review M2) | BUILT with 0029 (also makes review rows immutable) | E (migration) | a constraint tying candidate, master and subordinate |
+| 38 | `audit.log` insert policy lets any app session forge rows for any clinic; a pre-planted key makes `write_audit` return silently (review M3) | BUILT, awaiting CI and merge: migration 0030 (branch `mig-audit-queue`); the planted-key half remains | E + O | require a staff role of the row's clinic; scope the key |
+| 39 | Staff can insert arbitrary queue rows and read `payload` / `last_error` (review M4) | HALF BUILT: inserts are clean-job-only (0030); hiding `payload` and `last_error` needs a view or definer function (a new grant), not decided | E + O | narrow the insert grant; prove tracebacks are scrubbed |
 | 40 | Append-only triggers do not fire under `session_replication_role = replica` (restore, logical replication); several ledgers are not delete-proof against the owner (review L2, L3) | OPEN | E | `ENABLE ALWAYS` on the triggers; decide the owner-delete rule before the restore drill (item 28) |
-| 41 | No instruction-injection classifier and no PII masking before retrieval on the Front Door path (spec 11.1, 11.3) | OPEN | E + C | build and gate it; it blocks the `injection_undetected` hard gate and any hosted retriever on patient text |
+| 41 | No instruction-injection classifier and no PII masking before retrieval on the Front Door path (spec 11.1, 11.3) | HEURISTICS BUILT (branch `text-guard`, `docs/design/text-guard.md`); the hard gate stays OPEN until a clinician-authored adversarial set measures it | E + C | build and gate it; it blocks the `injection_undetected` hard gate and any hosted retriever on patient text |
 | 42 | Outbox and the event-to-job supervisor have no producer; expired holds are never swept in production; referral intake is manual (spec 7.4) | OPEN | E (design note first) | decide the producers; schedule the sweeps |
 | 43 | Tamil strings are unreviewed (419 of 419), including the emergency banner | OPEN | C + O | a reviewed `ta-reviewed.json`, the emergency banner first |
-| 44 | Staff MFA is enforced only in the frontend; the database does not require `aal2` on non-merge staff routes | OPEN (recorded) | O | decide whether the policy is needed before launch |
+| 44 | Staff MFA is enforced only in the frontend; the database does not require `aal2` on non-merge staff routes | BUILT in the API (branch `mfa-every-route`): every staff route needs aal2 + TOTP, on by default, off only in demo + synthetic_only; a database-level policy is still not added | O | decide whether the policy is needed before launch |
 | 45 | Slot, provider and location creation has no route | OPEN (recorded) | O | decide who creates them and how (needs a design note) |
-| 46 | No Python dependency vulnerability scan in CI (spec 21); no visual-regression tests (spec 19) | OPEN | E (a scanner is an external tool: ask first) | choose the tool |
+| 46 | No Python dependency vulnerability scan in CI (spec 21); no visual-regression tests (spec 19) | pip-audit job BUILT report-only (branch `pip-audit`); stage two (fail on fixable findings) after the first run is read; visual regression deferred | E (a scanner is an external tool: ask first) | choose the tool |
 | 47 | The safety-net second opinion and its fail-closed path are unbuilt (spec 5.2, 16.2); it can only escalate, so rules-first is intact | OPEN | E + C | design with the clinicians |
 
 ## How to use this file
