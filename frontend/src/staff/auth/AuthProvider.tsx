@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { createApi, type Api } from '../../shared/api/client';
 import { StepUpDialog } from '../components/StepUpDialog';
 import { SEND_ACTIVE_ROLE_HEADER } from '../featureFlags';
+import { storeGrant } from '../activeRole';
 import { isOffline } from '../online';
 import type { AuthPort, TotpEnrolment } from './port';
 
@@ -82,6 +83,8 @@ export function AuthProvider({ port, apiBaseUrl, children }: { port: AuthPort; a
   const endSession = useCallback(
     (notify: boolean) => {
       queryClient.clear();
+      // The chosen role is for one sign-in only: the next person (or the same one) picks again.
+      storeGrant(null);
       setActiveRoleRefused(false);
       setFactorId(null);
       setSessionEnded(notify);
@@ -137,6 +140,7 @@ export function AuthProvider({ port, apiBaseUrl, children }: { port: AuthPort; a
         const ok = await port.signInWithPassword(email, password);
         if (!ok) return false;
         setSessionEnded(false);
+        storeGrant(null);
         await settle();
         return true;
       },

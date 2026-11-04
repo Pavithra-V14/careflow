@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-425 of 425 strings are unreviewed.
+426 of 426 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -272,6 +272,7 @@ Terms standardised: proposal, resolve / resolved.
 | `problem.invalid` | Check what you entered and try again. | நீங்கள் உள்ளிட்டதைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும். | ok |
 | `problem.network` | The connection failed. Check it and try again. | இணைப்பு தோல்வியடைந்தது. இணைப்பைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும். | ok |
 | `problem.not_found` | That could not be found. | அது கிடைக்கவில்லை. | ok |
+| `problem.offline` | You are offline. Nothing was saved. What you typed is still here; send it again when the connection is back. | நீங்கள் இணைப்பில் இல்லை. எதுவும் சேமிக்கப்படவில்லை. நீங்கள் உள்ளிட்டவை இங்கேயே உள்ளன; இணைப்பு திரும்பியதும் மீண்டும் அனுப்புங்கள். | ok |
 | `problem.rate_limited` | Too many requests. Wait a moment and try again. | அதிக கோரிக்கைகள். சற்று காத்திருந்து மீண்டும் முயற்சிக்கவும். | minor drift |
 | `problem.retry` | Try again | மீண்டும் முயற்சிக்கவும் | ok |
 | `problem.step_up` | A fresh authenticator code is needed to do this. Nothing was changed. | இதைச் செய்ய புதிய அங்கீகாரக் குறியீடு தேவை. எதுவும் மாற்றப்படவில்லை. | ok |

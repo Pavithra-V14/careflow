@@ -87,6 +87,13 @@ export interface ApiOptions {
   isOffline?: () => boolean;
 }
 
+/** A write that was not sent because the browser reports no connection. Nothing reached the server. */
+export class OfflineWriteError extends TypeError {
+  constructor() {
+    super('offline');
+  }
+}
+
 /** The body the backend sends for a refused active-role header. Matched exactly: any other 403 is an ordinary refusal. */
 export const ACTIVE_ROLE_REFUSAL_DETAIL = 'active role not available';
 
@@ -124,7 +131,7 @@ export function createApi(options: ApiOptions) {
         if (role !== null && ACTIVE_ROLE_VALUE.test(role)) r.headers.set(ACTIVE_ROLE_HEADER, role);
       };
       // Offline: nothing is sent for a write, so it can never half-happen. It fails like any lost connection (the caller keeps its key).
-      if (options.isOffline?.() && request.method !== 'GET' && request.method !== 'HEAD' && !isSearch(request)) throw new TypeError('offline');
+      if (options.isOffline?.() && request.method !== 'GET' && request.method !== 'HEAD' && !isSearch(request)) throw new OfflineWriteError();
       await authorize(request);
       const first = await transport(request);
       if (first.status === 403) await noteActiveRoleRefusal(first, request);

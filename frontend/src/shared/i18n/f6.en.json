@@ -10,5 +10,8 @@
     "body": "Reload the page, or go to the home screen.",
     "reload": "Reload the page",
     "home": "Go to the home screen"
+  },
+  "problem": {
+    "offline": "You are offline. Nothing was saved. What you typed is still here; send it again when the connection is back."
   }
 }

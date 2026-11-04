@@ -66,8 +66,7 @@ Candidates are ordered by value to a clinic that already has the read side worki
 - Routes: none new. Uses `/v1/iam/me` for the session check.
 - What: a top-level error boundary with a fixed message and a way back to the home screen; a clear, fixed "session ended" state;
   an offline banner that stops writes from being sent while offline and never claims a write succeeded.
-- Decisions for the owner: should an unsent write be kept for retry after reconnect, or dropped with a message (recommended: dropped,
-  the user redoes it; no hidden queue of clinical writes)?
+- Decision (owner, 2026-11-04): an unsent write is dropped with a fixed message that says nothing was saved; what the person typed or chose stays in the form so they can send it again; there is no hidden retry queue.
 - Tests: unit (boundary renders a fixed message, no error text shown), browser (token expiry mid-session returns to sign-in once;
   offline blocks a write and sends nothing; the same idempotency key is reused on a real retry).
 
@@ -76,7 +75,7 @@ Candidates are ordered by value to a clinic that already has the read side worki
 - Routes: none.
 - What: keyboard-only pass over every screen, focus order, long Tamil text at 200% zoom, colour contrast, live-region announcements
   for success and error banners; fix what the sweep finds.
-- Decisions: which standard to target and state (recommended: WCAG 2.2 AA as a goal, not a claim).
+- Decision (owner, 2026-11-04): WCAG 2.2 AA is a goal, not a claim, in the docs and the UI. The UI makes no accessibility claim.
 - Tests: extend vitest-axe to every route; browser tests for keyboard paths on the write screens.
 
 ### F6.3 Operating profile in the shell (small; after the backend returns it)
@@ -90,7 +89,7 @@ Candidates are ordered by value to a clinic that already has the read side worki
 
 - Routes: none new; the header `X-CareFlow-Active-Role` on existing routes. Needs CORS to allow it (requests item 1).
 - What: when a user holds more than one role, a picker in the shell; the header is sent only with the flag ON.
-- Decisions: default role on sign-in; whether the picker remembers the choice (recommended: per session, not stored).
+- Decision (owner, 2026-11-04): the choice is remembered per tab only (sessionStorage) and forgotten at every sign-out and sign-in, so a role is picked again after each sign-in.
 - Tests: header present only with flag ON; flag-off pin test stays; switching role clears cached lists; a 403 after switching shows the fixed "not available to your role" message.
 
 ### F6.5 Merge approve with step-up (after one live approve works against the dev backend)

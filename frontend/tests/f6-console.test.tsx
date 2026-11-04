@@ -141,8 +141,55 @@ describe('offline', () => {
     await user.click(ack);
     const confirm = await screen.findByRole('dialog');
     await user.click(within(confirm).getByRole('button', { name: /Acknowledge/ }));
-    expect(await screen.findByText('The connection failed. Check it and try again.')).toBeInTheDocument();
+    expect(await screen.findByText('You are offline. Nothing was saved. What you typed is still here; send it again when the connection is back.')).toBeInTheDocument();
     expect(calls.filter((c) => c.method === 'post')).toEqual([]);
+  });
+});
+
+describe('offline write keeps what the person chose', () => {
+  it('says nothing was saved, keeps the chosen decision, and the same click works once the connection is back', async () => {
+    const user = userEvent.setup();
+    const detail = {
+      clinic_id: CLINIC_A, content_type: 'application/pdf', created_at: '2026-10-30T05:00:00Z', decided: false, document_id: ID.doc, holds: [], open_holds: 0,
+      proposal: { abstained: false, candidates: [{ card_id: 'card-x', version: 3 }], created_at: '2026-10-30T05:00:00Z', mode: 'shadow', patient_id: ID.patient, proposal_id: ID.doc2, review_task_id: ID.task },
+      proposal_id: ID.doc2, proposal_visible: true, registered_by: ID.user, run_state: 'awaiting_decision', size_bytes: 2048,
+    };
+    const routes: Routes = [
+      ['get', `/v1/staff/referrals/${ID.doc}`, () => json(detail)],
+      ['post', `/v1/staff/referrals/${ID.doc}/review`, (req) => json({ decision: (req.body as { decision: string }).decision, document_id: ID.doc, replayed: false })],
+    ];
+    const { calls } = await openConsole({ role: 'nurse', hash: `/referrals/${ID.doc}`, routes });
+    const group = await screen.findByRole('group', { name: 'Decision' });
+    await user.click(within(group).getByRole('radio', { name: 'Reject' }));
+    Object.defineProperty(window.navigator, 'onLine', { value: false, configurable: true });
+    await user.click(screen.getByRole('button', { name: 'Record decision' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Record decision' }));
+    expect(await screen.findByText(/Nothing was saved/)).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === 'post')).toEqual([]);
+    expect(screen.getByRole('radio', { name: 'Reject' })).toBeChecked(); // what they chose is still there
+    expect(document.body.textContent).not.toContain('The decision was recorded.');
+    // No hidden queue: nothing is sent by itself when the connection returns.
+    Object.defineProperty(window.navigator, 'onLine', { value: true, configurable: true });
+    act(() => void window.dispatchEvent(new Event('online')));
+    expect(calls.filter((c) => c.method === 'post')).toEqual([]);
+    // The confirmation stays open after a failed attempt, with the same choice in it: confirm again.
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Record decision' }));
+    expect(await screen.findByText('The decision was recorded.')).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === 'post')).toHaveLength(1);
+  });
+});
+
+describe('role memory is per sign-in', () => {
+  it('forgets the chosen role at sign-out, so the next sign-in picks again', async () => {
+    const user = userEvent.setup();
+    const { fake } = await openPicker(referralsRoute);
+    await user.click(screen.getByRole('radio', { name: /Nurse/ }));
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await screen.findByRole('group', { name: 'Session' });
+    expect(sessionStorage.getItem('careflow.activeRole')).not.toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
+    await waitFor(() => expect(sessionStorage.getItem('careflow.activeRole')).toBeNull());
+    void fake;
   });
 });
 
