@@ -1,6 +1,6 @@
 """Audit rows for human decisions (BUILD-SPEC.md 17.1 `audit`, 18.4; pre-launch item 5). Writes `audit.log` from the CALLING person's own session, in the SAME transaction as the decision.
 
-* No migration and no new grant: `careflow_app` already holds INSERT on `audit.log`, and the policy `log_insert_own_clinic` (migration 0030, replacing 0001's `log_insert_as_self`) requires `actor_id` to be the signed-in account holding a front-desk, nurse, doctor or admin grant at the row's clinic, so nobody
+* No migration and no new grant: `careflow_app` already holds INSERT on `audit.log`, and the policy `log_insert_own_clinic` (migration 0030, replacing 0001's `log_insert_as_self`) requires `actor_id` to be the signed-in account holding a front-desk, nurse, doctor or admin role at the row's clinic, so nobody
   can write a row as someone else. Reading audit rows stays with the auditor role.
 * Same transaction: the decision and its audit row commit together or not at all. If the audit insert fails the exception propagates and the request rolls back (a decision with no audit row must not
   commit).
