@@ -1,0 +1,14 @@
+{
+  "shell": {
+    "activeRoleUnavailable": "That role is not available right now. Choose a role to continue. You are still signed in."
+  },
+  "offline": {
+    "banner": "You are offline. Changes cannot be saved until the connection is back."
+  },
+  "errorBoundary": {
+    "title": "This screen could not be shown",
+    "body": "Reload the page, or go to the home screen.",
+    "reload": "Reload the page",
+    "home": "Go to the home screen"
+  }
+}

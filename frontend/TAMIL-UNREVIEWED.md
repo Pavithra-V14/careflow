@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-419 of 419 strings are unreviewed.
+425 of 425 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -91,6 +91,10 @@ Terms standardised: proposal, resolve / resolved.
 | `env.live` | LIVE | LIVE | kept in English by design |
 | `env.test` | TEST | TEST | kept in English by design |
 | `env.unknown` | Environment unknown | சூழல் தெரியவில்லை | ok |
+| `errorBoundary.body` | Reload the page, or go to the home screen. | பக்கத்தை மீண்டும் ஏற்றவும், அல்லது முகப்புத் திரைக்குச் செல்லவும். | ok |
+| `errorBoundary.home` | Go to the home screen | முகப்புத் திரைக்குச் செல் | ok |
+| `errorBoundary.reload` | Reload the page | பக்கத்தை மீண்டும் ஏற்று | ok |
+| `errorBoundary.title` | This screen could not be shown | இந்தத் திரையைக் காட்ட முடியவில்லை | ok |
 | `identity.actions` | Actions | செயல்கள் | ok |
 | `identity.actionsSoon` | Approve and unmerge | ஒப்புதல் மற்றும் இணைப்பு நீக்கம் | minor drift |
 | `identity.all` | All | அனைத்தும் | ok |
@@ -184,6 +188,7 @@ Terms standardised: proposal, resolve / resolved.
 | `nav.referrals` | Referrals | பரிந்துரைகள் | ok |
 | `nav.scheduling` | Scheduling | நேர அட்டவணை | minor drift; flag (ambiguous): Timetable reads as a schedule table; a main navigation label should be unambiguous. |
 | `nav.tasks` | Tasks | பணிகள் | ok |
+| `offline.banner` | You are offline. Changes cannot be saved until the connection is back. | நீங்கள் இணைப்பில் இல்லை. இணைப்பு திரும்பும் வரை மாற்றங்களைச் சேமிக்க முடியாது. | ok |
 | `pages.backHome` | Back to the home page | முகப்புப் பக்கத்திற்குத் திரும்பு | ok |
 | `pages.notAvailableSignIn` | Patient sign-in is not available yet. | நோயாளர் உள்நுழைவு இன்னும் கிடைக்கவில்லை. | ok |
 | `pages.notAvailableSignUp` | Patient sign-up is not available yet. | நோயாளர் பதிவு இன்னும் கிடைக்கவில்லை. | ok |
@@ -365,6 +370,7 @@ Terms standardised: proposal, resolve / resolved.
 | `scheduling.title` | Scheduling | நேர அட்டவணை | minor drift |
 | `scheduling.visitTypes` | Visit types | வருகை வகைகள் | ok |
 | `shell.activeRole` | Active role | தற்போதைய பங்கு | minor drift; flag (ambiguous): Role is a key concept used on many screens; the word chosen literally means share/part. |
+| `shell.activeRoleUnavailable` | That role is not available right now. Choose a role to continue. You are still signed in. | அந்தப் பங்கு இப்போது கிடைக்கவில்லை. தொடர ஒரு பங்கைத் தேர்ந்தெடுங்கள். நீங்கள் இன்னும் உள்நுழைந்துள்ளீர்கள். | ok |
 | `shell.changeRole` | Change role | பங்கை மாற்று | ok |
 | `shell.clinic` | Clinic | கிளினிக் | flag (mixed-language): Loanword while other strings use the Tamil word for hospital/clinic; inconsistent. |
 | `shell.continue` | Continue | தொடரவும் | ok |

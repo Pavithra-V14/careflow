@@ -52,6 +52,7 @@ for (const lang of LANGS) {
   });
 
   test(`front desk, scheduling lists, holds and offers [${lang}]`, async ({ page }) => {
+    test.setTimeout(90_000); // six screens x three widths of axe plus screenshots: about 30 seconds on a busy machine, the default limit
     await openConsole(page, 'front_desk', lang);
     for (const list of ['providers', 'locations', 'visit-types', 'priority-levels', 'holds', 'offers']) {
       await go(page, `#/scheduling/${list}`, READY[lang].scheduling && list !== 'holds' && list !== 'offers' ? (READY[lang].scheduling as string) : /\S/);

@@ -17,7 +17,7 @@ export type ReviewTaskStatus = TaskQuery['status'];
 export type TaskRole = NonNullable<TaskQuery['assigned_role']>;
 export type HoldStatus = NonNullable<paths['/v1/staff/scheduling/holds']['get']['parameters']['query']>['status'];
 
-/** The request header that names the active role. See docs/design/active-role.md (a proposal: the backend does not read it yet). */
+/** The request header that names the active role (docs/design/active-role.md; the backend reads it since migration 0028). */
 export const ACTIVE_ROLE_HEADER = 'X-CareFlow-Active-Role';
 const ACTIVE_ROLE_VALUE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[a-z][a-z_]*$/;
 export const formatActiveRole = (clinicId: string, role: string): string => `${clinicId}:${role}`;
@@ -78,7 +78,17 @@ export interface ApiOptions {
    * value is sent on the first request AND on a step-up retry, and only if it is exactly `<clinic uuid>:<role>`.
    */
   activeRole?: { enabled: boolean; get: () => string | null };
+  /**
+   * Called when the backend answers the ONE fixed refusal for the active-role header (403, detail "active role not available")
+   * to a request that carried the header. The caller falls back to choosing a role again; the user stays signed in.
+   */
+  onActiveRoleRefused?: () => void;
+  /** True while the browser reports no connection. A write is then not sent at all (it fails as a network error, key kept). */
+  isOffline?: () => boolean;
 }
+
+/** The body the backend sends for a refused active-role header. Matched exactly: any other 403 is an ordinary refusal. */
+export const ACTIVE_ROLE_REFUSAL_DETAIL = 'active role not available';
 
 /** True only for the exact step-up challenge the backend sends. Anything else is an ordinary 401. */
 export function isStepUpChallenge(res: Response): boolean {
@@ -95,6 +105,13 @@ const newKey = (): string => globalThis.crypto.randomUUID();
 
 export function createApi(options: ApiOptions) {
   const transport = options.fetch ?? ((input: Request) => globalThis.fetch(input));
+  // A search is a POST only so personal details stay out of the URL; it changes nothing, so it is not held back here (offline it fails by itself).
+  const isSearch = (r: Request) => new URL(r.url).pathname === '/v1/staff/patients/search';
+  async function noteActiveRoleRefusal(res: Response, req: Request): Promise<void> {
+    if (!options.onActiveRoleRefused || !req.headers.has(ACTIVE_ROLE_HEADER)) return;
+    const body: unknown = await res.clone().json().catch(() => null);
+    if ((body as { detail?: unknown } | null)?.detail === ACTIVE_ROLE_REFUSAL_DETAIL) options.onActiveRoleRefused();
+  }
   const client = createClient<paths>({
     baseUrl: options.baseUrl,
     fetch: async (request: Request) => {
@@ -106,14 +123,18 @@ export function createApi(options: ApiOptions) {
         const role = options.activeRole?.enabled ? options.activeRole.get() : null;
         if (role !== null && ACTIVE_ROLE_VALUE.test(role)) r.headers.set(ACTIVE_ROLE_HEADER, role);
       };
+      // Offline: nothing is sent for a write, so it can never half-happen. It fails like any lost connection (the caller keeps its key).
+      if (options.isOffline?.() && request.method !== 'GET' && request.method !== 'HEAD' && !isSearch(request)) throw new TypeError('offline');
       await authorize(request);
       const first = await transport(request);
+      if (first.status === 403) await noteActiveRoleRefusal(first, request);
       if (first.status !== 401) return first;
 
       if (isStepUpChallenge(first) && options.onStepUp && retry) {
         if (!(await options.onStepUp())) return first;
         await authorize(retry); // the token minted by the fresh verification
         const second = await transport(retry);
+        if (second.status === 403) await noteActiveRoleRefusal(second, retry);
         // One retry only. A second step-up challenge is returned to the caller, never looped on.
         if (second.status === 401 && !isStepUpChallenge(second)) options.onUnauthorized?.();
         return second;

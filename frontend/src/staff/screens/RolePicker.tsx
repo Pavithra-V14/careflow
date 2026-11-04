@@ -4,7 +4,7 @@ import { ScreenHeading } from '../components/ScreenHeading';
 import { grantKey, shortClinicId, type Grant } from '../me';
 
 // Least privilege: a person with several role grants picks ONE active role; nothing is selected by default.
-export function RolePicker({ grants, onPick }: { grants: readonly Grant[]; onPick: (g: Grant) => void }) {
+export function RolePicker({ grants, onPick, notice = null }: { grants: readonly Grant[]; onPick: (g: Grant) => void; notice?: string | null }) {
   const { t } = useTranslation();
   const name = useId();
   const [selected, setSelected] = useState<string | null>(null);
@@ -18,6 +18,7 @@ export function RolePicker({ grants, onPick }: { grants: readonly Grant[]; onPic
   return (
     <section aria-labelledby="pick-title" className="auth-card">
       <ScreenHeading id="pick-title">{t('shell.pickTitle')}</ScreenHeading>
+      {notice && <p role="status">{notice}</p>}
       <p>{t('shell.pickHelp')}</p>
       <form onSubmit={submit}>
         <fieldset>

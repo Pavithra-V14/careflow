@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { createApi, type Api } from '../../shared/api/client';
 import { StepUpDialog } from '../components/StepUpDialog';
 import { SEND_ACTIVE_ROLE_HEADER } from '../featureFlags';
+import { isOffline } from '../online';
 import type { AuthPort, TotpEnrolment } from './port';
 
 // Where the staff user is in sign-in. The server decides the second factor is required (the verified
@@ -22,6 +23,9 @@ interface AuthContextValue {
   port: AuthPort;
   /** Tells the API client which grant is active. Sent as a header only if SEND_ACTIVE_ROLE_HEADER is on (it is off). */
   setActiveRole: (value: string | null) => void;
+  /** True after the backend refused the active-role header; the console falls back to choosing a role. Cleared by `acknowledgeRoleRefusal`. */
+  activeRoleRefused: boolean;
+  acknowledgeRoleRefusal: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -58,6 +62,7 @@ export function AuthProvider({ port, apiBaseUrl, children }: { port: AuthPort; a
   const [factorId, setFactorId] = useState<string | null>(null);
   const [sessionEnded, setSessionEnded] = useState(false);
   const [stepUp, setStepUp] = useState<StepUpState | null>(null);
+  const [activeRoleRefused, setActiveRoleRefused] = useState(false);
 
   // Decide the phase from the session's assurance level and the verified factors.
   const settle = useCallback(async () => {
@@ -77,6 +82,7 @@ export function AuthProvider({ port, apiBaseUrl, children }: { port: AuthPort; a
   const endSession = useCallback(
     (notify: boolean) => {
       queryClient.clear();
+      setActiveRoleRefused(false);
       setFactorId(null);
       setSessionEnded(notify);
       setPhase('signed-out');
@@ -107,6 +113,9 @@ export function AuthProvider({ port, apiBaseUrl, children }: { port: AuthPort; a
         baseUrl: apiBaseUrl,
         getAccessToken: () => port.getAccessToken(),
         onStepUp: requestStepUp,
+        isOffline,
+        // The user stays signed in: only the choice of role is undone.
+        onActiveRoleRefused: () => setActiveRoleRefused(true),
         // Any other 401: drop the local session and go to sign-in. No reason is ever shown.
         onUnauthorized: () => {
           void port.signOut().then(() => endSession(true));
@@ -122,6 +131,8 @@ export function AuthProvider({ port, apiBaseUrl, children }: { port: AuthPort; a
       api,
       port,
       setActiveRole: (v) => void activeRole.set(v),
+      activeRoleRefused,
+      acknowledgeRoleRefusal: () => setActiveRoleRefused(false),
       async signIn(email, password) {
         const ok = await port.signInWithPassword(email, password);
         if (!ok) return false;
@@ -142,7 +153,7 @@ export function AuthProvider({ port, apiBaseUrl, children }: { port: AuthPort; a
         endSession(false);
       },
     }),
-    [phase, sessionEnded, api, port, factorId, settle, endSession, activeRole],
+    [phase, sessionEnded, api, port, factorId, settle, endSession, activeRole, activeRoleRefused],
   );
 
   return (

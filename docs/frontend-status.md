@@ -12,12 +12,13 @@ this side; what the frontend needs from them is in `docs/frontend-backend-reques
 | F2 | Staff sign-in, shell, role-aware navigation (convenience only), step-up handling, dev-only claim spike | merged |
 | F3 | Console screens: referrals, review tasks, patients (search, record), scheduling lists, holds, offers draft; LIVE / TEST badge | merged (PR #13) |
 | F4 | Referral decisions (approve, reject), identity revoke, merge and duplicate lists, merge actions behind a flag that is OFF | merged (PR #15) |
-| F5 | Live integration pass tooling (`npm run e2e:live`), schema checker, per-role reports, Tamil AI-review corrections, requests doc | this branch, PR pending |
+| F5 | Live integration pass tooling (`npm run e2e:live`), schema checker, per-role reports, Tamil AI-review corrections, requests doc | merged (PR #17) |
+| F6 (part 1) | Error boundary (fixed message, no error text), offline banner and held-back writes, session-expiry tests, active-role plumbing behind the OFF flag (single-role users never send it; the fixed 403 falls back to the role picker without signing out), accessibility additions (200% zoom, focus order, picker and banner at every width) | this branch, PR pending |
 
 Working today in the console: 28 backend operations through one generated client. Every write carries an idempotency key, retried with
 the same key; a step-up challenge asks once and retries once. Messages shown for errors are fixed per problem kind, never backend text.
 
-Tests: 433 unit tests, 93 browser tests (against mocked hosts), typecheck, lint, API freshness check, Tamil list check, bundle secret check.
+Tests: 449 unit tests, 100 browser tests (against mocked hosts), typecheck, lint, API freshness check, Tamil list check, bundle secret check.
 
 ## 2. Mock-only versus checked against the real backend
 
@@ -55,7 +56,7 @@ every empty-list row shape, and the whole Tamil interface (unreviewed by a nativ
 | Tamil strings (419, all unreviewed) | native-speaker review | AI-reviewed, labelled pending native review; `TAMIL-UNREVIEWED.md` lists them |
 | Privacy confirmation for the decrypted patient view | owner (recorded as a pre-launch blocker on the backend side) | affects what the record screen may show in `clinical` |
 
-## 5. F6: PLAN ONLY (nothing below is built until the owner approves)
+## 5. F6: plan (F6.1, F6.2 and the plumbing half of F6.4 were approved and built; the rest is PLAN ONLY)
 
 Candidates are ordered by value to a clinic that already has the read side working. "Routes" are from the current
 `openapi.snapshot.json`; "exists" means the route is in the snapshot, not that it has been used against a live backend.
