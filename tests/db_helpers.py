@@ -21,3 +21,13 @@ async def ensure_app_role_sa(conn) -> None:
     """SQLAlchemy AsyncConnection."""
     if not (await conn.exec_driver_sql(CHECK)).scalar():
         await conn.exec_driver_sql(GRANT)
+
+
+def without_scope(details) -> dict:
+    """An audit row's `details` without `role_scope`, which every audit writer now adds (migration 0028: 'active' when the request carried a verified X-CareFlow-Active-Role, else 'all_grants').
+    The tests that compare the rest exactly keep doing so; this asserts the key is there and well formed."""
+    import json
+
+    d = dict(json.loads(details) if isinstance(details, str) else details)
+    assert d.pop("role_scope") in ("all_grants", "active"), d
+    return d

@@ -197,7 +197,10 @@ async def test_the_intake_registers_what_the_adapter_reads_back_and_refuses_an_o
 
             class R:
                 def first(self_inner):
-                    return 1 if "staff_roles" in sql else None
+                    return 1 if "iam.has_clinic_role" in sql else None
+
+                def scalar(self_inner):
+                    return "iam.has_clinic_role" in sql
 
             if "insert into docs.documents" in sql:
                 self.inserts.append(params)

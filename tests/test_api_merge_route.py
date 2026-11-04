@@ -31,6 +31,9 @@ class _Result:
     def first(self):
         return self._row
 
+    def scalar(self):
+        return self._row is not None
+
 
 class FakeConn:
     def __init__(self, *, clinic_origin="test", front_desk=True, merge_clinic=CLINIC):
@@ -42,7 +45,7 @@ class FakeConn:
         self.statements.append(sql)
         if "from iam.clinics" in sql:
             return _Result((self.clinic_origin,) if self.clinic_origin else None)
-        if "from iam.staff_roles" in sql:
+        if "iam.has_clinic_role" in sql:
             return _Result((1,) if self.front_desk else None)
         if "from mpi.merges" in sql:
             return _Result((self.merge_clinic,) if self.merge_clinic else None)

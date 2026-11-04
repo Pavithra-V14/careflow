@@ -42,6 +42,9 @@ class _Result:
     def first(self):
         return self._row
 
+    def scalar(self):
+        return self._row is not None
+
 
 class FakeConn:
     def __init__(self, *, allowed=True, existing=None, insert_error=None, existing_after_error=None):
@@ -60,7 +63,7 @@ class FakeConn:
 
     async def execute(self, statement, params=None):
         sql = str(statement)
-        if "from iam.staff_roles" in sql:
+        if "iam.has_clinic_role" in sql:
             return _Result(1 if self.allowed else None)
         if "insert into docs.documents" in sql:
             if self.insert_error is not None:

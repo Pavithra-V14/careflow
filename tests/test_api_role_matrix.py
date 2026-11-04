@@ -46,6 +46,7 @@ from careflow.documents import DocumentIntake, document_id_for
 from careflow.front_door_runner import TASK_TYPE as FRONT_DOOR_TASK
 from careflow.front_door_runner import FrontDoorComponents
 from tests.bounds import bounded
+from tests.db_helpers import without_scope
 
 ENV = dotenv_values(Path(__file__).resolve().parent.parent / ".env")
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or ENV.get("DATABASE_URL_MIGRATOR")
@@ -139,7 +140,7 @@ async def _seed() -> Identities:
     return ids
 
 
-POOL = {"hold": 40, "book": 40, "extra": 40, "cancel": 30}  # slots / bookings handed out one per test case
+POOL = {"hold": 90, "book": 90, "extra": 60, "cancel": 70}  # slots / bookings handed out one per test case
 N_PATIENTS = 45
 
 
@@ -196,7 +197,8 @@ async def _seed_scheduling(ids, conn) -> None:
         "values ($1, $2, $3, $4, $5, $6, $7, $8, 'test', $9)",
         slots,
     )
-    bookings = [(uuid.uuid4(), sid, ids.patients_a[i % N_PATIENTS], k(f"bk{i}")) for i, sid in enumerate(pools["cancel"])]
+    # patients 40 to 44 are reserved (the cancel-candidates test asserts they have no booking, and 43/44 are the waiting pair): the seeded bookings cycle over the first 40 only
+    bookings = [(uuid.uuid4(), sid, ids.patients_a[i % 40], k(f"bk{i}")) for i, sid in enumerate(pools["cancel"])]
     await conn.executemany(
         "insert into sched.bookings (id, clinic_id, slot_id, patient_id, origin, idempotency_key) values ($1, $2, $3, $4, 'test', $5)",
         [(bid, a, sid, pid, key) for bid, sid, pid, key in bookings],
@@ -2422,7 +2424,7 @@ def test_the_two_person_rule_end_to_end(client, ids):
         ("merge.approve", ids.fd2, "front_desk"), ("merge.propose", ids.people["front_desk_a"][0], "front_desk"),
     ]
     for r in audit:
-        details = json.loads(r["details"]) if isinstance(r["details"], str) else r["details"]
+        details = without_scope(r["details"])
         assert set(details) <= {"master_patient_id", "subordinate_patient_id", "replayed"} and all(isinstance(v, (str, bool)) for v in details.values())
 
 
@@ -2520,7 +2522,7 @@ def test_a_revoke_writes_one_event_one_audit_row_and_with_the_task_settings_conf
     assert set(provenance) == {"patient_id", "revoke_event_id", "reason", "confirmed_at", "record_created_by"}
     audit = "select actor_id, actor_role, details, clinic_id from audit.log where resource_type = 'patient' and resource_id = $1 and action = 'patient.revoke_identity'"
     (row,) = _run(_fetch(audit, str(patient)))  # one row: the replay wrote none
-    details = json.loads(row["details"]) if isinstance(row["details"], str) else row["details"]
+    details = without_scope(row["details"])
     assert (row["actor_id"], row["actor_role"], row["clinic_id"]) == (fd, "front_desk", ids.clinic_a)
     assert details == {"reason": "wrong_person", "replayed": False, "review_task": "raised"}
 
@@ -2533,7 +2535,7 @@ def test_with_the_task_settings_unset_the_revoke_is_recorded_and_says_no_task_wa
     assert _run(_fetch("select count(*) as n from mpi.identity_confirmations where patient_id = $1 and kind = 'revoke'", patient))[0]["n"] == 1
     assert _run(_fetch("select count(*) as n from agents.review_tasks where provenance ->> 'patient_id' = $1", str(patient)))[0]["n"] == 0
     (row,) = _run(_fetch("select details from audit.log where resource_id = $1 and action = 'patient.revoke_identity'", str(patient)))
-    details = json.loads(row["details"]) if isinstance(row["details"], str) else row["details"]
+    details = without_scope(row["details"])
     assert details["review_task"] == "not_configured"  # the audit row says so too
 
 
@@ -2551,7 +2553,7 @@ def test_acknowledging_and_releasing_a_hold_write_one_audit_row_each_as_the_pers
     assert [r["action"] for r in rows] == ["review_task.acknowledge", "review_task.resolve"]  # the replay wrote nothing more
     for r in rows:
         assert (r["actor_id"], r["actor_role"], r["clinic_id"]) == (fd, "front_desk", ids.clinic_a)
-    details = json.loads(rows[1]["details"]) if isinstance(rows[1]["details"], str) else rows[1]["details"]
+    details = without_scope(rows[1]["details"])
     assert details == {"kind": "referral_hold", "replayed": False}
     state = _run(_fetch("select status, acknowledged_by, resolved_at is not null as closed from agents.review_tasks where id = $1", task))[0]
     assert (state["status"], state["acknowledged_by"], state["closed"]) == ("resolved", fd, True)
@@ -2577,7 +2579,7 @@ def test_registering_a_document_writes_one_row_and_one_audit_row_as_the_person_a
     assert len(rows) == 1 and rows[0]["registered_by"] == fd and rows[0]["storage_path"] == f"clinic/{ids.clinic_a}/doc/{document}"
     audit = _run(_fetch("select actor_id, actor_role, details, clinic_id from audit.log where resource_type = 'document' and resource_id = $1 and action = 'document.register'", str(document)))
     assert len(audit) == 1 and (audit[0]["actor_id"], audit[0]["actor_role"], audit[0]["clinic_id"]) == (fd, "front_desk", ids.clinic_a)
-    details = json.loads(audit[0]["details"]) if isinstance(audit[0]["details"], str) else audit[0]["details"]
+    details = without_scope(audit[0]["details"])
     assert details == {"kind": "referral", "scan": "not_checked", "replayed": False}
     refused = client.post(DOC_REGISTER, headers={**bearer(mint(ids.people["doctor_a"][0])), "X-Idempotency-Key": key}, json=body)
     assert refused.status_code == 403 and _run(_fetch("select count(*) as n from audit.log where resource_id = $1 and action = 'document.register'", str(document)))[0]["n"] == 1
@@ -2629,7 +2631,7 @@ def test_a_registered_person_is_found_by_exact_details_with_flags_only_and_a_wor
     # one audit row per search that reached the lookup: who, role, the KIND of search and the result count; never the query text or the results
     rows = _run(_fetch("select actor_id, actor_role, details, resource_id from audit.log where action = 'patient.search' and clinic_id = $1 order by id", ids.clinic_a))
     assert len(rows) >= 3 and all((r["actor_id"], r["actor_role"]) == (fd, "front_desk") for r in rows)
-    parsed = [json.loads(r["details"]) if isinstance(r["details"], str) else r["details"] for r in rows]
+    parsed = [without_scope(r["details"]) for r in rows]
     assert {"kind": "name_dob_phone", "labels": 1, "results": 1} in parsed and {"kind": "name_dob", "labels": 1, "results": 1} in parsed  # (the third search, another name with the same phone, finds the number's owner: one phone-only hit, no label)
     assert {"kind": "name_dob_phone", "labels": 0, "results": 1} in parsed
     assert all(set(d) == {"kind", "labels", "results"} for d in parsed)  # counts only, never ids or text
@@ -2746,7 +2748,7 @@ def test_list_rows_are_audited_with_the_count_only_and_the_page_limit_setting_ca
     finally:
         _end_view_override(client, key)
     rows = _run(_fetch("select actor_role, details, resource_type from audit.log where action = 'patient.view_labels' and clinic_id = $1 and actor_id = $2 order by id", ids.clinic_a, fd))  # this user's rows only: other tests of the clinic read labels as nurse and doctor
-    parsed = [json.loads(r["details"]) if isinstance(r["details"], str) else r["details"] for r in rows]
+    parsed = [without_scope(r["details"]) for r in rows]
     assert {"count": 1} in parsed and all(set(d) == {"count"} for d in parsed) and all(r["actor_role"] == "front_desk" for r in rows)  # a count, never ids
     assert HARD_PAGE_CAP == 25
     with pytest.raises(ValueError):
@@ -2879,7 +2881,7 @@ def test_a_confirmation_writes_exactly_one_audit_row_as_the_confirmer_with_ids_o
     assert ok.status_code == 200 and ok.json()["replayed"] is False
     (row,) = _run(_fetch(audit, str(patient)))
     assert (row["actor_id"], row["actor_role"], row["clinic_id"]) == (fd, "front_desk", ids.clinic_a)
-    details = json.loads(row["details"]) if isinstance(row["details"], str) else row["details"]
+    details = without_scope(row["details"])
     assert details == {"replayed": False}
     again = client.post(CONFIRM.format(patient_id=patient), headers={**bearer(mint(fd)), "X-Idempotency-Key": key})
     assert again.status_code == 200 and again.json()["replayed"] is True
