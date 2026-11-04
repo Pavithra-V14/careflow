@@ -182,13 +182,11 @@ jobs:
               tests/test_queue_live.py
               tests/test_rls_spend_and_approval_live.py
               tests/test_scheduling_live.py
-          - shard: 3  # about 44 min: referrals 1101 + identity 466 + mpi worker 263 + checkpoints 193 + triage 191 + docs 180 + msg 180 + real token 13 + storage policies 18 (measured on run 41089472168)
+          - shard: 3  # about 41 min (run 41842559711 measured 51.0 min job time, 2745 s of tests: referrals 1316 + identity 483 + mpi worker 315 + triage 234 + checkpoints 225 + msg 212 + docs 209 + real token 32 + storage policies 20; mpi worker and triage moved to shard 6 on 2026-11-04, about 550 s). The secret key reaches THIS shard only (storage policies and real token stay here).
             matrix_part: ""
             files: >-
               tests/test_api_referrals_live.py
               tests/test_identity_live.py
-              tests/test_rls_mpi_worker_live.py
-              tests/test_rls_triage_live.py
               tests/test_rls_checkpoints_live.py
               tests/test_rls_docs_live.py
               tests/test_rls_msg_live.py
@@ -217,10 +215,12 @@ jobs:
             files: >-
               tests/test_active_role_live.py
               tests/test_active_role_matrix_live.py
-          - shard: 6  # PART 2 of the header dimension (see shard 5)
+          - shard: 6  # PART 2 of the header dimension (see shard 5), plus the mpi worker and triage RLS files moved from shard 3 (run 41842559711: shard 6 took 21.4 min, shard 3 51.0); expected about 30 min
             matrix_part: "2/2"
             files: >-
               tests/test_active_role_matrix_live.py
+              tests/test_rls_mpi_worker_live.py
+              tests/test_rls_triage_live.py
     env:
       CAREFLOW_ENV: ci
       CAREFLOW_PROFILE: demo
