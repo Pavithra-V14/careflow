@@ -120,7 +120,7 @@ def _client(claims):
         raise AssertionError("the database was reached")
         yield
 
-    settings = Settings(supabase_url=PROJECT, database_url_app="postgresql://unused", step_up_max_age_seconds=300)
+    settings = Settings(_env_file=None, supabase_url=PROJECT, database_url_app="postgresql://unused", step_up_max_age_seconds=300)
     app = create_app(settings, jwks=JWKSClient(PROJECT + "/auth/v1/.well-known/jwks.json"), engine=object(), clock=lambda: NOW)  # type: ignore[arg-type]
     app.dependency_overrides[verified_claims] = fake_claims
     app.dependency_overrides[db_conn] = fake_db

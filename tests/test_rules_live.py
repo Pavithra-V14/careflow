@@ -373,12 +373,15 @@ async def test_no_model_and_no_network_are_needed_to_reach_a_safety_outcome(db, 
     def forbidden(*args, **kwargs):
         raise AssertionError("the safety decision tried to use the network")
 
-    for name in ("connect", "send", "sendall", "sendto", "recv"):
-        monkeypatch.setattr(socket.socket, name, forbidden)
-    assert evaluate_with(ruleset, TEXT).outcome == "red_flag"
-    assert evaluate_with(ruleset, "quiet").outcome == "clear"
-    stream = rules.StreamEvaluator(ruleset)
-    assert stream.feed("zz").outcome == "clear" and stream.feed("alpha").outcome == "red_flag"
+    # The patch is scoped to this SYNCHRONOUS block (no await inside), so the event loop cannot run while sockets are forbidden. Left in force until the test's teardown it let the loop's own flush of the
+    # open database connection call the patched send, which killed that connection and errored every later test in the file (shard 4, run 41829435245).
+    with monkeypatch.context() as no_network:
+        for name in ("connect", "send", "sendall", "sendto", "recv"):
+            no_network.setattr(socket.socket, name, forbidden)
+        assert evaluate_with(ruleset, TEXT).outcome == "red_flag"
+        assert evaluate_with(ruleset, "quiet").outcome == "clear"
+        stream = rules.StreamEvaluator(ruleset)
+        assert stream.feed("zz").outcome == "clear" and stream.feed("alpha").outcome == "red_flag"
 
 
 # ---- voice: the same rules over a live transcript --------------------------------------------------

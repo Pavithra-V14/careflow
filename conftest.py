@@ -1,6 +1,6 @@
 """Root pytest hooks.
 
-SPLITTING THE ROLE MATRIX ACROSS CI SHARDS. tests/test_api_role_matrix.py is the longest live file and grows with every route. CI runs it in two shards, each with
+SPLITTING THE ROLE MATRIX (and its header dimension, tests/test_active_role_matrix_live.py) ACROSS CI SHARDS. tests/test_api_role_matrix.py is the longest live file and grows with every route. CI runs it in two shards, each with
 `CAREFLOW_MATRIX_PART=i/n`; this hook then keeps only the tests of that part, chosen by a stable hash of the test id, so the n parts together run every test of the file exactly once and no
 test is in two parts. Each part is a separate pytest process, so it seeds its own clinics (the module fixtures do not collide). With the variable unset or empty (every local run, the offline
 job) nothing is deselected. An invalid value fails the run loudly instead of silently running everything or nothing.
@@ -9,7 +9,8 @@ job) nothing is deselected. An invalid value fails the run loudly instead of sil
 import os
 import zlib
 
-MATRIX_FILE = "test_api_role_matrix.py"
+# Files split this way: the role matrix, and the header dimension of it (tests/test_active_role_matrix_live.py, which replays every staff route and took 58 min whole).
+SPLIT_FILES = ("test_api_role_matrix.py", "test_active_role_matrix_live.py")
 
 
 def matrix_part_of(nodeid: str, parts: int) -> int:
@@ -36,7 +37,7 @@ def pytest_collection_modifyitems(config, items):
     index, total = part
     keep, dropped = [], []
     for item in items:
-        if item.nodeid.split("::")[0].endswith(MATRIX_FILE) and matrix_part_of(item.nodeid, total) != index:
+        if item.nodeid.split("::")[0].endswith(SPLIT_FILES) and matrix_part_of(item.nodeid, total) != index:
             dropped.append(item)
         else:
             keep.append(item)

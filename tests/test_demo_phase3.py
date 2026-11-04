@@ -25,7 +25,7 @@ DEMO_ENV = {"CAREFLOW_PROFILE": "demo", DATA_POLICY_VARIABLE: "synthetic_only", 
 
 
 def settings():
-    return Settings(supabase_url="https://x.supabase.test", database_url_app="postgresql://u:p@h/d")  # type: ignore[call-arg]
+    return Settings(_env_file=None, supabase_url="https://x.supabase.test", database_url_app="postgresql://u:p@h/d")  # type: ignore[call-arg]
 
 
 # ---- the file ------------------------------------------------------------------------------------------------------------------------------

@@ -21,12 +21,12 @@ name: CI
 
 on:
   # A change that touches ONLY the frontend (frontend/** and its own workflow) does not run this backend workflow: the frontend has its own (frontend.yml). A change that touches anything else
-  # still runs everything. NOTE for branch protection: a frontend-only pull request never reports the required `test` check from this workflow.
+  # still runs everything. The frontend's own notes (docs/frontend-*.md) count as frontend-only; docs/** in general does NOT (offline tests read the docs). NOTE for branch protection: a frontend-only pull request never reports the required `test` check from this workflow.
   pull_request:
-    paths-ignore: ['frontend/**', '.github/workflows/frontend.yml']
+    paths-ignore: ['frontend/**', '.github/workflows/frontend.yml', 'docs/frontend-*.md']
   push:
     branches: [main]
-    paths-ignore: ['frontend/**', '.github/workflows/frontend.yml']
+    paths-ignore: ['frontend/**', '.github/workflows/frontend.yml', 'docs/frontend-*.md']
 
 # A newer push to the same branch supersedes an older run of it, so superseded runs stop instead of piling up. Runs of DIFFERENT
 # branches still share ONE hosted CI database: each live shard below has its own, job-level group so two runs never overlap on the same shard
@@ -212,10 +212,14 @@ jobs:
               tests/test_rls_child_tables_live.py
               tests/test_rules_live.py
               tests/test_phase2_e2e_live.py
-          - shard: 5  # the ACTIVE ROLE (docs/design/active-role.md): the database tests (never committed) and the header dimension of every staff route through the role matrix (its own seeded world). Estimated 15-25 min: measure on its first run.
-            matrix_part: ""
+          - shard: 5  # the ACTIVE ROLE (docs/design/active-role.md): the database tests (never committed) and PART 1 of the header dimension of every staff route (its own seeded world). The whole file measured 58.5 min on run 41652369869 (too close to the 60-minute timeout), so it is split in two parts like the role matrix: expect about 30 min each.
+            matrix_part: "1/2"
             files: >-
               tests/test_active_role_live.py
+              tests/test_active_role_matrix_live.py
+          - shard: 6  # PART 2 of the header dimension (see shard 5)
+            matrix_part: "2/2"
+            files: >-
               tests/test_active_role_matrix_live.py
     env:
       CAREFLOW_ENV: ci
