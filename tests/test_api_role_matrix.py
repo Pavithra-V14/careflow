@@ -19,6 +19,7 @@ import base64
 import json
 import os
 import random
+import re
 import time
 import uuid
 from collections.abc import Callable
@@ -74,7 +75,9 @@ ATTACKER, _ = _key("matrix-key")  # same kid, different key material
 
 
 def mint(sub, *, key=SIGNING, kid="matrix-key", alg="ES256", **over):
-    claims = {"sub": str(sub), "iss": ISSUER, "aud": "authenticated", "role": "authenticated", "exp": int(time.time()) + 3000, **over}
+    # A staff token carries a verified second factor by default (every staff route demands one: careflow.auth.mfa_failure); a test that wants a password-only session says aal=None, amr=None.
+    claims = {"sub": str(sub), "iss": ISSUER, "aud": "authenticated", "role": "authenticated", "exp": int(time.time()) + 3000,
+              "aal": "aal2", "amr": [{"method": "totp", "timestamp": int(time.time()) - 5}], **over}
     claims = {k: v for k, v in claims.items() if v is not None}
     return jwt.encode(claims, key, algorithm=alg, headers={"kid": kid})
 
@@ -650,7 +653,7 @@ def stepped(sub, **over):
 
 def not_stepped_variants(sub) -> list[tuple[str, dict]]:
     return [
-        ("a password-only session (no aal, no amr)", bearer(mint(sub))),
+        ("a password-only session (no aal, no amr)", bearer(mint(sub, aal=None, amr=None))),
         ("aal1 even with a totp entry", bearer(mint(sub, aal="aal1", amr=_totp()))),
         ("aal2 with a totp entry older than the window", bearer(mint(sub, aal="aal2", amr=_totp(STEP_UP_WINDOW + 600)))),
         ("aal2 with a totp entry in the future", bearer(mint(sub, aal="aal2", amr=_totp(-3600)))),
@@ -1967,6 +1970,37 @@ def test_split_routes_have_both_halves_and_the_dedicated_half_covers_every_role_
 @pytest.mark.parametrize(("method", "path"), sorted(MATRIX))
 def test_role_matrix(client, ids, method, path):
     check_route_matrix(client, method, path, MATRIX[(method, path)](ids))
+
+
+# ---- every staff route demands a verified second factor (review decision 2026-11-04; careflow.auth.mfa_failure) -------------------------------------------------------
+
+
+def _filled(path: str) -> str:
+    return re.sub(r"\{[^}]+\}", lambda _m: str(uuid.uuid4()), path)
+
+
+PASSWORD_ONLY = [
+    {"aal": None, "amr": None},  # no second factor at all
+    {"aal": "aal1", "amr": [{"method": "totp", "timestamp": 1}]},  # aal1 even with a totp entry
+    {"aal": "aal2", "amr": [{"method": "password", "timestamp": 1}]},  # aal2 but no totp entry
+    {"aal": "aal2", "amr": ["totp"]},  # legacy string amr: not the verified shape
+]
+
+
+@pytest.mark.parametrize(("method", "path"), sorted(k for k in MATRIX if k[1] != "/v1/iam/me"))
+def test_every_staff_route_refuses_a_session_without_a_verified_second_factor(client, ids, method, path):
+    sub = ids.people["front_desk_a"][0]
+    for over in PASSWORD_ONLY:
+        r = client.request(method, _filled(path), headers=bearer(mint(sub, **over)), json={} if method == "POST" else None)
+        assert r.status_code == 401, (method, path, over, r.status_code)
+        assert r.json() in ({"detail": "multi-factor sign-in required"}, {"detail": "step-up required"}), (method, path, r.text)  # the merge routes' own step-up refusal may come first
+        assert r.headers["www-authenticate"] in {"mfa", "step-up"}
+
+
+def test_me_alone_is_open_to_a_password_only_session(client, ids):
+    """The console needs /v1/iam/me to find out what to enrol, so it is the one route exempt from the second-factor rule."""
+    r = client.get("/v1/iam/me", headers=bearer(mint(ids.people["front_desk_a"][0], aal=None, amr=None)))
+    assert r.status_code == 200
 
 
 def test_the_harness_catches_a_route_that_lets_everyone_in(ids):
