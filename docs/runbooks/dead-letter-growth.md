@@ -6,7 +6,7 @@ BUILD-SPEC.md 7.3 and 16.2; `careflow/dead_letters.py`; metric `dead_letter_coun
 
 **Who:** engineering on call. **Safe to repeat:** yes (the task key is `dead-letter:<job id>`; a second sweep creates nothing).
 
-1. **Confirm the count and the age.** `select id, task_type, attempts, created_at from queue.jobs where dead_lettered_at is not null order by created_at desc` as the migrator (never print the payload column). Note how many are new since the last alert.
+1. **Confirm the count and the age.** `select id, task_type, attempt_count, dead_lettered_at from ops.queue where state = 'dead_lettered' order by dead_lettered_at desc` as the migrator (name these columns; never select `payload` or `last_error`, which can hold text). Note how many are new since the last alert.
 2. **Check the tasks exist.** Every dead-lettered job should have a nurse task `dead-letter:<id>`. A job without one means the worker is not ticking: go to step 4 first.
 3. **Find the common cause from ids and error classes only** (never the payload or letter text): the worker log shows the class, e.g. a missing handler (deploy mismatch), `BudgetExceeded` (ceiling reached), a model or storage outage (see the model-outage runbook), or one bad document. Fix the cause; do not edit the job.
 4. **Is the worker running?** `CAREFLOW_RUN_WORKER` and `CAREFLOW_WORKER_ACCOUNT_ID` must be set and the log must show ticks. A stopped worker stops the sweep too.
