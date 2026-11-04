@@ -1,0 +1,190 @@
+generated_from: metrics-catalog.yaml
+note: generated; do not edit. Conditions are the catalog's text, not an executable query.
+rules:
+- id: after_the_fact_error_spike
+  severity: critical_safety
+  condition: after_the_fact_review_error_rate > 0.02
+  channel:
+  - admin_slack
+  - in_app_admin
+  suppressible_by_budget: false
+  metrics:
+  - after_the_fact_review_error_rate
+  note: triggers automatic demotion to shadow mode, BUILD-SPEC.md §14.7
+- id: audit_completeness_gap
+  severity: safety
+  condition: audit_log_completeness < 1.0
+  channel:
+  - admin_slack
+  - in_app_admin
+  suppressible_by_budget: false
+  metrics:
+  - audit_log_completeness
+- id: canary_approved
+  severity: critical_safety
+  condition: a canary task is approved by a reviewer
+  channel:
+  - admin_slack
+  - in_app_admin
+  suppressible_by_budget: false
+  metrics:
+  - canary_catch_rate
+  note: never shown to the reviewer who approved it
+- id: care_gap_growth
+  severity: safety
+  condition: care_gap_open_count rising week over week with no explanatory change in patient volume
+  channel:
+  - admin_slack
+  - in_app_admin
+  suppressible_by_budget: false
+  metrics:
+  - care_gap_open_count
+- id: cost_tail_spike
+  severity: cost
+  condition: cost per job > 3x rolling average, or absolute hard-stop $1-equivalent per job reached
+  channel:
+  - admin_slack
+  suppressible_by_budget: false
+  metrics:
+  - cost_per_completed_task
+  - cost_tail_top_5_percent
+  note: the hard-stop itself is a circuit breaker, not just an alert — see BUILD-SPEC.md §15.2
+- id: dead_letter_growth
+  severity: operational
+  condition: dead_letter_count > 0
+  channel:
+  - admin_slack
+  - in_app_admin
+  suppressible_by_budget: false
+  metrics:
+  - dead_letter_count
+  - loop_failure_rate
+- id: delivery_failure
+  severity: operational
+  condition: any notification channel (Slack, email, SMS) fails to deliver
+  channel:
+  - in_app_admin_banner
+  suppressible_by_budget: false
+  metrics: []
+  note: ensures a dead channel is never silently dead
+- id: error_rate_spike
+  severity: operational
+  condition: error_rate exceeds target
+  channel:
+  - admin_slack
+  suppressible_by_budget: false
+  metrics:
+  - error_rate
+- id: escalation_accuracy_drift
+  severity: safety
+  condition: escalation_rate_and_accuracy trending outside calibrated band for current autonomy mode
+  channel:
+  - admin_slack
+  - in_app_admin
+  suppressible_by_budget: false
+  metrics:
+  - escalation_rate_and_accuracy
+- id: eval_spend_cap
+  severity: cost
+  condition: evaluation_spend approaches its explicit monthly cap
+  channel:
+  - admin_slack
+  suppressible_by_budget: false
+  metrics:
+  - evaluation_spend
+- id: fallback_spike
+  severity: operational
+  condition: fallback_and_abstention_spike deviates from rolling baseline
+  channel:
+  - admin_slack
+  suppressible_by_budget: false
+  metrics:
+  - fallback_and_abstention_spike
+- id: golden_set_drift
+  severity: safety
+  condition: any gated metric in golden_set_vs_variance_band falls outside its variance band
+  channel:
+  - admin_slack
+  - in_app_admin
+  suppressible_by_budget: false
+  metrics:
+  - golden_set_vs_variance_band
+- id: grounding_rate_drop
+  severity: operational
+  condition: grounding_rate drops below target
+  channel:
+  - admin_slack
+  suppressible_by_budget: false
+  metrics:
+  - grounding_rate
+- id: index_staleness
+  severity: operational
+  condition: index_freshness_lag p95 exceeds target
+  channel:
+  - admin_slack
+  suppressible_by_budget: false
+  metrics:
+  - index_freshness_lag
+- id: latency_spike
+  severity: operational
+  condition: latency_p95_machine > 2x rolling average, or duration > 2x average (reference architecture default)
+  channel:
+  - admin_slack
+  suppressible_by_budget: false
+  metrics:
+  - latency_p95_machine
+- id: model_deprecated
+  severity: operational
+  condition: model_dependency_health detects a vanished or changed model id
+  channel:
+  - admin_slack
+  suppressible_by_budget: false
+  metrics:
+  - model_dependency_health
+- id: oldest_job_stale
+  severity: operational
+  condition: queue_depth_and_oldest_age.oldest_age > 10 min
+  channel:
+  - admin_slack
+  suppressible_by_budget: false
+  metrics:
+  - queue_depth_and_oldest_age
+- id: red_flag_overdue
+  severity: critical_safety
+  condition: red_flag_task_overdue > 0
+  channel:
+  - in_app_role
+  - admin_slack
+  - email_nudge
+  suppressible_by_budget: false
+  metrics:
+  - red_flag_task_overdue
+- id: review_task_overdue
+  severity: safety
+  condition: review_queue_age exceeds the task class's deadline
+  channel:
+  - in_app_role
+  - email_nudge
+  suppressible_by_budget: false
+  metrics:
+  - review_queue_age
+  escalation: next role up the chain if still unclaimed
+- id: safety_net_failed_closed
+  severity: critical_safety
+  condition: safety_net_fail_closed_rate increments
+  channel:
+  - admin_slack
+  - in_app_admin
+  suppressible_by_budget: false
+  metrics:
+  - safety_net_fail_closed_rate
+- id: voice_safety_missed
+  severity: critical_safety
+  condition: voice_safety_escalation_rate < 1.0 -- a detected red flag on a call did not trigger the safety response or nurse acknowledgment
+  channel:
+  - admin_slack
+  - in_app_admin
+  suppressible_by_budget: false
+  metrics:
+  - voice_safety_escalation_rate
+  note: no text trail exists for a missed voice escalation the way one exists for a missed message, so this fires immediately rather than waiting for a rollup
