@@ -94,6 +94,11 @@ jobs:
       - name: OpenAPI snapshot is current (BUILD-SPEC.md §21)
         run: uv run python scripts/export_openapi.py --check
 
+      # The gate scorecard (BUILD-SPEC.md 14.3): prints MEASURED / NOT MEASURED / FAILED per gate. --report-only because the gold sets do not exist yet, so every gate honestly reads NOT MEASURED;
+      # a FAILED gate (evidence that says so) still fails this step. Drop --report-only once the evidence file is produced in CI.
+      - name: Gate scorecard
+        run: uv run python scripts/gate_scorecard.py --report-only
+
       - name: "Offline tests (a skipped test is a failure)"
         run: |
           set -o pipefail
