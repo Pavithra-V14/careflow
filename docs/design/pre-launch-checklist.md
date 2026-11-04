@@ -23,7 +23,7 @@ Items 1 to 18 keep the numbers of `phase2-status.md` ("PRE-LAUNCH BLOCKERS"); 19
 | 13 | Durable spend ledger for a real reply-interpretation call | OPEN | O (a new grant needs sign-off) + E | build the definer-function variant in `spend-ledger-options.md` when a real call is wanted | phase2-status 13 |
 | 14 | (same as 2) | see 2 | | | |
 | 15 | (same as 9) | see 9 | | | |
-| 16 | Key-squatting hole in the 0013 `unmerge_review` insert clause | OPEN | E (a new migration; reviewer pass) | fix-forward migration binding the clause to a real event | phase2-status 16 |
+| 16 | Key-squatting hole in review-task inserts | IN PROGRESS: 0026 bound the FRONT-DESK `unmerge_review` clause to a merge; the nurse, doctor and worker insert clauses still do not pin `status`/`acknowledged_by` or the key (review 2026-11-04, L4, L5) | E (a new migration; reviewer pass) | fix-forward migration binding the remaining clauses | phase2-status 16 |
 | 17 | Privacy owner's written confirmation of the patient-view field list; a shared (not per-process) open rate limiter | OPEN | P + E | the written confirmation; a shared limiter | patient-view-fields.md |
 | 18 | Document storage is synthetic-only | OPEN | O + P + H | region decision (India region in production), the privacy owner's written confirmation, scanner (item 2), the recorded spike, and the 0027 storage policies applied in production | phase2-status 18; uploads-supabase-storage.md |
 
