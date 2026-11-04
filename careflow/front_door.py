@@ -65,6 +65,7 @@ from careflow.referral import (
     screen_referral,
 )
 from careflow.retrieval import CardRetriever
+from careflow.text_guard import mask_pii, scan_text
 
 RECURSION_LIMIT: Final = 40  # §7.3: 40 steps per run
 REVIEW_DECISIONS: Final = ("approve", "edit", "reject")
@@ -114,7 +115,7 @@ def hold_role_for(status: str) -> str:
 
 STATUSES: Final = (
     "started", "red_flag_escalated", "held_unassessable", "extraction_unavailable", "needs_front_desk", "identity_resolved", "matched",
-    "triage_proposed", "reviewed", "letter_unreadable", "identity_conflict",
+    "triage_proposed", "reviewed", "letter_unreadable", "identity_conflict", "held_suspect_text",
 )
 
 
@@ -223,6 +224,15 @@ def thread_id_for(document_id: uuid.UUID) -> str:
     return f"front_door:{document_id}"
 
 
+def _suspect_text(text_: str) -> FrontDoorState | None:
+    """The heuristic injection scan (careflow/text_guard.py). A suspect, unscannable or oversized letter is HELD for a nurse with closed reason words: when unsure, hold, never pass. It runs AFTER the
+    deterministic red-flag rules (it can only add a hold, never clear or lower anything) and before any model reads the letter."""
+    scan = scan_text(text_)
+    if scan.suspect:
+        return {"status": "held_suspect_text", "reasons": list(scan.reasons)}
+    return None
+
+
 def _digest(*parts: str) -> str:
     return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
 
@@ -252,6 +262,9 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
                 return {"status": "letter_unreadable", "reasons": ["empty_letter"]}
         if screened.result is not None:
             return {"status": screened.result.status, "reasons": list(screened.result.reasons)}
+        held = _suspect_text(text_)
+        if held is not None:
+            return held
         return {"status": "started", "reasons": []}
 
     async def resolve_identity(state: FrontDoorState) -> FrontDoorState:
@@ -262,6 +275,9 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
                 text_ = await deps.texts.text_for(document_id)
             except ExtractionNeedsManual as exc:
                 return _unavailable(exc)
+            held = _suspect_text(text_)  # a resume can land here without passing through `screen`: the extractor must not read a suspect letter
+            if held is not None:
+                return held
             result = await process_referral(conn, deps.engine, deps.extractor, deps.ingestor, document_id, text_, profile=deps.profile)  # type: ignore[arg-type]
         update: FrontDoorState = {"status": result.status, "reasons": list(result.reasons)}
         if result.identity is not None:
@@ -281,7 +297,11 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
         if screened.clearance is None:
             assert screened.result is not None
             return {"status": screened.result.status, "reasons": list(screened.result.reasons)}
-        found = await deps.retriever.retrieve(text_, scope=deps.retrieval_scope)
+        held = _suspect_text(text_)
+        if held is not None:
+            return held
+        # The retriever embeds the letter with a model: it receives the MASKED letter (no phone, e-mail, date or labelled name), not the original (BUILD-SPEC 11.3).
+        found = await deps.retriever.retrieve(mask_pii(text_).text, scope=deps.retrieval_scope)
         return {
             "status": "matched",
             "abstained": found.abstained,
