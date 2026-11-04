@@ -196,3 +196,63 @@ def test_the_env_example_lists_the_view_variable_names_without_values():
     text = (DEMO_FILE.parent.parent / ".env.example").read_text(encoding="utf-8")
     for name in ("CAREFLOW_PATIENT_VIEW_MAX_OPENS_PER_MINUTE", "CAREFLOW_PATIENT_VIEW_MAX_LABEL_ROWS_PER_MINUTE", "CAREFLOW_PATIENT_VIEW_PAGE_LIMIT"):
         assert f"# {name}=\n" in text and f"\n{name}=" not in text  # named, commented out, no value
+
+
+# ---- demo stand-ins for clinician items 23 and 24 (the revoke reasons, who re-checks, how urgently); NOTHING for 25 or 26 -----------------------------------
+
+
+def test_the_revoke_stand_ins_load_only_under_the_gate_and_map_to_the_demo_priority_levels():
+    from careflow.demo_phase3 import revoke_placeholders
+
+    got = revoke_placeholders(DEMO_ENV, "demo")
+    assert got["reasons"] == ("wrong_person", "planted_or_suspect", "mistaken_click", "other") and got["recheck_role"] == "admin"
+    assert got["admin_alert_reasons"] == ("planted_or_suspect",)
+    levels = load_demo_phase3("demo", "synthetic_only").priority_names
+    assert got["priority_by_reason"] == {"wrong_person": levels[2], "planted_or_suspect": levels[0], "mistaken_click": levels[2], "other": levels[2]}  # highest for planted, lowest for the rest
+    assert revoke_placeholders({"CAREFLOW_PROFILE": "demo", DATA_POLICY_VARIABLE: "synthetic_only"}, "demo") == {}  # switch off: nothing filled in
+    assert revoke_placeholders({}, "clinical") == {}
+
+
+@pytest.mark.parametrize(
+    ("env", "profile"),
+    [
+        ({SWITCH: "1"}, "clinical"),
+        ({SWITCH: "1", "CAREFLOW_PROFILE": "demo", DATA_POLICY_VARIABLE: "phi_approved"}, "demo"),
+        ({SWITCH: "1", "CAREFLOW_PROFILE": "demo"}, "demo"),
+        ({SWITCH: "1", "CAREFLOW_PROFILE": "clinical", DATA_POLICY_VARIABLE: "synthetic_only"}, "clinical"),
+    ],
+)
+def test_the_revoke_stand_ins_are_refused_outside_demo_with_synthetic_data(env, profile):
+    from careflow.demo_phase3 import revoke_placeholders
+
+    with pytest.raises(DemoConfigRefused):
+        revoke_placeholders(env, profile)
+    with pytest.raises(DemoConfigRefused):
+        load_demo_phase3(profile, env.get(DATA_POLICY_VARIABLE))
+
+
+def test_every_revoke_stand_in_is_labelled_and_the_file_holds_nothing_for_items_25_or_26():
+    data = yaml.safe_load(DEMO_FILE.read_text(encoding="utf-8"))["settings"]
+    for key in ("revoke_reasons", "revoke_recheck_role", "revoke_priority_by_reason", "revoke_admin_alert_reasons"):
+        assert set(data[key]) == {"value", "label"} and data[key]["label"] == DEMO_LABEL, key
+    # items 25 (closing a red-flag task) and 26 (editing a triage proposal): no value anywhere in the pack, and the loader would refuse a key added for them
+    assert not [k for k in SETTING_KEYS if re.search(r"clos|edit|resolve|second_person|confirm_by", k)], "no setting may answer item 25 or 26"
+    assert not re.search(r"clos|edit|resolve|second person", str(data), re.IGNORECASE)
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda s: s["revoke_priority_by_reason"]["value"].pop("other"),  # a reason with no demo level
+        lambda s: s["revoke_priority_by_reason"]["value"].update(other="HIGH"),  # not a demo priority level
+        lambda s: s["revoke_admin_alert_reasons"]["value"].append("not_a_reason"),  # an alert for a reason that is not listed
+        lambda s: s["revoke_reasons"]["value"].append("wrong_person"),  # a duplicate reason
+    ],
+)
+def test_the_loader_refuses_inconsistent_revoke_stand_ins(tmp_path: Path, mutate):
+    content = yaml.safe_load(DEMO_FILE.read_text(encoding="utf-8"))
+    mutate(content["settings"])
+    path = tmp_path / "demo.yaml"
+    path.write_text(yaml.safe_dump(content), encoding="utf-8")
+    with pytest.raises(DemoConfigRefused):
+        load_demo_phase3("demo", "synthetic_only", path=path)

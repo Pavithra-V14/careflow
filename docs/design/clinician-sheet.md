@@ -51,6 +51,19 @@ For: Priya and the clinical lead. Plain language. **We have not filled in any an
 | 23 | The list of reasons front desk can give when they take back a confirmation of who a patient is. Today: wrong person, planted or suspect record, mistaken click. | A short fixed list (no free text, which could hold patient details) shows why records get demoted. Operational words, not clinical content. | (the three words above; change, add or remove) | |
 | 24 | When a confirmation is taken back, a nurse or doctor is asked to re-check what was linked to that record in the meantime. Who gets that task, and how urgent is it? | Until this is answered NO task is raised: the take-back is recorded, the screen says no task was raised, and nobody re-checks. | role: nurse or doctor; urgency: immediate or standard | |
 | 25 | What does it take to CLOSE a red-flag review task: who may close it, what must be recorded (what was done, who was told), and does a second person confirm? | Until this is answered no route closes a red-flag task: a nurse can acknowledge it, nothing more. | (who, what is recorded, one or two people) | |
+| 26 | What may a reviewer EDIT in a triage proposal before approving it? | Until this is answered the console shows "edit" as "Coming soon" and the server refuses it with a fixed response: a reviewer can only approve or reject. | (see the options below) | |
+
+### AI-drafted options, not a decision (items 23 to 26)
+
+These were drafted by the assistant to make the questions easier to answer. They are **not** recommendations from the clinical side, **nothing here is answered**, and every answer cell above stays blank until a named person fills it in. Where a safe default is stated, that is what the software does *until* the question is answered.
+
+**23. Revoke reasons.** *AI-drafted options, not a decision.* Proposed closed list: `wrong_person`, `planted_or_suspect`, `mistaken_click`, `other`. No free text. (The software today knows the first three; `other` would be new.)
+
+**24. Who re-checks, and how urgently.** *AI-drafted options, not a decision.* Proposed: the re-check goes to a front-desk supervisor or an admin; a revoke with reason `planted_or_suspect` gets the highest priority and also an alert to an admin; the other reasons get the lowest priority. (Today only a nurse or doctor can be named, and there is no admin alert; both would be new.) Safe default until answered: no task is raised, and the screen says so.
+
+**25. Closing a red-flag review task.** *AI-drafted options, not a decision.* (a) a nurse or a doctor closes it, with a closed reason and no free text; (b) a doctor only; (c) a second person must confirm. Trade-off: the stricter the option, the safer and the slower. Safe default until answered: no route closes one (a nurse can acknowledge it, nothing more).
+
+**26. What a reviewer may edit in a triage proposal.** *AI-drafted options, not a decision.* One engineering rule holds whatever is chosen (it is not a clinical question): the original stays, and an edit is a new append-only event recording before and after, who, when and a reason code; nothing is overwritten. Options for which fields are editable: (a) priority only, (b) department only, (c) both. Safe default until answered: "edit" is refused with the fixed response.
 
 ## What happens with your answers
 Each answer goes in as a setting or as clinician-authored data, with your name and the date, and is reviewed before it goes live. Where two people must approve (red-flag rules), both names are recorded. If any answer is "not yet", the software keeps sending that case to a person.
