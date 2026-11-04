@@ -1,0 +1,65 @@
+# Threat model (2026-11-04): worker, step-up routes, storage, model gateway, patient view
+
+Scope: the five places where the system holds the most power or touches the most sensitive data. Method: for each, what is protected, who could attack it, how, what stops them today (with the file that does), and what is left (residual, with the pre-launch item in `pre-launch-checklist.md`). **This is an engineering note, not a clinical or legal document; it was written from the code and the design notes, and every "control" below names the test or file so it can be checked.** Out of scope: the frontend, hosting and the network (not built), the breach runbook.
+
+Actors considered: a curious or malicious staff member; a staff member of another clinic; a patient or guardian; an attacker with a stolen staff token; an attacker who controls a letter's content (a referral, a message); a compromised dependency or provider; an operator with the database login.
+
+## 1. The worker (the unattended queue consumer)
+**Protects:** clinic isolation and the integrity of the identity records the worker writes (it registers patients from referral letters and runs the Front Door graph).
+**Shape:** an asyncio task inside the API process (`CAREFLOW_RUN_WORKER` + `CAREFLOW_WORKER_ACCOUNT_ID`); it has NO token. Each of its transactions sets `request.jwt.claims` with `sub = <that account>`, and the database role is the app login with row-level security keyed on that sub (`careflow/tick.py`).
+| Threat | Control | Residual |
+|---|---|---|
+| The worker attaches an identity token to someone else's patient or forges a possible-duplicate | Migration 0022: the worker's ONLY write path is `mpi.register_patient_from_referral` (SECURITY DEFINER); its three INSERT policies were dropped (blocker 1, CLOSED) | none known |
+| The worker plants a token for a person not yet registered, so a later real referral links silently | 0023: worker-created records are unverified and never auto-linked; front desk confirms; revoke exists (0025). Blocker 10 CLOSED in code | item 3 (STRONG_IDENTIFIERS sign-off) and 11 (no pre-0023 worker row) |
+| The worker account also holds a human role and acts with it | 0024: an account holding `queue_worker` can hold no other role; `scripts/check_worker_accounts.py` runs in CI and reports older violations | none |
+| Anyone who can run code in the API process or reach the app database login can claim to be the worker (there is no token to steal, the claim is set by the process) | The app login is a restricted role (no BYPASSRLS); the worker's reach is what its RLS policies grant, nothing else; claims are transaction-local | **Residual:** the process is the trust boundary. A compromised API process or leaked `DATABASE_URL_APP` can act as ANY account by setting claims (this is true of every request path, not only the worker). Production needs the secret manager, network limits on the pooler and a separate worker process with its own login (item 27). Design note: `blocker1-worker-token-forgery.md` |
+| A poisoned job payload makes the worker call a model with another clinic's data | Jobs carry one clinic id; the graph reads through RLS as the worker; model calls are routed by data class (section 4) | tested for the Front Door; re-check when new job types are added |
+| A job loops or floods | Attempt ceiling 5 in the table, per-run budget (`careflow/budget.py`), dead letters raise a nurse task | item 30 (runbook drafted) |
+
+## 2. The step-up routes (merge propose, approve, unmerge)
+**Protects:** the two-person rule on joining or splitting patient records, the highest-impact identity action.
+**Shape:** `require_step_up` (`careflow/app.py`) runs after authentication and before any database work; the pure check is `careflow.auth.step_up_failure`: `aal2`, a well-formed `amr` with a `totp` entry, not in the future, no older than `CAREFLOW_STEP_UP_MAX_AGE_SECONDS`. The claim shape was recorded from a real dev token on 2026-10-30 (`step-up-spike.md`). The active-role header is parsed first (`careflow/active_role.py`).
+| Threat | Control | Residual |
+|---|---|---|
+| A stolen session token (password only) approves a merge | Needs a recent TOTP: otherwise one fixed 401 with `WWW-Authenticate: step-up`, no reason in the body | a stolen token WITH a fresh TOTP is accepted for the window; keep the window short (the setting has no default) |
+| One person proposes and approves | The database enforces two different people (merge table constraints and policies); the route also refuses | tested in the matrix (`test_the_two_person_rule_end_to_end`) |
+| A forged claim inside a token (`careflow_active`, `amr`) | Tokens are verified against the project's JWKS; a forged `careflow_active` is dropped before it reaches the database (`claims_with_active`) | the claim shape depends on the provider's token format (Appendix B, recorded once, re-check after any Auth change) |
+| Replay of an approval | Every write needs an idempotency key; a replay answers the original result and writes nothing twice | none |
+| Merge hides a wrong link | Unmerge breaks the link and raises a nurse task listing decisions made meanwhile; nothing is deleted (`wrong-merge.md`) | clinical review of flagged decisions is a person's |
+
+## 3. Storage (referral documents)
+**Protects:** the confidentiality and integrity of uploaded referral letters (patient data) and the system from hostile files.
+**Shape:** private bucket `careflow-documents`; signed upload then server-side re-verification (type, size, existence at the claimed path), then registration in `docs.documents`. Migration 0027 denies EVERY direct operation on `storage.objects` and `storage.buckets` for `anon` and `authenticated` (no list, read, upload, delete, signed URL or bucket call from a browser token). The server-side secret key is used only by the adapter and reaches CI shard 3 only (`tests/test_ci_shards.py`).
+| Threat | Control | Residual |
+|---|---|---|
+| A browser token reads or lists another clinic's documents | 0027 deny-everything policies; a live test tries list, read, upload, delete, signed URLs and bucket calls as `anon` and `authenticated` | the secret key is the whole boundary: it must live only in the secret manager (item 12 rotation; item 27) |
+| A malicious file (malware, a PDF built to crash the reader or inject text) | Allowlists on type and size; the reader treats unreadable documents as `document_unreadable` and routes to a nurse; extracted text is untrusted input (section 4); real uploads are disabled outside `demo` | **No malware scanner exists (item 2).** Uploads stay synthetic-only until one does |
+| A path chosen by the client points at someone else's object | The server computes the clinic-prefixed path and re-verifies existence at that path; the bucket name is fixed | tested in the upload tests; re-check if the path scheme changes |
+| A deleted document returns because a signed upload URL for its path is still valid | Known and recorded | the erasure procedure must account for it (items 4, 18) |
+| Documents leave the intended region | Dev and CI projects are Tokyo and synthetic only | item 18 (India region, privacy owner's confirmation) |
+
+## 4. The model gateway (every model call)
+**Protects:** patient text never reaching a provider that is not approved for it, and no model opinion overriding a deterministic safety rule.
+**Shape:** `careflow/gateway.py` routes by data class: a `PHI` request goes only to a registry row marked `phi_approved`, else `NoApprovedRoute` and a visible degrade; the red-flag rules run BEFORE any model call on every path (the one carve-out is image-to-text transcription, whose output is screened by the rules before anything else; a failed or empty transcription is never "clear"); `readiness` makes a `clinical` deployment report not ready without an approved route. Hosted adapters exist for SYNTHETIC demo only behind gates (not CI, demo profile, `synthetic_only`, a key, a verified date, a per-role spend ceiling with no default). Prompts are scanned for patient values in CI (`careflow/prompt_scan.py`).
+| Threat | Control | Residual |
+|---|---|---|
+| Patient text sent to an unapproved provider | The data-class filter is applied first and no call class bypasses it; the data-flow register (spec 17.6) lists each external call; `refuse_demo_outside_demo` stops demo adapters outside demo | any new adapter must be added to the register and the test (rule 13) |
+| Prompt injection in a letter or message changes a priority or a fact | Rules first; model output can only escalate, never de-escalate a flagged case; grounding checks tier-verify facts before a rule sees them; Jev output is never evidence (`NOT_EVIDENCE_ENGINES`); injected-text gold tests are a hard gate (14.3) | the gate has no evidence yet (item 25); the grounding checks are tested on fakes, not real models |
+| A model call is repeated, runs away or is too costly | Per-run budget, per-request and per-clinic daily ceilings, circuit breakers (10 failures, probe after 60 s); the safety class is counted but never refused | the ledger is IN MEMORY (per process): a restart or a second process resets it. A durable ledger is item 13 and needs a grant |
+| Secrets or patient text in logs and errors | Fixed error bodies; logs carry ids and error classes only (many tests assert a sentinel string never appears) | keep the sentinel tests for every new route |
+| Provider-side retention or training on patient text | Only `phi_approved` rows (an agreement) may see patient text; none exists | item 20 |
+| A model's output is stored as a training label | Auto-approved outputs never become labels; only human decisions do (CLAUDE.md rule 9) | no training pipeline exists; keep it so |
+
+## 5. The patient view (decrypting demographics for staff)
+**Protects:** names, dates of birth and phone numbers (encrypted at rest) from bulk or casual exposure.
+**Shape:** `careflow/patient_view.py`, demo profile with synthetic data only: a list row shows the name, YEAR of birth and last four phone digits within the caller's own clinic; the full date of birth and phone appear only when ONE record is opened (front desk, nurse, doctor of that clinic), which writes an audit row (who, role, patient id, never contents). The label read is capped (hard cap 25 rows, no total, no export). Opens per minute and label rows per minute are required settings with no default; unset means 503, never unlimited. Responses are `no-store`; nothing decrypted is logged or kept.
+| Threat | Control | Residual |
+|---|---|---|
+| A staff member scrapes the register | Row caps, per-user rate limits (charged for search labels too), no export, no total count, audit row per open | **the limiter is per process**: several processes multiply the limit (item 17). A staff member with legitimate access can still read one record at a time |
+| Another clinic's staff reads a record | Row-level security on `mpi.patients`; the view reads through the caller's own RLS; a record outside the clinic is the fixed 404 | covered by the matrix |
+| An account without a front-desk, nurse or doctor role (admin, auditor, owner, worker, patient) reads | 403 for every other identity (matrix) | none |
+| Keys: a key version that is not loaded, or a tampered ciphertext | Fixed 503, never a partial answer; rotation drill exists (`docs/runbooks/key_rotation.md`) | item 12 (keys in `.env.cli` were exposed in an upload and must be rotated) |
+| The view is turned on with real data | Off unless profile `demo` AND data policy `synthetic_only`; otherwise 503 | the privacy owner's written confirmation of the field list is required first (item 17) |
+
+## What this note does NOT claim
+That the system is secure against a compromised API process, a stolen database password or a hostile operator. Those depend on hosting, secrets management and monitoring that do not exist yet (items 26 to 28). The review of all migrations (`rls-security-reviewer`) and the spec review are separate passes; their findings are recorded where they are reported, not here.
