@@ -112,7 +112,7 @@ async def world():
             f"('{slot_booked}', '{a}', '{provider}', '{location}', '{vt}', '{(start + timedelta(hours=9)).isoformat()}', '{(start + timedelta(hours=9, minutes=30)).isoformat()}', 'booked', 'test', 'o-s-{slot_booked}'); "
             f"insert into sched.bookings (id, clinic_id, slot_id, patient_id, origin, idempotency_key) values ('{booking}', '{a}', '{slot_booked}', '{booker}', 'test', 'o-b-{booking}'); ",
         )
-        app = create_app(Settings(supabase_url=PROJECT, database_url_app="postgresql://unused"), jwks=fake_jwks_client(), engine=object(), vault=vault)  # type: ignore[arg-type]
+        app = create_app(Settings(_env_file=None, supabase_url=PROJECT, database_url_app="postgresql://unused"), jwks=fake_jwks_client(), engine=object(), vault=vault)  # type: ignore[arg-type]
 
         async def shared_db(claims=Depends(verified_claims)):
             async with conn.begin_nested():

@@ -206,7 +206,34 @@ async def test_a_poke_before_the_wait_is_not_lost_and_many_pokes_coalesce():
     assert await poker.wait(0.01) is False  # consumed once
 
 
+class ScriptedPoker(Poker):
+    """A Poker whose waiting is driven by the TEST instead of the wall clock. `wait(timeout)` records the timeout it was given, announces that the loop is idle, and then blocks until the test
+    releases it with `release(poked)`: True means "a poke arrived", False means "the interval elapsed". No sleep, no timer: the loop's behaviour is a pure function of the order of releases."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.timeouts: list[float] = []
+        self.idle = asyncio.Event()
+        self._release: asyncio.Queue[bool] = asyncio.Queue()
+
+    async def wait(self, timeout: float) -> bool:
+        self.timeouts.append(timeout)
+        self.idle.set()
+        return await self._release.get()
+
+    async def until_idle(self) -> None:
+        """Returns once the loop has finished a tick and is waiting (a bounded wait, so a loop that hung would fail the test instead of hanging the suite)."""
+        await asyncio.wait_for(self.idle.wait(), 5)
+        self.idle.clear()
+
+    def release(self, poked: bool) -> None:
+        self._release.put_nowait(poked)
+
+
 async def test_the_loop_ticks_on_a_poke_and_again_on_the_interval_and_survives_a_failing_tick(caplog):
+    """DETERMINISTIC (no wall clock): the loop is driven through a ScriptedPoker, so 'a poke' and 'the interval elapsed' are events the test chooses, in order.
+    Same claims as before, stated exactly: one tick at start, then a tick for every release whichever way it ends (poke or interval), a tick that raises is logged by CLASS only and the loop goes on,
+    and the loop asks to wait for exactly the interval it was given."""
     caplog.set_level(logging.DEBUG)
     ticks = []
 
@@ -216,17 +243,24 @@ async def test_the_loop_ticks_on_a_poke_and_again_on_the_interval_and_survives_a
             if len(ticks) == 2:
                 raise RuntimeError("SENTINEL-PAYLOAD-8812")  # a failing tick
 
-    poker = Poker()
+    poker = ScriptedPoker()
     task = asyncio.create_task(
         worker_loop(FakeEngine(), Q([]), {}, poker, worker_account_id=ACCOUNT, worker_id="w1", interval_seconds=0.05)  # type: ignore[arg-type]
     )
-    await asyncio.sleep(0.02)
-    first = len(ticks)
-    poker.poke()  # an immediate tick, well before the 0.05 s interval would have fired
-    await asyncio.sleep(0.01)
-    assert len(ticks) > first
-    await asyncio.sleep(0.2)  # several interval ticks, one of which failed
+    await poker.until_idle()
+    assert len(ticks) == 1  # the first tick runs at once, before any wait is over
+    poker.release(True)  # a POKE: an immediate tick (the one that fails)
+    await poker.until_idle()
+    assert len(ticks) == 2 and "RuntimeError" in caplog.text and "SENTINEL-PAYLOAD-8812" not in caplog.text  # logged by class only
+    assert not task.done()  # the failing tick did not end the loop
+    poker.release(False)  # the INTERVAL elapsed: another tick, and the loop is healthy again
+    await poker.until_idle()
+    assert len(ticks) == 3
+    poker.release(False)
+    await poker.until_idle()
+    assert len(ticks) == 4 and not task.done()
+    assert poker.timeouts == [0.05] * 4  # it waited for exactly the interval, every time
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
-    assert len(ticks) >= 4 and "RuntimeError" in caplog.text and "SENTINEL-PAYLOAD-8812" not in caplog.text
+    assert "SENTINEL-PAYLOAD-8812" not in caplog.text

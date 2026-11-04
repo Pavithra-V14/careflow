@@ -91,7 +91,7 @@ def client(monkeypatch, *, profile, rows=None, error=None, **settings):
 
     monkeypatch.setattr(app_module, "load_registry", fake_load)
     app = create_app(
-        Settings(supabase_url=PROJECT, database_url_app="postgresql://unused", **settings),
+        Settings(_env_file=None, supabase_url=PROJECT, database_url_app="postgresql://unused", **settings),
         jwks=JWKSClient(PROJECT + "/auth/v1/.well-known/jwks.json"), engine=object(),  # type: ignore[arg-type]
     )
     return TestClient(app)
@@ -115,7 +115,7 @@ def test_an_unset_profile_is_clinical_so_it_is_not_ready_either(monkeypatch):
     monkeypatch.delenv("CAREFLOW_PROFILE", raising=False)
     monkeypatch.setattr(app_module, "load_registry", lambda *a, **k: None)
     app = create_app(
-        Settings(supabase_url=PROJECT, database_url_app="postgresql://unused"),
+        Settings(_env_file=None, supabase_url=PROJECT, database_url_app="postgresql://unused"),
         jwks=JWKSClient(PROJECT + "/auth/v1/.well-known/jwks.json"), engine=object(),  # type: ignore[arg-type]
     )
     with TestClient(app) as c:

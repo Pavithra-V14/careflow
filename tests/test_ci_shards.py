@@ -25,11 +25,12 @@ def shard_files(shard: dict) -> list[str]:
 
 
 MATRIX = "tests/test_api_role_matrix.py"
+SPLIT = (MATRIX, "tests/test_active_role_matrix_live.py")  # files that CI runs in complete parts (conftest.py SPLIT_FILES)
 
 
 def test_every_live_test_file_is_in_exactly_one_shard_except_the_split_matrix_which_is_in_complete_parts():
-    listed = [f for shard in shards() for f in shard_files(shard) if f != MATRIX]
-    missing = sorted(set(LIVE_FILES) - set(listed) - {MATRIX})
+    listed = [f for shard in shards() for f in shard_files(shard) if f not in SPLIT]
+    missing = sorted(set(LIVE_FILES) - set(listed) - set(SPLIT))
     twice = sorted({f for f in listed if listed.count(f) > 1})
     unknown = sorted(set(listed) - set(LIVE_FILES))
     assert not missing, f"live test files that no shard runs (they would never run in CI): {missing}"
@@ -37,11 +38,12 @@ def test_every_live_test_file_is_in_exactly_one_shard_except_the_split_matrix_wh
     assert not unknown, f"shard entries that are not live test files (or do not exist): {unknown}"
     assert all((ROOT / f).is_file() for f in listed)
     # The matrix: in every shard that names it a `matrix_part` "i/n", with the same n, and the parts 1..n each exactly once (so every matrix test runs exactly once).
-    parts = [shard["matrix_part"] for shard in shards() if MATRIX in shard_files(shard)]
-    assert parts, "the role matrix is in no shard"
-    n = {int(p.split("/")[1]) for p in parts}
-    assert len(n) == 1 and sorted(int(p.split("/")[0]) for p in parts) == list(range(1, n.pop() + 1)), f"matrix parts must be 1..n exactly once, got {parts}"
-    assert all(not shard.get("matrix_part") for shard in shards() if MATRIX not in shard_files(shard)), "a shard without the matrix must not set matrix_part"
+    for split in SPLIT:
+        parts = [shard["matrix_part"] for shard in shards() if split in shard_files(shard)]
+        assert parts, f"{split} is in no shard"
+        n = {int(p.split("/")[1]) for p in parts}
+        assert len(n) == 1 and sorted(int(p.split("/")[0]) for p in parts) == list(range(1, n.pop() + 1)), f"{split}: parts must be 1..n exactly once, got {parts}"
+    assert all(not shard.get("matrix_part") for shard in shards() if not set(SPLIT) & set(shard_files(shard))), "a shard without a split file must not set matrix_part"
 
 
 def test_the_matrix_part_is_passed_to_pytest_in_every_shard():
@@ -160,7 +162,7 @@ def test_the_unscoped_count_guard_really_catches_one():
 def test_a_frontend_only_change_does_not_run_the_backend_workflow_but_any_other_change_does():
     triggers = WORKFLOW[True]
     for event in ("pull_request", "push"):
-        assert triggers[event]["paths-ignore"] == ["frontend/**", ".github/workflows/frontend.yml"], event
+        assert triggers[event]["paths-ignore"] == ["frontend/**", ".github/workflows/frontend.yml", "docs/frontend-*.md"], event
         assert "paths" not in triggers[event]  # an allow-list would silently skip new backend directories
 
 

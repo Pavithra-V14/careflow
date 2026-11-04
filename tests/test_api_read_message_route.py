@@ -54,7 +54,7 @@ def client(*, vault=_VAULT):
         return {"sub": str(USER), "role": "authenticated"}
 
     app = create_app(
-        Settings(supabase_url=PROJECT, database_url_app="postgresql://unused"), jwks=JWKSClient(PROJECT + "/auth/v1/.well-known/jwks.json"),
+        Settings(_env_file=None, supabase_url=PROJECT, database_url_app="postgresql://unused"), jwks=JWKSClient(PROJECT + "/auth/v1/.well-known/jwks.json"),
         engine=object(), vault=vault,  # type: ignore[arg-type]
     )
     app.dependency_overrides[db_conn] = fake_db

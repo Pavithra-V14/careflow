@@ -103,7 +103,7 @@ def make_client(*, conn=None, claims=None, window=300):
     async def fake_claims():
         return stepped_claims() if claims is None else claims
 
-    settings = Settings(supabase_url=PROJECT, database_url_app="postgresql://unused", step_up_max_age_seconds=window)
+    settings = Settings(_env_file=None, supabase_url=PROJECT, database_url_app="postgresql://unused", step_up_max_age_seconds=window)
     app = create_app(
         settings, jwks=JWKSClient(PROJECT + "/auth/v1/.well-known/jwks.json"), engine=object(), clock=lambda: NOW  # type: ignore[arg-type]
     )
