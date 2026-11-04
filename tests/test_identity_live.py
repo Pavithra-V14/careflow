@@ -38,7 +38,7 @@ APP = os.environ.get("DATABASE_URL_APP") or _ENV.get("DATABASE_URL_APP")
 MIGRATIONS = {n: (ROOT / "db" / "migrations" / f).read_text(encoding="utf-8")
               for n, f in (("0003", "0003_mpi_match_candidates.sql"), ("0004", "0004_scheduling_operations.sql"),
                            ("0007", "0007_red_flag_rules_schema.sql"), ("0008", "0008_mpi_merge_ledger.sql"),
-                           ("0009", "0009_merge_signature_fix.sql"))}
+                           ("0009", "0009_merge_signature_fix.sql"), ("0029", "0029_merge_state_machine.sql"))}
 
 pytestmark = [
     pytest.mark.asyncio(loop_scope="module"),
@@ -86,6 +86,9 @@ async def _conn():
         # 0009 replaces 0008's update policy with a trigger-based signature check; apply it here if it is not yet.
         if (await conn.execute(text("select not exists (select 1 from pg_trigger where tgname = 'merges_check_signatures')"))).scalar_one():
             await raw(conn, MIGRATIONS["0009"])
+        # 0029 adds the merge state machine and the candidate tie (review H1, M2); apply it here if it is not yet.
+        if (await conn.execute(text("select not exists (select 1 from pg_trigger where tgname = 'merges_check_transition')"))).scalar_one():
+            await raw(conn, MIGRATIONS["0029"])
         yield conn
     finally:
         await outer.rollback()
@@ -563,3 +566,111 @@ async def test_competing_proposals_for_one_subordinate_produce_exactly_one_live_
     async with admin.connect() as c:
         live = (await c.execute(text("select count(*) from mpi.merges where clinic_id = :c and status in ('awaiting_second_approval', 'active')"), {"c": clinic})).scalar_one()
     assert live == 1
+
+
+# ---- the merge state machine and the candidate tie (migration 0029; review H1 and M2) -----------------------------------------------------------
+
+
+async def _sql_as(db, uid, sql, **params):
+    async def run(conn):
+        await conn.execute(text(sql), params)
+
+    await act(db, uid, run)
+
+
+async def test_an_unmerged_merge_cannot_be_revived_by_one_front_desk_person(db, mgr, pipeline):
+    """H1: `update ... set status = 'active', unmerged_at = null` used to pass every row check and re-activate a merge with no second approval."""
+    w = await world(db, pipeline)
+    merge = await propose(db, mgr, w)
+    await confirm(db, mgr, w, merge.merge_id)
+    await act(db, w.fd1, mgr.execute_unmerge, w.a, "test", merge.merge_id, w.fd1, _key())
+    assert await one(db, "select status from mpi.merges where id = :i", i=merge.merge_id) == "unmerged"
+    for change in ("status = 'active', unmerged_at = null", "status = 'active'", "status = 'awaiting_second_approval'", "unmerged_at = null", "unmerged_at = now()", "activated_at = null"):
+        with pytest.raises(DBAPIError):
+            async with db.begin_nested():
+                await _sql_as(db, w.fd1, f"update mpi.merges set {change} where id = :i", i=merge.merge_id)
+    assert await one(db, "select status from mpi.merges where id = :i", i=merge.merge_id) == "unmerged"
+
+
+async def test_only_the_three_legal_transitions_exist_and_recorded_steps_never_change(db, mgr, pipeline):
+    w = await world(db, pipeline)
+    merge = await propose(db, mgr, w)
+    illegal = (
+        "status = 'active'",  # no second approval recorded: refused by the row checks as before
+        "activated_at = now()",  # a same-status update cannot touch the approvals
+    )
+    for change in illegal:
+        with pytest.raises(DBAPIError):
+            async with db.begin_nested():
+                await _sql_as(db, w.fd1, f"update mpi.merges set {change} where id = :i", i=merge.merge_id)
+    await confirm(db, mgr, w, merge.merge_id)
+    for change in ("status = 'awaiting_second_approval', second_approved_by = null, activated_at = null", "activated_at = now()", "approve_idempotency_key = 'other'"):
+        with pytest.raises(DBAPIError):
+            async with db.begin_nested():
+                await _sql_as(db, w.fd1, f"update mpi.merges set {change} where id = :i", i=merge.merge_id)
+    assert await one(db, "select status from mpi.merges where id = :i", i=merge.merge_id) == "active"
+    # the legal paths still work: awaiting -> unmerged (a cancel) and active -> unmerged
+    other = await world(db, pipeline)
+    cancelled = await propose(db, mgr, other)
+    await act(db, other.fd1, mgr.execute_unmerge, other.a, "test", cancelled.merge_id, other.fd1, _key())
+    assert await one(db, "select status from mpi.merges where id = :i", i=cancelled.merge_id) == "unmerged"
+    await act(db, w.fd1, mgr.execute_unmerge, w.a, "test", merge.merge_id, w.fd1, _key())
+    assert await one(db, "select status from mpi.merges where id = :i", i=merge.merge_id) == "unmerged"
+
+
+async def test_a_merge_must_start_from_a_pending_review_row_that_names_the_same_two_patients(db, mgr, pipeline):
+    """M2: the database, not only the engine, ties a proposal to the pair a person reviewed."""
+    w = await world(db, pipeline)
+    third = (await act(db, w.fd1, pipeline.ingest, clinic_id=w.a, origin="test", name="Third Person", dob="1999-09-09", phone=PHONE, idempotency_key=_key())).patient_id
+    (cand,) = await rows(db, "select id from mpi.match_candidates where clinic_id = :c and status = 'pending' limit 1", c=w.a)
+    insert = ("insert into mpi.merges (clinic_id, master_patient_id, subordinate_patient_id, candidate_id, approved_by, origin, idempotency_key) "
+              "values (:c, :m, :s, :cand, :ap, 'test', :k)")
+    args = {"c": w.a, "cand": cand[0], "ap": w.fd1, "k": _key()}
+    with pytest.raises(DBAPIError, match="does not name these two patients"):  # the pair is not the reviewed pair
+        async with db.begin_nested():
+            await act(db, w.fd1, lambda conn: conn.execute(text(insert), {**args, "m": w.master, "s": third, "k": _key()}))
+    await db.execute(text("update mpi.match_candidates set status = 'resolved', resolved_at = now(), resolved_by = :u where id = :i"), {"u": w.fd2, "i": cand[0]})
+    with pytest.raises(DBAPIError, match="pending review row"):  # the review row is already resolved
+        async with db.begin_nested():
+            await act(db, w.fd1, lambda conn: conn.execute(text(insert), {**args, "m": w.master, "s": w.sub, "k": _key()}))
+
+
+async def test_a_cancelled_proposal_cannot_carry_an_approval(db, mgr, pipeline):
+    w = await world(db, pipeline)
+    merge = await propose(db, mgr, w)
+    for change in ("status = 'unmerged', unmerged_at = now(), unmerged_by = :u, unmerge_idempotency_key = 'x', activated_at = now()",
+                   "status = 'unmerged', unmerged_at = now(), unmerged_by = :u, unmerge_idempotency_key = 'x', second_approved_by = :u"):
+        with pytest.raises(DBAPIError):
+            async with db.begin_nested():
+                await _sql_as(db, w.fd1, f"update mpi.merges set {change} where id = :i", i=merge.merge_id, u=w.fd1)
+    assert await one(db, "select status from mpi.merges where id = :i", i=merge.merge_id) == "awaiting_second_approval"
+
+
+async def test_a_review_row_cannot_be_rewritten_or_reopened_by_front_desk(db, mgr, pipeline):
+    """The candidate tie (M2) is only as strong as the review row, so its pair is immutable and `resolved` is terminal."""
+    w = await world(db, pipeline)
+    third = (await act(db, w.fd1, pipeline.ingest, clinic_id=w.a, origin="test", name="Third Person", dob="1999-09-09", phone=PHONE, idempotency_key=_key())).patient_id
+    (cand,) = await rows(db, "select id from mpi.match_candidates where clinic_id = :c and status = 'pending' limit 1", c=w.a)
+    for change in (f"candidate_patient_id = '{third}'", f"patient_id = '{third}'", "reason = 'ambiguous'", "matched_kinds = array['name_dob']"):
+        with pytest.raises(DBAPIError, match="names its pair once"):
+            async with db.begin_nested():
+                await _sql_as(db, w.fd1, f"update mpi.match_candidates set {change} where id = :i", i=cand[0])
+    await _sql_as(db, w.fd2, "update mpi.match_candidates set status = 'resolved', resolved_at = now(), resolved_by = :u where id = :i", i=cand[0], u=w.fd2)
+    for change in ("status = 'pending', resolved_at = null, resolved_by = null", "resolved_by = null"):
+        with pytest.raises(DBAPIError, match="cannot be reopened"):
+            async with db.begin_nested():
+                await _sql_as(db, w.fd1, f"update mpi.match_candidates set {change} where id = :i", i=cand[0])
+
+
+async def test_a_proposal_from_another_clinic_or_a_non_front_desk_role_gets_the_row_level_security_refusal_not_a_check_error(db, mgr, pipeline):
+    """The candidate tie is a SECURITY DEFINER function; it must not tell outsiders whether a review row exists."""
+    w = await world(db, pipeline)
+    (cand,) = await rows(db, "select id from mpi.match_candidates where clinic_id = :c and status = 'pending' limit 1", c=w.a)
+    insert = ("insert into mpi.merges (clinic_id, master_patient_id, subordinate_patient_id, candidate_id, approved_by, origin, idempotency_key) "
+              "values (:c, :m, :s, :cand, :ap, 'test', :k)")
+    for uid, clinic in ((w.fd_b, w.b), (w.nurse, w.a), (w.fd_b, w.a)):
+        with pytest.raises(DBAPIError) as caught:
+            async with db.begin_nested():
+                await _sql_as(db, uid, insert, c=clinic, m=w.master, s=w.sub, cand=cand[0], ap=uid, k=_key())
+        text_ = str(caught.value)
+        assert "pending review row" not in text_ and "does not name these two patients" not in text_, (uid, clinic)
