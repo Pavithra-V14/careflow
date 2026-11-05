@@ -100,6 +100,20 @@ calls:
     appendix_b: null
     notes: "Not an external call. Listed so a network transport is never wired by accident: tests/test_scheduling_agent.py::test_calling_a_server_in_process_opens_no_socket and the spike's tripwire test (docs/design/phase3-mcp-spike.md) pin it."
 
+  - id: supabase-auth-admin-invite
+    service: Supabase Auth admin API (the project's own, same project as the database), used only to create a staff member's sign-in
+    host: "<SUPABASE_URL>/auth/v1/invite"
+    source: careflow/auth_admin.py
+    data_sent: "A staff member's e-mail address (personal data, NOT patient data) with the project's secret key. Nothing else. The address is never stored in our tables, logged, audited or returned."
+    data_class: none
+    data_policy: synthetic_only
+    permitted_in_clinical: false
+    approved_by: "the project owner (instruction of 2026-11-05: staff invitation and role management)"
+    approved_on: "2026-11-05"
+    status: approved
+    appendix_b: "UNVERIFIED: the invite endpoint's request and response shape come from documentation. The adapter refuses to run unless CAREFLOW_AUTH_ADMIN_VERIFIED is a past or present date and the secret key is set; it is NOT wired by the application's start-up, so nothing calls it yet."
+    notes: "The Supabase service already approved for sign-in. NOT used by default: the secret key stays out of the web process until the owner wires the adapter. Permitted in clinical is false until a real call has been verified and the owner accepts the secret key in the API process."
+
   - id: supabase-storage
     service: Supabase Storage (the project's own, same project as the database; a PRIVATE bucket)
     host: "<SUPABASE_URL>/storage/v1 (the server) and the signed upload URL on the same host (the browser)"

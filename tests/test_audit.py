@@ -158,7 +158,7 @@ async def test_each_set_up_route_audits_through_the_one_helper_in_the_same_trans
 
 async def test_every_action_has_a_route_or_is_listed_as_pending():
     pending = {"clinical.tool_call"}  # written by careflow/mcp_kit.py `audited` (no clinical server is mounted yet)
-    written_by_the_database = {"patient.erase"}  # written by mpi.erase_patient (migration 0032) in the erase transaction; tests/test_erase_route.py pins the call
+    written_by_the_database = {"patient.erase", "staff.invite", "staff.grant_role", "staff.revoke_role", "staff.suspend", "staff.reinstate", "staff.activate"}  # written by mpi.erase_patient (migration 0032) in the erase transaction; tests/test_erase_route.py pins the call
     assert set(ROUTES.values()) | set(SETUP_ROUTES.values()) | pending | written_by_the_database == set(ACTIONS)
 
 

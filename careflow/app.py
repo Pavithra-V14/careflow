@@ -82,6 +82,7 @@ from careflow.auth import (
     step_up_failure,
     verify_token,
 )
+from careflow.auth_admin import AuthAdminError, AuthAdminPort
 from careflow.checkpointer import CheckpointerError
 from careflow.cors import middleware_kwargs, parse_origins
 from careflow.crypto import CryptoError, DemographicVault
@@ -2294,6 +2295,156 @@ async def erase_patient_route(patient_id: uuid.UUID, body: EraseIn, idempotency_
     return EraseOut(patient_id=patient_id, erased=erased)
 
 
+# ---- staff accounts: invite, grant and revoke roles, suspend and reinstate, activate yourself (migration 0034; docs/design/staff-account-management.md) -------------------------------------------------
+#
+# Admin of the clinic only (with a recent second factor), except `activate-me`, which is the invited person's own act and needs a verified second factor in their token. Every change is made by a database
+# function that checks the caller itself, writes the audit row in the same transaction and refuses with ONE generic error (mapped to the fixed answers below). The sign-in is created through the Auth admin
+# PORT (careflow/auth_admin.py): with none configured the invite route answers 503. An e-mail address is never stored, logged, audited or returned. queue_worker can never be granted here.
+
+STAFF_GRANTABLE: Final = ("front_desk", "nurse", "doctor", "admin", "auditor", "business_owner")
+GrantableRole = Literal["front_desk", "nurse", "doctor", "admin", "auditor", "business_owner"]
+staff_accounts = APIRouter(prefix="/v1/staff/accounts", tags=["staff accounts"])
+
+
+class InviteIn(_Body):
+    clinic_id: uuid.UUID
+    email: str = Field(min_length=3, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    role: GrantableRole
+
+
+class RoleChangeIn(_Body):
+    clinic_id: uuid.UUID
+    role: GrantableRole
+
+
+class InviteOut(_Out):
+    account_id: uuid.UUID
+    clinic_id: uuid.UUID
+    role: GrantableRole
+    replayed: bool
+
+
+class RoleChangeOut(_Out):
+    account_id: uuid.UUID
+    clinic_id: uuid.UUID
+    role: GrantableRole
+    changed: bool  # False when it was already so (a replay or a no-op)
+
+
+class StatusOut(_Out):
+    account_id: uuid.UUID
+    status: Literal["active", "suspended"]
+    changed: bool
+
+
+class ActivateOut(_Out):
+    activated: bool  # False when the account was already active
+
+
+class StaffAccountOut(_Out):
+    account_id: uuid.UUID
+    status: Literal["invited", "active", "suspended", "closed"]
+    roles: list[str]
+
+
+class StaffAccountList(_Out):
+    items: list[StaffAccountOut]
+    limit: int
+    has_more: bool
+
+
+async def _admin_gate(conn: AsyncConnection, claims: dict[str, Any], clinic_id: uuid.UUID) -> None:
+    """404 if the clinic is invisible to the caller, 403 unless the caller is an ACTIVE admin of it (under the active role, when one is named)."""
+    if (await conn.execute(text("select 1 from iam.clinics where id = :c"), {"c": clinic_id})).first() is None:
+        raise HTTPException(status_code=404, detail="not found")
+    await _acting_role(conn, claims, clinic_id, ("admin",))
+
+
+async def _staff_function(conn: AsyncConnection, sql: str, params: dict[str, Any], *, refused: tuple[int, str] = (403, "your role may not do this")) -> bool:
+    """Call one 0034 function. Its generic refusal (42501) becomes `refused`; the last-administrator guard (23514) becomes a 409."""
+    try:
+        async with conn.begin_nested():
+            return bool((await conn.execute(text(sql), params)).scalar())
+    except DBAPIError as exc:
+        state = getattr(exc.orig, "sqlstate", None)
+        if state == "42501":
+            raise HTTPException(status_code=refused[0], detail=refused[1]) from None
+        if state == "23514":
+            raise HTTPException(status_code=409, detail="a clinic must keep an active administrator") from None
+        raise
+
+
+@staff_accounts.get("", response_model=StaffAccountList)
+async def list_staff_accounts(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 100) -> StaffAccountList:
+    """Staff accounts that hold or held a role at this clinic, with their LIVE roles. 404 if the clinic is invisible to you, 403 unless you are an admin of it. Ids, a status word and role words only (no e-mail is stored here)."""
+    await _admin_gate(conn, claims, clinic_id)
+    rows = (
+        await conn.execute(
+            text(
+                "select a.id, a.status, coalesce(array_agg(sr.role order by sr.role) filter (where sr.revoked_at is null), '{}') as roles from iam.accounts a "
+                "join iam.staff_roles sr on sr.account_id = a.id where sr.clinic_id = :c and a.account_type = 'staff' group by a.id, a.status order by a.id limit :n"
+            ),
+            {"c": clinic_id, "n": limit + 1},
+        )
+    ).all()
+    return StaffAccountList(items=[StaffAccountOut(account_id=r.id, status=r.status, roles=list(r.roles)) for r in rows[:limit]], limit=limit, has_more=len(rows) > limit)
+
+
+@staff_accounts.post("/invite", response_model=InviteOut, dependencies=[Depends(require_step_up)])
+async def invite_staff(body: InviteIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> InviteOut:
+    """Invite a new staff member to a clinic with one role. 404 if the clinic is invisible to you, 403 unless you are an admin of it, 409 if the account already exists (use the role route), 503 while no Auth admin adapter is configured. STEP-UP REQUIRED."""
+    port: AuthAdminPort | None = request.app.state.auth_admin
+    if port is None:
+        log.error("staff invitation is unavailable: no Auth admin adapter is configured")
+        raise HTTPException(status_code=503, detail="invitations are unavailable: not configured")
+    await _admin_gate(conn, claims, body.clinic_id)
+    try:
+        account_id = await port.invite(body.email)
+    except AuthAdminError:
+        raise HTTPException(status_code=422, detail="request rejected") from None  # (nothing about the address or the exchange is kept)
+    created = await _staff_function(
+        conn, "select iam.invite_staff_account(:a, :c, :r, :k)", {"a": account_id, "c": body.clinic_id, "r": body.role, "k": idempotency_key}, refused=(409, "this account cannot be invited")
+    )
+    return InviteOut(account_id=account_id, clinic_id=body.clinic_id, role=body.role, replayed=not created)
+
+
+@staff_accounts.post("/activate-me", response_model=ActivateOut)
+async def activate_me(conn: TxConn) -> ActivateOut:
+    """Activate YOUR invited account. Needs a verified second factor in your token; 403 if the account is not invited or you have no live role. Admins cannot do this for you."""
+    activated = await _staff_function(conn, "select iam.activate_own_account()", {})
+    return ActivateOut(activated=activated)
+
+
+@staff_accounts.post("/{account_id}/roles", response_model=RoleChangeOut, dependencies=[Depends(require_step_up)])
+async def grant_staff_role_route(account_id: uuid.UUID, body: RoleChangeIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> RoleChangeOut:
+    """Grant a role at a clinic to an existing staff account. 404 if the clinic is invisible to you, 403 unless you are an admin of it or the account cannot be changed by you. queue_worker cannot be granted. STEP-UP REQUIRED."""
+    await _admin_gate(conn, claims, body.clinic_id)
+    changed = await _staff_function(conn, "select iam.grant_staff_role(:a, :c, :r, :k)", {"a": account_id, "c": body.clinic_id, "r": body.role, "k": idempotency_key})
+    return RoleChangeOut(account_id=account_id, clinic_id=body.clinic_id, role=body.role, changed=changed)
+
+
+@staff_accounts.post("/{account_id}/roles/revoke", response_model=RoleChangeOut, dependencies=[Depends(require_step_up)])
+async def revoke_staff_role_route(account_id: uuid.UUID, body: RoleChangeIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> RoleChangeOut:
+    """Revoke a live role at a clinic. 404 if the clinic is invisible to you, 403 unless you are an admin of it, 409 if it would leave the clinic without an active administrator. STEP-UP REQUIRED."""
+    await _admin_gate(conn, claims, body.clinic_id)
+    changed = await _staff_function(conn, "select iam.revoke_staff_role(:a, :c, :r, :k)", {"a": account_id, "c": body.clinic_id, "r": body.role, "k": idempotency_key})
+    return RoleChangeOut(account_id=account_id, clinic_id=body.clinic_id, role=body.role, changed=changed)
+
+
+@staff_accounts.post("/{account_id}/suspend", response_model=StatusOut, dependencies=[Depends(require_step_up)])
+async def suspend_staff_account(account_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn) -> StatusOut:
+    """Suspend an active staff account. 403 unless you are an admin of EVERY clinic where the account holds a live role, or if it is your own account. STEP-UP REQUIRED."""
+    changed = await _staff_function(conn, "select iam.set_staff_account_status(:a, 'suspended', :k)", {"a": account_id, "k": idempotency_key})
+    return StatusOut(account_id=account_id, status="suspended", changed=changed)
+
+
+@staff_accounts.post("/{account_id}/reinstate", response_model=StatusOut, dependencies=[Depends(require_step_up)])
+async def reinstate_staff_account(account_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn) -> StatusOut:
+    """Reinstate a suspended staff account. Same rules as suspending. An invited account is not reinstated here: the person activates it themselves. STEP-UP REQUIRED."""
+    changed = await _staff_function(conn, "select iam.set_staff_account_status(:a, 'active', :k)", {"a": account_id, "k": idempotency_key})
+    return StatusOut(account_id=account_id, status="active", changed=changed)
+
+
 # ---- clinic set-up: create locations, providers, visit types and slots (front desk and admin; docs/design/clinic-setup-routes.md) ----------------------------------------------------------
 #
 # The tables, policies and permissions already allow front desk and admin to write these (migration 0002); there was just no route, so a clinic could not set itself up without the seed script. No migration,
@@ -2758,6 +2909,7 @@ def create_app(
     settings: Settings | None = None, *, jwks: JWKSClient | None = None, engine: AsyncEngine | None = None,
     vault: DemographicVault | None = None, clock: Callable[[], float] = time.time, front_door: FrontDoorComponents | None = None,
     front_door_session_for: Callable[..., Any] = worker_session, document_intake: DocumentIntake | None = None, reply_interpreter: DecisionService | None = None,
+    auth_admin: AuthAdminPort | None = None,
 ) -> FastAPI:
     """Build the app. `jwks`, `engine`, `vault` and `clock` (for the step-up window) can be injected (tests do); otherwise they come from
     settings / the environment. `front_door` holds the Front Door's stand-in components; with None the run and review routes answer 503 and no handler is registered."""
@@ -2791,6 +2943,7 @@ def create_app(
             if components is not None:
                 log.warning("DEMO PROFILE: the Front Door runs on FAKE letters, extractor and retriever (synthetic data only)")
         app.state.front_door = components
+        app.state.auth_admin = auth_admin  # None unless injected: no Auth admin adapter is wired by default (the secret key stays out of the web process); the invite route answers 503
         app.state.reply_interpreter = reply_interpreter  # None unless a decision service is injected (FAKES ONLY today): the route answers 503
         app.state.storage_adapter = None
         intake = document_intake
@@ -2857,8 +3010,9 @@ def create_app(
     app.include_router(staff_documents)
     app.include_router(staff_identity)
     app.include_router(staff_audit)
+    app.include_router(staff_accounts)
     app.include_router(health)
-    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
+    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
     return app
 
 

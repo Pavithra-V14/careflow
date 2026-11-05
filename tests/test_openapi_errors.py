@@ -8,7 +8,7 @@ from careflow.openapi_errors import DECLARABLE, statuses_in
 
 ROUTERS = [
     app_module.router, app_module.scheduling, app_module.staff_messages, app_module.staff_patients, app_module.staff_merges, app_module.staff_referrals,
-    app_module.staff_review_tasks, app_module.staff_documents, app_module.staff_identity, app_module.staff_audit,
+    app_module.staff_review_tasks, app_module.staff_documents, app_module.staff_identity, app_module.staff_audit, app_module.staff_accounts,
 ]
 SCHEMA = create_app().openapi()
 

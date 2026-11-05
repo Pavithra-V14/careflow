@@ -40,6 +40,7 @@ from starlette.testclient import TestClient
 from careflow.adapters.fake import FakeUpload
 from careflow.app import Settings, create_app
 from careflow.auth import JWKSClient
+from careflow.auth_admin import FakeAuthAdmin
 from careflow.crypto import DemographicVault
 from careflow.db import make_app_engine
 from careflow.documents import ALLOWED_TYPES as ALLOWED_DOC_TYPES
@@ -222,7 +223,7 @@ async def _cleanup(ids, conn=None):
     own = conn is None
     conn = conn or await asyncpg.connect((MIGRATOR or "").replace("+asyncpg", ""), statement_cache_size=0)
     try:
-        accounts = [a for a, *_ in ids.people.values()] + ([ids.fd2] if hasattr(ids, "fd2") else [])
+        accounts = [a for a, *_ in ids.people.values()] + ([ids.fd2] if hasattr(ids, "fd2") else []) + list(getattr(ids, "extra_accounts", []))
         clinics = [ids.clinic_a, ids.clinic_b]
         for table in ("sched.bookings", "sched.holds", "sched.waitlist", "sched.slots", "sched.priority_levels",
                       "mpi.merges", "agents.review_tasks", "mpi.match_candidates", "mpi.identity_tokens", "mpi.patients", "sched.visit_types", "sched.providers",
@@ -325,7 +326,7 @@ def app() -> FastAPI:
     built = create_app(
         settings, jwks=fake_jwks_client(), vault=TEST_VAULT, front_door=FrontDoorComponents(None, None, None, None, None, None, None, None, None),
         document_intake=DocumentIntake(UPLOADS, profile="demo"),  # a fake storage in the demo profile with no scanner: registration reports scan=not_checked
-        reply_interpreter=_matrix_interpreter(),
+        reply_interpreter=_matrix_interpreter(), auth_admin=FakeAuthAdmin(),
     )
     return _enable_patient_view(built)
 
@@ -1934,6 +1935,174 @@ def test_erasure_clears_the_identity_columns_writes_one_audit_row_and_the_app_ro
     assert without_scope(audit[0]["details"]) == {"reason": ERASE_REASON}
 
 
+# ---- staff accounts: GET /accounts, POST /accounts/invite, /{id}/roles, /{id}/roles/revoke, /{id}/suspend, /{id}/reinstate, /activate-me (migration 0034) ------------------------------------------------------
+#
+# Admin of the clinic only (every staff role of the clinic can SEE the clinic row, so every other one gets 403; front desk of another clinic gets 404), with a recent second factor on every write. The accounts
+# these cases create or change are fresh owner-made staff accounts; they are removed with the clinics where the database allows (audit rows stay).
+
+ACCOUNTS = "/v1/staff/accounts"
+STAFF_NOT_ADMIN_VISIBLE = {r: 403 for r in ("front_desk_a", "nurse_a", "doctor_a", "business_owner_a", "auditor_a", "multi")}
+
+
+def new_staff_account(ids, status="active", roles=("nurse",), clinic=None):
+    """A fresh staff account (written by the owner) with live grants at clinic A (or `clinic`)."""
+
+    async def make(conn):
+        account = uuid.uuid4()
+        await conn.execute("insert into iam.accounts (id, account_type, status, origin) values ($1, 'staff', $2, 'test')", account, status)
+        for role in roles:
+            await conn.execute("insert into iam.staff_roles (account_id, clinic_id, role, origin) values ($1, $2, $3, 'test')", account, clinic or ids.clinic_a, role)
+        return account
+
+    account = _run(_owner(make))
+    ids.__dict__.setdefault("extra_accounts", []).append(account)
+    return account
+
+
+def _admin_stepped(ids):
+    return stepped(ids.people["admin_a"][0])
+
+
+def staff_list_cases(ids) -> list[tuple]:
+    path = f"{ACCOUNTS}?clinic_id={ids.clinic_a}"
+    cases = [
+        _case(ids, "an admin lists the clinic's staff accounts with their live roles", "admin_a", 200, path, key=None,
+              body=_page(ids, non_empty=True, check=lambda items: any(i["account_id"] == str(ids.people["admin_a"][0]) and i["roles"] == ["admin"] for i in items) and all(set(i) == {"account_id", "status", "roles"} for i in items))),
+        _case(ids, "an unknown clinic is not found", "admin_a", 404, f"{ACCOUNTS}?clinic_id={uuid.uuid4()}", key=None, body=_fixed(404)),
+        _case(ids, "a clinic id that is not a uuid is rejected", "admin_a", 422, f"{ACCOUNTS}?clinic_id=nope", key=None, body=_fixed(422)),
+        _case(ids, "the clinic id is required", "admin_a", 422, ACCOUNTS, key=None, body=_fixed(422)),
+        _case(ids, "limit=0 is rejected", "admin_a", 422, path + "&limit=0", key=None, body=_fixed(422)),
+    ]
+    for p in [*ids.people, "no account"]:
+        if p == "admin_a":
+            continue
+        status = STAFF_NOT_ADMIN_VISIBLE.get(p, 404)
+        who = bearer(mint(ids.no_account)) if p == "no account" else p
+        cases.append(_case(ids, f"{p} is refused", who, status, path, key=None, body=_fixed(status) if status == 404 else (lambda b: b == {"detail": "your role may not do this"})))
+    return cases + _unauthenticated(ids, path, None)
+
+
+def _staff_write_cases(ids, make_path, make_json, ok_cases, *, default_status=404):
+    """The shared gate cases of a step-up admin write: everyone else, not stepped up, unauthenticated."""
+    cases = list(ok_cases)
+    cases += _everyone_at_the_gate_admin(ids, make_path, make_json, default_status)
+    cases += [_case(ids, f"admin_a with {label} is told to step up", headers, 401, make_path(), json=make_json(), body=_fixed(401)) for label, headers in not_stepped_variants(ids.people["admin_a"][0])]
+    return cases + _unauthenticated(ids, make_path(), make_json())
+
+
+def _everyone_at_the_gate_admin(ids, make_path, make_json, default_status):
+    cases = []
+    for p in [*ids.people, "no account"]:
+        if p == "admin_a":
+            continue
+        sub = ids.no_account if p == "no account" else ids.people[p][0]
+        status = STAFF_NOT_ADMIN_VISIBLE.get(p, default_status) if default_status == 404 else default_status
+        cases.append(_case(ids, f"{p} with a second factor is refused", stepped(sub), status, make_path(), json=make_json(), body=_fixed(status) if status == 404 else (lambda b: b == {"detail": "your role may not do this"})))
+    return cases
+
+
+def staff_invite_cases(ids) -> list[tuple]:
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "email": f"new-{uuid.uuid4().hex[:8]}@example.test", "role": "nurse", **o}
+    key = _new_key()
+    same = body()
+    admin = _admin_stepped(ids)
+    invited = lambda replayed: (lambda b: set(b) == {"account_id", "clinic_id", "role", "replayed"} and b["role"] == "nurse" and b["replayed"] is replayed)
+    ok = [
+        _case(ids, "an admin invites a new staff member", admin, 200, f"{ACCOUNTS}/invite", json=same, key=key, body=invited(False)),
+        _case(ids, "the same request again is a replay", admin, 200, f"{ACCOUNTS}/invite", json=same, key=key, body=invited(True)),
+        _case(ids, "queue_worker can never be granted by invitation", admin, 422, f"{ACCOUNTS}/invite", json=body(role="queue_worker"), body=_fixed(422)),
+        _case(ids, "an address that is not an address is rejected", admin, 422, f"{ACCOUNTS}/invite", json=body(email="nope"), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", admin, 422, f"{ACCOUNTS}/invite", json=body(), key=None, body=_fixed(422)),
+        _case(ids, "an unknown clinic is not found", admin, 404, f"{ACCOUNTS}/invite", json=body(clinic_id=str(uuid.uuid4())), body=_fixed(404)),
+    ]
+    return _staff_write_cases(ids, lambda: f"{ACCOUNTS}/invite", body, ok)
+
+
+def staff_grant_cases(ids) -> list[tuple]:
+    target, other = new_staff_account(ids, roles=()), new_staff_account(ids, roles=())
+    path = lambda a: f"{ACCOUNTS}/{a}/roles"
+    body = lambda role="nurse", **o: {"clinic_id": str(ids.clinic_a), "role": role, **o}
+    admin, key = _admin_stepped(ids), _new_key()
+    changed = lambda flag: (lambda b: b["changed"] is flag and b["role"] in {"nurse", "doctor"})
+    ok = [
+        _case(ids, "an admin grants a role", admin, 200, path(target), json=body(), key=key, body=changed(True)),
+        _case(ids, "the same request again changes nothing", admin, 200, path(target), json=body(), key=key, body=changed(False)),
+        _case(ids, "a role the account already holds changes nothing", admin, 200, path(target), json=body(), body=changed(False)),
+        _case(ids, "queue_worker cannot be granted", admin, 422, path(other), json=body("queue_worker"), body=_fixed(422)),
+        _case(ids, "an account that does not exist is refused", admin, 403, path(uuid.uuid4()), json=body(), body=lambda b: b == {"detail": "your role may not do this"}),
+        _case(ids, "an unknown clinic is not found", admin, 404, path(other), json=body(clinic_id=str(uuid.uuid4())), body=_fixed(404)),
+        _case(ids, "missing X-Idempotency-Key is rejected", admin, 422, path(other), json=body(), key=None, body=_fixed(422)),
+    ]
+    return _staff_write_cases(ids, lambda: path(other), body, ok)
+
+
+def staff_revoke_cases(ids) -> list[tuple]:
+    target, other, lone = new_staff_account(ids, roles=("nurse",)), new_staff_account(ids, roles=("nurse",)), ids.people["admin_a"][0]
+    path = lambda a: f"{ACCOUNTS}/{a}/roles/revoke"
+    body = lambda role="nurse", **o: {"clinic_id": str(ids.clinic_a), "role": role, **o}
+    admin, key = _admin_stepped(ids), _new_key()
+    ok = [
+        _case(ids, "an admin revokes a live role", admin, 200, path(target), json=body(), key=key, body=lambda b: b["changed"] is True),
+        _case(ids, "the same request again changes nothing", admin, 200, path(target), json=body(), key=key, body=lambda b: b["changed"] is False),
+        _case(ids, "the last administrator cannot be revoked", admin, 409, path(lone), json=body("admin"), body=lambda b: b == {"detail": "a clinic must keep an active administrator"}),
+        _case(ids, "an unknown clinic is not found", admin, 404, path(other), json=body(clinic_id=str(uuid.uuid4())), body=_fixed(404)),
+        _case(ids, "missing X-Idempotency-Key is rejected", admin, 422, path(other), json=body(), key=None, body=_fixed(422)),
+    ]
+    return _staff_write_cases(ids, lambda: path(other), body, ok)
+
+
+def staff_suspend_cases(ids) -> list[tuple]:
+    target, other = new_staff_account(ids, roles=("nurse",)), new_staff_account(ids, roles=("nurse",))
+    path = lambda a: f"{ACCOUNTS}/{a}/suspend"
+    admin, key = _admin_stepped(ids), _new_key()
+    ok = [
+        _case(ids, "an admin suspends an active account", admin, 200, path(target), key=key, body=lambda b: b["status"] == "suspended" and b["changed"] is True),
+        _case(ids, "the same request again changes nothing", admin, 200, path(target), key=key, body=lambda b: b["changed"] is False),
+        _case(ids, "an admin cannot suspend themselves", admin, 403, path(ids.people["admin_a"][0]), body=lambda b: b == {"detail": "your role may not do this"}),
+        _case(ids, "an account that does not exist is refused", admin, 403, path(uuid.uuid4()), body=lambda b: b == {"detail": "your role may not do this"}),
+        _case(ids, "missing X-Idempotency-Key is rejected", admin, 422, path(other), key=None, body=_fixed(422)),
+    ]
+    return _staff_write_cases(ids, lambda: path(other), lambda: None, ok, default_status=403)
+
+
+def staff_reinstate_cases(ids) -> list[tuple]:
+    target, invited, other = new_staff_account(ids, "suspended", ("nurse",)), new_staff_account(ids, "invited", ("nurse",)), new_staff_account(ids, "suspended", ("nurse",))
+    path = lambda a: f"{ACCOUNTS}/{a}/reinstate"
+    admin, key = _admin_stepped(ids), _new_key()
+    ok = [
+        _case(ids, "an admin reinstates a suspended account", admin, 200, path(target), key=key, body=lambda b: b["status"] == "active" and b["changed"] is True),
+        _case(ids, "the same request again changes nothing", admin, 200, path(target), key=key, body=lambda b: b["changed"] is False),
+        _case(ids, "an invited account is not reinstated by an admin: the person activates it", admin, 403, path(invited), body=lambda b: b == {"detail": "your role may not do this"}),
+        _case(ids, "missing X-Idempotency-Key is rejected", admin, 422, path(other), key=None, body=_fixed(422)),
+    ]
+    return _staff_write_cases(ids, lambda: path(other), lambda: None, ok, default_status=403)
+
+
+def staff_activate_cases(ids) -> list[tuple]:
+    mine, no_role, active = new_staff_account(ids, "invited", ("nurse",)), new_staff_account(ids, "invited", ()), ids.people["nurse_a"][0]
+    path = f"{ACCOUNTS}/activate-me"
+    password_only = [bearer(mint(mine, aal=None, amr=None))]
+    return [
+        _case(ids, "an invited person with a second factor activates their own account", bearer(mint(mine)), 200, path, body=lambda b: b == {"activated": True}),
+        _case(ids, "doing it again is a replay", bearer(mint(mine)), 200, path, body=lambda b: b == {"activated": False}),
+        _case(ids, "an invited account with no live role cannot activate", bearer(mint(no_role)), 403, path, body=lambda b: b == {"detail": "your role may not do this"}),
+        _case(ids, "an already active account is a no-op", bearer(mint(active)), 200, path, body=lambda b: b == {"activated": False}),
+        _case(ids, "a password-only session is refused before anything runs", password_only[0], 401, path, body=_fixed(401)),
+        _case(ids, "a valid user with no account is refused", bearer(mint(ids.no_account)), 403, path, body=lambda b: b == {"detail": "your role may not do this"}),
+    ] + _unauthenticated(ids, path, None)
+
+
+def test_a_staff_role_change_is_audited_in_the_same_transaction_and_the_application_role_cannot_write_iam_directly(client, ids):
+    target = new_staff_account(ids, roles=())
+    admin = ids.people["admin_a"][0]
+    done = client.post(f"{ACCOUNTS}/{target}/roles", headers={**stepped(admin), "X-Idempotency-Key": _new_key()}, json={"clinic_id": str(ids.clinic_a), "role": "doctor"})
+    assert done.status_code == 200 and done.json()["changed"] is True
+    rows = _run(_fetch("select actor_id, actor_role, details from audit.log where action = 'staff.grant_role' and resource_id = $1", str(target)))
+    assert len(rows) == 1 and (rows[0]["actor_id"], rows[0]["actor_role"]) == (admin, "admin") and without_scope(rows[0]["details"]) == {"role": "doctor"}
+    grants = _run(_fetch("select role, granted_by from iam.staff_roles where account_id = $1 and revoked_at is null", target))
+    assert [(g["role"], g["granted_by"]) for g in grants] == [("doctor", admin)]
+
+
 # ---- clinic set-up: POST /locations, /providers, /visit-types, /slots (front desk and admin of the clinic only) ----------------------------------------------------------------------------
 #
 # Front desk and admin create; nurse and doctor can SEE the clinic and are refused with 403; every other identity gets the same 404 as a clinic that is not there. A replay answers the original, the same key
@@ -1942,7 +2111,7 @@ def test_erasure_clears_the_identity_columns_writes_one_audit_row_and_the_app_ro
 SETUP_BASE = PREFIX
 SETUP_ROUTES_PATHS = {"locations": PREFIX + "/locations", "providers": PREFIX + "/providers", "visit-types": PREFIX + "/visit-types", "slots": PREFIX + "/slots"}
 SETUP_ALLOWED = ("front_desk_a", "admin_a")
-SETUP_VISIBLE_NOT_ALLOWED = {"nurse_a": 403, "doctor_a": 403, "multi": 403}
+SETUP_VISIBLE_NOT_ALLOWED = {"nurse_a": 403, "doctor_a": 403, "multi": 403, "business_owner_a": 403, "auditor_a": 403}  # every staff role of the clinic can SEE the clinic row (clinics_select_own_staff)
 
 
 def _setup_body(ids, kind, **over):
@@ -2174,6 +2343,13 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", MERGE_OPEN): merge_open_cases,
     ("GET", AUDIT): audit_reader_cases,
     ("GET", HOLDS): hold_list_cases,
+    ("GET", ACCOUNTS): staff_list_cases,
+    ("POST", ACCOUNTS + "/invite"): staff_invite_cases,
+    ("POST", ACCOUNTS + "/activate-me"): staff_activate_cases,
+    ("POST", ACCOUNTS + "/{account_id}/roles"): staff_grant_cases,
+    ("POST", ACCOUNTS + "/{account_id}/roles/revoke"): staff_revoke_cases,
+    ("POST", ACCOUNTS + "/{account_id}/suspend"): staff_suspend_cases,
+    ("POST", ACCOUNTS + "/{account_id}/reinstate"): staff_reinstate_cases,
     ("POST", ERASE): erase_cases,
     ("GET", OFFERS): offer_list_cases,
     ("POST", OFFER_DELIVERED): offer_delivered_cases,

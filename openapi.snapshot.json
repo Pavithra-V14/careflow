@@ -1,6 +1,20 @@
 {
   "components": {
     "schemas": {
+      "ActivateOut": {
+        "additionalProperties": false,
+        "properties": {
+          "activated": {
+            "title": "Activated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "activated"
+        ],
+        "title": "ActivateOut",
+        "type": "object"
+      },
       "AuditList": {
         "additionalProperties": false,
         "properties": {
@@ -1083,6 +1097,81 @@
           "needs_person"
         ],
         "title": "InterpretReplyOut",
+        "type": "object"
+      },
+      "InviteIn": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "email": {
+            "maxLength": 254,
+            "minLength": 3,
+            "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+            "title": "Email",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "front_desk",
+              "nurse",
+              "doctor",
+              "admin",
+              "auditor",
+              "business_owner"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "email",
+          "role"
+        ],
+        "title": "InviteIn",
+        "type": "object"
+      },
+      "InviteOut": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "role": {
+            "enum": [
+              "front_desk",
+              "nurse",
+              "doctor",
+              "admin",
+              "auditor",
+              "business_owner"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_id",
+          "clinic_id",
+          "role",
+          "replayed"
+        ],
+        "title": "InviteOut",
         "type": "object"
       },
       "LabelsIn": {
@@ -2993,6 +3082,73 @@
         "title": "RevokeIdentityOut",
         "type": "object"
       },
+      "RoleChangeIn": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "front_desk",
+              "nurse",
+              "doctor",
+              "admin",
+              "auditor",
+              "business_owner"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "role"
+        ],
+        "title": "RoleChangeIn",
+        "type": "object"
+      },
+      "RoleChangeOut": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "front_desk",
+              "nurse",
+              "doctor",
+              "admin",
+              "auditor",
+              "business_owner"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_id",
+          "clinic_id",
+          "role",
+          "changed"
+        ],
+        "title": "RoleChangeOut",
+        "type": "object"
+      },
       "RoleGrant": {
         "properties": {
           "clinic_id": {
@@ -3336,6 +3492,96 @@
           "hold_expires_at"
         ],
         "title": "SlotOut",
+        "type": "object"
+      },
+      "StaffAccountList": {
+        "additionalProperties": false,
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/StaffAccountOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "limit",
+          "has_more"
+        ],
+        "title": "StaffAccountList",
+        "type": "object"
+      },
+      "StaffAccountOut": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "invited",
+              "active",
+              "suspended",
+              "closed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_id",
+          "status",
+          "roles"
+        ],
+        "title": "StaffAccountOut",
+        "type": "object"
+      },
+      "StatusOut": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "suspended"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_id",
+          "status",
+          "changed"
+        ],
+        "title": "StatusOut",
         "type": "object"
       },
       "ThreadList": {
@@ -3832,6 +4078,629 @@
           }
         ],
         "summary": "Me"
+      }
+    },
+    "/v1/staff/accounts": {
+      "get": {
+        "description": "Staff accounts that hold or held a role at this clinic, with their LIVE roles. 404 if the clinic is invisible to you, 403 unless you are an admin of it. Ids, a status word and role words only (no e-mail is stored here).",
+        "operationId": "list_staff_accounts_v1_staff_accounts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Clinic Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffAccountList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Staff Accounts",
+        "tags": [
+          "staff accounts"
+        ]
+      }
+    },
+    "/v1/staff/accounts/activate-me": {
+      "post": {
+        "description": "Activate YOUR invited account. Needs a verified second factor in your token; 403 if the account is not invited or you have no live role. Admins cannot do this for you.",
+        "operationId": "activate_me_v1_staff_accounts_activate_me_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Activate Me",
+        "tags": [
+          "staff accounts"
+        ]
+      }
+    },
+    "/v1/staff/accounts/invite": {
+      "post": {
+        "description": "Invite a new staff member to a clinic with one role. 404 if the clinic is invisible to you, 403 unless you are an admin of it, 409 if the account already exists (use the role route), 503 while no Auth admin adapter is configured. STEP-UP REQUIRED.",
+        "operationId": "invite_staff_v1_staff_accounts_invite_post",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Invite Staff",
+        "tags": [
+          "staff accounts"
+        ]
+      }
+    },
+    "/v1/staff/accounts/{account_id}/reinstate": {
+      "post": {
+        "description": "Reinstate a suspended staff account. Same rules as suspending. An invited account is not reinstated here: the person activates it themselves. STEP-UP REQUIRED.",
+        "operationId": "reinstate_staff_account_v1_staff_accounts__account_id__reinstate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reinstate Staff Account",
+        "tags": [
+          "staff accounts"
+        ]
+      }
+    },
+    "/v1/staff/accounts/{account_id}/roles": {
+      "post": {
+        "description": "Grant a role at a clinic to an existing staff account. 404 if the clinic is invisible to you, 403 unless you are an admin of it or the account cannot be changed by you. queue_worker cannot be granted. STEP-UP REQUIRED.",
+        "operationId": "grant_staff_role_route_v1_staff_accounts__account_id__roles_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleChangeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleChangeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Grant Staff Role Route",
+        "tags": [
+          "staff accounts"
+        ]
+      }
+    },
+    "/v1/staff/accounts/{account_id}/roles/revoke": {
+      "post": {
+        "description": "Revoke a live role at a clinic. 404 if the clinic is invisible to you, 403 unless you are an admin of it, 409 if it would leave the clinic without an active administrator. STEP-UP REQUIRED.",
+        "operationId": "revoke_staff_role_route_v1_staff_accounts__account_id__roles_revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleChangeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleChangeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Revoke Staff Role Route",
+        "tags": [
+          "staff accounts"
+        ]
+      }
+    },
+    "/v1/staff/accounts/{account_id}/suspend": {
+      "post": {
+        "description": "Suspend an active staff account. 403 unless you are an admin of EVERY clinic where the account holds a live role, or if it is your own account. STEP-UP REQUIRED.",
+        "operationId": "suspend_staff_account_v1_staff_accounts__account_id__suspend_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Suspend Staff Account",
+        "tags": [
+          "staff accounts"
+        ]
       }
     },
     "/v1/staff/audit": {
