@@ -28,6 +28,7 @@ SETTING_KEYS: Final = frozenset(
         "offer_expiry_seconds", "hold_lifetime_seconds", "backfill_candidates", "priority_names", "offer_message_text", "scheduling_task_priority", "scheduling_task_role",
         "patient_view_max_opens_per_minute", "patient_view_max_label_rows_per_minute",
         "revoke_reasons", "revoke_recheck_role", "revoke_priority_by_reason", "revoke_admin_alert_reasons",  # demo stand-ins for clinician items 23 and 24 (NOT 25 or 26)
+        "triage_task_role", "triage_task_priority", "hold_task_priority", "dead_letter_task_priority", "triage_mode",
     }
 )
 _TRUE: Final = {"1", "true", "yes", "on"}
@@ -47,6 +48,11 @@ def demo_allowed(profile: str, policy: str | None) -> bool:
 
 def _switched_on(environ: Mapping[str, str]) -> bool:
     return (environ.get(SWITCH) or "").strip().lower() in _TRUE
+
+
+def switched_on(environ: Mapping[str, str]) -> bool:
+    """Is CAREFLOW_DEMO_PHASE3 on? (The gate on profile and data policy is separate: `demo_allowed`.)"""
+    return _switched_on(environ)
 
 
 def _carries_label(environ: Mapping[str, str]) -> bool:
@@ -76,6 +82,11 @@ class DemoPhase3:
     revoke_recheck_role: str
     revoke_priority_by_reason: Mapping[str, str]
     revoke_admin_alert_reasons: tuple[str, ...]
+    triage_task_role: str  # who reviews a triage proposal in the demo (an invented stand-in for a clinical-governance decision)
+    triage_task_priority: str
+    hold_task_priority: str
+    dead_letter_task_priority: str
+    triage_mode: str  # shadow, assisted or autonomous: a governance choice, so a labelled demo value
 
     def scheduling_settings(self) -> SchedulingSettings:
         """The Scheduling agent's settings with the demo values filled in. The accept-confidence threshold stays unset: no demo value exists for it."""
@@ -124,6 +135,8 @@ def load_demo_phase3(profile: str, policy: str | None, *, path: Path = DEMO_FILE
         scheduling_task_role=str(v["scheduling_task_role"]), patient_view_max_opens_per_minute=int(v["patient_view_max_opens_per_minute"]),
         patient_view_max_label_rows_per_minute=int(v["patient_view_max_label_rows_per_minute"]),
         revoke_reasons=reasons, revoke_recheck_role=str(v["revoke_recheck_role"]), revoke_priority_by_reason=by_reason, revoke_admin_alert_reasons=alerts,
+        triage_task_role=str(v["triage_task_role"]), triage_task_priority=str(v["triage_task_priority"]), hold_task_priority=str(v["hold_task_priority"]),
+        dead_letter_task_priority=str(v["dead_letter_task_priority"]), triage_mode=str(v["triage_mode"]),
     )
 
 

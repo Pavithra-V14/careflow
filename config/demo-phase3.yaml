@@ -69,3 +69,18 @@ settings:
   patient_view_max_label_rows_per_minute:
     value: 200
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  triage_task_role:
+    value: nurse
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  triage_task_priority:
+    value: standard
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  hold_task_priority:
+    value: standard
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  dead_letter_task_priority:
+    value: standard
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  triage_mode:
+    value: assisted
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"

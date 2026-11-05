@@ -62,6 +62,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from careflow import (
     active_role,
+    demo_front_door,
     demo_phase3,
     identity,
     mpi,
@@ -986,13 +987,16 @@ class IngestOut(_Out):
     candidate_ids: list[uuid.UUID]  # existing records queued for a person to review (outcome `review`)
 
 
-def _active_key_version(request: Request) -> int | None:
-    vault: DemographicVault = request.app.state.vault
-    configured: int | None = request.app.state.active_key_version
+def _choose_key_version(vault: Any, configured: int | None) -> int | None:
+    """The key version new demographics are encrypted under: the configured one if it is loaded, else the only loaded one, else None. ONE definition, used by the routes and by the demo wiring."""
+    versions = tuple(getattr(vault, "key_versions", ()) or ())
     if configured is not None:
-        return configured if configured in vault.key_versions else None
-    versions = vault.key_versions
+        return configured if configured in versions else None
     return versions[0] if len(versions) == 1 else None
+
+
+def _active_key_version(request: Request) -> int | None:
+    return _choose_key_version(request.app.state.vault, request.app.state.active_key_version)
 
 
 @staff_patients.post("", response_model=IngestOut)
@@ -2424,15 +2428,25 @@ def create_app(
         app.state.worker_account_id = cfg.worker_account_id
         app.state.wired_adapters = frozenset()  # (provider, model_id) pairs with a wired adapter: none yet
         app.state.malware_scanner_configured = False  # nothing sets it: no scanner exists (BUILD-SPEC.md 11.5); clinical stays not ready
-        app.state.front_door = front_door
+        components = front_door
+        if components is None:  # the DEMO profile (synthetic data, switch on, keys loaded) wires FAKE components; any other profile leaves them unwired and the routes answer 503
+            try:
+                held = app.state.vault
+                components = demo_front_door.components_from_environment(os.environ, resolve_profile(), vault=held, key_version=_choose_key_version(held, cfg.active_key_version))
+            except Exception:  # noqa: BLE001 - any fault in the demo configuration leaves the components unwired (the routes answer 503), never a startup crash
+                log.error("the demo Front Door components could not be built: the referral run and review routes stay unavailable")
+                components = None
+            if components is not None:
+                log.warning("DEMO PROFILE: the Front Door runs on FAKE letters, extractor and retriever (synthetic data only)")
+        app.state.front_door = components
         app.state.storage_adapter = None
         intake = document_intake
         if intake is None:
             intake, app.state.storage_adapter = _intake_from_environment(cfg.supabase_url)
         app.state.document_intake = intake  # None unless storage is configured AND verified (below): the upload routes answer 503
         app.state.poker = Poker()  # routes that enqueue call `app.state.poker.poke()` after their transaction commits (7.4)
-        handlers = {FRONT_DOOR_TASK: front_door_handler(front_door, session_for=front_door_session_for)} if front_door is not None else {}
-        sweeps = [lambda conn: raise_dead_letter_tasks(conn, front_door.dead_letters)] if front_door is not None else []  # a dead-lettered run is never silent
+        handlers = {FRONT_DOOR_TASK: front_door_handler(components, session_for=front_door_session_for)} if components is not None else {}
+        sweeps = [lambda conn: raise_dead_letter_tasks(conn, components.dead_letters)] if components is not None else []  # a dead-lettered run is never silent
         worker: asyncio.Task | None = None
         if cfg.run_worker:
             if cfg.worker_account_id is None:
