@@ -161,8 +161,7 @@ async def verify_token(token: str, keys: JWKSClient, *, issuer: str, leeway: flo
 # Sensitive actions (merge, ...) need a SECOND factor verified RECENTLY, even inside an active session. Supabase Auth records a verified
 # TOTP factor in the token as `aal: "aal2"` plus an `amr` entry stamped with the verification time, and a refresh keeps that stamp.
 #
-# APPENDIX B, UNVERIFIED: the shape below (`amr` = list of {"method": str, "timestamp": int-seconds}) comes from documentation, not from a
-# real token. It must be confirmed against a real dev staff token before any non-test code depends on it (docs/design/step-up-spike.md).
+# APPENDIX B: the shape below (`amr` = list of {"method": str, "timestamp": int-seconds}) was VERIFIED 2026-10-30 against a REAL dev-project token (captured by the console's development claim panel; recorded in docs/frontend-backend-requests.md section 4 and docs/design/step-up-spike.md): `aal` is "aal2", `amr` is a list of entries with exactly the keys `method` and `timestamp`, `method` includes "totp", the timestamp is an integer of unix seconds, and a refresh keeps it. NOT covered by that capture: the legacy string `amr`, a token from a later sign-in challenge, an expired window and an end-to-end merge call.
 # `_totp_verified_at` is the ONE place that knows the shape, so a correction is a one-place change. Anything else fails closed.
 
 STEP_UP_METHOD: Final = "totp"
@@ -185,6 +184,20 @@ def _totp_verified_at(claims: dict[str, Any]) -> int | str:
         if method == STEP_UP_METHOD:
             times.append(stamp)
     return max(times) if times else "no_totp_entry"
+
+
+def mfa_failure(claims: dict[str, Any], *, now: float) -> str | None:
+    """None if the claims show a verified second factor (aal2 and a well-formed `amr` with a TOTP entry that is not in the future); otherwise a reason code (for the log, never the client).
+    Unlike `step_up_failure` there is NO recency requirement: this is the session-level rule for every staff route (a password-only session is refused everywhere), while step-up adds
+    "verified recently" for the sensitive routes. Same shape rules, same single parser (`_totp_verified_at`), same fail-closed reading of anything missing or malformed."""
+    if claims.get("aal") != STEP_UP_AAL:
+        return "aal_not_aal2"
+    verified_at = _totp_verified_at(claims)
+    if isinstance(verified_at, str):
+        return verified_at
+    if verified_at > now:
+        return "timestamp_future"
+    return None
 
 
 def step_up_failure(claims: dict[str, Any], *, max_age_seconds: int, now: float) -> str | None:

@@ -92,6 +92,7 @@ depends on a guess. All F3 screens run only against mocks until a live backend i
   `identity_confirmation_revoked`) and of the urgent kinds (`red_flag`, `screening_unassessable`), copied from
   `careflow/review_tasks.py` and the 0013 migration. If the backend exposed them (an enum, or a `resolvable` flag per task),
   the copy could go. The backend still decides: a wrong copy only shows or hides a button.
+  **Backend, 2026-11-04:** every review task (list and detail) now carries `resolvable: boolean` (true for exactly the kinds the resolve route closes), so the copied list can go. The urgent kinds are already `priority: immediate`. `kind` itself stays a string (new kinds appear with new features); a closed enum is not added.
 - **Resolve takes no reason.** The screen shows "PLACEHOLDER - clinician to define" where reason codes would go and sends none.
   If a clinician decides a reason is required, the route needs a body field first.
 - **Closed words for translation.** `run_state` and the proposal `mode` are strings; the console shows them as given (humanised).

@@ -201,7 +201,7 @@ def test_every_header_that_cannot_be_held_or_is_malformed_is_the_same_fixed_403_
 def test_on_a_step_up_route_the_header_syntax_comes_first_and_a_good_header_never_skips_the_step_up(client, ids, allroles, method, path):  # noqa: F811
     target = concrete(path)
     a = ids.clinic_a
-    not_stepped = bearer(mint(ids.allroles))  # a token with no aal / amr
+    not_stepped = bearer(mint(ids.allroles, aal=None, amr=None))  # a token with no aal / amr
     stepped = bearer(mint(ids.allroles, aal="aal2", amr=[{"method": "totp", "timestamp": int(time.time()) - 5}]))
     base = {"X-Idempotency-Key": _new_key()}
     bad = client.request(method, target, headers={**not_stepped, **base, HEADER: "garbage"}, json={})

@@ -62,12 +62,14 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from careflow import (
     active_role,
+    demo_front_door,
     demo_phase3,
     identity,
     mpi,
     offers,
     openapi_errors,
     patient_view,
+    reply_interpretation,
     review_tasks,
 )
 from careflow.adapters.storage import DOCUMENT_BUCKET, SupabaseUploadAdapter
@@ -76,6 +78,7 @@ from careflow.auth import (
     AuthError,
     AuthUnavailable,
     JWKSClient,
+    mfa_failure,
     step_up_failure,
     verify_token,
 )
@@ -84,7 +87,13 @@ from careflow.cors import middleware_kwargs, parse_origins
 from careflow.crypto import CryptoError, DemographicVault
 from careflow.db import make_app_engine, set_request_claims
 from careflow.dead_letters import raise_dead_letter_tasks
-from careflow.demo_phase3 import refuse_demo_outside_demo, scheduling_settings_for
+from careflow.decision import DecisionService
+from careflow.demo_phase3 import data_policy as _data_policy
+from careflow.demo_phase3 import (
+    demo_allowed,
+    refuse_demo_outside_demo,
+    scheduling_settings_for,
+)
 from careflow.documents import (
     DocumentIntake,
     UploadRejected,
@@ -159,6 +168,9 @@ class Settings(BaseSettings):
 
     # How recently a second factor must have been verified for a sensitive action (BUILD-SPEC 18.1 step-up). REQUIRED, no code default:
     # until it is set the merge routes answer a visible 503 (and log an error) instead of guessing a window.
+    # EVERY staff route needs a verified second factor (aal2 + a well-formed amr with TOTP), ON by default everywhere. It can be turned off ONLY in the demo profile with synthetic data, by this explicit
+    # setting; create_app refuses to build with it off anywhere else (MfaSettingRefused). Step-up (recent second factor) on the merge routes is separate and unchanged.
+    require_aal2: bool = Field(default=True, validation_alias=AliasChoices("CAREFLOW_REQUIRE_AAL2", "require_aal2"))
     step_up_max_age_seconds: int | None = Field(
         default=None, validation_alias=AliasChoices("CAREFLOW_STEP_UP_MAX_AGE_SECONDS", "step_up_max_age_seconds")
     )
@@ -229,9 +241,25 @@ async def _begin_request(conn: AsyncConnection, claims: dict[str, Any], active: 
         raise _active_role_refusal()
 
 
+class MfaSettingRefused(Exception):
+    """CAREFLOW_REQUIRE_AAL2 is off outside profile=demo with data_policy=synthetic_only. Fixed words."""
+
+
+def _require_mfa(request: Request, claims: dict[str, Any]) -> None:
+    """Every staff route: a verified second factor, before any database work. ONE fixed 401, `WWW-Authenticate: mfa`, no reason in the body (the code goes to the log). Off only where create_app
+    allowed it (demo + synthetic_only). Unknown state counts as ON."""
+    if getattr(request.app.state, "require_aal2", True) is False:
+        return
+    reason = mfa_failure(claims, now=request.app.state.clock())
+    if reason is not None:
+        log.info("multi-factor sign-in required: %s", reason)
+        raise HTTPException(status_code=401, detail="multi-factor sign-in required", headers={"WWW-Authenticate": "mfa"})
+
+
 async def db_conn(
     request: Request, claims: dict[str, Any] = Depends(verified_claims), active: active_role.ActiveRole | None = Depends(active_role_request)
 ) -> AsyncIterator[AsyncConnection]:
+    _require_mfa(request, claims)  # /v1/iam/me alone is exempt (db_conn_all_grants): the console needs it to find out what to enrol
     engine: AsyncEngine = request.app.state.engine
     async with engine.connect() as conn, conn.begin():
         await _begin_request(conn, claims, active)  # before any query
@@ -257,7 +285,7 @@ async def require_step_up(
     """Step-up re-authentication (BUILD-SPEC 18.1): a second factor verified within CAREFLOW_STEP_UP_MAX_AGE_SECONDS. The decision is the pure
     careflow.auth.step_up_failure; this wrapper supplies the configured window and the clock. A refusal is ONE fixed 401 with
     `WWW-Authenticate: step-up` and no reason; the reason code goes to the log, never a claim value. It runs before any database work.
-    Authentication still comes first (verified_claims). The claim shape is UNVERIFIED against a real token (docs/design/step-up-spike.md)."""
+    Authentication still comes first (verified_claims). The claim shape was verified on a real dev token on 2026-10-30 (docs/design/step-up-spike.md)."""
     max_age = request.app.state.step_up_max_age_seconds
     if not isinstance(max_age, int) or isinstance(max_age, bool) or max_age <= 0:
         log.error("step-up is unavailable: CAREFLOW_STEP_UP_MAX_AGE_SECONDS is not set to a positive number of seconds")
@@ -279,11 +307,22 @@ class RoleGrant(BaseModel):
     clinic_origin: str | None
 
 
+OPERATING_PROFILES: Final = ("demo", "clinical")
+
+
+def operating_profile() -> Literal["demo", "clinical"] | None:
+    """The deployment's CAREFLOW_PROFILE, RESTRICTED to the two known values (compared the way `resolve_profile` does: trimmed, case-insensitive). Unset, empty or anything else is None, never a guess:
+    the console shows a demo banner for "demo" and says nothing for None. It names the profile only; no setting, key or other configuration value ever appears here."""
+    raw = (os.environ.get("CAREFLOW_PROFILE") or "").strip().lower()
+    return raw if raw in OPERATING_PROFILES else None  # type: ignore[return-value]
+
+
 class Me(BaseModel):
     account_id: uuid.UUID
     account_type: str
     status: str
     roles: list[RoleGrant]
+    operating_profile: Literal["demo", "clinical"] | None  # the deployment's profile (demo or clinical); null when unset or unrecognised
 
 
 @router.get("/v1/iam/me", response_model=Me)
@@ -316,6 +355,7 @@ async def me(conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_cl
         account_type=account.account_type,
         status=account.status,
         roles=[RoleGrant(clinic_id=g.clinic_id, role=g.role, clinic_name=g.clinic_name, clinic_origin=g.clinic_origin) for g in grants],
+        operating_profile=operating_profile(),
     )
 
 
@@ -771,6 +811,99 @@ async def screen_message(message_id: uuid.UUID, idempotency_key: IdempotencyKey,
     return ScreenOut(message_id=r.message_id, screening_id=r.screening_id, outcome=r.outcome, replayed=r.replayed, patient_reply=r.patient_reply)  # type: ignore[arg-type]
 
 
+# ---- staff message lists: threads, and the HEADERS of one thread's messages (no bodies) --------------------------------------------------------------
+#
+# `GET /v1/staff/messages/threads` and `GET /v1/staff/messages/threads/{thread_id}/messages` give the console a conversation list. They return ids, the topic, the sender KIND, times, counts and an
+# erased flag: never a body, never ciphertext, never the key version (the SQL names its columns, so a body cannot be selected by accident). Who sees what is decided by row-level security on
+# msg.threads and msg.messages, exactly as for reading a body: nurse and doctor see every topic, front desk sees appointments and safety, and a thread a caller cannot see is absent from the list and
+# a 404 when opened by id. Admin, business owner, auditor, workers and patients get 403. A header carries no message text, so reading headers writes no audit row (reading a BODY does). Newest first;
+# `before` is an exclusive time cursor for the next page. Declared BEFORE `/{message_id}` so the literal path `/threads` is never taken for a message id.
+
+MESSAGE_LIST_READERS: Final = ("front_desk", "nurse", "doctor")
+Topic = Literal["care", "appointments", "safety"]
+
+
+class ThreadOut(_Out):
+    thread_id: uuid.UUID
+    clinic_id: uuid.UUID
+    patient_id: uuid.UUID
+    topic: Topic
+    status: Literal["open", "closed"]
+    created_at: datetime
+    message_count: int
+    last_message_at: datetime | None
+
+
+class ThreadList(_Out):
+    items: list[ThreadOut]
+    limit: int
+    has_more: bool
+
+
+class MessageHeaderOut(_Out):
+    message_id: uuid.UUID
+    thread_id: uuid.UUID
+    topic: Topic
+    sender_kind: Literal["patient", "staff", "system"]
+    created_at: datetime
+    erased: bool
+
+
+class MessageHeaderList(_Out):
+    items: list[MessageHeaderOut]
+    limit: int
+    has_more: bool
+
+
+@staff_messages.get("/threads", response_model=ThreadList)
+async def list_threads(
+    conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), patient_id: uuid.UUID | None = None, topic: Topic | None = None, before: datetime | None = None, limit: Limit = 100
+) -> ThreadList:
+    """Message threads you may see, newest first (`patient_id`, `topic` filter; `before` pages). 403 unless you hold front desk, nurse or doctor somewhere. No message text."""
+    await _staff_reader(conn, claims, MESSAGE_LIST_READERS)
+    rows = (
+        await conn.execute(
+            text(
+                "select t.id, t.clinic_id, t.patient_id, t.topic, t.status, t.created_at, "
+                "(select count(*) from msg.messages m where m.thread_id = t.id) as message_count, "
+                "(select max(m.created_at) from msg.messages m where m.thread_id = t.id) as last_message_at "
+                "from msg.threads t where (cast(:p as uuid) is null or t.patient_id = :p) and (cast(:t as text) is null or t.topic = :t) "
+                "and (cast(:b as timestamptz) is null or t.created_at < :b) order by t.created_at desc, t.id limit :n"
+            ),
+            {"p": patient_id, "t": topic, "b": before, "n": limit + 1},
+        )
+    ).all()
+    items = [
+        ThreadOut(
+            thread_id=r.id, clinic_id=r.clinic_id, patient_id=r.patient_id, topic=r.topic, status=r.status, created_at=r.created_at, message_count=r.message_count,
+            last_message_at=r.last_message_at,
+        )
+        for r in rows[:limit]
+    ]
+    return ThreadList(items=items, limit=limit, has_more=len(rows) > limit)
+
+
+@staff_messages.get("/threads/{thread_id}/messages", response_model=MessageHeaderList)
+async def list_thread_messages(
+    thread_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), before: datetime | None = None, limit: Limit = 100
+) -> MessageHeaderList:
+    """The message HEADERS of one thread, newest first (ids, topic, sender kind, time, erased; never a body). 403 unless you hold front desk, nurse or doctor somewhere; 404 if you cannot see the thread."""
+    await _staff_reader(conn, claims, MESSAGE_LIST_READERS)
+    if (await conn.execute(text("select 1 from msg.threads where id = :i"), {"i": thread_id})).first() is None:
+        raise HTTPException(status_code=404, detail="not found")
+    rows = (
+        await conn.execute(
+            text(
+                "select id, thread_id, topic, sender_kind, created_at, (erased_at is not null) as erased from msg.messages "
+                "where thread_id = :i and (cast(:b as timestamptz) is null or created_at < :b) order by created_at desc, id limit :n"
+            ),
+            {"i": thread_id, "b": before, "n": limit + 1},
+        )
+    ).all()
+    items = [MessageHeaderOut(message_id=r.id, thread_id=r.thread_id, topic=r.topic, sender_kind=r.sender_kind, created_at=r.created_at, erased=r.erased) for r in rows[:limit]]
+    return MessageHeaderList(items=items, limit=limit, has_more=len(rows) > limit)
+
+
 # ---- staff message read: GET /v1/staff/messages/{message_id} (BUILD-SPEC.md 9.4 audit principle; CLAUDE.md rules 5, 6, 8) -------------------
 #
 # Reading a decrypted message is a patient-data access. Who may read is decided by row-level security on msg.messages: nurse and doctor read
@@ -856,13 +989,16 @@ class IngestOut(_Out):
     candidate_ids: list[uuid.UUID]  # existing records queued for a person to review (outcome `review`)
 
 
-def _active_key_version(request: Request) -> int | None:
-    vault: DemographicVault = request.app.state.vault
-    configured: int | None = request.app.state.active_key_version
+def _choose_key_version(vault: Any, configured: int | None) -> int | None:
+    """The key version new demographics are encrypted under: the configured one if it is loaded, else the only loaded one, else None. ONE definition, used by the routes and by the demo wiring."""
+    versions = tuple(getattr(vault, "key_versions", ()) or ())
     if configured is not None:
-        return configured if configured in vault.key_versions else None
-    versions = vault.key_versions
+        return configured if configured in versions else None
     return versions[0] if len(versions) == 1 else None
+
+
+def _active_key_version(request: Request) -> int | None:
+    return _choose_key_version(request.app.state.vault, request.app.state.active_key_version)
 
 
 @staff_patients.post("", response_model=IngestOut)
@@ -1019,6 +1155,7 @@ class ReviewTaskOut(_Out):
     acknowledged_by: uuid.UUID | None
     acknowledged_at: datetime | None
     resolved_at: datetime | None
+    resolvable: bool  # True when the resolve route may close this kind (review_tasks.RESOLVABLE_KINDS); the console reads this instead of carrying its own copy of the list. The server still decides: a 409 stays a 409.
 
 
 class ReviewTaskDetailOut(ReviewTaskOut):
@@ -1043,7 +1180,7 @@ class ReviewTaskTransitionOut(_Out):
 def _task_out(r: review_tasks.TaskRow) -> dict[str, Any]:
     return {
         "task_id": r.id, "clinic_id": r.clinic_id, "kind": r.kind, "priority": r.priority, "assigned_role": r.assigned_role, "status": r.status, "created_at": r.created_at,
-        "acknowledged_by": r.acknowledged_by, "acknowledged_at": r.acknowledged_at, "resolved_at": r.resolved_at,
+        "acknowledged_by": r.acknowledged_by, "acknowledged_at": r.acknowledged_at, "resolved_at": r.resolved_at, "resolvable": r.kind in review_tasks.RESOLVABLE_KINDS,
     }
 
 
@@ -1195,6 +1332,64 @@ async def send_offer_route(
     )
 
 
+# ---- reply interpretation, FAKES ONLY (careflow/reply_interpretation.py; docs/design/phase3-scheduling-agent.md section 5) ---------------------------------------------------------
+#
+# `POST /v1/staff/scheduling/offers/interpret-reply`: a front-desk person asks what a patient's reply to an offer means. The deterministic red-flag rules screen the reply FIRST (a red flag or an
+# unassessable reply raises the nurse task and NO model is asked); only a clear patient reply on the appointments topic is put to the `decision` tier. The answer is a SUGGESTION with a closed
+# reason word when there is none; it never contains the reply, and nothing books or is sent. With no decision service wired (no real engine is approved: the durable spend ledger is a hard blocker
+# for a real call) the route answers 503. Front desk of the message's clinic only: another role that can SEE the message gets 403, anyone who cannot gets the one fixed 404.
+
+
+class InterpretReplyIn(_Body):
+    message_id: uuid.UUID
+
+
+class InterpretReplyOut(_Out):
+    """Ids, closed words and numbers only: never the reply or any patient text."""
+
+    message_id: uuid.UUID
+    screening_id: uuid.UUID
+    outcome: Literal["red_flag", "unassessable", "clear"]
+    replayed: bool
+    suggestion: Literal["accept", "decline", "other_time", "question", "unclear"] | None
+    confidence: float | None  # only a CALIBRATED confidence; None means unknown
+    calibrated: bool | None
+    engine: str | None
+    reason: Literal["red_flag", "unassessable", "not_a_patient_reply", "no_route", "spend_ceiling", "engine_failed"] | None
+    needs_person: bool
+
+
+@scheduling.post("/offers/interpret-reply", response_model=InterpretReplyOut)
+async def interpret_reply_route(body: InterpretReplyIn, idempotency_key: IdempotencyKey, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims)) -> InterpretReplyOut:
+    """Suggest what a patient's reply means. 404 if you cannot see the message, 403 unless you are front desk of its clinic, 409 if the body was erased, 503 if reply interpretation or the encryption keys are
+    not configured. The red-flag rules always run first; `suggestion` is null with a `reason` when a person must read the reply."""
+    vault: DemographicVault | None = request.app.state.vault
+    service = request.app.state.reply_interpreter
+    if vault is None or service is None:
+        log.error("reply interpretation is unavailable: no decision service or no encryption keys are configured")
+        raise HTTPException(status_code=503, detail="reply interpretation is not available")
+    row = (await conn.execute(text("select clinic_id, origin from msg.messages where id = :i"), {"i": body.message_id})).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")  # missing and invisible are one answer
+    if not await _holds_role(conn, claims, row.clinic_id, ("front_desk",)):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    actor = uuid.UUID(claims["sub"])
+    try:
+        result = await reply_interpretation.interpret_reply(conn, vault, _screening_engine, service, body.message_id, actor_id=actor, idempotency_key=idempotency_key)
+    except (MessageNotFound, ScreeningNotPermitted):
+        raise HTTPException(status_code=404, detail="not found") from None
+    except MessageErased:
+        raise HTTPException(status_code=409, detail="the message body was erased") from None
+    await write_audit(
+        conn, clinic_id=row.clinic_id, origin=row.origin, actor_id=actor, actor_role="front_desk", action="offer.interpret_reply", resource_type="message", resource_id=body.message_id,
+        details={"outcome": result.outcome, "suggestion": result.suggestion or "none", "reason": result.reason or "none"}, idempotency_key=f"audit:interpret-reply:{body.message_id}:{idempotency_key}",
+    )
+    return InterpretReplyOut(
+        message_id=result.message_id, screening_id=result.screening_id, outcome=result.outcome, replayed=result.replayed, suggestion=result.suggestion,  # type: ignore[arg-type]
+        confidence=result.confidence, calibrated=result.calibrated, engine=result.engine, reason=result.reason, needs_person=result.needs_person,
+    )
+
+
 # ---- documents: begin an upload, register it (careflow/documents.py; docs/design/uploads-supabase-storage.md) -------------------------------------------------
 #
 # Two steps, both by a front-desk person or a nurse of the clinic. BEGIN hands the browser a short-lived signed URL for a path THE SERVER chose (derived from the clinic and the idempotency key).
@@ -1316,9 +1511,10 @@ async def _validation_error_handler(request: Request, exc: RequestValidationErro
 
 # ---- staff merges: propose, approve, unmerge (BUILD-SPEC.md §17.2, §18.1; CLAUDE.md rules 3, 5, 8) ------------------------------------------
 #
-# STEP-UP IMPLEMENTED, CLAIM SHAPE PENDING LIVE VERIFICATION. Every route here needs a recently verified second factor
-# (`require_step_up`). The `amr` entry shape it reads is documented but NOT yet confirmed against a real token (Appendix B spike,
-# docs/design/step-up-spike.md): do not treat the step-up check as verified until that is recorded.
+# STEP-UP IMPLEMENTED, CLAIM SHAPE VERIFIED ON A REAL DEV TOKEN (2026-10-30). Every route here needs a recently verified second factor
+# (`require_step_up`). What that capture did not cover (legacy string `amr`, a later challenge, an expired window, an end-to-end merge call) is listed in docs/design/step-up-spike.md.
+# NOTE: the three route docstrings below still say "PENDING LIVE VERIFICATION": they are the OpenAPI descriptions the frontend's generated types copy, so they change together with the next
+# schema regeneration (docs/design/step-up-spike.md).
 #
 # STRONG_IDENTIFIERS (careflow/mpi.py) decides which matches are strong enough to avoid a review row, and it is reachable over HTTP through
 # POST /v1/staff/patients. It is PENDING SIGN-OFF by Priya (Health-information lead): no real patient data until that is recorded.
@@ -2270,7 +2466,7 @@ def _intake_from_environment(supabase_url: str) -> tuple[DocumentIntake | None, 
 def create_app(
     settings: Settings | None = None, *, jwks: JWKSClient | None = None, engine: AsyncEngine | None = None,
     vault: DemographicVault | None = None, clock: Callable[[], float] = time.time, front_door: FrontDoorComponents | None = None,
-    front_door_session_for: Callable[..., Any] = worker_session, document_intake: DocumentIntake | None = None,
+    front_door_session_for: Callable[..., Any] = worker_session, document_intake: DocumentIntake | None = None, reply_interpreter: DecisionService | None = None,
 ) -> FastAPI:
     """Build the app. `jwks`, `engine`, `vault` and `clock` (for the step-up window) can be injected (tests do); otherwise they come from
     settings / the environment. `front_door` holds the Front Door's stand-in components; with None the run and review routes answer 503 and no handler is registered."""
@@ -2278,26 +2474,40 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         cfg = settings or Settings()  # type: ignore[call-arg]  # fields come from the environment
+        if not cfg.require_aal2 and not demo_allowed(resolve_profile(), _data_policy(os.environ)):  # also catches a value that came from .env
+            raise MfaSettingRefused("CAREFLOW_REQUIRE_AAL2 may be turned off only in profile=demo with data_policy=synthetic_only: refusing to start")
         app.state.issuer = cfg.issuer
         app.state.jwks = jwks or JWKSClient(cfg.jwks_url)
         app.state.engine = engine or make_app_engine(cfg.database_url_app, pool_size=5, max_overflow=5, pool_pre_ping=True)
         app.state.vault = vault if vault is not None else _load_vault()
         app.state.active_key_version = cfg.active_key_version
         app.state.step_up_max_age_seconds = cfg.step_up_max_age_seconds
+        app.state.require_aal2 = cfg.require_aal2
         app.state.clock = clock
         app.state.required_roles = cfg.required_roles
         app.state.worker_account_id = cfg.worker_account_id
         app.state.wired_adapters = frozenset()  # (provider, model_id) pairs with a wired adapter: none yet
         app.state.malware_scanner_configured = False  # nothing sets it: no scanner exists (BUILD-SPEC.md 11.5); clinical stays not ready
-        app.state.front_door = front_door
+        components = front_door
+        if components is None:  # the DEMO profile (synthetic data, switch on, keys loaded) wires FAKE components; any other profile leaves them unwired and the routes answer 503
+            try:
+                held = app.state.vault
+                components = demo_front_door.components_from_environment(os.environ, resolve_profile(), vault=held, key_version=_choose_key_version(held, cfg.active_key_version))
+            except Exception:  # noqa: BLE001 - any fault in the demo configuration leaves the components unwired (the routes answer 503), never a startup crash
+                log.error("the demo Front Door components could not be built: the referral run and review routes stay unavailable")
+                components = None
+            if components is not None:
+                log.warning("DEMO PROFILE: the Front Door runs on FAKE letters, extractor and retriever (synthetic data only)")
+        app.state.front_door = components
+        app.state.reply_interpreter = reply_interpreter  # None unless a decision service is injected (FAKES ONLY today): the route answers 503
         app.state.storage_adapter = None
         intake = document_intake
         if intake is None:
             intake, app.state.storage_adapter = _intake_from_environment(cfg.supabase_url)
         app.state.document_intake = intake  # None unless storage is configured AND verified (below): the upload routes answer 503
         app.state.poker = Poker()  # routes that enqueue call `app.state.poker.poke()` after their transaction commits (7.4)
-        handlers = {FRONT_DOOR_TASK: front_door_handler(front_door, session_for=front_door_session_for)} if front_door is not None else {}
-        sweeps = [lambda conn: raise_dead_letter_tasks(conn, front_door.dead_letters)] if front_door is not None else []  # a dead-lettered run is never silent
+        handlers = {FRONT_DOOR_TASK: front_door_handler(components, session_for=front_door_session_for)} if components is not None else {}
+        sweeps = [lambda conn: raise_dead_letter_tasks(conn, components.dead_letters)] if components is not None else []  # a dead-lettered run is never silent
         worker: asyncio.Task | None = None
         if cfg.run_worker:
             if cfg.worker_account_id is None:
@@ -2329,6 +2539,9 @@ def create_app(
     origins = parse_origins(raw_origins, resolve_profile())
     if origins:
         app.add_middleware(CORSMiddleware, **middleware_kwargs(origins))
+    mfa_off = (not settings.require_aal2) if settings is not None else (os.environ.get("CAREFLOW_REQUIRE_AAL2") or "").strip().lower() in {"0", "false", "no", "off"}
+    if mfa_off and not demo_allowed(resolve_profile(), _data_policy(os.environ)):
+        raise MfaSettingRefused("CAREFLOW_REQUIRE_AAL2 may be turned off only in profile=demo with data_policy=synthetic_only: refusing to start")
     refuse_demo_outside_demo(os.environ, resolve_profile())  # the demo Phase 3 placeholders may never be present outside profile=demo + data_policy=synthetic_only
     app.add_exception_handler(RequestValidationError, _validation_error_handler)  # type: ignore[arg-type]
 

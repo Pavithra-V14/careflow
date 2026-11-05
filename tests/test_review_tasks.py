@@ -121,3 +121,23 @@ async def test_the_only_write_is_one_update_of_the_four_granted_columns():
     (sql,) = conn.updates()
     assert "set status = 'resolved'" in sql and "acknowledged_by = coalesce(acknowledged_by" in sql and "resolved_at = now()" in sql
     assert "delete" not in " ".join(conn.statements).lower() and "insert" not in " ".join(conn.statements).lower()
+
+
+def test_a_task_row_says_whether_the_resolve_route_may_close_its_kind():
+    """The console reads `resolvable` instead of carrying its own copy of the kind list; it comes from the same constant the route checks."""
+    import datetime as dt
+    import uuid
+
+    from careflow import app as app_module
+    from careflow.review_tasks import RESOLVABLE_KINDS, TaskRow
+
+    assert app_module.ReviewTaskOut.model_fields["resolvable"].annotation is bool
+    now = dt.datetime.now(dt.UTC)
+
+    def row(kind):
+        return TaskRow(uuid.uuid4(), uuid.uuid4(), "test", kind, "standard", "nurse", "open", now, None, None, None)
+
+    for kind in sorted(RESOLVABLE_KINDS):
+        assert app_module._task_out(row(kind))["resolvable"] is True, kind
+    for kind in ("red_flag", "screening_unassessable", "something_new"):
+        assert app_module._task_out(row(kind))["resolvable"] is False, kind  # unknown is not resolvable

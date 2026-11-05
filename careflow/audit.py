@@ -1,6 +1,6 @@
 """Audit rows for human decisions (BUILD-SPEC.md 17.1 `audit`, 18.4; pre-launch item 5). Writes `audit.log` from the CALLING person's own session, in the SAME transaction as the decision.
 
-* No migration and no new grant: `careflow_app` already holds INSERT on `audit.log`, and the policy `log_insert_as_self` (migration 0001) requires `actor_id` to be the signed-in account, so nobody
+* No migration and no new grant: `careflow_app` already holds INSERT on `audit.log`, and the policy `log_insert_own_clinic` (migration 0030, replacing 0001's `log_insert_as_self`) requires `actor_id` to be the signed-in account holding a front-desk, nurse, doctor or admin role at the row's clinic, so nobody
   can write a row as someone else. Reading audit rows stays with the auditor role.
 * Same transaction: the decision and its audit row commit together or not at all. If the audit insert fails the exception propagates and the request rolls back (a decision with no audit row must not
   commit).
@@ -36,7 +36,7 @@ ACTIONS: Final = frozenset(
         "patient.view_labels",  # list rows decrypted for a page: the COUNT only
         "patient.search",  # a front-desk person searched for a patient: the KIND of search and the result count only, never the query or the results
         "hold.release",  # a front-desk person gave a held slot back before its time ran out
-        "offer.send",  # a front-desk person sent an offer: the slot hold and the offer message (careflow/offers.py)
+        "offer.send", "offer.interpret_reply",  # a front-desk person sent an offer: the slot hold and the offer message (careflow/offers.py)
         "clinical.tool_call",  # a call on the clinical read-only MCP server (careflow/mcp_kit.py `audited`): tool name and outcome only
     }
 )

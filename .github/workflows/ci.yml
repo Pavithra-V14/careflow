@@ -94,6 +94,14 @@ jobs:
       - name: OpenAPI snapshot is current (BUILD-SPEC.md §21)
         run: uv run python scripts/export_openapi.py --check
 
+      - name: Generated dashboard and alert rules are current (metrics-catalog.yaml)
+        run: uv run python scripts/generate_dashboard.py --check
+
+      # The gate scorecard (BUILD-SPEC.md 14.3): prints MEASURED / NOT MEASURED / FAILED per gate. --report-only because the gold sets do not exist yet, so every gate honestly reads NOT MEASURED;
+      # a FAILED gate (evidence that says so) still fails this step. Drop --report-only once the evidence file is produced in CI.
+      - name: Gate scorecard
+        run: uv run python scripts/gate_scorecard.py --report-only
+
       - name: "Offline tests (a skipped test is a failure)"
         run: |
           set -o pipefail
@@ -182,13 +190,11 @@ jobs:
               tests/test_queue_live.py
               tests/test_rls_spend_and_approval_live.py
               tests/test_scheduling_live.py
-          - shard: 3  # about 44 min: referrals 1101 + identity 466 + mpi worker 263 + checkpoints 193 + triage 191 + docs 180 + msg 180 + real token 13 + storage policies 18 (measured on run 41089472168)
+          - shard: 3  # about 41 min (run 41842559711 measured 51.0 min job time, 2745 s of tests: referrals 1316 + identity 483 + mpi worker 315 + triage 234 + checkpoints 225 + msg 212 + docs 209 + real token 32 + storage policies 20; mpi worker and triage moved to shard 6 on 2026-11-04, about 550 s). The secret key reaches THIS shard only (storage policies and real token stay here).
             matrix_part: ""
             files: >-
               tests/test_api_referrals_live.py
               tests/test_identity_live.py
-              tests/test_rls_mpi_worker_live.py
-              tests/test_rls_triage_live.py
               tests/test_rls_checkpoints_live.py
               tests/test_rls_docs_live.py
               tests/test_rls_msg_live.py
@@ -217,10 +223,12 @@ jobs:
             files: >-
               tests/test_active_role_live.py
               tests/test_active_role_matrix_live.py
-          - shard: 6  # PART 2 of the header dimension (see shard 5)
+          - shard: 6  # PART 2 of the header dimension (see shard 5), plus the mpi worker and triage RLS files moved from shard 3 (run 41842559711: shard 6 took 21.4 min, shard 3 51.0); expected about 30 min
             matrix_part: "2/2"
             files: >-
               tests/test_active_role_matrix_live.py
+              tests/test_rls_mpi_worker_live.py
+              tests/test_rls_triage_live.py
     env:
       CAREFLOW_ENV: ci
       CAREFLOW_PROFILE: demo
@@ -281,6 +289,76 @@ jobs:
       - name: "Per-file times, shard ${{ matrix.shard }}"
         if: always()
         run: uv run python scripts/ci_shard_times.py shard-times.xml --label "shard-${{ matrix.shard }}"
+
+      # The JUnit XML of this shard, kept so the gate-scorecard job can turn the tests that already exist into gate evidence (careflow/gate_evidence.py).
+      - name: "Keep this shard's JUnit XML"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-shard-${{ matrix.shard }}
+          path: shard-times.xml
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Dependency vulnerability audit (BUILD-SPEC.md 21; owner decision 2026-11-04). REPORT-ONLY for now: `continue-on-error`, and the `test` job below does not depend on it. It audits the exact versions in
+  # uv.lock against the public advisory database (pip-audit, pinned; the only thing sent out is package names and versions, no patient data). Stage two, after the first run's output has been read:
+  # fail the build on a vulnerability that has a fix version, with a reviewed ignore list (reason and date per entry). pip-audit reports no severity, so "high" is judged from the advisory text.
+  dependency-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Export the locked versions
+        run: |
+          python -m pip install --upgrade pip uv
+          uv export --frozen --no-hashes --no-emit-project > audit-requirements.txt
+
+      - name: pip-audit (report only)
+        run: |
+          set +e
+          uvx --from pip-audit==2.9.0 pip-audit -r audit-requirements.txt --no-deps --disable-pip --progress-spinner off 2>&1 | tee audit.out
+          status=${PIPESTATUS[0]}
+          { echo "### Dependency audit (report only)"; echo; echo '```'; cat audit.out; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          echo "pip-audit exit status: $status (report only; not a failure yet)"
+          exit 0
+
+  # The gate scorecard fed by real test results (BUILD-SPEC.md 14.3; docs/design/remaining-work.md A11). REPORT ONLY: `continue-on-error`, not needed by `test`. The three gates that already have CI tests
+  # (clinic isolation, double booking, idempotency) read MEASURED when their files ran and passed; every gold-set gate stays NOT MEASURED.
+  gate-scorecard:
+    if: always()
+    needs: [live]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Install dependencies from the lockfile
+        run: |
+          python -m pip install --upgrade pip uv
+          uv sync --frozen
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: junit-shard-*
+          path: junit
+          merge-multiple: false
+
+      - name: Gate evidence and scorecard (report only)
+        run: |
+          uv run python scripts/gate_evidence.py gate-evidence.json junit/*/shard-times.xml
+          uv run python scripts/gate_scorecard.py gate-evidence.json --report-only | tee scorecard.out
+          { echo "### Gate scorecard (report only)"; echo; echo '```'; cat scorecard.out; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
   # The single required check. It is named `test`, as before, so branch protection does not change: it passes only if EVERY shard passed.
   test:
