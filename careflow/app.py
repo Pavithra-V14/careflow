@@ -796,6 +796,99 @@ async def screen_message(message_id: uuid.UUID, idempotency_key: IdempotencyKey,
     return ScreenOut(message_id=r.message_id, screening_id=r.screening_id, outcome=r.outcome, replayed=r.replayed, patient_reply=r.patient_reply)  # type: ignore[arg-type]
 
 
+# ---- staff message lists: threads, and the HEADERS of one thread's messages (no bodies) --------------------------------------------------------------
+#
+# `GET /v1/staff/messages/threads` and `GET /v1/staff/messages/threads/{thread_id}/messages` give the console a conversation list. They return ids, the topic, the sender KIND, times, counts and an
+# erased flag: never a body, never ciphertext, never the key version (the SQL names its columns, so a body cannot be selected by accident). Who sees what is decided by row-level security on
+# msg.threads and msg.messages, exactly as for reading a body: nurse and doctor see every topic, front desk sees appointments and safety, and a thread a caller cannot see is absent from the list and
+# a 404 when opened by id. Admin, business owner, auditor, workers and patients get 403. A header carries no message text, so reading headers writes no audit row (reading a BODY does). Newest first;
+# `before` is an exclusive time cursor for the next page. Declared BEFORE `/{message_id}` so the literal path `/threads` is never taken for a message id.
+
+MESSAGE_LIST_READERS: Final = ("front_desk", "nurse", "doctor")
+Topic = Literal["care", "appointments", "safety"]
+
+
+class ThreadOut(_Out):
+    thread_id: uuid.UUID
+    clinic_id: uuid.UUID
+    patient_id: uuid.UUID
+    topic: Topic
+    status: Literal["open", "closed"]
+    created_at: datetime
+    message_count: int
+    last_message_at: datetime | None
+
+
+class ThreadList(_Out):
+    items: list[ThreadOut]
+    limit: int
+    has_more: bool
+
+
+class MessageHeaderOut(_Out):
+    message_id: uuid.UUID
+    thread_id: uuid.UUID
+    topic: Topic
+    sender_kind: Literal["patient", "staff", "system"]
+    created_at: datetime
+    erased: bool
+
+
+class MessageHeaderList(_Out):
+    items: list[MessageHeaderOut]
+    limit: int
+    has_more: bool
+
+
+@staff_messages.get("/threads", response_model=ThreadList)
+async def list_threads(
+    conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), patient_id: uuid.UUID | None = None, topic: Topic | None = None, before: datetime | None = None, limit: Limit = 100
+) -> ThreadList:
+    """Message threads you may see, newest first (`patient_id`, `topic` filter; `before` pages). 403 unless you hold front desk, nurse or doctor somewhere. No message text."""
+    await _staff_reader(conn, claims, MESSAGE_LIST_READERS)
+    rows = (
+        await conn.execute(
+            text(
+                "select t.id, t.clinic_id, t.patient_id, t.topic, t.status, t.created_at, "
+                "(select count(*) from msg.messages m where m.thread_id = t.id) as message_count, "
+                "(select max(m.created_at) from msg.messages m where m.thread_id = t.id) as last_message_at "
+                "from msg.threads t where (cast(:p as uuid) is null or t.patient_id = :p) and (cast(:t as text) is null or t.topic = :t) "
+                "and (cast(:b as timestamptz) is null or t.created_at < :b) order by t.created_at desc, t.id limit :n"
+            ),
+            {"p": patient_id, "t": topic, "b": before, "n": limit + 1},
+        )
+    ).all()
+    items = [
+        ThreadOut(
+            thread_id=r.id, clinic_id=r.clinic_id, patient_id=r.patient_id, topic=r.topic, status=r.status, created_at=r.created_at, message_count=r.message_count,
+            last_message_at=r.last_message_at,
+        )
+        for r in rows[:limit]
+    ]
+    return ThreadList(items=items, limit=limit, has_more=len(rows) > limit)
+
+
+@staff_messages.get("/threads/{thread_id}/messages", response_model=MessageHeaderList)
+async def list_thread_messages(
+    thread_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), before: datetime | None = None, limit: Limit = 100
+) -> MessageHeaderList:
+    """The message HEADERS of one thread, newest first (ids, topic, sender kind, time, erased; never a body). 403 unless you hold front desk, nurse or doctor somewhere; 404 if you cannot see the thread."""
+    await _staff_reader(conn, claims, MESSAGE_LIST_READERS)
+    if (await conn.execute(text("select 1 from msg.threads where id = :i"), {"i": thread_id})).first() is None:
+        raise HTTPException(status_code=404, detail="not found")
+    rows = (
+        await conn.execute(
+            text(
+                "select id, thread_id, topic, sender_kind, created_at, (erased_at is not null) as erased from msg.messages "
+                "where thread_id = :i and (cast(:b as timestamptz) is null or created_at < :b) order by created_at desc, id limit :n"
+            ),
+            {"i": thread_id, "b": before, "n": limit + 1},
+        )
+    ).all()
+    items = [MessageHeaderOut(message_id=r.id, thread_id=r.thread_id, topic=r.topic, sender_kind=r.sender_kind, created_at=r.created_at, erased=r.erased) for r in rows[:limit]]
+    return MessageHeaderList(items=items, limit=limit, has_more=len(rows) > limit)
+
+
 # ---- staff message read: GET /v1/staff/messages/{message_id} (BUILD-SPEC.md 9.4 audit principle; CLAUDE.md rules 5, 6, 8) -------------------
 #
 # Reading a decrypted message is a patient-data access. Who may read is decided by row-level security on msg.messages: nurse and doctor read
@@ -1044,6 +1137,7 @@ class ReviewTaskOut(_Out):
     acknowledged_by: uuid.UUID | None
     acknowledged_at: datetime | None
     resolved_at: datetime | None
+    resolvable: bool  # True when the resolve route may close this kind (review_tasks.RESOLVABLE_KINDS); the console reads this instead of carrying its own copy of the list. The server still decides: a 409 stays a 409.
 
 
 class ReviewTaskDetailOut(ReviewTaskOut):
@@ -1068,7 +1162,7 @@ class ReviewTaskTransitionOut(_Out):
 def _task_out(r: review_tasks.TaskRow) -> dict[str, Any]:
     return {
         "task_id": r.id, "clinic_id": r.clinic_id, "kind": r.kind, "priority": r.priority, "assigned_role": r.assigned_role, "status": r.status, "created_at": r.created_at,
-        "acknowledged_by": r.acknowledged_by, "acknowledged_at": r.acknowledged_at, "resolved_at": r.resolved_at,
+        "acknowledged_by": r.acknowledged_by, "acknowledged_at": r.acknowledged_at, "resolved_at": r.resolved_at, "resolvable": r.kind in review_tasks.RESOLVABLE_KINDS,
     }
 
 
