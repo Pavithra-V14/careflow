@@ -141,7 +141,7 @@ def make_app(monkeypatch, env):
     async def fake_claims():
         return claims
 
-    app = create_app(Settings(supabase_url=PROJECT, database_url_app="postgresql://unused"), jwks=JWKSClient(PROJECT + "/auth/v1/.well-known/jwks.json"), engine=object(), vault=vault())  # type: ignore[arg-type]
+    app = create_app(Settings(_env_file=None, supabase_url=PROJECT, database_url_app="postgresql://unused"), jwks=JWKSClient(PROJECT + "/auth/v1/.well-known/jwks.json"), engine=object(), vault=vault())  # type: ignore[arg-type]
     app.dependency_overrides[db_conn] = fake_db
     app.dependency_overrides[verified_claims] = fake_claims
     return app

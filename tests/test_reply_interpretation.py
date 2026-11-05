@@ -167,6 +167,9 @@ class _Result:
     def first(self):
         return self._row
 
+    def scalar(self):
+        return self._row
+
 
 class FakeConn:
     def __init__(self, *, message=True, front_desk=True):
@@ -176,6 +179,8 @@ class FakeConn:
         sql = str(statement)
         if "from msg.messages" in sql:
             return _Result(SimpleNamespace(clinic_id=CLINIC, origin="test") if self.message else None)
+        if "iam.has_clinic_role" in sql:  # the role check is the database's helper since migration 0028
+            return _Result(bool(self.front_desk))
         if "from iam.staff_roles" in sql:
             return _Result((1,) if self.front_desk else None)
         raise AssertionError(sql)
@@ -199,7 +204,7 @@ def make_client(monkeypatch, *, conn=None, service="unset", vault=True):
     monkeypatch.setattr("careflow.app.write_audit", write_audit)
     the_vault = DemographicVault.from_env({f"CAREFLOW_{k}_SECRET_V1": base64.b64encode(os.urandom(32)).decode() for k in ("ENC", "HMAC")}) if vault else None
     app = create_app(
-        Settings(supabase_url=PROJECT, database_url_app="postgresql://unused"), jwks=JWKSClient(PROJECT + "/auth/v1/.well-known/jwks.json"), engine=object(),  # type: ignore[arg-type]
+        Settings(_env_file=None, supabase_url=PROJECT, database_url_app="postgresql://unused"), jwks=JWKSClient(PROJECT + "/auth/v1/.well-known/jwks.json"), engine=object(),  # type: ignore[arg-type]
         vault=the_vault, reply_interpreter=service_for(adapter_for("accept")) if service == "unset" else service,
     )
     app.dependency_overrides[db_conn] = fake_db
