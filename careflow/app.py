@@ -2269,7 +2269,7 @@ class EraseRequestIn(_Body):
 class EraseRequestOut(_Out):
     request_id: uuid.UUID
     patient_id: uuid.UUID
-    status: Literal["requested"]
+    status: Literal["requested", "erased", "cancelled"]  # the request's CURRENT state (a retry of an old request answers it truthfully)
 
 
 class ErasureRequestRow(_Out):
@@ -2332,7 +2332,8 @@ async def request_patient_erasure_route(
     if not await _clinic_role_held(conn, row[0], ("front_desk",)):
         raise HTTPException(status_code=403, detail="your role may not do this")
     request_id = await _erasure_function(conn, "select mpi.request_patient_erasure(:p, :r, :k)", {"p": patient_id, "r": body.reason, "k": idempotency_key})
-    return EraseRequestOut(request_id=request_id, patient_id=patient_id, status="requested")
+    state = (await conn.execute(text("select status from mpi.erasure_requests where id = :i"), {"i": request_id})).scalar()
+    return EraseRequestOut(request_id=request_id, patient_id=patient_id, status=state or "requested")
 
 
 @staff_erasure.get("", response_model=ErasureRequestList)

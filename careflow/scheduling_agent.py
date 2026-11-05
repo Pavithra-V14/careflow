@@ -12,6 +12,7 @@ ledger). No grant, role or policy is added: the tools read through `SlotManager`
 """
 
 import uuid
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
@@ -19,8 +20,11 @@ from mcp.server.mcpserver import MCPServer
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from careflow.autonomy import Policy
+from careflow.budget import RunBudget
 from careflow.mcp_kit import Envelope, async_tool, current_session
 from careflow.scheduling import SlotManager
+from careflow.scheduling_write_tools import register_write_tools
 
 MAX_LIMIT = 50  # a technical bound on one read
 SETTING_NAMES = ("offer_expiry_seconds", "hold_lifetime_seconds", "backfill_candidates", "accept_confidence_threshold", "offer_message_template")
@@ -76,10 +80,13 @@ def _candidate(c: Any) -> dict[str, Any]:
     return {"waitlist_id": str(c.waitlist_id), "patient_id": str(c.patient_id), "priority_code": c.priority_code, "rank": c.rank, "joined_at": c.joined_at.isoformat()}
 
 
-def build_scheduling_server(settings: SchedulingSettings, slots: SlotManager | None = None) -> MCPServer:
-    """The in-process `scheduling` server. Every tool is `async def` (checked at registration), reads the caller's session from `current_session()` and returns an `Envelope`."""
+def build_scheduling_server(settings: SchedulingSettings, slots: SlotManager | None = None, *, write_policy: Policy | None = None, budget: Callable[[], RunBudget | None] | None = None) -> MCPServer:
+    """The in-process `scheduling` server. Every tool is `async def` (checked at registration), reads the caller's session from `current_session()` and returns an `Envelope`.
+    With a `write_policy` the four WRITE tools (careflow/scheduling_write_tools.py) are registered too, behind the five-check pipeline of spec 8; without one the server is READ-ONLY, as before."""
     manager = slots or SlotManager()
     server = MCPServer("scheduling")
+    if write_policy is not None:
+        register_write_tools(server, manager, write_policy, budget)
 
     @async_tool(server)
     async def find_slots(clinic_id: uuid.UUID, limit: int = 20) -> Envelope:

@@ -98,13 +98,16 @@ begin
         raise exception 'patient erasure refused' using errcode = '42501';
     end if;
     select clinic_id, origin, erased_at into v_row from mpi.patients where id = p_patient_id for update;
-    if not found or v_row.erased_at is not null or not iam.has_clinic_role(v_row.clinic_id, array['front_desk']) then
+    if not found or not iam.has_clinic_role(v_row.clinic_id, array['front_desk']) then
         raise exception 'patient erasure refused' using errcode = '42501';
     end if;
-    -- a replay (the same caller, the same key) answers the original request
+    -- a replay (the same caller, the same key) answers the original request, whatever has happened to it since (the route reads its status)
     select id into v_id from mpi.erasure_requests where idempotency_key = 'req:' || p_patient_id::text || ':' || v_actor::text || ':' || p_idempotency_key;
     if v_id is not null then
         return v_id;
+    end if;
+    if v_row.erased_at is not null then
+        raise exception 'patient erasure refused' using errcode = '42501';
     end if;
     insert into mpi.erasure_requests (clinic_id, patient_id, reason, requested_by, origin, idempotency_key)
     values (v_row.clinic_id, p_patient_id, p_reason, v_actor, v_row.origin, 'req:' || p_patient_id::text || ':' || v_actor::text || ':' || p_idempotency_key)
@@ -137,6 +140,7 @@ begin
     if v_req.status <> 'requested' or v_req.requested_by = v_actor then
         raise exception 'patient erasure refused' using errcode = '42501';
     end if;
+    perform 1 from mpi.patients where id = v_req.patient_id for update;  -- the same row lock the merge engine takes on both patients, so a merge cannot be proposed between the check and the erase
     if exists (select 1 from mpi.merges m
                where m.status in ('awaiting_second_approval', 'active') and v_req.patient_id in (m.master_patient_id, m.subordinate_patient_id)) then
         raise exception 'a patient in a live merge link cannot be erased' using errcode = 'check_violation';
@@ -208,6 +212,10 @@ declare
     f text;
     r text;
 begin
+    -- the definer functions write patients, the ledger and audit.log as their owner, which works under FORCE row-level security only because the migrator bypasses it (0024 asserts the same)
+    if not (select rolbypassrls or rolsuper from pg_roles where rolname = current_user) then
+        raise exception '0032: the role running this migration (the owner of the definer functions) must bypass row-level security';
+    end if;
     foreach c in array array['name_ct', 'name_key_version', 'dob_ct', 'dob_key_version', 'phone_ct', 'phone_key_version', 'erased_at', 'account_id', 'clinic_id', 'origin', 'idempotency_key'] loop
         if has_column_privilege('careflow_app', 'mpi.patients', c, 'update') then
             raise exception '0032: the application role must not UPDATE mpi.patients.%', c;

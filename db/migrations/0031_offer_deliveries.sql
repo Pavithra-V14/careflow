@@ -33,7 +33,7 @@ create policy offer_deliveries_insert on sched.offer_deliveries for insert to ca
         iam.has_clinic_role(clinic_id, array['front_desk']) and delivered_by = auth.uid()
         -- the hold must be a LIVE OFFER of this clinic and origin (reviewer finding 2026-11-05: the database, not only the route, enforces it)
         and exists (select 1 from sched.holds h where h.id = hold_id and h.clinic_id = offer_deliveries.clinic_id and h.origin = offer_deliveries.origin
-                     and h.idempotency_key like 'offer-hold:%' and h.status = 'active')
+                     and h.idempotency_key like 'offer-hold:%' and h.status = 'active' and h.expires_at > clock_timestamp())
     );
 
 create function sched.offer_deliveries_append_only() returns trigger

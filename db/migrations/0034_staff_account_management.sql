@@ -116,23 +116,29 @@ declare
     v_from text;
     v_clinic uuid;
     v_origin text;
+    v_pass integer;
 begin
     if v_actor is null or p_account_id is null or p_account_id = v_actor or p_status is null or p_status <> all (array['suspended', 'active'])
        or p_idempotency_key is null or length(btrim(p_idempotency_key)) = 0 or length(p_idempotency_key) > 200 then
         raise exception 'staff change refused' using errcode = '42501';
     end if;
-    -- serialise with every other change to the admin sets of the clinics concerned (sorted, so two callers cannot deadlock)
-    for v_clinic in select distinct clinic_id from iam.staff_roles where account_id = p_account_id and revoked_at is null order by clinic_id loop
-        perform pg_advisory_xact_lock(hashtextextended('staff-admins:' || v_clinic::text, 0));
+    -- AUTHORISE first (no lock is taken for a caller who may not do this), then serialise with every other change to the admin sets of the clinics concerned (sorted, so two callers cannot
+    -- deadlock), then check again under the locks (the target's clinics may have changed in between). The target must exist, be moving between active and suspended only, and the caller must be
+    -- an admin of EVERY clinic where the target holds a live grant.
+    for v_pass in 1..2 loop
+        select status into v_from from iam.accounts where id = p_account_id and account_type = 'staff';
+        if v_from is null
+           or v_from not in ('active', 'suspended')
+           or not exists (select 1 from iam.staff_roles where account_id = p_account_id and revoked_at is null)
+           or exists (select 1 from iam.staff_roles sr where sr.account_id = p_account_id and sr.revoked_at is null and not iam.has_clinic_role(sr.clinic_id, array['admin'])) then
+            raise exception 'staff change refused' using errcode = '42501';
+        end if;
+        if v_pass = 1 then
+            for v_clinic in select distinct clinic_id from iam.staff_roles where account_id = p_account_id and revoked_at is null order by clinic_id loop
+                perform pg_advisory_xact_lock(hashtextextended('staff-admins:' || v_clinic::text, 0));
+            end loop;
+        end if;
     end loop;
-    select status into v_from from iam.accounts where id = p_account_id and account_type = 'staff';
-    -- the target must exist, be moving between active and suspended only, and the caller must be an admin of EVERY clinic where the target holds a live grant
-    if v_from is null
-       or v_from not in ('active', 'suspended')
-       or not exists (select 1 from iam.staff_roles where account_id = p_account_id and revoked_at is null)
-       or exists (select 1 from iam.staff_roles sr where sr.account_id = p_account_id and sr.revoked_at is null and not iam.has_clinic_role(sr.clinic_id, array['admin'])) then
-        raise exception 'staff change refused' using errcode = '42501';
-    end if;
     if v_from = p_status then
         return false;  -- already in that state: a replay writes nothing more
     end if;

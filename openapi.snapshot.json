@@ -758,7 +758,11 @@
             "type": "string"
           },
           "status": {
-            "const": "requested",
+            "enum": [
+              "requested",
+              "erased",
+              "cancelled"
+            ],
             "title": "Status",
             "type": "string"
           }
