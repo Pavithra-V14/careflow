@@ -23,7 +23,7 @@ import re
 import time
 import uuid
 from collections.abc import Callable
-from datetime import UTC, timedelta
+from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 from pathlib import Path
 from types import SimpleNamespace
@@ -1777,6 +1777,77 @@ def hold_release_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(refused), None)
 
 
+# ---- clinic set-up: POST /locations, /providers, /visit-types, /slots (front desk and admin of the clinic only) ----------------------------------------------------------------------------
+#
+# Front desk and admin create; nurse and doctor can SEE the clinic and are refused with 403; every other identity gets the same 404 as a clinic that is not there. A replay answers the original, the same key
+# with different content is a 409, a slot overlapping the provider's live slot is a 409, and a slot naming another clinic's provider is a 404. The created rows are committed and removed with the clinics.
+
+SETUP_BASE = PREFIX
+SETUP_ROUTES_PATHS = {"locations": PREFIX + "/locations", "providers": PREFIX + "/providers", "visit-types": PREFIX + "/visit-types", "slots": PREFIX + "/slots"}
+SETUP_ALLOWED = ("front_desk_a", "admin_a")
+SETUP_VISIBLE_NOT_ALLOWED = {"nurse_a": 403, "doctor_a": 403, "multi": 403}
+
+
+def _setup_body(ids, kind, **over):
+    nonce = uuid.uuid4().hex[:8]
+    body = {
+        "locations": {"clinic_id": str(ids.clinic_a), "name": f"Room {nonce}"},
+        "providers": {"clinic_id": str(ids.clinic_a), "display_name": f"Provider {nonce}"},
+        "visit-types": {"clinic_id": str(ids.clinic_a), "name": f"Visit {nonce}", "duration_minutes": 20},
+    }
+    if kind == "slots":
+        start = datetime(2100, 1, 1, tzinfo=UTC) + timedelta(days=int(uuid.uuid4().int % 20000), hours=int(uuid.uuid4().int % 20))
+        body["slots"] = {
+            "clinic_id": str(ids.clinic_a), "provider_id": str(ids.provider_a), "location_id": str(ids.location_a), "visit_type_id": str(ids.vt_a),
+            "starts_at": start.isoformat(), "ends_at": (start + timedelta(minutes=30)).isoformat(),
+        }
+    return {**body[kind], **over}
+
+
+def setup_create_cases(kind):
+    def cases(ids) -> list[tuple]:
+        path = SETUP_ROUTES_PATHS[kind]
+        ok_body = _setup_body(ids, kind)
+        key = _new_key()
+        created = lambda replayed: (lambda b: set(b) == {"id", "clinic_id", "replayed"} and b["clinic_id"] == str(ids.clinic_a) and b["replayed"] is replayed)
+        cases = [
+            _case(ids, f"front desk creates ({kind})", "front_desk_a", 200, path, json=ok_body, key=key, body=created(False)),
+            _case(ids, "the same key and body is a replay", "front_desk_a", 200, path, json=ok_body, key=key, body=created(True)),
+            _case(ids, "the same key with different content is a conflict", "front_desk_a", 409, path, json=_setup_body(ids, kind), key=key,
+                  body=lambda b: b == {"detail": "this idempotency key was already used by a different request"}),
+            _case(ids, "an admin of the clinic creates too", "admin_a", 200, path, json=_setup_body(ids, kind), body=created(False)),
+            _case(ids, "an unknown field is rejected", "front_desk_a", 422, path, json={**_setup_body(ids, kind), "surprise": 1}, body=_fixed(422)),
+            _case(ids, "missing X-Idempotency-Key is rejected", "front_desk_a", 422, path, json=_setup_body(ids, kind), key=None, body=_fixed(422)),
+            _case(ids, "a clinic id that is not a uuid is rejected", "front_desk_a", 422, path, json=_setup_body(ids, kind, clinic_id="nope"), body=_fixed(422)),
+            _case(ids, "a clinic that does not exist is not found", "front_desk_a", 404, path, json=_setup_body(ids, kind, clinic_id=str(uuid.uuid4())), body=_fixed(404)),
+        ]
+        if kind == "visit-types":
+            cases += [_case(ids, f"duration {bad} is rejected", "front_desk_a", 422, path, json=_setup_body(ids, kind, duration_minutes=bad), body=_fixed(422)) for bad in (0, -5, 1441)]
+        if kind != "slots":
+            field = "name" if kind != "providers" else "display_name"
+            cases.append(_case(ids, "a blank name is rejected", "front_desk_a", 422, path, json=_setup_body(ids, kind, **{field: "   "}), body=_fixed(422)))
+        else:
+            first = _setup_body(ids, kind)
+            overlap = {**first, "starts_at": (datetime.fromisoformat(first["starts_at"]) + timedelta(minutes=10)).isoformat(), "ends_at": (datetime.fromisoformat(first["ends_at"]) + timedelta(minutes=10)).isoformat()}
+            cases += [
+                _case(ids, "a first slot is created", "front_desk_a", 200, path, json=first, body=created(False)),
+                _case(ids, "an overlapping slot of the same provider is a conflict", "front_desk_a", 409, path, json=overlap, body=lambda b: b == {"detail": "that time overlaps another slot of this provider"}),
+                _case(ids, "an end before the start is rejected", "front_desk_a", 422, path, json=_setup_body(ids, kind, ends_at="2000-01-01T00:00:00+00:00"), body=_fixed(422)),
+                _case(ids, "a time without a zone is rejected", "front_desk_a", 422, path, json=_setup_body(ids, kind, starts_at="2100-01-01T10:00:00", ends_at="2100-01-01T10:30:00"), body=_fixed(422)),
+                _case(ids, "a slot longer than a day is rejected", "front_desk_a", 422, path, json=_setup_body(ids, kind, starts_at="2100-01-01T00:00:00+00:00", ends_at="2100-01-03T00:00:00+00:00"), body=_fixed(422)),
+                _case(ids, "an unknown provider is not found", "front_desk_a", 404, path, json=_setup_body(ids, kind, provider_id=str(uuid.uuid4())), body=_fixed(404)),
+            ]
+        for p in [*ids.people, "no account"]:
+            if p in SETUP_ALLOWED:
+                continue
+            status = SETUP_VISIBLE_NOT_ALLOWED.get(p, 404)
+            who = bearer(mint(ids.no_account)) if p == "no account" else p
+            cases.append(_case(ids, f"{p} is refused", who, status, path, json=_setup_body(ids, kind), body=_fixed(status) if status == 404 else (lambda b: b == {"detail": "your role may not do this"})))
+        return cases + _unauthenticated(ids, path, _setup_body(ids, kind))
+
+    return cases
+
+
 # ---- /v1/staff/audit (the audit-log reader) --------------------------------------------------------------------------------------------------------------------
 #
 # Auditor of the clinic only (the existing select policy); every other identity is refused with 403 before any query. Newest first, keyset paging, filters on closed columns. `reason` is never
@@ -1946,6 +2017,10 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", MERGE_OPEN): merge_open_cases,
     ("GET", AUDIT): audit_reader_cases,
     ("GET", HOLDS): hold_list_cases,
+    ("POST", PREFIX + "/locations"): setup_create_cases("locations"),
+    ("POST", PREFIX + "/providers"): setup_create_cases("providers"),
+    ("POST", PREFIX + "/visit-types"): setup_create_cases("visit-types"),
+    ("POST", PREFIX + "/slots"): setup_create_cases("slots"),
     ("POST", HOLD_RELEASE): hold_release_cases,
     ("POST", PATIENT_SEARCH): patient_search_cases,
     ("GET", PATIENT_STATUS): patient_status_cases,

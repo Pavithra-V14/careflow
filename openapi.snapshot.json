@@ -490,6 +490,32 @@
         "title": "ConfirmIdentityOut",
         "type": "object"
       },
+      "CreatedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "clinic_id",
+          "replayed"
+        ],
+        "title": "CreatedOut",
+        "type": "object"
+      },
       "DuplicateList": {
         "additionalProperties": false,
         "properties": {
@@ -1063,6 +1089,29 @@
           "items"
         ],
         "title": "LabelsOut",
+        "type": "object"
+      },
+      "LocationIn": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "name"
+        ],
+        "title": "LocationIn",
         "type": "object"
       },
       "LocationList": {
@@ -1895,6 +1944,29 @@
           "subordinate_patient_id"
         ],
         "title": "ProposeMergeIn",
+        "type": "object"
+      },
+      "ProviderIn": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Display Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "display_name"
+        ],
+        "title": "ProviderIn",
         "type": "object"
       },
       "ProviderList": {
@@ -2935,6 +3007,51 @@
         "title": "SendOfferOut",
         "type": "object"
       },
+      "SlotIn": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "ends_at": {
+            "format": "date-time",
+            "title": "Ends At",
+            "type": "string"
+          },
+          "location_id": {
+            "format": "uuid",
+            "title": "Location Id",
+            "type": "string"
+          },
+          "provider_id": {
+            "format": "uuid",
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "starts_at": {
+            "format": "date-time",
+            "title": "Starts At",
+            "type": "string"
+          },
+          "visit_type_id": {
+            "format": "uuid",
+            "title": "Visit Type Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "provider_id",
+          "location_id",
+          "visit_type_id",
+          "starts_at",
+          "ends_at"
+        ],
+        "title": "SlotIn",
+        "type": "object"
+      },
       "SlotList": {
         "additionalProperties": false,
         "properties": {
@@ -3218,6 +3335,36 @@
           "detail"
         ],
         "title": "ValidationErrorBody",
+        "type": "object"
+      },
+      "VisitTypeIn": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "duration_minutes": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1440.0,
+            "title": "Duration Minutes",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "name",
+          "duration_minutes"
+        ],
+        "title": "VisitTypeIn",
         "type": "object"
       },
       "VisitTypeList": {
@@ -6698,6 +6845,107 @@
         "tags": [
           "staff scheduling"
         ]
+      },
+      "post": {
+        "description": "Create a location (room or site). 404 if the clinic is not visible to you, 403 unless you are front desk or admin there, 409 if the key was used for a different request.",
+        "operationId": "create_location_v1_staff_scheduling_locations_post",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocationIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Location",
+        "tags": [
+          "staff scheduling"
+        ]
       }
     },
     "/v1/staff/scheduling/offers/draft": {
@@ -7155,6 +7403,107 @@
         "tags": [
           "staff scheduling"
         ]
+      },
+      "post": {
+        "description": "Create a provider (a display name; no sign-in is linked here). 404 if the clinic is not visible to you, 403 unless you are front desk or admin there, 409 if the key was used for a different request.",
+        "operationId": "create_provider_v1_staff_scheduling_providers_post",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Provider",
+        "tags": [
+          "staff scheduling"
+        ]
       }
     },
     "/v1/staff/scheduling/slots": {
@@ -7264,6 +7613,107 @@
           }
         ],
         "summary": "List Slots",
+        "tags": [
+          "staff scheduling"
+        ]
+      },
+      "post": {
+        "description": "Create one open slot. 404 if the clinic, provider, location or visit type is not visible to you in that clinic, 403 unless you are front desk or admin there, 409 if it overlaps another live slot of the same provider or the key was used for a different request, 422 for a bad time range.",
+        "operationId": "create_slot_v1_staff_scheduling_slots_post",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SlotIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Slot",
         "tags": [
           "staff scheduling"
         ]
@@ -7521,6 +7971,107 @@
           }
         ],
         "summary": "List Visit Types",
+        "tags": [
+          "staff scheduling"
+        ]
+      },
+      "post": {
+        "description": "Create a visit type with its scheduling length in minutes (entered by the clinic; nothing here guesses a duration). 404 if the clinic is not visible to you, 403 unless you are front desk or admin there, 409 if the key was used for a different request.",
+        "operationId": "create_visit_type_v1_staff_scheduling_visit_types_post",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VisitTypeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Visit Type",
         "tags": [
           "staff scheduling"
         ]

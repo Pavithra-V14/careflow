@@ -57,7 +57,7 @@ from langgraph.types import Command
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from careflow import (
@@ -2140,6 +2140,145 @@ async def release_hold_route(hold_id: uuid.UUID, idempotency_key: IdempotencyKey
         details={"slot_id": released.slot_id, "replayed": released.replayed}, idempotency_key=f"audit:hold-release:{hold_id}:{idempotency_key}",
     )
     return ReleaseOut(hold_id=released.hold_id, slot_id=released.slot_id, status="released", replayed=released.replayed)
+
+
+# ---- clinic set-up: create locations, providers, visit types and slots (front desk and admin; docs/design/clinic-setup-routes.md) ----------------------------------------------------------
+#
+# The tables, policies and permissions already allow front desk and admin to write these (migration 0002); there was just no route, so a clinic could not set itself up without the seed script. No migration,
+# no new grant. Every route needs `X-Idempotency-Key` (a replay answers the original; a different request under the same key is a 409), writes one audit row (ids and numbers only), and is limited to
+# front desk and admin of the named clinic (404 if the clinic is not visible, 403 if visible but not one of those roles). Priority levels are NOT created here: they are clinician-owned. Nothing is
+# ever deleted: a later step deactivates.
+
+SETUP_ROLES: Final = ("front_desk", "admin")
+MAX_SLOT_HOURS: Final = 24
+
+
+class LocationIn(_Body):
+    clinic_id: uuid.UUID
+    name: str = Field(min_length=1, max_length=120, pattern=r"\S")
+
+
+class ProviderIn(_Body):
+    clinic_id: uuid.UUID
+    display_name: str = Field(min_length=1, max_length=120, pattern=r"\S")
+
+
+class VisitTypeIn(_Body):
+    clinic_id: uuid.UUID
+    name: str = Field(min_length=1, max_length=120, pattern=r"\S")
+    duration_minutes: int = Field(gt=0, le=1440)
+
+
+class SlotIn(_Body):
+    clinic_id: uuid.UUID
+    provider_id: uuid.UUID
+    location_id: uuid.UUID
+    visit_type_id: uuid.UUID
+    starts_at: datetime
+    ends_at: datetime
+
+
+class CreatedOut(_Out):
+    id: uuid.UUID
+    clinic_id: uuid.UUID
+    replayed: bool
+
+
+async def _setup_gate(conn: AsyncConnection, claims: dict[str, Any], clinic_id: uuid.UUID) -> tuple[str, str]:
+    """(origin, acting role) after checking the caller holds front desk or admin at this clinic NOW. 404 if the clinic is invisible, 403 if visible but not one of those roles."""
+    clinic = (await conn.execute(text("select origin from iam.clinics where id = :c"), {"c": clinic_id})).first()
+    if clinic is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return clinic[0], await _acting_role(conn, claims, clinic_id, SETUP_ROLES)
+
+
+async def _setup_insert(
+    conn: AsyncConnection, *, table: str, clinic_id: uuid.UUID, origin: str, key: str, columns: dict[str, Any], same: Callable[[Any], bool], error_map: dict[str, tuple[int, str]]
+) -> tuple[uuid.UUID, bool]:
+    """Insert one set-up row under a key made of the table, the clinic and the client's key. Returns (id, replayed). A replay with different content is the fixed 409."""
+    names = ", ".join(columns)
+    marks = ", ".join(f":{c}" for c in columns)
+    full_key = f"setup:{table}:{clinic_id}:{key}"
+    try:
+        async with conn.begin_nested():
+            row = (
+                await conn.execute(
+                    text(f"insert into sched.{table} (clinic_id, origin, idempotency_key, {names}) values (:clinic_id, :origin, :k, {marks}) on conflict (idempotency_key) do nothing returning id"),
+                    {"clinic_id": clinic_id, "origin": origin, "k": full_key, **columns},
+                )
+            ).first()
+    except DBAPIError as exc:
+        state = getattr(exc.orig, "sqlstate", None)
+        if state in error_map:
+            status, detail = error_map[state]
+            raise HTTPException(status_code=status, detail=detail) from None
+        if state == "42501":
+            raise HTTPException(status_code=403, detail="your role may not do this") from None
+        raise
+    if row is not None:
+        return row[0], False
+    prior = (await conn.execute(text(f"select * from sched.{table} where idempotency_key = :k"), {"k": full_key})).first()
+    if prior is None or not same(prior):
+        raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request")
+    return prior.id, True
+
+
+async def _setup_audit(conn: AsyncConnection, *, clinic_id: uuid.UUID, origin: str, claims: dict[str, Any], role: str, action: str, resource_id: uuid.UUID, key: str, replayed: bool) -> None:
+    await write_audit(
+        conn, clinic_id=clinic_id, origin=origin, actor_id=uuid.UUID(claims["sub"]), actor_role=role, action=action, resource_type=action.split(".")[1].removeprefix("create_"),
+        resource_id=resource_id, details={"replayed": replayed}, idempotency_key=f"audit:{action}:{resource_id}:{key}",
+    )
+
+
+@scheduling.post("/locations", response_model=CreatedOut)
+async def create_location(body: LocationIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> CreatedOut:
+    """Create a location (room or site). 404 if the clinic is not visible to you, 403 unless you are front desk or admin there, 409 if the key was used for a different request."""
+    origin, role = await _setup_gate(conn, claims, body.clinic_id)
+    new_id, replayed = await _setup_insert(
+        conn, table="locations", clinic_id=body.clinic_id, origin=origin, key=idempotency_key, columns={"name": body.name.strip()}, same=lambda r: r.name == body.name.strip(), error_map={}
+    )
+    await _setup_audit(conn, clinic_id=body.clinic_id, origin=origin, claims=claims, role=role, action="setup.create_location", resource_id=new_id, key=idempotency_key, replayed=replayed)
+    return CreatedOut(id=new_id, clinic_id=body.clinic_id, replayed=replayed)
+
+
+@scheduling.post("/providers", response_model=CreatedOut)
+async def create_provider(body: ProviderIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> CreatedOut:
+    """Create a provider (a display name; no sign-in is linked here). 404 if the clinic is not visible to you, 403 unless you are front desk or admin there, 409 if the key was used for a different request."""
+    origin, role = await _setup_gate(conn, claims, body.clinic_id)
+    new_id, replayed = await _setup_insert(
+        conn, table="providers", clinic_id=body.clinic_id, origin=origin, key=idempotency_key, columns={"display_name": body.display_name.strip()},
+        same=lambda r: r.display_name == body.display_name.strip(), error_map={},
+    )
+    await _setup_audit(conn, clinic_id=body.clinic_id, origin=origin, claims=claims, role=role, action="setup.create_provider", resource_id=new_id, key=idempotency_key, replayed=replayed)
+    return CreatedOut(id=new_id, clinic_id=body.clinic_id, replayed=replayed)
+
+
+@scheduling.post("/visit-types", response_model=CreatedOut)
+async def create_visit_type(body: VisitTypeIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> CreatedOut:
+    """Create a visit type with its scheduling length in minutes (entered by the clinic; nothing here guesses a duration). 404 if the clinic is not visible to you, 403 unless you are front desk or admin there, 409 if the key was used for a different request."""
+    origin, role = await _setup_gate(conn, claims, body.clinic_id)
+    new_id, replayed = await _setup_insert(
+        conn, table="visit_types", clinic_id=body.clinic_id, origin=origin, key=idempotency_key, columns={"name": body.name.strip(), "duration_minutes": body.duration_minutes},
+        same=lambda r: (r.name, r.duration_minutes) == (body.name.strip(), body.duration_minutes), error_map={},
+    )
+    await _setup_audit(conn, clinic_id=body.clinic_id, origin=origin, claims=claims, role=role, action="setup.create_visit_type", resource_id=new_id, key=idempotency_key, replayed=replayed)
+    return CreatedOut(id=new_id, clinic_id=body.clinic_id, replayed=replayed)
+
+
+@scheduling.post("/slots", response_model=CreatedOut)
+async def create_slot(body: SlotIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> CreatedOut:
+    """Create one open slot. 404 if the clinic, provider, location or visit type is not visible to you in that clinic, 403 unless you are front desk or admin there, 409 if it overlaps another live slot of the same provider or the key was used for a different request, 422 for a bad time range."""
+    if body.starts_at.tzinfo is None or body.ends_at.tzinfo is None or body.ends_at <= body.starts_at or (body.ends_at - body.starts_at).total_seconds() > MAX_SLOT_HOURS * 3600:
+        raise HTTPException(status_code=422, detail="request rejected")
+    origin, role = await _setup_gate(conn, claims, body.clinic_id)
+    new_id, replayed = await _setup_insert(
+        conn, table="slots", clinic_id=body.clinic_id, origin=origin, key=idempotency_key,
+        columns={"provider_id": body.provider_id, "location_id": body.location_id, "visit_type_id": body.visit_type_id, "starts_at": body.starts_at, "ends_at": body.ends_at},
+        same=lambda r: (r.provider_id, r.location_id, r.visit_type_id, r.starts_at, r.ends_at) == (body.provider_id, body.location_id, body.visit_type_id, body.starts_at, body.ends_at),
+        error_map={"23P01": (409, "that time overlaps another slot of this provider"), "23503": (404, "not found")},
+    )
+    await _setup_audit(conn, clinic_id=body.clinic_id, origin=origin, claims=claims, role=role, action="setup.create_slot", resource_id=new_id, key=idempotency_key, replayed=replayed)
+    return CreatedOut(id=new_id, clinic_id=body.clinic_id, replayed=replayed)
 
 
 # ---- the audit-log reader (auditor only) -----------------------------------------------------------------------------------------------------------------------

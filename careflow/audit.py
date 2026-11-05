@@ -35,6 +35,7 @@ ACTIONS: Final = frozenset(
         "patient.view",  # a front-desk person, nurse or doctor OPENED one record in full: who, role, patient id; never the contents
         "patient.view_labels",  # list rows decrypted for a page: the COUNT only
         "patient.search",  # a front-desk person searched for a patient: the KIND of search and the result count only, never the query or the results
+        "setup.create_location", "setup.create_provider", "setup.create_visit_type", "setup.create_slot",  # a front-desk person or admin set the clinic up (careflow/app.py set-up routes): ids only
         "hold.release",  # a front-desk person gave a held slot back before its time ran out
         "offer.send", "offer.interpret_reply",  # a front-desk person sent an offer: the slot hold and the offer message (careflow/offers.py)
         "clinical.tool_call",  # a call on the clinical read-only MCP server (careflow/mcp_kit.py `audited`): tool name and outcome only

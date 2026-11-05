@@ -139,9 +139,25 @@ async def test_each_human_decision_route_writes_its_audit_row_in_the_same_transa
     assert re.search(r"write_audit\(\s*conn,", source)
 
 
+SETUP_ROUTES = {
+    "create_location": "setup.create_location",
+    "create_provider": "setup.create_provider",
+    "create_visit_type": "setup.create_visit_type",
+    "create_slot": "setup.create_slot",
+}
+
+
+@pytest.mark.parametrize(("function", "action"), sorted(SETUP_ROUTES.items()))
+async def test_each_set_up_route_audits_through_the_one_helper_in_the_same_transaction(function, action):
+    source = inspect.getsource(getattr(app_module, function))
+    assert f'action="{action}"' in source and "await _setup_audit(" in source and source.index("await _setup_audit(") > source.index("await _setup_insert(")
+    helper = inspect.getsource(app_module._setup_audit)
+    assert "await write_audit(" in helper and 'idempotency_key=f"audit:' in helper and re.search(r"write_audit\(\s*conn,", helper)
+
+
 async def test_every_action_has_a_route_or_is_listed_as_pending():
     pending = {"clinical.tool_call"}  # written by careflow/mcp_kit.py `audited` (no clinical server is mounted yet)
-    assert set(ROUTES.values()) | pending == set(ACTIONS)
+    assert set(ROUTES.values()) | set(SETUP_ROUTES.values()) | pending == set(ACTIONS)
 
 
 async def test_the_audit_module_adds_no_dependency_and_uses_only_the_existing_table():
