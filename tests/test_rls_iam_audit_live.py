@@ -251,11 +251,11 @@ async def test_the_queue_accepts_only_a_clean_new_job_from_a_producer(db):
 
 
 async def test_audit_idempotency_key_rejects_duplicates(db):
-    _, _, p = await seed(db)
-    await _audit_insert(db, p["nurse_a"], p["nurse_a"], "k-dup")
+    a, _, p = await seed(db)
+    await _audit_insert(db, p["nurse_a"], p["nurse_a"], "k-dup", a)
     await db.execute("savepoint d")
     with pytest.raises(asyncpg.UniqueViolationError):
-        await _audit_insert(db, p["nurse_a"], p["nurse_a"], "k-dup")
+        await _audit_insert(db, p["nurse_a"], p["nurse_a"], "k-dup", a)
     await db.execute("rollback to savepoint d")
 
 

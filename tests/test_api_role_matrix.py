@@ -2192,6 +2192,83 @@ def test_a_staff_role_change_is_audited_in_the_same_transaction_and_the_applicat
     assert [(g["role"], g["granted_by"]) for g in grants] == [("doctor", admin)]
 
 
+# ---- backfill: POST /backfills, GET /backfills/{slot_id}, POST /backfills/{slot_id}/decide and /reply (the Scheduling graph behind staff routes) -----------------------------------------------------------
+#
+# The matrix app has NO scheduling components (all the graph's ports are fakes in this package), so the committed half runs on the real pooler role up to the point where a permitted caller meets the visible
+# 503: front desk gets it, every other identity is told apart BEFORE it (403 where the clinic or slot is visible to them, otherwise the one 404). The pause-by-pause flow, audit rows and the 409s are in
+# tests/test_backfill_routes.py (fakes) and tests/test_scheduling_graph.py. Writes need an idempotency key; nothing here can reach a patient.
+
+BACKFILLS = PREFIX + "/backfills"
+UNCONFIGURED = {"detail": "backfill runs are unavailable: not configured"}
+CLINIC_VISIBLE = {r: 403 for r in ("nurse_a", "doctor_a", "admin_a", "business_owner_a", "auditor_a", "multi")}  # every staff role of the clinic sees the clinic row
+SLOT_VISIBLE_NOT_FRONT_DESK = {r: 403 for r in ("nurse_a", "doctor_a", "admin_a", "multi")}  # front desk, nurse, doctor and admin see slots (sched.slots select policy)
+
+
+def _backfill_gate_cases(ids, make_path, make_json, *, allowed, status_for_visible, reader_status=503):
+    cases = []
+    for p in [*ids.people, "no account"]:
+        sub = ids.no_account if p == "no account" else ids.people[p][0]
+        who = bearer(mint(sub))
+        if p in allowed:
+            cases.append(_case(ids, f"{p} is allowed: the run is not configured, so the answer is the visible 503", who, reader_status, make_path(), json=make_json(), body=lambda b: b == UNCONFIGURED))
+            continue
+        status = status_for_visible.get(p, 404)
+        cases.append(_case(ids, f"{p} is refused", who, status, make_path(), json=make_json(), body=_fixed(status) if status == 404 else (lambda b: b["detail"].startswith("your role may not"))))
+    return cases
+
+
+def backfill_start_cases(ids) -> list[tuple]:
+    slot = ids.pools["extra"].pop()
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "slot_id": str(slot), "visit_type_id": str(ids.vt_a), **o}
+    cases = _backfill_gate_cases(ids, lambda: BACKFILLS, body, allowed={"front_desk_a"}, status_for_visible=CLINIC_VISIBLE)
+    cases += [
+        _case(ids, "missing X-Idempotency-Key is rejected", "front_desk_a", 422, BACKFILLS, json=body(), key=None, body=_fixed(422)),
+        _case(ids, "an unknown field is rejected", "front_desk_a", 422, BACKFILLS, json=body(surprise=1), body=_fixed(422)),
+        _case(ids, "a slot id that is not a uuid is rejected", "front_desk_a", 422, BACKFILLS, json=body(slot_id="nope"), body=_fixed(422)),
+        _case(ids, "an unknown clinic is not found", "front_desk_a", 404, BACKFILLS, json=body(clinic_id=str(uuid.uuid4())), body=_fixed(404)),
+    ]
+    return cases + _unauthenticated(ids, BACKFILLS, body())
+
+
+def backfill_get_cases(ids) -> list[tuple]:
+    slot = ids.pools["extra"].pop()
+    path = f"{BACKFILLS}/{slot}"
+    readers = ("front_desk_a", "nurse_a", "doctor_a", "multi")
+    cases = _backfill_gate_cases(ids, lambda: path, lambda: None, allowed=set(readers), status_for_visible={"admin_a": 403})
+    cases += [
+        _case(ids, "an unknown slot is not found", "front_desk_a", 404, f"{BACKFILLS}/{uuid.uuid4()}", key=None, body=_fixed(404)),
+        _case(ids, "a slot id that is not a uuid is rejected", "front_desk_a", 422, f"{BACKFILLS}/nope", key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path, None)
+
+
+def backfill_decide_cases(ids) -> list[tuple]:
+    slot = ids.pools["extra"].pop()
+    path = f"{BACKFILLS}/{slot}/decide"
+    body = lambda **o: {"action": "send", **o}
+    cases = _backfill_gate_cases(ids, lambda: path, body, allowed={"front_desk_a"}, status_for_visible=SLOT_VISIBLE_NOT_FRONT_DESK)
+    cases += [
+        _case(ids, "an action that is not listed is rejected", "front_desk_a", 422, path, json=body(action="book it"), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "front_desk_a", 422, path, json=body(), key=None, body=_fixed(422)),
+        _case(ids, "an unknown slot is not found", "front_desk_a", 404, f"{BACKFILLS}/{uuid.uuid4()}/decide", json=body(), body=_fixed(404)),
+    ]
+    return cases + _unauthenticated(ids, path, body())
+
+
+def backfill_reply_cases(ids) -> list[tuple]:
+    slot = ids.pools["extra"].pop()
+    path = f"{BACKFILLS}/{slot}/reply"
+    body = lambda **o: {"outcome": "timed_out", **o}
+    cases = _backfill_gate_cases(ids, lambda: path, body, allowed={"front_desk_a"}, status_for_visible=SLOT_VISIBLE_NOT_FRONT_DESK)
+    cases += [
+        _case(ids, "a reply without its message is rejected", "front_desk_a", 422, path, json={"outcome": "replied"}, body=_fixed(422)),
+        _case(ids, "a message with a timed-out outcome is rejected", "front_desk_a", 422, path, json=body(message_id=str(uuid.uuid4())), body=_fixed(422)),
+        _case(ids, "an outcome that is not listed is rejected", "front_desk_a", 422, path, json=body(outcome="maybe"), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "front_desk_a", 422, path, json=body(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path, body())
+
+
 # ---- clinic set-up: POST /locations, /providers, /visit-types, /slots (front desk and admin of the clinic only) ----------------------------------------------------------------------------
 #
 # Front desk and admin create; nurse and doctor can SEE the clinic and are refused with 403; every other identity gets the same 404 as a clinic that is not there. A replay answers the original, the same key
@@ -2432,6 +2509,10 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", MERGE_OPEN): merge_open_cases,
     ("GET", AUDIT): audit_reader_cases,
     ("GET", HOLDS): hold_list_cases,
+    ("POST", BACKFILLS): backfill_start_cases,
+    ("GET", BACKFILLS + "/{slot_id}"): backfill_get_cases,
+    ("POST", BACKFILLS + "/{slot_id}/decide"): backfill_decide_cases,
+    ("POST", BACKFILLS + "/{slot_id}/reply"): backfill_reply_cases,
     ("GET", ACCOUNTS): staff_list_cases,
     ("POST", ACCOUNTS + "/invite"): staff_invite_cases,
     ("POST", ACCOUNTS + "/activate-me"): staff_activate_cases,

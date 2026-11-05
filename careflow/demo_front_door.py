@@ -111,3 +111,40 @@ def components_from_environment(environ: Mapping[str, str], profile: str, *, vau
 
 def _dead_letters(priority: str) -> SqlDeadLetterTaskWriter:
     return SqlDeadLetterTaskWriter(priority=priority)
+
+
+# ---- the Scheduling graph's DEMO wiring (Phase 3) -----------------------------------------------------------------------------------------------------------------------------------------
+
+
+def scheduling_components_from_environment(environ: Mapping[str, str], profile: str, *, vault: DemographicVault | None, key_version: int | None):
+    """The Scheduling graph's components with REAL ports (careflow/scheduling_ports.py) over a FAKE decision engine and an in-memory checkpointer, or None (the backfill routes then answer 503). None unless
+    profile=demo AND data_policy=synthetic_only AND the demo switch is on AND the keys are loaded. The autonomy mode comes from CAREFLOW_AUTONOMY_MODE (unset or unrecognised means `shadow`: a person decides every
+    booking). The checkpointer is in memory: a restart forgets the runs (acceptable for a demo; a durable one is a later step)."""
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    from careflow.autonomy import policy_from
+    from careflow.demo_decision import demo_decision_service
+    from careflow.scheduling_ports import (
+        BookerPort,
+        HoldReleaserPort,
+        OfferSenderPort,
+        ReplyInterpreterPort,
+        ReplyScreenerPort,
+        SlotRanker,
+        StateOnlyTasks,
+    )
+    from careflow.scheduling_runner import SchedulingComponents
+
+    if vault is None or key_version is None:
+        return None
+    if not demo_phase3.demo_allowed(profile, demo_phase3.data_policy(environ)) or not demo_phase3.switched_on(environ):
+        return None
+    pack = demo_phase3.load_demo_phase3(profile, demo_phase3.data_policy(environ))
+    settings = pack.scheduling_settings()
+    engine = RedFlagEngine()
+    return SchedulingComponents(
+        ranker=SlotRanker(), sender=OfferSenderPort(vault, settings, key_version), screener=ReplyScreenerPort(vault, engine, profile),
+        interpreter=ReplyInterpreterPort(vault, engine, demo_decision_service()), booker=BookerPort(), releaser=HoldReleaserPort(), tasks=StateOnlyTasks(),
+        policy=policy_from(environ.get("CAREFLOW_AUTONOMY_MODE")), max_candidates=settings.backfill_candidates or 1, task_priority=pack.scheduling_task_priority, task_role=pack.scheduling_task_role,
+        checkpointer=InMemorySaver(),
+    )
