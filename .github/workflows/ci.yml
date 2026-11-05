@@ -282,6 +282,34 @@ jobs:
         if: always()
         run: uv run python scripts/ci_shard_times.py shard-times.xml --label "shard-${{ matrix.shard }}"
 
+  # Dependency vulnerability audit (BUILD-SPEC.md 21; owner decision 2026-11-04). REPORT-ONLY for now: `continue-on-error`, and the `test` job below does not depend on it. It audits the exact versions in
+  # uv.lock against the public advisory database (pip-audit, pinned; the only thing sent out is package names and versions, no patient data). Stage two, after the first run's output has been read:
+  # fail the build on a vulnerability that has a fix version, with a reviewed ignore list (reason and date per entry). pip-audit reports no severity, so "high" is judged from the advisory text.
+  dependency-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Export the locked versions
+        run: |
+          python -m pip install --upgrade pip uv
+          uv export --frozen --no-hashes --no-emit-project > audit-requirements.txt
+
+      - name: pip-audit (report only)
+        run: |
+          set +e
+          uvx --from pip-audit==2.9.0 pip-audit -r audit-requirements.txt --no-deps --disable-pip --progress-spinner off 2>&1 | tee audit.out
+          status=${PIPESTATUS[0]}
+          { echo "### Dependency audit (report only)"; echo; echo '```'; cat audit.out; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          echo "pip-audit exit status: $status (report only; not a failure yet)"
+          exit 0
+
   # The single required check. It is named `test`, as before, so branch protection does not change: it passes only if EVERY shard passed.
   test:
     if: always()
