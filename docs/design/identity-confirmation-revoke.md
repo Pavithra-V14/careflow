@@ -27,3 +27,6 @@ Replace "one confirmation row per patient" by an event log, so a record can be c
 **What it changes.** One migration (the log replaces `unique (patient_id)`; fix-forward, never an edit of 0023), one route, the matcher's `_find` (the latest event per patient instead of existence), the pre-launch checklist.
 
 **Not decided here.** Whether a revoke needs a second person after all; the reason list; the task's priority and role; whether front-desk-created records may be revoked.
+
+## Open: who re-checks a revoke (clinician item 24)
+There is no front-desk supervisor role and no admin alert today; adding either is a new role or feature and needs a design note and the user's OK. The route keeps its three reasons and the nurse/doctor task settings. The demo pack (`config/demo-phase3.yaml`) holds labelled stand-ins for items 23 and 24 that are NOT wired in; wiring (and any migration, e.g. for `other`) waits for the clinician's answers and is then built once with the final list.
