@@ -36,7 +36,7 @@ ACTIONS: Final = frozenset(
         "patient.view_labels",  # list rows decrypted for a page: the COUNT only
         "patient.search",  # a front-desk person searched for a patient: the KIND of search and the result count only, never the query or the results
         "setup.create_location", "setup.create_provider", "setup.create_visit_type", "setup.create_slot",  # a front-desk person or admin set the clinic up (careflow/app.py set-up routes): ids only
-        "patient.erase",  # a front-desk person erased a patient's identity (written by mpi.erase_patient in the same transaction): reason code and role scope only
+        "patient.erase_request", "patient.erase", "patient.erase_cancel",  # the two-person erasure of a patient's identity (written by the mpi.*_patient_erasure functions in the same transaction): reason code and role scope only
         "staff.invite", "staff.grant_role", "staff.revoke_role", "staff.suspend", "staff.reinstate", "staff.activate",  # staff account changes, written by the iam.* functions (migration 0034): role word and scope only
         "offer.mark_delivered",  # a front-desk person delivered an offer by hand (channel manual): hold id and the closed channel word only
         "hold.release",  # a front-desk person gave a held slot back before its time ran out

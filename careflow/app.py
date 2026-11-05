@@ -2251,26 +2251,75 @@ async def release_hold_route(hold_id: uuid.UUID, idempotency_key: IdempotencyKey
     return ReleaseOut(hold_id=released.hold_id, slot_id=released.slot_id, status="released", replayed=released.replayed)
 
 
-# ---- audited erasure of a patient's identity (migration 0032; docs/design/patient-erasure-and-update-narrowing.md) ------------------------------------------------------------------------
+# ---- audited, TWO-PERSON erasure of a patient's identity (migration 0032; BUILD-SPEC 12.5; docs/design/patient-erasure-and-update-narrowing.md) -----------------------------------------------------
 #
-# `POST /v1/staff/patients/{patient_id}/erase`: front desk of the patient's clinic, with a recent second factor (step-up), a reason from the clinic's CLOSED list, and an idempotency key. The work is the database
-# function mpi.erase_patient (the only way to erase; the application role can no longer update the identity columns): it clears the encrypted name, date of birth and phone and writes the audit row in the same
-# transaction. The list of allowed reasons is a REQUIRED setting with no default (CAREFLOW_ERASE_REASONS, comma separated closed words): it is a legal and privacy decision, not an engineering one, so while it
-# is unset the route answers 503. Messages are not erased by this route. A patient in a live merge link is a 409 (break the link first).
+# One front-desk person REQUESTS an erasure (`POST /v1/staff/patients/{id}/erasure-requests`, with a reason from the clinic's closed list); a DIFFERENT front-desk person APPROVES it
+# (`POST /v1/staff/erasure-requests/{id}/approve`), and only then are the encrypted name, date of birth and phone cleared, in the same transaction as the audit row. Anyone of the clinic's front desk can
+# cancel an open request. All three need a recent second factor (step-up) and an idempotency key. The work is done by the database functions mpi.request_patient_erasure / approve_patient_erasure /
+# cancel_patient_erasure (the application role can no longer update the identity columns). The allowed reasons are a REQUIRED setting with no default (CAREFLOW_ERASE_REASONS, comma separated closed words):
+# which reasons a clinic may erase for is a privacy and legal decision, so while it is unset the request route answers 503. Messages are not erased by this path. A patient in a live merge link cannot be erased.
+
+staff_erasure = APIRouter(prefix="/v1/staff/erasure-requests", tags=["staff erasure"])
 
 
-class EraseIn(_Body):
+class EraseRequestIn(_Body):
     reason: str = Field(min_length=1, max_length=40, pattern=r"^[a-z][a-z0-9_]*$")
 
 
-class EraseOut(_Out):
+class EraseRequestOut(_Out):
+    request_id: uuid.UUID
     patient_id: uuid.UUID
-    erased: bool  # False on a replay: the record was already erased and nothing more was written
+    status: Literal["requested"]
 
 
-@staff_patients.post("/{patient_id}/erase", response_model=EraseOut, dependencies=[Depends(require_step_up)])
-async def erase_patient_route(patient_id: uuid.UUID, body: EraseIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> EraseOut:
-    """Erase a patient's identity (name, date of birth, phone). 404 if you cannot see the patient, 403 unless you are front desk of the clinic, 409 if the patient is in a live merge link, 422 for a reason not on the clinic's list, 503 while the list of reasons is not configured. STEP-UP REQUIRED."""
+class ErasureRequestRow(_Out):
+    request_id: uuid.UUID
+    patient_id: uuid.UUID
+    reason: str
+    status: Literal["requested", "erased", "cancelled"]
+    requested_by: uuid.UUID
+    approved_by: uuid.UUID | None
+    created_at: datetime
+    decided_at: datetime | None
+
+
+class ErasureRequestList(_Out):
+    items: list[ErasureRequestRow]
+    limit: int
+    has_more: bool
+
+
+class ApproveErasureOut(_Out):
+    request_id: uuid.UUID
+    erased: bool  # False on a replay: it was already carried out and nothing more was written
+
+
+class CancelErasureOut(_Out):
+    request_id: uuid.UUID
+    cancelled: bool
+
+
+async def _erasure_function(conn: AsyncConnection, sql: str, params: dict[str, Any]) -> Any:
+    """Call one 0032 function. Its generic refusal (42501) is a 403, an open request already there (23505) and the live-merge-link guard (23514) are 409s."""
+    try:
+        async with conn.begin_nested():
+            return (await conn.execute(text(sql), params)).scalar()
+    except DBAPIError as exc:
+        state = getattr(exc.orig, "sqlstate", None)
+        if state == "42501":
+            raise HTTPException(status_code=403, detail="your role may not do this") from None
+        if state == "23505":
+            raise HTTPException(status_code=409, detail="an erasure request is already open for this patient") from None
+        if state == "23514":
+            raise HTTPException(status_code=409, detail="this patient is in a live merge link") from None
+        raise
+
+
+@staff_patients.post("/{patient_id}/erasure-requests", response_model=EraseRequestOut, dependencies=[Depends(require_step_up)])
+async def request_patient_erasure_route(
+    patient_id: uuid.UUID, body: EraseRequestIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)
+) -> EraseRequestOut:
+    """Ask for a patient's identity to be erased; a DIFFERENT front-desk person must approve. 404 if you cannot see the patient, 403 unless you are front desk of the clinic, 409 if a request is already open, 422 for a reason not on the clinic's list, 503 while the list of reasons is not configured. STEP-UP REQUIRED."""
     allowed: frozenset[str] | None = request.app.state.erase_reasons
     if not allowed:
         log.error("patient erasure is unavailable: CAREFLOW_ERASE_REASONS is not set (the list of reasons is the clinic's decision)")
@@ -2282,17 +2331,45 @@ async def erase_patient_route(patient_id: uuid.UUID, body: EraseIn, idempotency_
         raise HTTPException(status_code=404, detail="not found")
     if not await _clinic_role_held(conn, row[0], ("front_desk",)):
         raise HTTPException(status_code=403, detail="your role may not do this")
-    try:
-        async with conn.begin_nested():
-            erased = bool((await conn.execute(text("select mpi.erase_patient(:p, :r, :k)"), {"p": patient_id, "r": body.reason, "k": idempotency_key})).scalar())
-    except DBAPIError as exc:
-        state = getattr(exc.orig, "sqlstate", None)
-        if state == "23514":
-            raise HTTPException(status_code=409, detail="this patient is in a live merge link") from None
-        if state == "42501":
-            raise HTTPException(status_code=403, detail="your role may not do this") from None
-        raise
-    return EraseOut(patient_id=patient_id, erased=erased)
+    request_id = await _erasure_function(conn, "select mpi.request_patient_erasure(:p, :r, :k)", {"p": patient_id, "r": body.reason, "k": idempotency_key})
+    return EraseRequestOut(request_id=request_id, patient_id=patient_id, status="requested")
+
+
+@staff_erasure.get("", response_model=ErasureRequestList)
+async def list_erasure_requests(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), status: Literal["requested", "erased", "cancelled"] | None = "requested", limit: Limit = 100) -> ErasureRequestList:
+    """Erasure requests of the clinics where you are front desk, newest first (`status` filters; open ones by default). Ids, a reason code and times only. 403 unless you are front desk somewhere."""
+    if not await _any_role_held(conn, ("front_desk",)):
+        raise HTTPException(status_code=403, detail="your role may not read this")
+    rows = (
+        await conn.execute(
+            text(
+                "select id, patient_id, reason, status, requested_by, approved_by, created_at, decided_at from mpi.erasure_requests "
+                "where (cast(:s as text) is null or status = :s) order by created_at desc, id limit :n"
+            ),
+            {"s": status, "n": limit + 1},
+        )
+    ).all()
+    items = [
+        ErasureRequestRow(
+            request_id=r.id, patient_id=r.patient_id, reason=r.reason, status=r.status, requested_by=r.requested_by, approved_by=r.approved_by, created_at=r.created_at, decided_at=r.decided_at
+        )
+        for r in rows[:limit]
+    ]
+    return ErasureRequestList(items=items, limit=limit, has_more=len(rows) > limit)
+
+
+@staff_erasure.post("/{request_id}/approve", response_model=ApproveErasureOut, dependencies=[Depends(require_step_up)])
+async def approve_patient_erasure_route(request_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn) -> ApproveErasureOut:
+    """Approve an open erasure request as a DIFFERENT front-desk person than the requester: the identity is erased now. 403 unless you are front desk of the clinic and not the requester (one generic answer), 409 if the patient is in a live merge link. STEP-UP REQUIRED."""
+    erased = bool(await _erasure_function(conn, "select mpi.approve_patient_erasure(:r, :k)", {"r": request_id, "k": idempotency_key}))
+    return ApproveErasureOut(request_id=request_id, erased=erased)
+
+
+@staff_erasure.post("/{request_id}/cancel", response_model=CancelErasureOut, dependencies=[Depends(require_step_up)])
+async def cancel_patient_erasure_route(request_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn) -> CancelErasureOut:
+    """Cancel an open erasure request (any front-desk person of the clinic). 403 unless you are front desk of the clinic or the request is no longer open. STEP-UP REQUIRED."""
+    cancelled = bool(await _erasure_function(conn, "select mpi.cancel_patient_erasure(:r)", {"r": request_id}))
+    return CancelErasureOut(request_id=request_id, cancelled=cancelled)
 
 
 # ---- staff accounts: invite, grant and revoke roles, suspend and reinstate, activate yourself (migration 0034; docs/design/staff-account-management.md) -------------------------------------------------
@@ -3011,8 +3088,9 @@ def create_app(
     app.include_router(staff_identity)
     app.include_router(staff_audit)
     app.include_router(staff_accounts)
+    app.include_router(staff_erasure)
     app.include_router(health)
-    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
+    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
     return app
 
 

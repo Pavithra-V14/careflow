@@ -230,6 +230,7 @@ jobs:
               tests/test_rls_mpi_worker_live.py
               tests/test_rls_triage_live.py
               tests/test_staff_accounts_live.py
+              tests/test_erasure_live.py
     env:
       CAREFLOW_ENV: ci
       CAREFLOW_PROFILE: demo

@@ -33,8 +33,8 @@ because the application role cannot UPDATE messages at all and, under RLS, would
 that way would be silently low, and "unknown is not zero" (rule 3), so a key could be retired while bodies still use
 it. A key may be retired only when BOTH `version_usage` (patients) and `message_version_usage` (messages) show zero.
 
-Role: the engine runs on whatever connection it is given. Under the restricted app role with a front-desk identity
-it rotates that clinic's rows (RLS decides); the maintenance script gives it the migrator connection to cover every
+Role: the engine runs on whatever connection it is given. Since migration 0032 the restricted application role can no longer UPDATE a patient's
+identity columns or an identity token, so rotation runs ONLY where the maintenance script runs it: on the migrator connection, which covers every
 clinic. Plaintext exists only in this process's memory and is never logged or put in an error message.
 """
 

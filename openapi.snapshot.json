@@ -15,6 +15,26 @@
         "title": "ActivateOut",
         "type": "object"
       },
+      "ApproveErasureOut": {
+        "additionalProperties": false,
+        "properties": {
+          "erased": {
+            "title": "Erased",
+            "type": "boolean"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "erased"
+        ],
+        "title": "ApproveErasureOut",
+        "type": "object"
+      },
       "AuditList": {
         "additionalProperties": false,
         "properties": {
@@ -386,6 +406,26 @@
         "title": "BookingOut",
         "type": "object"
       },
+      "CancelErasureOut": {
+        "additionalProperties": false,
+        "properties": {
+          "cancelled": {
+            "title": "Cancelled",
+            "type": "boolean"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "cancelled"
+        ],
+        "title": "CancelErasureOut",
+        "type": "object"
+      },
       "CancelOut": {
         "additionalProperties": false,
         "properties": {
@@ -687,7 +727,7 @@
         "title": "Envelope",
         "type": "object"
       },
-      "EraseIn": {
+      "EraseRequestIn": {
         "additionalProperties": false,
         "properties": {
           "reason": {
@@ -701,27 +741,135 @@
         "required": [
           "reason"
         ],
-        "title": "EraseIn",
+        "title": "EraseRequestIn",
         "type": "object"
       },
-      "EraseOut": {
+      "EraseRequestOut": {
         "additionalProperties": false,
         "properties": {
-          "erased": {
-            "title": "Erased",
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "requested",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "patient_id",
+          "status"
+        ],
+        "title": "EraseRequestOut",
+        "type": "object"
+      },
+      "ErasureRequestList": {
+        "additionalProperties": false,
+        "properties": {
+          "has_more": {
+            "title": "Has More",
             "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ErasureRequestRow"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "limit",
+          "has_more"
+        ],
+        "title": "ErasureRequestList",
+        "type": "object"
+      },
+      "ErasureRequestRow": {
+        "additionalProperties": false,
+        "properties": {
+          "approved_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved By"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
           },
           "patient_id": {
             "format": "uuid",
             "title": "Patient Id",
             "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "requested_by": {
+            "format": "uuid",
+            "title": "Requested By",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "requested",
+              "erased",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
           }
         },
         "required": [
+          "request_id",
           "patient_id",
-          "erased"
+          "reason",
+          "status",
+          "requested_by",
+          "approved_by",
+          "created_at",
+          "decided_at"
         ],
-        "title": "EraseOut",
+        "title": "ErasureRequestRow",
         "type": "object"
       },
       "ErrorBody": {
@@ -5090,6 +5238,275 @@
         ]
       }
     },
+    "/v1/staff/erasure-requests": {
+      "get": {
+        "description": "Erasure requests of the clinics where you are front desk, newest first (`status` filters; open ones by default). Ids, a reason code and times only. 403 unless you are front desk somewhere.",
+        "operationId": "list_erasure_requests_v1_staff_erasure_requests_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "requested",
+                    "erased",
+                    "cancelled"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": "requested",
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErasureRequestList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Erasure Requests",
+        "tags": [
+          "staff erasure"
+        ]
+      }
+    },
+    "/v1/staff/erasure-requests/{request_id}/approve": {
+      "post": {
+        "description": "Approve an open erasure request as a DIFFERENT front-desk person than the requester: the identity is erased now. 403 unless you are front desk of the clinic and not the requester (one generic answer), 409 if the patient is in a live merge link. STEP-UP REQUIRED.",
+        "operationId": "approve_patient_erasure_route_v1_staff_erasure_requests__request_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApproveErasureOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Approve Patient Erasure Route",
+        "tags": [
+          "staff erasure"
+        ]
+      }
+    },
+    "/v1/staff/erasure-requests/{request_id}/cancel": {
+      "post": {
+        "description": "Cancel an open erasure request (any front-desk person of the clinic). 403 unless you are front desk of the clinic or the request is no longer open. STEP-UP REQUIRED.",
+        "operationId": "cancel_patient_erasure_route_v1_staff_erasure_requests__request_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CancelErasureOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Cancel Patient Erasure Route",
+        "tags": [
+          "staff erasure"
+        ]
+      }
+    },
     "/v1/staff/identity/merges": {
       "get": {
         "description": "Merges of the clinics you may read, newest first. Front desk, nurse and doctor. 403 otherwise.",
@@ -6507,10 +6924,10 @@
         ]
       }
     },
-    "/v1/staff/patients/{patient_id}/erase": {
+    "/v1/staff/patients/{patient_id}/erasure-requests": {
       "post": {
-        "description": "Erase a patient's identity (name, date of birth, phone). 404 if you cannot see the patient, 403 unless you are front desk of the clinic, 409 if the patient is in a live merge link, 422 for a reason not on the clinic's list, 503 while the list of reasons is not configured. STEP-UP REQUIRED.",
-        "operationId": "erase_patient_route_v1_staff_patients__patient_id__erase_post",
+        "description": "Ask for a patient's identity to be erased; a DIFFERENT front-desk person must approve. 404 if you cannot see the patient, 403 unless you are front desk of the clinic, 409 if a request is already open, 422 for a reason not on the clinic's list, 503 while the list of reasons is not configured. STEP-UP REQUIRED.",
+        "operationId": "request_patient_erasure_route_v1_staff_patients__patient_id__erasure_requests_post",
         "parameters": [
           {
             "in": "path",
@@ -6541,7 +6958,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/EraseIn"
+                "$ref": "#/components/schemas/EraseRequestIn"
               }
             }
           },
@@ -6552,7 +6969,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EraseOut"
+                  "$ref": "#/components/schemas/EraseRequestOut"
                 }
               }
             },
@@ -6624,7 +7041,7 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Erase Patient Route",
+        "summary": "Request Patient Erasure Route",
         "tags": [
           "staff patients"
         ]

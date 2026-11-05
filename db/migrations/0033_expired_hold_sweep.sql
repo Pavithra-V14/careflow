@@ -25,6 +25,9 @@ begin
     if cardinality(v_clinics) = 0 then
         raise exception 'sweep refused' using errcode = '42501';
     end if;
+    -- Lock the held slots FIRST (the same row lock every slot operation takes), as its own statement, so the statements below see every hold committed by an operation that was holding the lock
+    -- (reviewer finding 2026-11-05: without it a concurrent hold could be missed and its slot reopened).
+    perform 1 from sched.slots where status = 'held' and clinic_id = any(v_clinics) order by id for update;
     with gone as (
         update sched.holds set status = 'expired'
          where status = 'active' and expires_at <= clock_timestamp() and clinic_id = any(v_clinics)
@@ -39,6 +42,15 @@ end
 $$;
 revoke all on function sched.release_expired_holds() from public;
 grant execute on function sched.release_expired_holds() to careflow_app;
+do $$
+declare r text;
+begin
+    foreach r in array array['anon', 'authenticated', 'service_role'] loop
+        if exists (select 1 from pg_roles where rolname = r) then
+            execute format('revoke all on function sched.release_expired_holds() from %I', r);
+        end if;
+    end loop;
+end $$;
 
 do $$
 begin

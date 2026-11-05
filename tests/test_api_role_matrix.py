@@ -233,7 +233,8 @@ async def _cleanup(ids, conn=None):
                 # whatever references them (the confirming accounts, the clinics), stay behind, tagged origin='test'; nothing reads them and every other suite is scoped to its own clinic.
                 await conn.execute(
                     "delete from mpi.patients p where p.clinic_id = any($1) and not exists (select 1 from mpi.identity_confirmations c where c.patient_id = p.id) "
-                    "and not exists (select 1 from agents.triage_proposals pr where pr.patient_id = p.id)", clinics
+                    "and not exists (select 1 from agents.triage_proposals pr where pr.patient_id = p.id) "
+                    "and not exists (select 1 from mpi.erasure_requests e where e.patient_id = p.id)", clinics
                 )
                 continue
             if table == "agents.review_tasks":
@@ -1884,55 +1885,143 @@ def test_a_delivery_record_cannot_be_changed_or_deleted_even_by_the_owner(client
     assert len(audit) == 1 and audit[0]["actor_role"] == "front_desk"
 
 
-# ---- POST /v1/staff/patients/{patient_id}/erase (migration 0032: audited erasure; front desk of the clinic only, with a recent second factor and a reason from the configured closed list) -------------------------
+# ---- two-person erasure (migration 0032; BUILD-SPEC 12.5): POST /patients/{id}/erasure-requests, GET /erasure-requests, POST /erasure-requests/{id}/approve and /cancel ------------------------------------
 #
-# The matrix app is configured with the TEST reason `entered_in_error` (a stand-in input: the real list is the clinic's decision). A replay after the erase is `erased: false`. A patient in a live merge
-# link is a 409. Nurse, doctor, admin and the other roles that can see the patient are 403; everyone else the same 404.
+# The matrix app is configured with the TEST reason `entered_in_error` (a stand-in input: the real list is the clinic's decision). Front desk of the clinic requests and cancels; a DIFFERENT front-desk
+# person approves. Nurse, doctor and the other staff who can SEE the patient get 403; everyone else the same 404. Every write needs a recent second factor.
 
-ERASE = "/v1/staff/patients/{patient_id}/erase"
+ERASE_REQUEST = "/v1/staff/patients/{patient_id}/erasure-requests"
+ERASURES = "/v1/staff/erasure-requests"
 ERASE_REASON = "entered_in_error"
+NO_MESSAGE = {"detail": "your role may not do this"}
 
 
-def erase_cases(ids) -> list[tuple]:
+def new_erasure_request(ids, *, with_live_merge=False, status="requested"):
+    """An erasure request written by the owner (requested by front_desk_a), for a fresh patient. Returns (request_id, patient_id)."""
+
+    async def make(conn):
+        master, subordinate, cand = await _new_pair(conn, ids.clinic_a, candidate=with_live_merge)
+        if with_live_merge:
+            await conn.execute(
+                "insert into mpi.merges (clinic_id, master_patient_id, subordinate_patient_id, candidate_id, approved_by, origin, idempotency_key) values ($1, $2, $3, $4, $5, 'test', $6)",
+                ids.clinic_a, master, subordinate, cand, ids.people["front_desk_a"][0], f"matrix-erase-merge-{uuid.uuid4().hex}",
+            )
+        request_id = await conn.fetchval(
+            "insert into mpi.erasure_requests (clinic_id, patient_id, reason, requested_by, origin, idempotency_key) values ($1, $2, $3, $4, 'test', $5) returning id",
+            ids.clinic_a, master, ERASE_REASON, ids.people["front_desk_a"][0], f"matrix-erase-{uuid.uuid4().hex}",
+        )
+        if status == "cancelled":
+            await conn.execute("update mpi.erasure_requests set status = 'cancelled', decided_at = now() where id = $1", request_id)
+        return request_id, master
+
+    return _run(_owner(make))
+
+
+def erase_request_cases(ids) -> list[tuple]:
     fd = stepped(ids.people["front_desk_a"][0])
     ok, _, _ = new_pair(ids, candidate=False)
-    linked_master, _linked_sub, _ = new_pair(ids)
-    _run(_owner(lambda conn: conn.execute("insert into mpi.merges (clinic_id, master_patient_id, subordinate_patient_id, candidate_id, approved_by, origin, idempotency_key) "
-                                          "select clinic_id, patient_id, candidate_patient_id, id, $2, 'test', $3 from mpi.match_candidates where patient_id = $1 or candidate_patient_id = $1 limit 1",
-                                          linked_master, ids.people["front_desk_a"][0], f"matrix-erase-merge-{uuid.uuid4().hex}")))
+    second, _, _ = new_pair(ids, candidate=False)
     refused, _, _ = new_pair(ids, candidate=False)
-    path = lambda p: ERASE.format(patient_id=p)
+    path = lambda p: ERASE_REQUEST.format(patient_id=p)
     body = lambda **o: {"reason": ERASE_REASON, **o}
     key = _new_key()
-    erased = lambda flag: (lambda b: b == {"patient_id": str(ok), "erased": flag})
+    asked = lambda patient: (lambda b: set(b) == {"request_id", "patient_id", "status"} and b["patient_id"] == str(patient) and b["status"] == "requested")
     cases = [
-        _case(ids, "front desk erases a patient with a second factor", fd, 200, path(ok), json=body(), key=key, body=erased(True)),
-        _case(ids, "the same request again is a replay: nothing more is erased", fd, 200, path(ok), json=body(), key=key, body=erased(False)),
-        _case(ids, "a patient in a live merge link cannot be erased", fd, 409, path(linked_master), json=body(), body=lambda b: b == {"detail": "this patient is in a live merge link"}),
-        _case(ids, "a reason that is not on the clinic's list is rejected", fd, 422, path(refused), json=body(reason="because"), body=_fixed(422)),
-        _case(ids, "an unknown field is rejected", fd, 422, path(refused), json=body(surprise=1), body=_fixed(422)),
-        _case(ids, "a missing reason is rejected", fd, 422, path(refused), json={}, body=_fixed(422)),
-        _case(ids, "missing X-Idempotency-Key is rejected", fd, 422, path(refused), json=body(), key=None, body=_fixed(422)),
+        _case(ids, "front desk asks for an erasure", fd, 200, path(ok), json=body(), key=key, body=asked(ok)),
+        _case(ids, "the same request and key answers the same request", fd, 200, path(ok), json=body(), key=key, body=asked(ok)),
+        _case(ids, "a second open request for the same patient is a conflict", fd, 409, path(ok), json=body(), body=lambda b: b == {"detail": "an erasure request is already open for this patient"}),
+        _case(ids, "a reason that is not on the clinic's list is rejected", fd, 422, path(second), json=body(reason="because"), body=_fixed(422)),
+        _case(ids, "an unknown field is rejected", fd, 422, path(second), json=body(surprise=1), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", fd, 422, path(second), json=body(), key=None, body=_fixed(422)),
         _case(ids, "a patient that does not exist is not found", fd, 404, path(uuid.uuid4()), json=body(), body=_fixed(404)),
-        _case(ids, "front desk of ANOTHER clinic gets the same 404", stepped(ids.people["front_desk_b"][0]), 404, path(refused), json=body(), body=_fixed(404)),
+        _case(ids, "front desk of ANOTHER clinic gets the same 404", stepped(ids.people["front_desk_b"][0]), 404, path(second), json=body(), body=_fixed(404)),
         _case(ids, "a patient id that is not a uuid is rejected", fd, 422, path("nope"), json=body(), body=_fixed(422)),
     ]
-    visible_but_not_front_desk = {r: 403 for r in ("nurse_a", "doctor_a", "multi")}  # staff who can SEE the patient but are not front desk
+    visible_but_not_front_desk = {r: 403 for r in ("nurse_a", "doctor_a", "multi")}
     cases += _everyone_at_the_gate(ids, lambda: path(refused), body, visible_but_not_front_desk, 404)
     cases += _not_stepped_cases(ids, lambda: path(refused), body)
     return cases + _unauthenticated(ids, path(refused), body())
 
 
-def test_erasure_clears_the_identity_columns_writes_one_audit_row_and_the_app_role_cannot_do_it_by_update(client, ids):
+def erasure_list_cases(ids) -> list[tuple]:
+    new_erasure_request(ids)
+    readers = ("front_desk_a", "multi")  # multi is a nurse in A and a doctor in B: NOT front desk anywhere, so refused below
+    cases = [
+        _case(ids, "front desk lists the open requests", "front_desk_a", 200, ERASURES, key=None,
+              body=_page(ids, non_empty=True, check=lambda items: all(set(i) == {"request_id", "patient_id", "reason", "status", "requested_by", "approved_by", "created_at", "decided_at"} and i["status"] == "requested" for i in items))),
+        _case(ids, "an unknown status is rejected", "front_desk_a", 422, ERASURES + "?status=done", key=None, body=_fixed(422)),
+        _case(ids, "limit=0 is rejected", "front_desk_a", 422, ERASURES + "?limit=0", key=None, body=_fixed(422)),
+        _case(ids, "front desk of another clinic sees none of this clinic's requests", "front_desk_b", 200, ERASURES, key=None, body=_page(ids, check=lambda items: items == [])),
+    ]
+    denied = [p for p in ids.people if p not in (readers[0], "front_desk_b")]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, ERASURES, key=None, body=lambda b: b == {"detail": "your role may not read this"}) for p in denied]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, ERASURES, key=None, body=lambda b: b == {"detail": "your role may not read this"}))
+    return cases + _unauthenticated(ids, ERASURES, None)
+
+
+def erase_approve_cases(ids) -> list[tuple]:
+    fd2 = stepped(ids.fd2)
+    ok, _ok_patient = new_erasure_request(ids)
+    own, _ = new_erasure_request(ids)
+    linked, _ = new_erasure_request(ids, with_live_merge=True)
+    other, _ = new_erasure_request(ids)
+    path = lambda r: f"{ERASURES}/{r}/approve"
+    key = _new_key()
+    done = lambda flag: (lambda b: b == {"request_id": str(ok), "erased": flag})
+    cases = [
+        _case(ids, "the requester cannot approve their own request", stepped(ids.people["front_desk_a"][0]), 403, path(own), body=lambda b: b == NO_MESSAGE),
+        _case(ids, "a DIFFERENT front desk person approves: the identity is erased", fd2, 200, path(ok), key=key, body=done(True)),
+        _case(ids, "the same approval again is a replay", fd2, 200, path(ok), key=key, body=done(False)),
+        _case(ids, "a patient in a live merge link cannot be erased", fd2, 409, path(linked), body=lambda b: b == {"detail": "this patient is in a live merge link"}),
+        _case(ids, "an unknown request is refused with the one generic answer", fd2, 403, path(uuid.uuid4()), body=lambda b: b == NO_MESSAGE),
+        _case(ids, "missing X-Idempotency-Key is rejected", fd2, 422, path(other), key=None, body=_fixed(422)),
+        _case(ids, "a request id that is not a uuid is rejected", fd2, 422, path("nope"), body=_fixed(422)),
+    ]
+    for p in [*ids.people, "no account"]:
+        if p == "front_desk_a":
+            continue  # front_desk_a is the requester of these rows: covered above
+        sub = ids.no_account if p == "no account" else ids.people[p][0]
+        cases.append(_case(ids, f"{p} with a second factor is refused", stepped(sub), 403, path(other), body=lambda b: b == NO_MESSAGE))
+    cases += [_case(ids, f"front_desk_a with {label} is told to step up", headers, 401, path(other), body=_fixed(401)) for label, headers in not_stepped_variants(ids.fd2)]
+    return cases + _unauthenticated(ids, path(other), None)
+
+
+def erase_cancel_cases(ids) -> list[tuple]:
+    ok, _ = new_erasure_request(ids)
+    done, _ = new_erasure_request(ids, status="cancelled")
+    other, _ = new_erasure_request(ids)
+    path = lambda r: f"{ERASURES}/{r}/cancel"
+    fd = stepped(ids.people["front_desk_a"][0])
+    cases = [
+        _case(ids, "front desk cancels an open request", fd, 200, path(ok), body=lambda b: b == {"request_id": str(ok), "cancelled": True}),
+        _case(ids, "cancelling again changes nothing", fd, 200, path(ok), body=lambda b: b == {"request_id": str(ok), "cancelled": False}),
+        _case(ids, "an already cancelled request is not cancelled twice", fd, 200, path(done), body=lambda b: b["cancelled"] is False),
+        _case(ids, "an unknown request is refused with the one generic answer", fd, 403, path(uuid.uuid4()), body=lambda b: b == NO_MESSAGE),
+    ]
+    for p in [*ids.people, "no account"]:
+        if p == "front_desk_a":
+            continue
+        sub = ids.no_account if p == "no account" else ids.people[p][0]
+        cases.append(_case(ids, f"{p} with a second factor is refused", stepped(sub), 403, path(other), body=lambda b: b == NO_MESSAGE))
+    cases += [_case(ids, f"front_desk_a with {label} is told to step up", headers, 401, path(other), body=_fixed(401)) for label, headers in not_stepped_variants(ids.people["front_desk_a"][0])]
+    return cases + _unauthenticated(ids, path(other), None)
+
+
+def test_a_completed_erasure_clears_the_identity_columns_and_leaves_exactly_the_three_audit_rows_and_the_app_role_cannot_update_by_hand(client, ids):
     patient, _, _ = new_pair(ids, candidate=False)
-    fd = ids.people["front_desk_a"][0]
-    done = client.post(ERASE.format(patient_id=patient), headers={**stepped(fd), "X-Idempotency-Key": _new_key()}, json={"reason": ERASE_REASON})
+    fd1, fd2 = ids.people["front_desk_a"][0], ids.fd2
+    asked = client.post(ERASE_REQUEST.format(patient_id=patient), headers={**stepped(fd1), "X-Idempotency-Key": _new_key()}, json={"reason": ERASE_REASON})
+    assert asked.status_code == 200
+    request_id = asked.json()["request_id"]
+    done = client.post(f"{ERASURES}/{request_id}/approve", headers={**stepped(fd2), "X-Idempotency-Key": _new_key()})
     assert done.status_code == 200 and done.json()["erased"] is True
     row = _run(_fetch("select name_ct, dob_ct, phone_ct, name_key_version, dob_key_version, phone_key_version, erased_at from mpi.patients where id = $1", patient))[0]
     assert row["erased_at"] is not None and all(row[c] is None for c in ("name_ct", "dob_ct", "phone_ct", "name_key_version", "dob_key_version", "phone_key_version"))
-    audit = _run(_fetch("select actor_id, actor_role, details from audit.log where action = 'patient.erase' and resource_id = $1", str(patient)))
-    assert len(audit) == 1 and (audit[0]["actor_id"], audit[0]["actor_role"]) == (fd, "front_desk")
-    assert without_scope(audit[0]["details"]) == {"reason": ERASE_REASON}
+    audit = _run(_fetch("select actor_id, action, details from audit.log where resource_id = $1 and action like 'patient.erase%' order by id", str(patient)))
+    assert [(a["action"], a["actor_id"]) for a in audit] == [("patient.erase_request", fd1), ("patient.erase", fd2)]
+    assert all(without_scope(a["details"]) == {"reason": ERASE_REASON} for a in audit)
+    request = _run(_fetch("select status, requested_by, approved_by from mpi.erasure_requests where id = $1::uuid", request_id))[0]
+    assert (request["status"], request["requested_by"], request["approved_by"]) == ("erased", fd1, fd2)
 
 
 # ---- staff accounts: GET /accounts, POST /accounts/invite, /{id}/roles, /{id}/roles/revoke, /{id}/suspend, /{id}/reinstate, /activate-me (migration 0034) ------------------------------------------------------
@@ -2350,7 +2439,10 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", ACCOUNTS + "/{account_id}/roles/revoke"): staff_revoke_cases,
     ("POST", ACCOUNTS + "/{account_id}/suspend"): staff_suspend_cases,
     ("POST", ACCOUNTS + "/{account_id}/reinstate"): staff_reinstate_cases,
-    ("POST", ERASE): erase_cases,
+    ("POST", ERASE_REQUEST): erase_request_cases,
+    ("GET", ERASURES): erasure_list_cases,
+    ("POST", ERASURES + "/{request_id}/approve"): erase_approve_cases,
+    ("POST", ERASURES + "/{request_id}/cancel"): erase_cancel_cases,
     ("GET", OFFERS): offer_list_cases,
     ("POST", OFFER_DELIVERED): offer_delivered_cases,
     ("POST", PREFIX + "/locations"): setup_create_cases("locations"),

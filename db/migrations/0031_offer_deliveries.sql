@@ -29,7 +29,12 @@ alter table sched.offer_deliveries force row level security;
 create policy offer_deliveries_select on sched.offer_deliveries for select to careflow_app
     using (iam.has_clinic_role(clinic_id, array['front_desk', 'nurse', 'doctor']));
 create policy offer_deliveries_insert on sched.offer_deliveries for insert to careflow_app
-    with check (iam.has_clinic_role(clinic_id, array['front_desk']) and delivered_by = auth.uid());
+    with check (
+        iam.has_clinic_role(clinic_id, array['front_desk']) and delivered_by = auth.uid()
+        -- the hold must be a LIVE OFFER of this clinic and origin (reviewer finding 2026-11-05: the database, not only the route, enforces it)
+        and exists (select 1 from sched.holds h where h.id = hold_id and h.clinic_id = offer_deliveries.clinic_id and h.origin = offer_deliveries.origin
+                     and h.idempotency_key like 'offer-hold:%' and h.status = 'active')
+    );
 
 create function sched.offer_deliveries_append_only() returns trigger
     language plpgsql set search_path = ''
