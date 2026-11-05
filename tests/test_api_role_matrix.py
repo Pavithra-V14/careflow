@@ -311,6 +311,8 @@ def expected_me(ids, key):
         "account_id": str(account_id),
         "account_type": kind,
         "status": status,
+        # the deployment's profile (the live job sets CAREFLOW_PROFILE=demo); unset or unrecognised is null
+        "operating_profile": (os.environ.get("CAREFLOW_PROFILE") or "").strip().lower() if (os.environ.get("CAREFLOW_PROFILE") or "").strip().lower() in ("demo", "clinical") else None,
         # each grant also names its clinic and that clinic's origin (the frontend shows them): the fixture's two clinics are "Matrix A" and "Matrix B", both origin 'test'
         "roles": sorted(
             ({"clinic_id": str(c), "role": r, "clinic_name": "Matrix A" if c == ids.clinic_a else "Matrix B", "clinic_origin": "test"} for c, r in grants),

@@ -1365,6 +1365,8 @@ export interface components {
             account_id: string;
             /** Account Type */
             account_type: string;
+            /** Operating Profile */
+            operating_profile: ("demo" | "clinical") | null;
             /** Roles */
             roles: components["schemas"]["RoleGrant"][];
             /** Status */

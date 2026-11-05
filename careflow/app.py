@@ -304,11 +304,22 @@ class RoleGrant(BaseModel):
     clinic_origin: str | None
 
 
+OPERATING_PROFILES: Final = ("demo", "clinical")
+
+
+def operating_profile() -> Literal["demo", "clinical"] | None:
+    """The deployment's CAREFLOW_PROFILE, RESTRICTED to the two known values (compared the way `resolve_profile` does: trimmed, case-insensitive). Unset, empty or anything else is None, never a guess:
+    the console shows a demo banner for "demo" and says nothing for None. It names the profile only; no setting, key or other configuration value ever appears here."""
+    raw = (os.environ.get("CAREFLOW_PROFILE") or "").strip().lower()
+    return raw if raw in OPERATING_PROFILES else None  # type: ignore[return-value]
+
+
 class Me(BaseModel):
     account_id: uuid.UUID
     account_type: str
     status: str
     roles: list[RoleGrant]
+    operating_profile: Literal["demo", "clinical"] | None  # the deployment's profile (demo or clinical); null when unset or unrecognised
 
 
 @router.get("/v1/iam/me", response_model=Me)
@@ -341,6 +352,7 @@ async def me(conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_cl
         account_type=account.account_type,
         status=account.status,
         roles=[RoleGrant(clinic_id=g.clinic_id, role=g.role, clinic_name=g.clinic_name, clinic_origin=g.clinic_origin) for g in grants],
+        operating_profile=operating_profile(),
     )
 
 

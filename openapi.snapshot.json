@@ -1002,6 +1002,21 @@
             "title": "Account Type",
             "type": "string"
           },
+          "operating_profile": {
+            "anyOf": [
+              {
+                "enum": [
+                  "demo",
+                  "clinical"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operating Profile"
+          },
           "roles": {
             "items": {
               "$ref": "#/components/schemas/RoleGrant"
@@ -1018,7 +1033,8 @@
           "account_id",
           "account_type",
           "status",
-          "roles"
+          "roles",
+          "operating_profile"
         ],
         "title": "Me",
         "type": "object"
