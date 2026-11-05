@@ -143,7 +143,7 @@ async def _seed() -> Identities:
     return ids
 
 
-POOL = {"hold": 90, "book": 90, "extra": 60, "cancel": 70}  # slots / bookings handed out one per test case
+POOL = {"hold": 90, "book": 90, "extra": 110, "cancel": 70}  # slots / bookings handed out one per test case
 N_PATIENTS = 45
 
 
@@ -209,6 +209,15 @@ async def _seed_scheduling(ids, conn) -> None:
     ids.pools = {**{p: list(v) for p, v in pools.items() if p != "cancel"}, "cancel": [bid for bid, *_ in bookings]}
 
 
+LEFT_BEHIND_WHERE = {
+    "sched.holds": "not exists (select 1 from sched.offer_deliveries d where d.hold_id = t.id)",
+    "sched.slots": "not exists (select 1 from sched.holds h where h.slot_id = t.id)",
+    "sched.visit_types": "not exists (select 1 from sched.slots s where s.visit_type_id = t.id)",
+    "sched.providers": "not exists (select 1 from sched.slots s where s.provider_id = t.id)",
+    "sched.locations": "not exists (select 1 from sched.slots s where s.location_id = t.id)",
+}
+
+
 async def _cleanup(ids, conn=None):
     own = conn is None
     conn = conn or await asyncpg.connect((MIGRATOR or "").replace("+asyncpg", ""), statement_cache_size=0)
@@ -229,6 +238,11 @@ async def _cleanup(ids, conn=None):
             if table == "agents.review_tasks":
                 # A task that an append-only triage proposal points at cannot be deleted (the referral-queue cases seed one); it stays behind with its clinic, tagged origin='test'.
                 await conn.execute("delete from agents.review_tasks t where t.clinic_id = any($1) and not exists (select 1 from agents.triage_proposals p where p.review_task_id = t.id)", clinics)
+                continue
+            if table in LEFT_BEHIND_WHERE:
+                # Rows that an append-only delivery record (migration 0031) points at, directly or through the hold, the slot and the reference rows they use, cannot be deleted: they stay behind with
+                # their clinic, tagged origin='test'; nothing reads them and every other suite is scoped to its own clinic.
+                await conn.execute(f"delete from {table} t where t.clinic_id = any($1) and {LEFT_BEHIND_WHERE[table]}", clinics)
                 continue
             await conn.execute(f"delete from {table} where clinic_id = any($1)", clinics)
         await conn.execute("delete from iam.staff_roles where clinic_id = any($1)", [ids.clinic_a, ids.clinic_b])
@@ -1777,6 +1791,98 @@ def hold_release_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(refused), None)
 
 
+# ---- /v1/staff/scheduling/offers (list) and /offers/{hold_id}/mark-delivered (a person delivered the offer by hand; migration 0031) -----------------------------------------------------------
+#
+# List: front desk, nurse, doctor of the clinic (the scheduling readers); a reader of another clinic sees none of this clinic's offers. Mark delivered: front desk of the clinic only; nurse, doctor and admin
+# can SEE the offer and get 403; everyone else the same 404 as a missing hold. A hold that is not an offer, or an offer whose hold is no longer live, is a 409; a second press is a replay.
+
+OFFERS = PREFIX + "/offers"
+OFFER_DELIVERED = PREFIX + "/offers/{hold_id}/mark-delivered"
+
+
+def new_offer_hold(ids, status="active"):
+    """A synthetic OFFER hold (the key prefix `offer-hold:` is what marks one) on a fresh matrix slot, written by the owner."""
+
+    async def make(conn):
+        slot = ids.pools["extra"].pop()
+        hid = uuid.uuid4()
+        expires = "now() + interval '1 hour'" if status != "expired" else "now() + interval '1 second'"
+        await conn.execute(
+            f"insert into sched.holds (id, clinic_id, slot_id, patient_id, expires_at, origin, idempotency_key, status) values ($1, $2, $3, $4, {expires}, 'test', $5, $6)",
+            hid, ids.clinic_a, slot, ids.patients_a[7], f"offer-hold:matrix-{hid}", "active" if status == "expired" else status,
+        )
+        if status == "active":
+            await conn.execute("update sched.slots set status = 'held' where id = $1", slot)
+        if status == "expired":
+            await asyncio.sleep(1.5)
+        return hid
+
+    return _run(_owner(make))
+
+
+def offer_list_cases(ids) -> list[tuple]:
+    waiting, expired = new_offer_hold(ids), new_offer_hold(ids, "expired")
+    plain, _slot = new_hold(ids)  # not an offer: never listed
+    state_of = lambda hid, items: next((i["state"] for i in items if i["hold_id"] == str(hid)), None)
+    readers = ("front_desk_a", "nurse_a", "doctor_a", "multi")
+    cases = [
+        _case(ids, f"{who} lists the offers", who, 200, OFFERS, key=None,
+              body=_page(ids, clinic_only=ids.clinic_a, non_empty=True, check=lambda items: state_of(waiting, items) == "awaiting_delivery" and state_of(expired, items) == "expired" and state_of(plain, items) is None))
+        for who in readers
+    ]
+    cases += [
+        _case(ids, "state=expired filters", "front_desk_a", 200, OFFERS + "?state=expired", key=None,
+              body=_page(ids, clinic_only=ids.clinic_a, non_empty=True, check=lambda items: all(i["state"] == "expired" for i in items) and state_of(waiting, items) is None)),
+        _case(ids, "an offer row carries ids, times and closed words only", "nurse_a", 200, OFFERS, key=None,
+              body=_page(ids, check=lambda items: all(set(i) == {"hold_id", "clinic_id", "slot_id", "patient_id", "state", "created_at", "expires_at", "delivered_at", "channel"} for i in items))),
+        _case(ids, "a reader of another clinic sees none of this clinic's offers", "front_desk_b", 200, OFFERS, key=None, body=_page(ids, check=lambda items: items == [])),
+        _case(ids, "an unknown state is rejected", "front_desk_a", 422, OFFERS + "?state=sent", key=None, body=_fixed(422)),
+        _case(ids, "limit=0 is rejected", "front_desk_a", 422, OFFERS + "?limit=0", key=None, body=_fixed(422)),
+    ]
+    denied = [p for p in ids.people if p not in (*readers, "front_desk_b")]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, OFFERS, key=None, body=lambda b: b == {"detail": "your role may not read this"}) for p in denied]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, OFFERS, key=None, body=lambda b: b == {"detail": "your role may not read this"}))
+    return cases + _unauthenticated(ids, OFFERS, None)
+
+
+def offer_delivered_cases(ids) -> list[tuple]:
+    ok, refused, dead, released = new_offer_hold(ids), new_offer_hold(ids), new_offer_hold(ids, "expired"), new_offer_hold(ids, "released")
+    plain, _slot = new_hold(ids)
+    path = lambda h: OFFER_DELIVERED.format(hold_id=h)
+    delivered = lambda hid, replayed: (lambda b: b["hold_id"] == str(hid) and b["channel"] == "manual" and b["replayed"] is replayed and b["delivered_at"])
+    cases = [
+        _case(ids, "front desk marks an offer delivered", "front_desk_a", 200, path(ok), body=delivered(ok, False)),
+        _case(ids, "a second press is a replay and writes nothing more", "front_desk_a", 200, path(ok), body=delivered(ok, True)),
+        _case(ids, "a hold that is not an offer is a conflict", "front_desk_a", 409, path(plain), body=lambda b: b == {"detail": "this hold is not an offer"}),
+        _case(ids, "an expired offer cannot be marked delivered", "front_desk_a", 409, path(dead), body=lambda b: b == {"detail": "this offer is no longer live"}),
+        _case(ids, "a released offer cannot be marked delivered", "front_desk_a", 409, path(released), body=lambda b: b == {"detail": "this offer is no longer live"}),
+        _case(ids, "an unknown hold is not found", "front_desk_a", 404, path(uuid.uuid4()), body=_fixed(404)),
+        _case(ids, "front desk of another clinic gets the same 404", "front_desk_b", 404, path(refused), body=_fixed(404)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "front_desk_a", 422, path(refused), key=None, body=_fixed(422)),
+        _case(ids, "a hold id that is not a uuid is rejected", "front_desk_a", 422, path("nope"), body=_fixed(422)),
+    ]
+    for p in [*ids.people, "no account"]:
+        if p in ("front_desk_a", "front_desk_b"):
+            continue
+        status = HOLD_VISIBLE_NOT_FRONT_DESK.get(p, 404)
+        who = bearer(mint(ids.no_account)) if p == "no account" else p
+        cases.append(_case(ids, f"{p} is refused", who, status, path(refused), body=_fixed(status) if status == 404 else (lambda b: b == {"detail": "your role may not do this"})))
+    return cases + _unauthenticated(ids, path(refused), None)
+
+
+def test_a_delivery_record_cannot_be_changed_or_deleted_even_by_the_owner(client, ids):
+    hold = new_offer_hold(ids)
+    done = client.post(OFFER_DELIVERED.format(hold_id=hold), headers={**bearer(mint(ids.people["front_desk_a"][0])), "X-Idempotency-Key": _new_key()})
+    assert done.status_code == 200
+    for statement in ("update sched.offer_deliveries set channel = 'manual' where hold_id = $1", "delete from sched.offer_deliveries where hold_id = $1"):
+        with pytest.raises(asyncpg.PostgresError, match="append-only"):
+            _run(_fetch(statement, hold))
+    rows = _run(_fetch("select delivered_by, channel from sched.offer_deliveries where hold_id = $1", hold))
+    assert [(r["delivered_by"], r["channel"]) for r in rows] == [(ids.people["front_desk_a"][0], "manual")]
+    audit = _run(_fetch("select actor_role, details from audit.log where action = 'offer.mark_delivered' and resource_id = $1", str(hold)))
+    assert len(audit) == 1 and audit[0]["actor_role"] == "front_desk"
+
+
 # ---- clinic set-up: POST /locations, /providers, /visit-types, /slots (front desk and admin of the clinic only) ----------------------------------------------------------------------------
 #
 # Front desk and admin create; nurse and doctor can SEE the clinic and are refused with 403; every other identity gets the same 404 as a clinic that is not there. A replay answers the original, the same key
@@ -2017,6 +2123,8 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", MERGE_OPEN): merge_open_cases,
     ("GET", AUDIT): audit_reader_cases,
     ("GET", HOLDS): hold_list_cases,
+    ("GET", OFFERS): offer_list_cases,
+    ("POST", OFFER_DELIVERED): offer_delivered_cases,
     ("POST", PREFIX + "/locations"): setup_create_cases("locations"),
     ("POST", PREFIX + "/providers"): setup_create_cases("providers"),
     ("POST", PREFIX + "/visit-types"): setup_create_cases("visit-types"),

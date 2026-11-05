@@ -1332,6 +1332,111 @@ async def send_offer_route(
     )
 
 
+# ---- offer delivery by a person: list the offers, and mark one delivered (docs/design/phase3-manual-delivery.md; migration 0031) --------------------------------------------------------
+#
+# The system sends NOTHING to a patient. The front desk copies the drafted offer text (the message `send` recorded, read through the audited message read) and sends it from the clinic's own phone, then
+# marks the offer delivered: one append-only row (who, when, the single channel `manual`). `GET /offers` is the list the front desk works from (awaiting delivery, delivered, expired, booked, released);
+# an offer is never shown as sent unless a person marked it. Front desk, nurse and doctor read; ONLY front desk marks. Offer state is derived from the hold and the delivery row, never stored twice.
+
+OfferState = Literal["awaiting_delivery", "delivered", "expired", "booked", "released"]
+
+
+class OfferRowOut(_Out):
+    hold_id: uuid.UUID
+    clinic_id: uuid.UUID
+    slot_id: uuid.UUID
+    patient_id: uuid.UUID | None
+    state: OfferState
+    created_at: datetime
+    expires_at: datetime
+    delivered_at: datetime | None
+    channel: Literal["manual"] | None
+
+
+class OfferRowList(_Out):
+    items: list[OfferRowOut]
+    limit: int
+    has_more: bool
+
+
+class MarkDeliveredOut(_Out):
+    hold_id: uuid.UUID
+    channel: Literal["manual"]
+    delivered_at: datetime
+    replayed: bool
+
+
+_OFFERS_SQL = (
+    "with o as (select h.id, h.clinic_id, h.slot_id, h.patient_id, h.created_at, h.expires_at, d.delivered_at, d.channel, "
+    "case when h.status = 'converted' then 'booked' when h.status = 'released' then 'released' "
+    "when h.status <> 'active' or h.expires_at <= clock_timestamp() then 'expired' when d.delivered_at is not null then 'delivered' else 'awaiting_delivery' end as state "
+    "from sched.holds h left join sched.offer_deliveries d on d.hold_id = h.id "
+    "where h.clinic_id = any(cast(:c as uuid[])) and h.idempotency_key like 'offer-hold:%') "
+    "select * from o where (cast(:s as text) is null or state = :s) order by created_at desc, id limit :n"
+)
+
+
+@scheduling.get("/offers", response_model=OfferRowList)
+async def list_offers(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), state: OfferState | None = None, limit: Limit = 100) -> OfferRowList:
+    """Offers of the clinics you may read, newest first (`state` filters). An offer is `delivered` only if a person marked it; `expired` once its hold ran out. Ids, times and closed words only."""
+    clinics = await _readable_clinics(conn, claims)
+    rows = (await conn.execute(text(_OFFERS_SQL), {"c": clinics, "s": state, "n": limit + 1})).all()
+    items = [
+        OfferRowOut(
+            hold_id=r.id, clinic_id=r.clinic_id, slot_id=r.slot_id, patient_id=r.patient_id, state=r.state, created_at=r.created_at, expires_at=r.expires_at, delivered_at=r.delivered_at,
+            channel=r.channel,
+        )
+        for r in rows[:limit]
+    ]
+    return OfferRowList(items=items, limit=limit, has_more=len(rows) > limit)
+
+
+@scheduling.post("/offers/{hold_id}/mark-delivered", response_model=MarkDeliveredOut)
+async def mark_offer_delivered(hold_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> MarkDeliveredOut:
+    """Record that YOU delivered this offer by hand (channel `manual`). 404 if you cannot see the offer, 403 unless you are front desk there, 409 if the hold is not an offer or is no longer live (expired, released or booked). A second press is a replay and writes nothing more."""
+    hold = (await conn.execute(text("select clinic_id, origin, status, expires_at > clock_timestamp() as live, idempotency_key like 'offer-hold:%' as is_offer from sched.holds where id = :h"), {"h": hold_id})).first()
+    if hold is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _clinic_role_held(conn, hold.clinic_id, ("front_desk",)):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    if not hold.is_offer:
+        raise HTTPException(status_code=409, detail="this hold is not an offer")
+    actor = uuid.UUID(claims["sub"])
+    prior = (await conn.execute(text("select delivered_at, channel from sched.offer_deliveries where hold_id = :h"), {"h": hold_id})).first()
+    replayed = prior is not None
+    if prior is None:
+        if hold.status != "active" or not hold.live:
+            raise HTTPException(status_code=409, detail="this offer is no longer live")
+        try:
+            async with conn.begin_nested():
+                created = (
+                    await conn.execute(
+                        text(
+                            "insert into sched.offer_deliveries (clinic_id, hold_id, channel, delivered_by, origin, idempotency_key) values (:c, :h, 'manual', :u, :o, :k) "
+                            "on conflict (hold_id) do nothing returning delivered_at, channel"
+                        ),
+                        {"c": hold.clinic_id, "h": hold_id, "u": actor, "o": hold.origin, "k": f"offer-delivery:{hold_id}:{idempotency_key}"},
+                    )
+                ).first()
+        except DBAPIError as exc:
+            if getattr(exc.orig, "sqlstate", None) == "42501":
+                raise HTTPException(status_code=403, detail="your role may not do this") from None
+            if getattr(exc.orig, "sqlstate", None) == "23505":  # the key is held by another request
+                raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request") from None
+            raise
+        if created is None:  # a concurrent press won: this one is a replay
+            created = (await conn.execute(text("select delivered_at, channel from sched.offer_deliveries where hold_id = :h"), {"h": hold_id})).first()
+            replayed = True
+        prior = created
+    if prior is None:
+        raise HTTPException(status_code=409, detail="this offer is no longer live")
+    await write_audit(
+        conn, clinic_id=hold.clinic_id, origin=hold.origin, actor_id=actor, actor_role="front_desk", action="offer.mark_delivered", resource_type="offer", resource_id=hold_id,
+        details={"channel": prior.channel, "replayed": replayed}, idempotency_key=f"audit:offer-delivered:{hold_id}:{idempotency_key}",
+    )
+    return MarkDeliveredOut(hold_id=hold_id, channel=prior.channel, delivered_at=prior.delivered_at, replayed=replayed)
+
+
 # ---- reply interpretation, FAKES ONLY (careflow/reply_interpretation.py; docs/design/phase3-scheduling-agent.md section 5) ---------------------------------------------------------
 #
 # `POST /v1/staff/scheduling/offers/interpret-reply`: a front-desk person asks what a patient's reply to an offer means. The deterministic red-flag rules screen the reply FIRST (a red flag or an

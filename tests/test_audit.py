@@ -113,6 +113,7 @@ ROUTES = {
     "send_offer_route": "offer.send",
     "interpret_reply_route": "offer.interpret_reply",
     "release_hold_route": "hold.release",
+    "mark_offer_delivered": "offer.mark_delivered",
     "search_patients": "patient.search",
     "open_patient_record": "patient.view",
     "patient_labels_route": "patient.view_labels",
