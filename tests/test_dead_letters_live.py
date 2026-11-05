@@ -182,3 +182,75 @@ async def test_the_nurse_of_the_clinic_can_see_the_task_front_desk_and_another_c
             n = (await db.execute(text("select count(*) from agents.review_tasks where kind = 'referral_dead_letter' and source_message_id = :s"), {"s": f"document:{doc}"})).scalar_one()
             await db.exec_driver_sql("reset role")
         assert n == expected, who
+
+
+# ---- the worker's expired-hold sweep (migration 0033) --------------------------------------------------------------------------------------------------------------------------
+
+
+async def stale_hold(db, w, clinic=None):
+    """A slot 'held' by an active hold whose time has passed (seeded as the owner; the insert trigger needs a future time, so it is moved into the past afterwards)."""
+    clinic = clinic or w.a
+    ids = {k: _u() for k in ("provider", "location", "vt", "slot", "hold")}
+    start = "date_trunc('hour', now()) + interval '400 days'"
+    await raw(
+        db,
+        f"insert into sched.providers (id, clinic_id, display_name, origin, idempotency_key) values ('{ids['provider']}', '{clinic}', 'P', 'test', 'sw-p-{ids['provider']}');\n"
+        f"insert into sched.locations (id, clinic_id, name, origin, idempotency_key) values ('{ids['location']}', '{clinic}', 'L', 'test', 'sw-l-{ids['location']}');\n"
+        f"insert into sched.visit_types (id, clinic_id, name, duration_minutes, origin, idempotency_key) values ('{ids['vt']}', '{clinic}', 'V', 20, 'test', 'sw-v-{ids['vt']}');\n"
+        f"insert into sched.slots (id, clinic_id, provider_id, location_id, visit_type_id, starts_at, ends_at, status, origin, idempotency_key) "
+        f"values ('{ids['slot']}', '{clinic}', '{ids['provider']}', '{ids['location']}', '{ids['vt']}', {start}, {start} + interval '20 minutes', 'held', 'test', 'sw-s-{ids['slot']}');\n"
+        f"insert into sched.holds (id, clinic_id, slot_id, expires_at, origin, idempotency_key, status) values ('{ids['hold']}', '{clinic}', '{ids['slot']}', now() + interval '1 hour', 'test', 'sw-h-{ids['hold']}', 'active');\n"
+        f"update sched.holds set expires_at = clock_timestamp() - interval '1 second', created_at = clock_timestamp() - interval '1 hour' where id = '{ids['hold']}';",
+    )
+    return ids
+
+
+async def run_sweep(db, w, who):
+    async with db.begin_nested():
+        await as_user(db, w.people[who])
+        done = (await db.execute(text("select sched.release_expired_holds()"))).scalar()
+        await db.exec_driver_sql("reset role")  # (a refusal rolls the savepoint back, which restores the role too)
+        return done
+
+
+async def hold_and_slot(db, ids):
+    h = (await db.execute(text("select status from sched.holds where id = :h"), {"h": ids["hold"]})).scalar()
+    s = (await db.execute(text("select status from sched.slots where id = :s"), {"s": ids["slot"]})).scalar()
+    return h, s
+
+
+async def test_the_worker_sweep_expires_the_stale_hold_and_reopens_the_slot_in_its_own_clinic_only(db):
+    w = await world(db)
+    mine, theirs = await stale_hold(db, w), await stale_hold(db, w, w.b)
+    assert await hold_and_slot(db, mine) == ("active", "held")
+    assert await run_sweep(db, w, "worker") == 1  # worker A: clinic A only
+    assert await hold_and_slot(db, mine) == ("expired", "open")
+    assert await hold_and_slot(db, theirs) == ("active", "held")  # clinic B's stale hold is not this worker's business
+    assert await run_sweep(db, w, "worker") == 0  # safe to repeat
+    assert await run_sweep(db, w, "worker_b") == 1 and await hold_and_slot(db, theirs) == ("expired", "open")
+
+
+async def test_a_live_hold_is_left_alone_by_the_sweep(db):
+    w = await world(db)
+    live = await stale_hold(db, w)
+    await db.execute(text("update sched.holds set expires_at = clock_timestamp() + interval '1 hour' where id = :h"), {"h": live["hold"]})
+    assert await run_sweep(db, w, "worker") == 0 and await hold_and_slot(db, live) == ("active", "held")
+
+
+@pytest.mark.parametrize("who", ["nurse", "fd", "nurse_b"])
+async def test_nobody_but_a_queue_worker_can_run_the_sweep(db, who):
+    w = await world(db)
+    ids = await stale_hold(db, w)
+    with pytest.raises(Exception, match="sweep refused"):
+        await run_sweep(db, w, who)
+    assert await hold_and_slot(db, ids) == ("active", "held")
+
+
+async def test_a_call_with_no_identity_is_refused(db):
+    w = await world(db)
+    async with db.begin_nested():
+        await db.exec_driver_sql("set local role careflow_app")
+        await db.execute(text("select set_config('request.jwt.claims', '', true)"))
+        with pytest.raises(Exception, match="sweep refused"):
+            await db.execute(text("select sched.release_expired_holds()"))
+    assert w.a

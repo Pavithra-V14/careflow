@@ -34,7 +34,8 @@ pytestmark = [
 
 DENIED = "err:42501"
 REFUSED = "patient account binding refused"
-ALLOWED_UPDATE = ("name_ct", "name_key_version", "dob_ct", "dob_key_version", "phone_ct", "phone_key_version", "erased_at")
+# Migration 0032 (review M1): the application role updates NOTHING about a patient's identity any more; `lock_version` is the one harmless column left so SELECT ... FOR UPDATE keeps working.
+ALLOWED_UPDATE = ("lock_version",)
 NEVER_UPDATE = ("account_id", "clinic_id", "origin", "idempotency_key", "id", "created_at")
 
 
@@ -223,7 +224,7 @@ async def test_has_column_privilege_matrix(db):
         can_insert = await db.fetchval("select has_column_privilege('careflow_app', 'mpi.patients', $1, 'INSERT')", c)
         can_update = await db.fetchval("select has_column_privilege('careflow_app', 'mpi.patients', $1, 'UPDATE')", c)
         # account_id (0012) and registered_via (0023) are written only by the database: the registration function and the column default; the application role has no INSERT on either
-        assert can_insert == (c not in ("account_id", "registered_via")), ("INSERT", c)
+        assert can_insert == (c not in ("account_id", "registered_via", "lock_version")), ("INSERT", c)
         assert can_update == (c in ALLOWED_UPDATE), ("UPDATE", c)
     assert set(NEVER_UPDATE) <= set(cols)
 
@@ -255,8 +256,8 @@ async def test_app_role_cannot_disable_the_trigger_or_set_session_replication_ro
 
 
 async def test_the_app_role_can_still_lock_patient_rows(db):
-    """SELECT ... FOR UPDATE / FOR SHARE need UPDATE on at least one column; identity.py and key rotation rely on it. The
-    seven-column UPDATE grant must therefore never be narrowed to nothing."""
+    """SELECT ... FOR UPDATE / FOR SHARE need UPDATE on at least one column; identity.py relies on it. Since 0032 the one column is `lock_version`:
+    the UPDATE grant must therefore never be narrowed to nothing."""
     w = await seed(db)
     out = await attempts(
         db, w["fd"],
@@ -354,7 +355,8 @@ async def test_a_second_patient_with_the_same_account_is_refused(db):
 # ---- what must keep working ----------------------------------------------------------------------------------------------
 
 
-async def test_a_bound_patient_still_accepts_rotation_and_erasure_updates(db):
+async def test_the_app_role_can_no_longer_rotate_or_erase_a_patient_by_update_but_the_owner_still_can(db):
+    """0032 (review M1): rotation runs as the migrator and erasure goes through mpi.erase_patient; a plain UPDATE of the identity columns by the application role is refused."""
     w = await seed(db)
     bound = await new_patient(db, w["a"], account=w["ok"])
     out = await attempts(
@@ -365,7 +367,9 @@ async def test_a_bound_patient_still_accepts_rotation_and_erasure_updates(db):
              f"dob_key_version = null, phone_ct = null, phone_key_version = null where id = '{bound}'"
          )],  # erasure
     )
-    assert out == ["ok:1", "ok:1"]
+    assert out == [DENIED, DENIED]
+    assert await attempts(db, w["fd"], [f"update mpi.patients set lock_version = lock_version + 1 where id = '{bound}'"]) == ["ok:1"]  # the one allowed column
+    await db.execute(f"update mpi.patients set name_ct = {bx(b'N' * 20)}, name_key_version = 2 where id = '{bound}'")  # the owner (migrator) path
     assert await db.fetchval("select account_id from mpi.patients where id = $1", bound) == w["ok"]
 
 

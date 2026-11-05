@@ -23,7 +23,7 @@ import re
 import time
 import uuid
 from collections.abc import Callable
-from datetime import UTC, timedelta
+from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 from pathlib import Path
 from types import SimpleNamespace
@@ -40,6 +40,7 @@ from starlette.testclient import TestClient
 from careflow.adapters.fake import FakeUpload
 from careflow.app import Settings, create_app
 from careflow.auth import JWKSClient
+from careflow.auth_admin import FakeAuthAdmin
 from careflow.crypto import DemographicVault
 from careflow.db import make_app_engine
 from careflow.documents import ALLOWED_TYPES as ALLOWED_DOC_TYPES
@@ -143,7 +144,7 @@ async def _seed() -> Identities:
     return ids
 
 
-POOL = {"hold": 90, "book": 90, "extra": 60, "cancel": 70}  # slots / bookings handed out one per test case
+POOL = {"hold": 90, "book": 90, "extra": 110, "cancel": 70}  # slots / bookings handed out one per test case
 N_PATIENTS = 45
 
 
@@ -209,11 +210,20 @@ async def _seed_scheduling(ids, conn) -> None:
     ids.pools = {**{p: list(v) for p, v in pools.items() if p != "cancel"}, "cancel": [bid for bid, *_ in bookings]}
 
 
+LEFT_BEHIND_WHERE = {
+    "sched.holds": "not exists (select 1 from sched.offer_deliveries d where d.hold_id = t.id)",
+    "sched.slots": "not exists (select 1 from sched.holds h where h.slot_id = t.id)",
+    "sched.visit_types": "not exists (select 1 from sched.slots s where s.visit_type_id = t.id)",
+    "sched.providers": "not exists (select 1 from sched.slots s where s.provider_id = t.id)",
+    "sched.locations": "not exists (select 1 from sched.slots s where s.location_id = t.id)",
+}
+
+
 async def _cleanup(ids, conn=None):
     own = conn is None
     conn = conn or await asyncpg.connect((MIGRATOR or "").replace("+asyncpg", ""), statement_cache_size=0)
     try:
-        accounts = [a for a, *_ in ids.people.values()] + ([ids.fd2] if hasattr(ids, "fd2") else [])
+        accounts = [a for a, *_ in ids.people.values()] + ([ids.fd2] if hasattr(ids, "fd2") else []) + list(getattr(ids, "extra_accounts", []))
         clinics = [ids.clinic_a, ids.clinic_b]
         for table in ("sched.bookings", "sched.holds", "sched.waitlist", "sched.slots", "sched.priority_levels",
                       "mpi.merges", "agents.review_tasks", "mpi.match_candidates", "mpi.identity_tokens", "mpi.patients", "sched.visit_types", "sched.providers",
@@ -223,12 +233,18 @@ async def _cleanup(ids, conn=None):
                 # whatever references them (the confirming accounts, the clinics), stay behind, tagged origin='test'; nothing reads them and every other suite is scoped to its own clinic.
                 await conn.execute(
                     "delete from mpi.patients p where p.clinic_id = any($1) and not exists (select 1 from mpi.identity_confirmations c where c.patient_id = p.id) "
-                    "and not exists (select 1 from agents.triage_proposals pr where pr.patient_id = p.id)", clinics
+                    "and not exists (select 1 from agents.triage_proposals pr where pr.patient_id = p.id) "
+                    "and not exists (select 1 from mpi.erasure_requests e where e.patient_id = p.id)", clinics
                 )
                 continue
             if table == "agents.review_tasks":
                 # A task that an append-only triage proposal points at cannot be deleted (the referral-queue cases seed one); it stays behind with its clinic, tagged origin='test'.
                 await conn.execute("delete from agents.review_tasks t where t.clinic_id = any($1) and not exists (select 1 from agents.triage_proposals p where p.review_task_id = t.id)", clinics)
+                continue
+            if table in LEFT_BEHIND_WHERE:
+                # Rows that an append-only delivery record (migration 0031) points at, directly or through the hold, the slot and the reference rows they use, cannot be deleted: they stay behind with
+                # their clinic, tagged origin='test'; nothing reads them and every other suite is scoped to its own clinic.
+                await conn.execute(f"delete from {table} t where t.clinic_id = any($1) and {LEFT_BEHIND_WHERE[table]}", clinics)
                 continue
             await conn.execute(f"delete from {table} where clinic_id = any($1)", clinics)
         await conn.execute("delete from iam.staff_roles where clinic_id = any($1)", [ids.clinic_a, ids.clinic_b])
@@ -306,12 +322,12 @@ def _matrix_interpreter():
 
 @pytest.fixture(scope="module")
 def app() -> FastAPI:
-    settings = Settings(_env_file=None, supabase_url=PROJECT, database_url_app=APP_URL or "", step_up_max_age_seconds=STEP_UP_WINDOW)
+    settings = Settings(_env_file=None, supabase_url=PROJECT, database_url_app=APP_URL or "", step_up_max_age_seconds=STEP_UP_WINDOW, erase_reasons="entered_in_error")
     # Stand-in components (all None): the referral routes need SOME configured front door to get past their 503; the paths tested here (404, 422, 401) never touch a component.
     built = create_app(
         settings, jwks=fake_jwks_client(), vault=TEST_VAULT, front_door=FrontDoorComponents(None, None, None, None, None, None, None, None, None),
         document_intake=DocumentIntake(UPLOADS, profile="demo"),  # a fake storage in the demo profile with no scanner: registration reports scan=not_checked
-        reply_interpreter=_matrix_interpreter(),
+        reply_interpreter=_matrix_interpreter(), auth_admin=FakeAuthAdmin(),
     )
     return _enable_patient_view(built)
 
@@ -1777,6 +1793,476 @@ def hold_release_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(refused), None)
 
 
+# ---- /v1/staff/scheduling/offers (list) and /offers/{hold_id}/mark-delivered (a person delivered the offer by hand; migration 0031) -----------------------------------------------------------
+#
+# List: front desk, nurse, doctor of the clinic (the scheduling readers); a reader of another clinic sees none of this clinic's offers. Mark delivered: front desk of the clinic only; nurse, doctor and admin
+# can SEE the offer and get 403; everyone else the same 404 as a missing hold. A hold that is not an offer, or an offer whose hold is no longer live, is a 409; a second press is a replay.
+
+OFFERS = PREFIX + "/offers"
+OFFER_DELIVERED = PREFIX + "/offers/{hold_id}/mark-delivered"
+
+
+def new_offer_hold(ids, status="active"):
+    """A synthetic OFFER hold (the key prefix `offer-hold:` is what marks one) on a fresh matrix slot, written by the owner."""
+
+    async def make(conn):
+        slot = ids.pools["extra"].pop()
+        hid = uuid.uuid4()
+        expires = "now() + interval '1 hour'" if status != "expired" else "now() + interval '1 second'"
+        await conn.execute(
+            f"insert into sched.holds (id, clinic_id, slot_id, patient_id, expires_at, origin, idempotency_key, status) values ($1, $2, $3, $4, {expires}, 'test', $5, $6)",
+            hid, ids.clinic_a, slot, ids.patients_a[7], f"offer-hold:matrix-{hid}", "active" if status == "expired" else status,
+        )
+        if status == "active":
+            await conn.execute("update sched.slots set status = 'held' where id = $1", slot)
+        if status == "expired":
+            await asyncio.sleep(1.5)
+        return hid
+
+    return _run(_owner(make))
+
+
+def offer_list_cases(ids) -> list[tuple]:
+    waiting, expired = new_offer_hold(ids), new_offer_hold(ids, "expired")
+    plain, _slot = new_hold(ids)  # not an offer: never listed
+    state_of = lambda hid, items: next((i["state"] for i in items if i["hold_id"] == str(hid)), None)
+    readers = ("front_desk_a", "nurse_a", "doctor_a", "multi")
+    cases = [
+        _case(ids, f"{who} lists the offers", who, 200, OFFERS, key=None,
+              body=_page(ids, clinic_only=ids.clinic_a, non_empty=True, check=lambda items: state_of(waiting, items) == "awaiting_delivery" and state_of(expired, items) == "expired" and state_of(plain, items) is None))
+        for who in readers
+    ]
+    cases += [
+        _case(ids, "state=expired filters", "front_desk_a", 200, OFFERS + "?state=expired", key=None,
+              body=_page(ids, clinic_only=ids.clinic_a, non_empty=True, check=lambda items: all(i["state"] == "expired" for i in items) and state_of(waiting, items) is None)),
+        _case(ids, "an offer row carries ids, times and closed words only", "nurse_a", 200, OFFERS, key=None,
+              body=_page(ids, check=lambda items: all(set(i) == {"hold_id", "clinic_id", "slot_id", "patient_id", "state", "created_at", "expires_at", "delivered_at", "channel"} for i in items))),
+        _case(ids, "a reader of another clinic sees none of this clinic's offers", "front_desk_b", 200, OFFERS, key=None, body=_page(ids, check=lambda items: items == [])),
+        _case(ids, "an unknown state is rejected", "front_desk_a", 422, OFFERS + "?state=sent", key=None, body=_fixed(422)),
+        _case(ids, "limit=0 is rejected", "front_desk_a", 422, OFFERS + "?limit=0", key=None, body=_fixed(422)),
+    ]
+    denied = [p for p in ids.people if p not in (*readers, "front_desk_b")]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, OFFERS, key=None, body=lambda b: b == {"detail": "your role may not read this"}) for p in denied]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, OFFERS, key=None, body=lambda b: b == {"detail": "your role may not read this"}))
+    return cases + _unauthenticated(ids, OFFERS, None)
+
+
+def offer_delivered_cases(ids) -> list[tuple]:
+    ok, refused, dead, released = new_offer_hold(ids), new_offer_hold(ids), new_offer_hold(ids, "expired"), new_offer_hold(ids, "released")
+    plain, _slot = new_hold(ids)
+    path = lambda h: OFFER_DELIVERED.format(hold_id=h)
+    delivered = lambda hid, replayed: (lambda b: b["hold_id"] == str(hid) and b["channel"] == "manual" and b["replayed"] is replayed and b["delivered_at"])
+    cases = [
+        _case(ids, "front desk marks an offer delivered", "front_desk_a", 200, path(ok), body=delivered(ok, False)),
+        _case(ids, "a second press is a replay and writes nothing more", "front_desk_a", 200, path(ok), body=delivered(ok, True)),
+        _case(ids, "a hold that is not an offer is a conflict", "front_desk_a", 409, path(plain), body=lambda b: b == {"detail": "this hold is not an offer"}),
+        _case(ids, "an expired offer cannot be marked delivered", "front_desk_a", 409, path(dead), body=lambda b: b == {"detail": "this offer is no longer live"}),
+        _case(ids, "a released offer cannot be marked delivered", "front_desk_a", 409, path(released), body=lambda b: b == {"detail": "this offer is no longer live"}),
+        _case(ids, "an unknown hold is not found", "front_desk_a", 404, path(uuid.uuid4()), body=_fixed(404)),
+        _case(ids, "front desk of another clinic gets the same 404", "front_desk_b", 404, path(refused), body=_fixed(404)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "front_desk_a", 422, path(refused), key=None, body=_fixed(422)),
+        _case(ids, "a hold id that is not a uuid is rejected", "front_desk_a", 422, path("nope"), body=_fixed(422)),
+    ]
+    for p in [*ids.people, "no account"]:
+        if p in ("front_desk_a", "front_desk_b"):
+            continue
+        status = HOLD_VISIBLE_NOT_FRONT_DESK.get(p, 404)
+        who = bearer(mint(ids.no_account)) if p == "no account" else p
+        cases.append(_case(ids, f"{p} is refused", who, status, path(refused), body=_fixed(status) if status == 404 else (lambda b: b == {"detail": "your role may not do this"})))
+    return cases + _unauthenticated(ids, path(refused), None)
+
+
+def test_a_delivery_record_cannot_be_changed_or_deleted_even_by_the_owner(client, ids):
+    hold = new_offer_hold(ids)
+    done = client.post(OFFER_DELIVERED.format(hold_id=hold), headers={**bearer(mint(ids.people["front_desk_a"][0])), "X-Idempotency-Key": _new_key()})
+    assert done.status_code == 200
+    for statement in ("update sched.offer_deliveries set channel = 'manual' where hold_id = $1", "delete from sched.offer_deliveries where hold_id = $1"):
+        with pytest.raises(asyncpg.PostgresError, match="append-only"):
+            _run(_fetch(statement, hold))
+    rows = _run(_fetch("select delivered_by, channel from sched.offer_deliveries where hold_id = $1", hold))
+    assert [(r["delivered_by"], r["channel"]) for r in rows] == [(ids.people["front_desk_a"][0], "manual")]
+    audit = _run(_fetch("select actor_role, details from audit.log where action = 'offer.mark_delivered' and resource_id = $1", str(hold)))
+    assert len(audit) == 1 and audit[0]["actor_role"] == "front_desk"
+
+
+# ---- two-person erasure (migration 0032; BUILD-SPEC 12.5): POST /patients/{id}/erasure-requests, GET /erasure-requests, POST /erasure-requests/{id}/approve and /cancel ------------------------------------
+#
+# The matrix app is configured with the TEST reason `entered_in_error` (a stand-in input: the real list is the clinic's decision). Front desk of the clinic requests and cancels; a DIFFERENT front-desk
+# person approves. Nurse, doctor and the other staff who can SEE the patient get 403; everyone else the same 404. Every write needs a recent second factor.
+
+ERASE_REQUEST = "/v1/staff/patients/{patient_id}/erasure-requests"
+ERASURES = "/v1/staff/erasure-requests"
+ERASE_REASON = "entered_in_error"
+NO_MESSAGE = {"detail": "your role may not do this"}
+
+
+def new_erasure_request(ids, *, with_live_merge=False, status="requested"):
+    """An erasure request written by the owner (requested by front_desk_a), for a fresh patient. Returns (request_id, patient_id)."""
+
+    async def make(conn):
+        master, subordinate, cand = await _new_pair(conn, ids.clinic_a, candidate=with_live_merge)
+        if with_live_merge:
+            await conn.execute(
+                "insert into mpi.merges (clinic_id, master_patient_id, subordinate_patient_id, candidate_id, approved_by, origin, idempotency_key) values ($1, $2, $3, $4, $5, 'test', $6)",
+                ids.clinic_a, master, subordinate, cand, ids.people["front_desk_a"][0], f"matrix-erase-merge-{uuid.uuid4().hex}",
+            )
+        request_id = await conn.fetchval(
+            "insert into mpi.erasure_requests (clinic_id, patient_id, reason, requested_by, origin, idempotency_key) values ($1, $2, $3, $4, 'test', $5) returning id",
+            ids.clinic_a, master, ERASE_REASON, ids.people["front_desk_a"][0], f"matrix-erase-{uuid.uuid4().hex}",
+        )
+        if status == "cancelled":
+            await conn.execute("update mpi.erasure_requests set status = 'cancelled', decided_at = now() where id = $1", request_id)
+        return request_id, master
+
+    return _run(_owner(make))
+
+
+def erase_request_cases(ids) -> list[tuple]:
+    fd = stepped(ids.people["front_desk_a"][0])
+    ok, _, _ = new_pair(ids, candidate=False)
+    second, _, _ = new_pair(ids, candidate=False)
+    refused, _, _ = new_pair(ids, candidate=False)
+    path = lambda p: ERASE_REQUEST.format(patient_id=p)
+    body = lambda **o: {"reason": ERASE_REASON, **o}
+    key = _new_key()
+    asked = lambda patient: (lambda b: set(b) == {"request_id", "patient_id", "status"} and b["patient_id"] == str(patient) and b["status"] == "requested")
+    cases = [
+        _case(ids, "front desk asks for an erasure", fd, 200, path(ok), json=body(), key=key, body=asked(ok)),
+        _case(ids, "the same request and key answers the same request", fd, 200, path(ok), json=body(), key=key, body=asked(ok)),
+        _case(ids, "a second open request for the same patient is a conflict", fd, 409, path(ok), json=body(), body=lambda b: b == {"detail": "an erasure request is already open for this patient"}),
+        _case(ids, "a reason that is not on the clinic's list is rejected", fd, 422, path(second), json=body(reason="because"), body=_fixed(422)),
+        _case(ids, "an unknown field is rejected", fd, 422, path(second), json=body(surprise=1), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", fd, 422, path(second), json=body(), key=None, body=_fixed(422)),
+        _case(ids, "a patient that does not exist is not found", fd, 404, path(uuid.uuid4()), json=body(), body=_fixed(404)),
+        _case(ids, "front desk of ANOTHER clinic gets the same 404", stepped(ids.people["front_desk_b"][0]), 404, path(second), json=body(), body=_fixed(404)),
+        _case(ids, "a patient id that is not a uuid is rejected", fd, 422, path("nope"), json=body(), body=_fixed(422)),
+    ]
+    visible_but_not_front_desk = {r: 403 for r in ("nurse_a", "doctor_a", "multi")}
+    cases += _everyone_at_the_gate(ids, lambda: path(refused), body, visible_but_not_front_desk, 404)
+    cases += _not_stepped_cases(ids, lambda: path(refused), body)
+    return cases + _unauthenticated(ids, path(refused), body())
+
+
+def erasure_list_cases(ids) -> list[tuple]:
+    new_erasure_request(ids)
+    readers = ("front_desk_a", "multi")  # multi is a nurse in A and a doctor in B: NOT front desk anywhere, so refused below
+    cases = [
+        _case(ids, "front desk lists the open requests", "front_desk_a", 200, ERASURES, key=None,
+              body=_page(ids, non_empty=True, check=lambda items: all(set(i) == {"request_id", "patient_id", "reason", "status", "requested_by", "approved_by", "created_at", "decided_at"} and i["status"] == "requested" for i in items))),
+        _case(ids, "an unknown status is rejected", "front_desk_a", 422, ERASURES + "?status=done", key=None, body=_fixed(422)),
+        _case(ids, "limit=0 is rejected", "front_desk_a", 422, ERASURES + "?limit=0", key=None, body=_fixed(422)),
+        _case(ids, "front desk of another clinic sees none of this clinic's requests", "front_desk_b", 200, ERASURES, key=None, body=_page(ids, check=lambda items: items == [])),
+    ]
+    denied = [p for p in ids.people if p not in (readers[0], "front_desk_b")]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, ERASURES, key=None, body=lambda b: b == {"detail": "your role may not read this"}) for p in denied]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, ERASURES, key=None, body=lambda b: b == {"detail": "your role may not read this"}))
+    return cases + _unauthenticated(ids, ERASURES, None)
+
+
+def erase_approve_cases(ids) -> list[tuple]:
+    fd2 = stepped(ids.fd2)
+    ok, _ok_patient = new_erasure_request(ids)
+    own, _ = new_erasure_request(ids)
+    linked, _ = new_erasure_request(ids, with_live_merge=True)
+    other, _ = new_erasure_request(ids)
+    path = lambda r: f"{ERASURES}/{r}/approve"
+    key = _new_key()
+    done = lambda flag: (lambda b: b == {"request_id": str(ok), "erased": flag})
+    cases = [
+        _case(ids, "the requester cannot approve their own request", stepped(ids.people["front_desk_a"][0]), 403, path(own), body=lambda b: b == NO_MESSAGE),
+        _case(ids, "a DIFFERENT front desk person approves: the identity is erased", fd2, 200, path(ok), key=key, body=done(True)),
+        _case(ids, "the same approval again is a replay", fd2, 200, path(ok), key=key, body=done(False)),
+        _case(ids, "a patient in a live merge link cannot be erased", fd2, 409, path(linked), body=lambda b: b == {"detail": "this patient is in a live merge link"}),
+        _case(ids, "an unknown request is refused with the one generic answer", fd2, 403, path(uuid.uuid4()), body=lambda b: b == NO_MESSAGE),
+        _case(ids, "missing X-Idempotency-Key is rejected", fd2, 422, path(other), key=None, body=_fixed(422)),
+        _case(ids, "a request id that is not a uuid is rejected", fd2, 422, path("nope"), body=_fixed(422)),
+    ]
+    for p in [*ids.people, "no account"]:
+        if p == "front_desk_a":
+            continue  # front_desk_a is the requester of these rows: covered above
+        sub = ids.no_account if p == "no account" else ids.people[p][0]
+        cases.append(_case(ids, f"{p} with a second factor is refused", stepped(sub), 403, path(other), body=lambda b: b == NO_MESSAGE))
+    cases += [_case(ids, f"front_desk_a with {label} is told to step up", headers, 401, path(other), body=_fixed(401)) for label, headers in not_stepped_variants(ids.fd2)]
+    return cases + _unauthenticated(ids, path(other), None)
+
+
+def erase_cancel_cases(ids) -> list[tuple]:
+    ok, _ = new_erasure_request(ids)
+    done, _ = new_erasure_request(ids, status="cancelled")
+    other, _ = new_erasure_request(ids)
+    path = lambda r: f"{ERASURES}/{r}/cancel"
+    fd = stepped(ids.people["front_desk_a"][0])
+    cases = [
+        _case(ids, "front desk cancels an open request", fd, 200, path(ok), body=lambda b: b == {"request_id": str(ok), "cancelled": True}),
+        _case(ids, "cancelling again changes nothing", fd, 200, path(ok), body=lambda b: b == {"request_id": str(ok), "cancelled": False}),
+        _case(ids, "an already cancelled request is not cancelled twice", fd, 200, path(done), body=lambda b: b["cancelled"] is False),
+        _case(ids, "an unknown request is refused with the one generic answer", fd, 403, path(uuid.uuid4()), body=lambda b: b == NO_MESSAGE),
+    ]
+    for p in [*ids.people, "no account"]:
+        if p == "front_desk_a":
+            continue
+        sub = ids.no_account if p == "no account" else ids.people[p][0]
+        cases.append(_case(ids, f"{p} with a second factor is refused", stepped(sub), 403, path(other), body=lambda b: b == NO_MESSAGE))
+    cases += [_case(ids, f"front_desk_a with {label} is told to step up", headers, 401, path(other), body=_fixed(401)) for label, headers in not_stepped_variants(ids.people["front_desk_a"][0])]
+    return cases + _unauthenticated(ids, path(other), None)
+
+
+def test_a_completed_erasure_clears_the_identity_columns_and_leaves_exactly_the_three_audit_rows_and_the_app_role_cannot_update_by_hand(client, ids):
+    patient, _, _ = new_pair(ids, candidate=False)
+    fd1, fd2 = ids.people["front_desk_a"][0], ids.fd2
+    asked = client.post(ERASE_REQUEST.format(patient_id=patient), headers={**stepped(fd1), "X-Idempotency-Key": _new_key()}, json={"reason": ERASE_REASON})
+    assert asked.status_code == 200
+    request_id = asked.json()["request_id"]
+    done = client.post(f"{ERASURES}/{request_id}/approve", headers={**stepped(fd2), "X-Idempotency-Key": _new_key()})
+    assert done.status_code == 200 and done.json()["erased"] is True
+    row = _run(_fetch("select name_ct, dob_ct, phone_ct, name_key_version, dob_key_version, phone_key_version, erased_at from mpi.patients where id = $1", patient))[0]
+    assert row["erased_at"] is not None and all(row[c] is None for c in ("name_ct", "dob_ct", "phone_ct", "name_key_version", "dob_key_version", "phone_key_version"))
+    audit = _run(_fetch("select actor_id, action, details from audit.log where resource_id = $1 and action like 'patient.erase%' order by id", str(patient)))
+    assert [(a["action"], a["actor_id"]) for a in audit] == [("patient.erase_request", fd1), ("patient.erase", fd2)]
+    assert all(without_scope(a["details"]) == {"reason": ERASE_REASON} for a in audit)
+    request = _run(_fetch("select status, requested_by, approved_by from mpi.erasure_requests where id = $1::uuid", request_id))[0]
+    assert (request["status"], request["requested_by"], request["approved_by"]) == ("erased", fd1, fd2)
+
+
+# ---- staff accounts: GET /accounts, POST /accounts/invite, /{id}/roles, /{id}/roles/revoke, /{id}/suspend, /{id}/reinstate, /activate-me (migration 0034) ------------------------------------------------------
+#
+# Admin of the clinic only (every staff role of the clinic can SEE the clinic row, so every other one gets 403; front desk of another clinic gets 404), with a recent second factor on every write. The accounts
+# these cases create or change are fresh owner-made staff accounts; they are removed with the clinics where the database allows (audit rows stay).
+
+ACCOUNTS = "/v1/staff/accounts"
+STAFF_NOT_ADMIN_VISIBLE = {r: 403 for r in ("front_desk_a", "nurse_a", "doctor_a", "business_owner_a", "auditor_a", "multi")}
+
+
+def new_staff_account(ids, status="active", roles=("nurse",), clinic=None):
+    """A fresh staff account (written by the owner) with live grants at clinic A (or `clinic`)."""
+
+    async def make(conn):
+        account = uuid.uuid4()
+        await conn.execute("insert into iam.accounts (id, account_type, status, origin) values ($1, 'staff', $2, 'test')", account, status)
+        for role in roles:
+            await conn.execute("insert into iam.staff_roles (account_id, clinic_id, role, origin) values ($1, $2, $3, 'test')", account, clinic or ids.clinic_a, role)
+        return account
+
+    account = _run(_owner(make))
+    ids.__dict__.setdefault("extra_accounts", []).append(account)
+    return account
+
+
+def _admin_stepped(ids):
+    return stepped(ids.people["admin_a"][0])
+
+
+def staff_list_cases(ids) -> list[tuple]:
+    path = f"{ACCOUNTS}?clinic_id={ids.clinic_a}"
+    cases = [
+        _case(ids, "an admin lists the clinic's staff accounts with their live roles", "admin_a", 200, path, key=None,
+              body=_page(ids, non_empty=True, check=lambda items: any(i["account_id"] == str(ids.people["admin_a"][0]) and i["roles"] == ["admin"] for i in items) and all(set(i) == {"account_id", "status", "roles"} for i in items))),
+        _case(ids, "an unknown clinic is not found", "admin_a", 404, f"{ACCOUNTS}?clinic_id={uuid.uuid4()}", key=None, body=_fixed(404)),
+        _case(ids, "a clinic id that is not a uuid is rejected", "admin_a", 422, f"{ACCOUNTS}?clinic_id=nope", key=None, body=_fixed(422)),
+        _case(ids, "the clinic id is required", "admin_a", 422, ACCOUNTS, key=None, body=_fixed(422)),
+        _case(ids, "limit=0 is rejected", "admin_a", 422, path + "&limit=0", key=None, body=_fixed(422)),
+    ]
+    for p in [*ids.people, "no account"]:
+        if p == "admin_a":
+            continue
+        status = STAFF_NOT_ADMIN_VISIBLE.get(p, 404)
+        who = bearer(mint(ids.no_account)) if p == "no account" else p
+        cases.append(_case(ids, f"{p} is refused", who, status, path, key=None, body=_fixed(status) if status == 404 else (lambda b: b == {"detail": "your role may not do this"})))
+    return cases + _unauthenticated(ids, path, None)
+
+
+def _staff_write_cases(ids, make_path, make_json, ok_cases, *, default_status=404):
+    """The shared gate cases of a step-up admin write: everyone else, not stepped up, unauthenticated."""
+    cases = list(ok_cases)
+    cases += _everyone_at_the_gate_admin(ids, make_path, make_json, default_status)
+    cases += [_case(ids, f"admin_a with {label} is told to step up", headers, 401, make_path(), json=make_json(), body=_fixed(401)) for label, headers in not_stepped_variants(ids.people["admin_a"][0])]
+    return cases + _unauthenticated(ids, make_path(), make_json())
+
+
+def _everyone_at_the_gate_admin(ids, make_path, make_json, default_status):
+    cases = []
+    for p in [*ids.people, "no account"]:
+        if p == "admin_a":
+            continue
+        sub = ids.no_account if p == "no account" else ids.people[p][0]
+        status = STAFF_NOT_ADMIN_VISIBLE.get(p, default_status) if default_status == 404 else default_status
+        cases.append(_case(ids, f"{p} with a second factor is refused", stepped(sub), status, make_path(), json=make_json(), body=_fixed(status) if status == 404 else (lambda b: b == {"detail": "your role may not do this"})))
+    return cases
+
+
+def staff_invite_cases(ids) -> list[tuple]:
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "email": f"new-{uuid.uuid4().hex[:8]}@example.test", "role": "nurse", **o}
+    key = _new_key()
+    same = body()
+    admin = _admin_stepped(ids)
+    invited = lambda replayed: (lambda b: set(b) == {"account_id", "clinic_id", "role", "replayed"} and b["role"] == "nurse" and b["replayed"] is replayed)
+    ok = [
+        _case(ids, "an admin invites a new staff member", admin, 200, f"{ACCOUNTS}/invite", json=same, key=key, body=invited(False)),
+        _case(ids, "the same request again is a replay", admin, 200, f"{ACCOUNTS}/invite", json=same, key=key, body=invited(True)),
+        _case(ids, "queue_worker can never be granted by invitation", admin, 422, f"{ACCOUNTS}/invite", json=body(role="queue_worker"), body=_fixed(422)),
+        _case(ids, "an address that is not an address is rejected", admin, 422, f"{ACCOUNTS}/invite", json=body(email="nope"), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", admin, 422, f"{ACCOUNTS}/invite", json=body(), key=None, body=_fixed(422)),
+        _case(ids, "an unknown clinic is not found", admin, 404, f"{ACCOUNTS}/invite", json=body(clinic_id=str(uuid.uuid4())), body=_fixed(404)),
+    ]
+    return _staff_write_cases(ids, lambda: f"{ACCOUNTS}/invite", body, ok)
+
+
+def staff_grant_cases(ids) -> list[tuple]:
+    target, other = new_staff_account(ids, roles=()), new_staff_account(ids, roles=())
+    path = lambda a: f"{ACCOUNTS}/{a}/roles"
+    body = lambda role="nurse", **o: {"clinic_id": str(ids.clinic_a), "role": role, **o}
+    admin, key = _admin_stepped(ids), _new_key()
+    changed = lambda flag: (lambda b: b["changed"] is flag and b["role"] in {"nurse", "doctor"})
+    ok = [
+        _case(ids, "an admin grants a role", admin, 200, path(target), json=body(), key=key, body=changed(True)),
+        _case(ids, "the same request again changes nothing", admin, 200, path(target), json=body(), key=key, body=changed(False)),
+        _case(ids, "a role the account already holds changes nothing", admin, 200, path(target), json=body(), body=changed(False)),
+        _case(ids, "queue_worker cannot be granted", admin, 422, path(other), json=body("queue_worker"), body=_fixed(422)),
+        _case(ids, "an account that does not exist is refused", admin, 403, path(uuid.uuid4()), json=body(), body=lambda b: b == {"detail": "your role may not do this"}),
+        _case(ids, "an unknown clinic is not found", admin, 404, path(other), json=body(clinic_id=str(uuid.uuid4())), body=_fixed(404)),
+        _case(ids, "missing X-Idempotency-Key is rejected", admin, 422, path(other), json=body(), key=None, body=_fixed(422)),
+    ]
+    return _staff_write_cases(ids, lambda: path(other), body, ok)
+
+
+def staff_revoke_cases(ids) -> list[tuple]:
+    target, other, lone = new_staff_account(ids, roles=("nurse",)), new_staff_account(ids, roles=("nurse",)), ids.people["admin_a"][0]
+    path = lambda a: f"{ACCOUNTS}/{a}/roles/revoke"
+    body = lambda role="nurse", **o: {"clinic_id": str(ids.clinic_a), "role": role, **o}
+    admin, key = _admin_stepped(ids), _new_key()
+    ok = [
+        _case(ids, "an admin revokes a live role", admin, 200, path(target), json=body(), key=key, body=lambda b: b["changed"] is True),
+        _case(ids, "the same request again changes nothing", admin, 200, path(target), json=body(), key=key, body=lambda b: b["changed"] is False),
+        _case(ids, "the last administrator cannot be revoked", admin, 409, path(lone), json=body("admin"), body=lambda b: b == {"detail": "a clinic must keep an active administrator"}),
+        _case(ids, "an unknown clinic is not found", admin, 404, path(other), json=body(clinic_id=str(uuid.uuid4())), body=_fixed(404)),
+        _case(ids, "missing X-Idempotency-Key is rejected", admin, 422, path(other), json=body(), key=None, body=_fixed(422)),
+    ]
+    return _staff_write_cases(ids, lambda: path(other), body, ok)
+
+
+def staff_suspend_cases(ids) -> list[tuple]:
+    target, other = new_staff_account(ids, roles=("nurse",)), new_staff_account(ids, roles=("nurse",))
+    path = lambda a: f"{ACCOUNTS}/{a}/suspend"
+    admin, key = _admin_stepped(ids), _new_key()
+    ok = [
+        _case(ids, "an admin suspends an active account", admin, 200, path(target), key=key, body=lambda b: b["status"] == "suspended" and b["changed"] is True),
+        _case(ids, "the same request again changes nothing", admin, 200, path(target), key=key, body=lambda b: b["changed"] is False),
+        _case(ids, "an admin cannot suspend themselves", admin, 403, path(ids.people["admin_a"][0]), body=lambda b: b == {"detail": "your role may not do this"}),
+        _case(ids, "an account that does not exist is refused", admin, 403, path(uuid.uuid4()), body=lambda b: b == {"detail": "your role may not do this"}),
+        _case(ids, "missing X-Idempotency-Key is rejected", admin, 422, path(other), key=None, body=_fixed(422)),
+    ]
+    return _staff_write_cases(ids, lambda: path(other), lambda: None, ok, default_status=403)
+
+
+def staff_reinstate_cases(ids) -> list[tuple]:
+    target, invited, other = new_staff_account(ids, "suspended", ("nurse",)), new_staff_account(ids, "invited", ("nurse",)), new_staff_account(ids, "suspended", ("nurse",))
+    path = lambda a: f"{ACCOUNTS}/{a}/reinstate"
+    admin, key = _admin_stepped(ids), _new_key()
+    ok = [
+        _case(ids, "an admin reinstates a suspended account", admin, 200, path(target), key=key, body=lambda b: b["status"] == "active" and b["changed"] is True),
+        _case(ids, "the same request again changes nothing", admin, 200, path(target), key=key, body=lambda b: b["changed"] is False),
+        _case(ids, "an invited account is not reinstated by an admin: the person activates it", admin, 403, path(invited), body=lambda b: b == {"detail": "your role may not do this"}),
+        _case(ids, "missing X-Idempotency-Key is rejected", admin, 422, path(other), key=None, body=_fixed(422)),
+    ]
+    return _staff_write_cases(ids, lambda: path(other), lambda: None, ok, default_status=403)
+
+
+def staff_activate_cases(ids) -> list[tuple]:
+    mine, no_role, active = new_staff_account(ids, "invited", ("nurse",)), new_staff_account(ids, "invited", ()), ids.people["nurse_a"][0]
+    path = f"{ACCOUNTS}/activate-me"
+    password_only = [bearer(mint(mine, aal=None, amr=None))]
+    return [
+        _case(ids, "an invited person with a second factor activates their own account", bearer(mint(mine)), 200, path, body=lambda b: b == {"activated": True}),
+        _case(ids, "doing it again is a replay", bearer(mint(mine)), 200, path, body=lambda b: b == {"activated": False}),
+        _case(ids, "an invited account with no live role cannot activate", bearer(mint(no_role)), 403, path, body=lambda b: b == {"detail": "your role may not do this"}),
+        _case(ids, "an already active account is a no-op", bearer(mint(active)), 200, path, body=lambda b: b == {"activated": False}),
+        _case(ids, "a password-only session is refused before anything runs", password_only[0], 401, path, body=_fixed(401)),
+        _case(ids, "a valid user with no account is refused", bearer(mint(ids.no_account)), 403, path, body=lambda b: b == {"detail": "your role may not do this"}),
+    ] + _unauthenticated(ids, path, None)
+
+
+def test_a_staff_role_change_is_audited_in_the_same_transaction_and_the_application_role_cannot_write_iam_directly(client, ids):
+    target = new_staff_account(ids, roles=())
+    admin = ids.people["admin_a"][0]
+    done = client.post(f"{ACCOUNTS}/{target}/roles", headers={**stepped(admin), "X-Idempotency-Key": _new_key()}, json={"clinic_id": str(ids.clinic_a), "role": "doctor"})
+    assert done.status_code == 200 and done.json()["changed"] is True
+    rows = _run(_fetch("select actor_id, actor_role, details from audit.log where action = 'staff.grant_role' and resource_id = $1", str(target)))
+    assert len(rows) == 1 and (rows[0]["actor_id"], rows[0]["actor_role"]) == (admin, "admin") and without_scope(rows[0]["details"]) == {"role": "doctor"}
+    grants = _run(_fetch("select role, granted_by from iam.staff_roles where account_id = $1 and revoked_at is null", target))
+    assert [(g["role"], g["granted_by"]) for g in grants] == [("doctor", admin)]
+
+
+# ---- clinic set-up: POST /locations, /providers, /visit-types, /slots (front desk and admin of the clinic only) ----------------------------------------------------------------------------
+#
+# Front desk and admin create; nurse and doctor can SEE the clinic and are refused with 403; every other identity gets the same 404 as a clinic that is not there. A replay answers the original, the same key
+# with different content is a 409, a slot overlapping the provider's live slot is a 409, and a slot naming another clinic's provider is a 404. The created rows are committed and removed with the clinics.
+
+SETUP_BASE = PREFIX
+SETUP_ROUTES_PATHS = {"locations": PREFIX + "/locations", "providers": PREFIX + "/providers", "visit-types": PREFIX + "/visit-types", "slots": PREFIX + "/slots"}
+SETUP_ALLOWED = ("front_desk_a", "admin_a")
+SETUP_VISIBLE_NOT_ALLOWED = {"nurse_a": 403, "doctor_a": 403, "multi": 403, "business_owner_a": 403, "auditor_a": 403}  # every staff role of the clinic can SEE the clinic row (clinics_select_own_staff)
+
+
+def _setup_body(ids, kind, **over):
+    nonce = uuid.uuid4().hex[:8]
+    body = {
+        "locations": {"clinic_id": str(ids.clinic_a), "name": f"Room {nonce}"},
+        "providers": {"clinic_id": str(ids.clinic_a), "display_name": f"Provider {nonce}"},
+        "visit-types": {"clinic_id": str(ids.clinic_a), "name": f"Visit {nonce}", "duration_minutes": 20},
+    }
+    if kind == "slots":
+        start = datetime(2100, 1, 1, tzinfo=UTC) + timedelta(days=int(uuid.uuid4().int % 20000), hours=int(uuid.uuid4().int % 20))
+        body["slots"] = {
+            "clinic_id": str(ids.clinic_a), "provider_id": str(ids.provider_a), "location_id": str(ids.location_a), "visit_type_id": str(ids.vt_a),
+            "starts_at": start.isoformat(), "ends_at": (start + timedelta(minutes=30)).isoformat(),
+        }
+    return {**body[kind], **over}
+
+
+def setup_create_cases(kind):
+    def cases(ids) -> list[tuple]:
+        path = SETUP_ROUTES_PATHS[kind]
+        ok_body = _setup_body(ids, kind)
+        key = _new_key()
+        created = lambda replayed: (lambda b: set(b) == {"id", "clinic_id", "replayed"} and b["clinic_id"] == str(ids.clinic_a) and b["replayed"] is replayed)
+        cases = [
+            _case(ids, f"front desk creates ({kind})", "front_desk_a", 200, path, json=ok_body, key=key, body=created(False)),
+            _case(ids, "the same key and body is a replay", "front_desk_a", 200, path, json=ok_body, key=key, body=created(True)),
+            _case(ids, "the same key with different content is a conflict", "front_desk_a", 409, path, json=_setup_body(ids, kind), key=key,
+                  body=lambda b: b == {"detail": "this idempotency key was already used by a different request"}),
+            _case(ids, "an admin of the clinic creates too", "admin_a", 200, path, json=_setup_body(ids, kind), body=created(False)),
+            _case(ids, "an unknown field is rejected", "front_desk_a", 422, path, json={**_setup_body(ids, kind), "surprise": 1}, body=_fixed(422)),
+            _case(ids, "missing X-Idempotency-Key is rejected", "front_desk_a", 422, path, json=_setup_body(ids, kind), key=None, body=_fixed(422)),
+            _case(ids, "a clinic id that is not a uuid is rejected", "front_desk_a", 422, path, json=_setup_body(ids, kind, clinic_id="nope"), body=_fixed(422)),
+            _case(ids, "a clinic that does not exist is not found", "front_desk_a", 404, path, json=_setup_body(ids, kind, clinic_id=str(uuid.uuid4())), body=_fixed(404)),
+        ]
+        if kind == "visit-types":
+            cases += [_case(ids, f"duration {bad} is rejected", "front_desk_a", 422, path, json=_setup_body(ids, kind, duration_minutes=bad), body=_fixed(422)) for bad in (0, -5, 1441)]
+        if kind != "slots":
+            field = "name" if kind != "providers" else "display_name"
+            cases.append(_case(ids, "a blank name is rejected", "front_desk_a", 422, path, json=_setup_body(ids, kind, **{field: "   "}), body=_fixed(422)))
+        else:
+            first = _setup_body(ids, kind)
+            overlap = {**first, "starts_at": (datetime.fromisoformat(first["starts_at"]) + timedelta(minutes=10)).isoformat(), "ends_at": (datetime.fromisoformat(first["ends_at"]) + timedelta(minutes=10)).isoformat()}
+            cases += [
+                _case(ids, "a first slot is created", "front_desk_a", 200, path, json=first, body=created(False)),
+                _case(ids, "an overlapping slot of the same provider is a conflict", "front_desk_a", 409, path, json=overlap, body=lambda b: b == {"detail": "that time overlaps another slot of this provider"}),
+                _case(ids, "an end before the start is rejected", "front_desk_a", 422, path, json=_setup_body(ids, kind, ends_at="2000-01-01T00:00:00+00:00"), body=_fixed(422)),
+                _case(ids, "a time without a zone is rejected", "front_desk_a", 422, path, json=_setup_body(ids, kind, starts_at="2100-01-01T10:00:00", ends_at="2100-01-01T10:30:00"), body=_fixed(422)),
+                _case(ids, "a slot longer than a day is rejected", "front_desk_a", 422, path, json=_setup_body(ids, kind, starts_at="2100-01-01T00:00:00+00:00", ends_at="2100-01-03T00:00:00+00:00"), body=_fixed(422)),
+                _case(ids, "an unknown provider is not found", "front_desk_a", 404, path, json=_setup_body(ids, kind, provider_id=str(uuid.uuid4())), body=_fixed(404)),
+            ]
+        for p in [*ids.people, "no account"]:
+            if p in SETUP_ALLOWED:
+                continue
+            status = SETUP_VISIBLE_NOT_ALLOWED.get(p, 404)
+            who = bearer(mint(ids.no_account)) if p == "no account" else p
+            cases.append(_case(ids, f"{p} is refused", who, status, path, json=_setup_body(ids, kind), body=_fixed(status) if status == 404 else (lambda b: b == {"detail": "your role may not do this"})))
+        return cases + _unauthenticated(ids, path, _setup_body(ids, kind))
+
+    return cases
+
+
 # ---- /v1/staff/audit (the audit-log reader) --------------------------------------------------------------------------------------------------------------------
 #
 # Auditor of the clinic only (the existing select policy); every other identity is refused with 403 before any query. Newest first, keyset paging, filters on closed columns. `reason` is never
@@ -1946,6 +2432,23 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", MERGE_OPEN): merge_open_cases,
     ("GET", AUDIT): audit_reader_cases,
     ("GET", HOLDS): hold_list_cases,
+    ("GET", ACCOUNTS): staff_list_cases,
+    ("POST", ACCOUNTS + "/invite"): staff_invite_cases,
+    ("POST", ACCOUNTS + "/activate-me"): staff_activate_cases,
+    ("POST", ACCOUNTS + "/{account_id}/roles"): staff_grant_cases,
+    ("POST", ACCOUNTS + "/{account_id}/roles/revoke"): staff_revoke_cases,
+    ("POST", ACCOUNTS + "/{account_id}/suspend"): staff_suspend_cases,
+    ("POST", ACCOUNTS + "/{account_id}/reinstate"): staff_reinstate_cases,
+    ("POST", ERASE_REQUEST): erase_request_cases,
+    ("GET", ERASURES): erasure_list_cases,
+    ("POST", ERASURES + "/{request_id}/approve"): erase_approve_cases,
+    ("POST", ERASURES + "/{request_id}/cancel"): erase_cancel_cases,
+    ("GET", OFFERS): offer_list_cases,
+    ("POST", OFFER_DELIVERED): offer_delivered_cases,
+    ("POST", PREFIX + "/locations"): setup_create_cases("locations"),
+    ("POST", PREFIX + "/providers"): setup_create_cases("providers"),
+    ("POST", PREFIX + "/visit-types"): setup_create_cases("visit-types"),
+    ("POST", PREFIX + "/slots"): setup_create_cases("slots"),
     ("POST", HOLD_RELEASE): hold_release_cases,
     ("POST", PATIENT_SEARCH): patient_search_cases,
     ("GET", PATIENT_STATUS): patient_status_cases,
@@ -2129,7 +2632,7 @@ def _pool_test_app():
     are kept; only the pool's WAIT is longer than the app's 30 seconds. On the shared CI database a request can wait that long for a connection when the other two shards are busy (a pool
     timeout, never a wrong row, failed this test twice in CI: runs 40521334349 and 40879700466). No app pool setting changes: this builds the test's own engine. The caller disposes it."""
     engine = make_app_engine(APP_URL or "", pool_size=5, max_overflow=5, pool_pre_ping=True, pool_timeout=POOL_TIMEOUT_SECONDS)
-    settings = Settings(_env_file=None, supabase_url=PROJECT, database_url_app=APP_URL or "", step_up_max_age_seconds=STEP_UP_WINDOW)
+    settings = Settings(_env_file=None, supabase_url=PROJECT, database_url_app=APP_URL or "", step_up_max_age_seconds=STEP_UP_WINDOW, erase_reasons="entered_in_error")
     return create_app(settings, jwks=fake_jwks_client(), vault=TEST_VAULT, front_door=FrontDoorComponents(None, None, None, None, None, None, None, None, None), engine=engine), engine
 
 

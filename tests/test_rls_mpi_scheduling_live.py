@@ -298,13 +298,14 @@ async def test_every_other_identity_cannot_insert_a_patient(db):
 async def test_only_front_desk_of_the_clinic_can_update_a_patient(db):
     a, b, p = await seed(db)
     ids = await seed_patients(db, a, b, p)
-    upd = "update mpi.patients set phone_ct = {ct}, phone_key_version = {v} where id = '{id}'"
-    assert await attempts(db, p["front_desk_a"], [upd.format(ct=bx(b"\x02new"), v=2, id=ids["a1"])]) == ["ok:1"]
+    upd = "update mpi.patients set lock_version = lock_version + {v} where id = '{id}'"  # since 0032 the one column the application role may update (the identity columns are not)
+    assert await attempts(db, p["front_desk_a"], [upd.format(v=2, id=ids["a1"])]) == ["ok:1"]
     # An UPDATE the policy does not allow matches no rows; it does not error and changes nothing.
-    res = await try_each(db, [p[w] for w in OTHERS], upd.format(ct=bx(b"\x03evil"), v=3, id=ids["a1"]))
+    res = await try_each(db, [p[w] for w in OTHERS], upd.format(v=3, id=ids["a1"]))
     assert set(res.values()) == {"ok:0"}, res
-    row = await db.fetchrow("select phone_ct, phone_key_version from mpi.patients where id = $1", ids["a1"])
-    assert (bytes(row["phone_ct"]), row["phone_key_version"]) == (b"\x02new", 2)
+    assert await db.fetchval("select lock_version from mpi.patients where id = $1", ids["a1"]) == 2
+    # and front desk cannot touch the identity columns at all (0032)
+    assert await attempts(db, p["front_desk_a"], [f"update mpi.patients set phone_ct = null where id = '{ids['a1']}'"]) == ["err:42501"]
 
 
 async def test_front_desk_cannot_move_a_patient_into_another_clinic(db):

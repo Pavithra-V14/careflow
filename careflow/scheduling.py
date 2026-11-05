@@ -553,3 +553,9 @@ class SlotManager:
             raise NotPermitted("your role may not make this change") from exc
         if state == "23514":
             raise SchedulingError(f"rejected by a database check: {exc.orig}") from exc
+
+
+async def release_expired_holds_sweep(conn: AsyncConnection) -> int:
+    """The WORKER's end-of-tick sweep (migration 0033): the definer function expires active holds past their time and reopens the slots they left 'held', only in clinics where the caller is a queue
+    worker. Returns how many holds it expired. A caller who is not a queue worker is refused by the database (the tick logs a failing sweep and goes on)."""
+    return int((await conn.execute(text("select sched.release_expired_holds()"))).scalar() or 0)

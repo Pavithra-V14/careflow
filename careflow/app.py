@@ -57,7 +57,7 @@ from langgraph.types import Command
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from careflow import (
@@ -82,6 +82,7 @@ from careflow.auth import (
     step_up_failure,
     verify_token,
 )
+from careflow.auth_admin import AuthAdminError, AuthAdminPort
 from careflow.checkpointer import CheckpointerError
 from careflow.cors import middleware_kwargs, parse_origins
 from careflow.crypto import CryptoError, DemographicVault
@@ -138,6 +139,7 @@ from careflow.scheduling import (
     SlotNotFound,
     SlotUnavailable,
     UnknownReference,
+    release_expired_holds_sweep,
 )
 from careflow.scheduling_agent import SchedulingSettings, build_scheduling_server
 from careflow.tick import Poker, worker_loop
@@ -170,6 +172,8 @@ class Settings(BaseSettings):
     # until it is set the merge routes answer a visible 503 (and log an error) instead of guessing a window.
     # EVERY staff route needs a verified second factor (aal2 + a well-formed amr with TOTP), ON by default everywhere. It can be turned off ONLY in the demo profile with synthetic data, by this explicit
     # setting; create_app refuses to build with it off anywhere else (MfaSettingRefused). Step-up (recent second factor) on the merge routes is separate and unchanged.
+    # The CLOSED list of reasons a patient may be erased for (comma separated words). A privacy decision with NO default: unset means the erase route answers 503.
+    erase_reasons: str | None = Field(default=None, validation_alias=AliasChoices("CAREFLOW_ERASE_REASONS", "erase_reasons"))
     require_aal2: bool = Field(default=True, validation_alias=AliasChoices("CAREFLOW_REQUIRE_AAL2", "require_aal2"))
     step_up_max_age_seconds: int | None = Field(
         default=None, validation_alias=AliasChoices("CAREFLOW_STEP_UP_MAX_AGE_SECONDS", "step_up_max_age_seconds")
@@ -1332,6 +1336,111 @@ async def send_offer_route(
     )
 
 
+# ---- offer delivery by a person: list the offers, and mark one delivered (docs/design/phase3-manual-delivery.md; migration 0031) --------------------------------------------------------
+#
+# The system sends NOTHING to a patient. The front desk copies the drafted offer text (the message `send` recorded, read through the audited message read) and sends it from the clinic's own phone, then
+# marks the offer delivered: one append-only row (who, when, the single channel `manual`). `GET /offers` is the list the front desk works from (awaiting delivery, delivered, expired, booked, released);
+# an offer is never shown as sent unless a person marked it. Front desk, nurse and doctor read; ONLY front desk marks. Offer state is derived from the hold and the delivery row, never stored twice.
+
+OfferState = Literal["awaiting_delivery", "delivered", "expired", "booked", "released"]
+
+
+class OfferRowOut(_Out):
+    hold_id: uuid.UUID
+    clinic_id: uuid.UUID
+    slot_id: uuid.UUID
+    patient_id: uuid.UUID | None
+    state: OfferState
+    created_at: datetime
+    expires_at: datetime
+    delivered_at: datetime | None
+    channel: Literal["manual"] | None
+
+
+class OfferRowList(_Out):
+    items: list[OfferRowOut]
+    limit: int
+    has_more: bool
+
+
+class MarkDeliveredOut(_Out):
+    hold_id: uuid.UUID
+    channel: Literal["manual"]
+    delivered_at: datetime
+    replayed: bool
+
+
+_OFFERS_SQL = (
+    "with o as (select h.id, h.clinic_id, h.slot_id, h.patient_id, h.created_at, h.expires_at, d.delivered_at, d.channel, "
+    "case when h.status = 'converted' then 'booked' when h.status = 'released' then 'released' "
+    "when h.status <> 'active' or h.expires_at <= clock_timestamp() then 'expired' when d.delivered_at is not null then 'delivered' else 'awaiting_delivery' end as state "
+    "from sched.holds h left join sched.offer_deliveries d on d.hold_id = h.id "
+    "where h.clinic_id = any(cast(:c as uuid[])) and h.idempotency_key like 'offer-hold:%') "
+    "select * from o where (cast(:s as text) is null or state = :s) order by created_at desc, id limit :n"
+)
+
+
+@scheduling.get("/offers", response_model=OfferRowList)
+async def list_offers(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), state: OfferState | None = None, limit: Limit = 100) -> OfferRowList:
+    """Offers of the clinics you may read, newest first (`state` filters). An offer is `delivered` only if a person marked it; `expired` once its hold ran out. Ids, times and closed words only."""
+    clinics = await _readable_clinics(conn, claims)
+    rows = (await conn.execute(text(_OFFERS_SQL), {"c": clinics, "s": state, "n": limit + 1})).all()
+    items = [
+        OfferRowOut(
+            hold_id=r.id, clinic_id=r.clinic_id, slot_id=r.slot_id, patient_id=r.patient_id, state=r.state, created_at=r.created_at, expires_at=r.expires_at, delivered_at=r.delivered_at,
+            channel=r.channel,
+        )
+        for r in rows[:limit]
+    ]
+    return OfferRowList(items=items, limit=limit, has_more=len(rows) > limit)
+
+
+@scheduling.post("/offers/{hold_id}/mark-delivered", response_model=MarkDeliveredOut)
+async def mark_offer_delivered(hold_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> MarkDeliveredOut:
+    """Record that YOU delivered this offer by hand (channel `manual`). 404 if you cannot see the offer, 403 unless you are front desk there, 409 if the hold is not an offer or is no longer live (expired, released or booked). A second press is a replay and writes nothing more."""
+    hold = (await conn.execute(text("select clinic_id, origin, status, expires_at > clock_timestamp() as live, idempotency_key like 'offer-hold:%' as is_offer from sched.holds where id = :h"), {"h": hold_id})).first()
+    if hold is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _clinic_role_held(conn, hold.clinic_id, ("front_desk",)):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    if not hold.is_offer:
+        raise HTTPException(status_code=409, detail="this hold is not an offer")
+    actor = uuid.UUID(claims["sub"])
+    prior = (await conn.execute(text("select delivered_at, channel from sched.offer_deliveries where hold_id = :h"), {"h": hold_id})).first()
+    replayed = prior is not None
+    if prior is None:
+        if hold.status != "active" or not hold.live:
+            raise HTTPException(status_code=409, detail="this offer is no longer live")
+        try:
+            async with conn.begin_nested():
+                created = (
+                    await conn.execute(
+                        text(
+                            "insert into sched.offer_deliveries (clinic_id, hold_id, channel, delivered_by, origin, idempotency_key) values (:c, :h, 'manual', :u, :o, :k) "
+                            "on conflict (hold_id) do nothing returning delivered_at, channel"
+                        ),
+                        {"c": hold.clinic_id, "h": hold_id, "u": actor, "o": hold.origin, "k": f"offer-delivery:{hold_id}:{idempotency_key}"},
+                    )
+                ).first()
+        except DBAPIError as exc:
+            if getattr(exc.orig, "sqlstate", None) == "42501":
+                raise HTTPException(status_code=403, detail="your role may not do this") from None
+            if getattr(exc.orig, "sqlstate", None) == "23505":  # the key is held by another request
+                raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request") from None
+            raise
+        if created is None:  # a concurrent press won: this one is a replay
+            created = (await conn.execute(text("select delivered_at, channel from sched.offer_deliveries where hold_id = :h"), {"h": hold_id})).first()
+            replayed = True
+        prior = created
+    if prior is None:
+        raise HTTPException(status_code=409, detail="this offer is no longer live")
+    await write_audit(
+        conn, clinic_id=hold.clinic_id, origin=hold.origin, actor_id=actor, actor_role="front_desk", action="offer.mark_delivered", resource_type="offer", resource_id=hold_id,
+        details={"channel": prior.channel, "replayed": replayed}, idempotency_key=f"audit:offer-delivered:{hold_id}:{idempotency_key}",
+    )
+    return MarkDeliveredOut(hold_id=hold_id, channel=prior.channel, delivered_at=prior.delivered_at, replayed=replayed)
+
+
 # ---- reply interpretation, FAKES ONLY (careflow/reply_interpretation.py; docs/design/phase3-scheduling-agent.md section 5) ---------------------------------------------------------
 #
 # `POST /v1/staff/scheduling/offers/interpret-reply`: a front-desk person asks what a patient's reply to an offer means. The deterministic red-flag rules screen the reply FIRST (a red flag or an
@@ -2142,6 +2251,417 @@ async def release_hold_route(hold_id: uuid.UUID, idempotency_key: IdempotencyKey
     return ReleaseOut(hold_id=released.hold_id, slot_id=released.slot_id, status="released", replayed=released.replayed)
 
 
+# ---- audited, TWO-PERSON erasure of a patient's identity (migration 0032; BUILD-SPEC 12.5; docs/design/patient-erasure-and-update-narrowing.md) -----------------------------------------------------
+#
+# One front-desk person REQUESTS an erasure (`POST /v1/staff/patients/{id}/erasure-requests`, with a reason from the clinic's closed list); a DIFFERENT front-desk person APPROVES it
+# (`POST /v1/staff/erasure-requests/{id}/approve`), and only then are the encrypted name, date of birth and phone cleared, in the same transaction as the audit row. Anyone of the clinic's front desk can
+# cancel an open request. All three need a recent second factor (step-up) and an idempotency key. The work is done by the database functions mpi.request_patient_erasure / approve_patient_erasure /
+# cancel_patient_erasure (the application role can no longer update the identity columns). The allowed reasons are a REQUIRED setting with no default (CAREFLOW_ERASE_REASONS, comma separated closed words):
+# which reasons a clinic may erase for is a privacy and legal decision, so while it is unset the request route answers 503. Messages are not erased by this path. A patient in a live merge link cannot be erased.
+
+staff_erasure = APIRouter(prefix="/v1/staff/erasure-requests", tags=["staff erasure"])
+
+
+class EraseRequestIn(_Body):
+    reason: str = Field(min_length=1, max_length=40, pattern=r"^[a-z][a-z0-9_]*$")
+
+
+class EraseRequestOut(_Out):
+    request_id: uuid.UUID
+    patient_id: uuid.UUID
+    status: Literal["requested", "erased", "cancelled"]  # the request's CURRENT state (a retry of an old request answers it truthfully)
+
+
+class ErasureRequestRow(_Out):
+    request_id: uuid.UUID
+    patient_id: uuid.UUID
+    reason: str
+    status: Literal["requested", "erased", "cancelled"]
+    requested_by: uuid.UUID
+    approved_by: uuid.UUID | None
+    created_at: datetime
+    decided_at: datetime | None
+
+
+class ErasureRequestList(_Out):
+    items: list[ErasureRequestRow]
+    limit: int
+    has_more: bool
+
+
+class ApproveErasureOut(_Out):
+    request_id: uuid.UUID
+    erased: bool  # False on a replay: it was already carried out and nothing more was written
+
+
+class CancelErasureOut(_Out):
+    request_id: uuid.UUID
+    cancelled: bool
+
+
+async def _erasure_function(conn: AsyncConnection, sql: str, params: dict[str, Any]) -> Any:
+    """Call one 0032 function. Its generic refusal (42501) is a 403, an open request already there (23505) and the live-merge-link guard (23514) are 409s."""
+    try:
+        async with conn.begin_nested():
+            return (await conn.execute(text(sql), params)).scalar()
+    except DBAPIError as exc:
+        state = getattr(exc.orig, "sqlstate", None)
+        if state == "42501":
+            raise HTTPException(status_code=403, detail="your role may not do this") from None
+        if state == "23505":
+            raise HTTPException(status_code=409, detail="an erasure request is already open for this patient") from None
+        if state == "23514":
+            raise HTTPException(status_code=409, detail="this patient is in a live merge link") from None
+        raise
+
+
+@staff_patients.post("/{patient_id}/erasure-requests", response_model=EraseRequestOut, dependencies=[Depends(require_step_up)])
+async def request_patient_erasure_route(
+    patient_id: uuid.UUID, body: EraseRequestIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)
+) -> EraseRequestOut:
+    """Ask for a patient's identity to be erased; a DIFFERENT front-desk person must approve. 404 if you cannot see the patient, 403 unless you are front desk of the clinic, 409 if a request is already open, 422 for a reason not on the clinic's list, 503 while the list of reasons is not configured. STEP-UP REQUIRED."""
+    allowed: frozenset[str] | None = request.app.state.erase_reasons
+    if not allowed:
+        log.error("patient erasure is unavailable: CAREFLOW_ERASE_REASONS is not set (the list of reasons is the clinic's decision)")
+        raise HTTPException(status_code=503, detail="erasure is unavailable: not configured")
+    if body.reason not in allowed:
+        raise HTTPException(status_code=422, detail="request rejected")
+    row = (await conn.execute(text("select clinic_id from mpi.patients where id = :i"), {"i": patient_id})).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _clinic_role_held(conn, row[0], ("front_desk",)):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    request_id = await _erasure_function(conn, "select mpi.request_patient_erasure(:p, :r, :k)", {"p": patient_id, "r": body.reason, "k": idempotency_key})
+    state = (await conn.execute(text("select status from mpi.erasure_requests where id = :i"), {"i": request_id})).scalar()
+    return EraseRequestOut(request_id=request_id, patient_id=patient_id, status=state or "requested")
+
+
+@staff_erasure.get("", response_model=ErasureRequestList)
+async def list_erasure_requests(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), status: Literal["requested", "erased", "cancelled"] | None = "requested", limit: Limit = 100) -> ErasureRequestList:
+    """Erasure requests of the clinics where you are front desk, newest first (`status` filters; open ones by default). Ids, a reason code and times only. 403 unless you are front desk somewhere."""
+    if not await _any_role_held(conn, ("front_desk",)):
+        raise HTTPException(status_code=403, detail="your role may not read this")
+    rows = (
+        await conn.execute(
+            text(
+                "select id, patient_id, reason, status, requested_by, approved_by, created_at, decided_at from mpi.erasure_requests "
+                "where (cast(:s as text) is null or status = :s) order by created_at desc, id limit :n"
+            ),
+            {"s": status, "n": limit + 1},
+        )
+    ).all()
+    items = [
+        ErasureRequestRow(
+            request_id=r.id, patient_id=r.patient_id, reason=r.reason, status=r.status, requested_by=r.requested_by, approved_by=r.approved_by, created_at=r.created_at, decided_at=r.decided_at
+        )
+        for r in rows[:limit]
+    ]
+    return ErasureRequestList(items=items, limit=limit, has_more=len(rows) > limit)
+
+
+@staff_erasure.post("/{request_id}/approve", response_model=ApproveErasureOut, dependencies=[Depends(require_step_up)])
+async def approve_patient_erasure_route(request_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn) -> ApproveErasureOut:
+    """Approve an open erasure request as a DIFFERENT front-desk person than the requester: the identity is erased now. 403 unless you are front desk of the clinic and not the requester (one generic answer), 409 if the patient is in a live merge link. STEP-UP REQUIRED."""
+    erased = bool(await _erasure_function(conn, "select mpi.approve_patient_erasure(:r, :k)", {"r": request_id, "k": idempotency_key}))
+    return ApproveErasureOut(request_id=request_id, erased=erased)
+
+
+@staff_erasure.post("/{request_id}/cancel", response_model=CancelErasureOut, dependencies=[Depends(require_step_up)])
+async def cancel_patient_erasure_route(request_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn) -> CancelErasureOut:
+    """Cancel an open erasure request (any front-desk person of the clinic). 403 unless you are front desk of the clinic or the request is no longer open. STEP-UP REQUIRED."""
+    cancelled = bool(await _erasure_function(conn, "select mpi.cancel_patient_erasure(:r)", {"r": request_id}))
+    return CancelErasureOut(request_id=request_id, cancelled=cancelled)
+
+
+# ---- staff accounts: invite, grant and revoke roles, suspend and reinstate, activate yourself (migration 0034; docs/design/staff-account-management.md) -------------------------------------------------
+#
+# Admin of the clinic only (with a recent second factor), except `activate-me`, which is the invited person's own act and needs a verified second factor in their token. Every change is made by a database
+# function that checks the caller itself, writes the audit row in the same transaction and refuses with ONE generic error (mapped to the fixed answers below). The sign-in is created through the Auth admin
+# PORT (careflow/auth_admin.py): with none configured the invite route answers 503. An e-mail address is never stored, logged, audited or returned. queue_worker can never be granted here.
+
+STAFF_GRANTABLE: Final = ("front_desk", "nurse", "doctor", "admin", "auditor", "business_owner")
+GrantableRole = Literal["front_desk", "nurse", "doctor", "admin", "auditor", "business_owner"]
+staff_accounts = APIRouter(prefix="/v1/staff/accounts", tags=["staff accounts"])
+
+
+class InviteIn(_Body):
+    clinic_id: uuid.UUID
+    email: str = Field(min_length=3, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    role: GrantableRole
+
+
+class RoleChangeIn(_Body):
+    clinic_id: uuid.UUID
+    role: GrantableRole
+
+
+class InviteOut(_Out):
+    account_id: uuid.UUID
+    clinic_id: uuid.UUID
+    role: GrantableRole
+    replayed: bool
+
+
+class RoleChangeOut(_Out):
+    account_id: uuid.UUID
+    clinic_id: uuid.UUID
+    role: GrantableRole
+    changed: bool  # False when it was already so (a replay or a no-op)
+
+
+class StatusOut(_Out):
+    account_id: uuid.UUID
+    status: Literal["active", "suspended"]
+    changed: bool
+
+
+class ActivateOut(_Out):
+    activated: bool  # False when the account was already active
+
+
+class StaffAccountOut(_Out):
+    account_id: uuid.UUID
+    status: Literal["invited", "active", "suspended", "closed"]
+    roles: list[str]
+
+
+class StaffAccountList(_Out):
+    items: list[StaffAccountOut]
+    limit: int
+    has_more: bool
+
+
+async def _admin_gate(conn: AsyncConnection, claims: dict[str, Any], clinic_id: uuid.UUID) -> None:
+    """404 if the clinic is invisible to the caller, 403 unless the caller is an ACTIVE admin of it (under the active role, when one is named)."""
+    if (await conn.execute(text("select 1 from iam.clinics where id = :c"), {"c": clinic_id})).first() is None:
+        raise HTTPException(status_code=404, detail="not found")
+    await _acting_role(conn, claims, clinic_id, ("admin",))
+
+
+async def _staff_function(conn: AsyncConnection, sql: str, params: dict[str, Any], *, refused: tuple[int, str] = (403, "your role may not do this")) -> bool:
+    """Call one 0034 function. Its generic refusal (42501) becomes `refused`; the last-administrator guard (23514) becomes a 409."""
+    try:
+        async with conn.begin_nested():
+            return bool((await conn.execute(text(sql), params)).scalar())
+    except DBAPIError as exc:
+        state = getattr(exc.orig, "sqlstate", None)
+        if state == "42501":
+            raise HTTPException(status_code=refused[0], detail=refused[1]) from None
+        if state == "23514":
+            raise HTTPException(status_code=409, detail="a clinic must keep an active administrator") from None
+        raise
+
+
+@staff_accounts.get("", response_model=StaffAccountList)
+async def list_staff_accounts(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 100) -> StaffAccountList:
+    """Staff accounts that hold or held a role at this clinic, with their LIVE roles. 404 if the clinic is invisible to you, 403 unless you are an admin of it. Ids, a status word and role words only (no e-mail is stored here)."""
+    await _admin_gate(conn, claims, clinic_id)
+    rows = (
+        await conn.execute(
+            text(
+                "select a.id, a.status, coalesce(array_agg(sr.role order by sr.role) filter (where sr.revoked_at is null), '{}') as roles from iam.accounts a "
+                "join iam.staff_roles sr on sr.account_id = a.id where sr.clinic_id = :c and a.account_type = 'staff' group by a.id, a.status order by a.id limit :n"
+            ),
+            {"c": clinic_id, "n": limit + 1},
+        )
+    ).all()
+    return StaffAccountList(items=[StaffAccountOut(account_id=r.id, status=r.status, roles=list(r.roles)) for r in rows[:limit]], limit=limit, has_more=len(rows) > limit)
+
+
+@staff_accounts.post("/invite", response_model=InviteOut, dependencies=[Depends(require_step_up)])
+async def invite_staff(body: InviteIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> InviteOut:
+    """Invite a new staff member to a clinic with one role. 404 if the clinic is invisible to you, 403 unless you are an admin of it, 409 if the account already exists (use the role route), 503 while no Auth admin adapter is configured. STEP-UP REQUIRED."""
+    port: AuthAdminPort | None = request.app.state.auth_admin
+    if port is None:
+        log.error("staff invitation is unavailable: no Auth admin adapter is configured")
+        raise HTTPException(status_code=503, detail="invitations are unavailable: not configured")
+    await _admin_gate(conn, claims, body.clinic_id)
+    try:
+        account_id = await port.invite(body.email)
+    except AuthAdminError:
+        raise HTTPException(status_code=422, detail="request rejected") from None  # (nothing about the address or the exchange is kept)
+    created = await _staff_function(
+        conn, "select iam.invite_staff_account(:a, :c, :r, :k)", {"a": account_id, "c": body.clinic_id, "r": body.role, "k": idempotency_key}, refused=(409, "this account cannot be invited")
+    )
+    return InviteOut(account_id=account_id, clinic_id=body.clinic_id, role=body.role, replayed=not created)
+
+
+@staff_accounts.post("/activate-me", response_model=ActivateOut)
+async def activate_me(conn: TxConn) -> ActivateOut:
+    """Activate YOUR invited account. Needs a verified second factor in your token; 403 if the account is not invited or you have no live role. Admins cannot do this for you."""
+    activated = await _staff_function(conn, "select iam.activate_own_account()", {})
+    return ActivateOut(activated=activated)
+
+
+@staff_accounts.post("/{account_id}/roles", response_model=RoleChangeOut, dependencies=[Depends(require_step_up)])
+async def grant_staff_role_route(account_id: uuid.UUID, body: RoleChangeIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> RoleChangeOut:
+    """Grant a role at a clinic to an existing staff account. 404 if the clinic is invisible to you, 403 unless you are an admin of it or the account cannot be changed by you. queue_worker cannot be granted. STEP-UP REQUIRED."""
+    await _admin_gate(conn, claims, body.clinic_id)
+    changed = await _staff_function(conn, "select iam.grant_staff_role(:a, :c, :r, :k)", {"a": account_id, "c": body.clinic_id, "r": body.role, "k": idempotency_key})
+    return RoleChangeOut(account_id=account_id, clinic_id=body.clinic_id, role=body.role, changed=changed)
+
+
+@staff_accounts.post("/{account_id}/roles/revoke", response_model=RoleChangeOut, dependencies=[Depends(require_step_up)])
+async def revoke_staff_role_route(account_id: uuid.UUID, body: RoleChangeIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> RoleChangeOut:
+    """Revoke a live role at a clinic. 404 if the clinic is invisible to you, 403 unless you are an admin of it, 409 if it would leave the clinic without an active administrator. STEP-UP REQUIRED."""
+    await _admin_gate(conn, claims, body.clinic_id)
+    changed = await _staff_function(conn, "select iam.revoke_staff_role(:a, :c, :r, :k)", {"a": account_id, "c": body.clinic_id, "r": body.role, "k": idempotency_key})
+    return RoleChangeOut(account_id=account_id, clinic_id=body.clinic_id, role=body.role, changed=changed)
+
+
+@staff_accounts.post("/{account_id}/suspend", response_model=StatusOut, dependencies=[Depends(require_step_up)])
+async def suspend_staff_account(account_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn) -> StatusOut:
+    """Suspend an active staff account. 403 unless you are an admin of EVERY clinic where the account holds a live role, or if it is your own account. STEP-UP REQUIRED."""
+    changed = await _staff_function(conn, "select iam.set_staff_account_status(:a, 'suspended', :k)", {"a": account_id, "k": idempotency_key})
+    return StatusOut(account_id=account_id, status="suspended", changed=changed)
+
+
+@staff_accounts.post("/{account_id}/reinstate", response_model=StatusOut, dependencies=[Depends(require_step_up)])
+async def reinstate_staff_account(account_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn) -> StatusOut:
+    """Reinstate a suspended staff account. Same rules as suspending. An invited account is not reinstated here: the person activates it themselves. STEP-UP REQUIRED."""
+    changed = await _staff_function(conn, "select iam.set_staff_account_status(:a, 'active', :k)", {"a": account_id, "k": idempotency_key})
+    return StatusOut(account_id=account_id, status="active", changed=changed)
+
+
+# ---- clinic set-up: create locations, providers, visit types and slots (front desk and admin; docs/design/clinic-setup-routes.md) ----------------------------------------------------------
+#
+# The tables, policies and permissions already allow front desk and admin to write these (migration 0002); there was just no route, so a clinic could not set itself up without the seed script. No migration,
+# no new grant. Every route needs `X-Idempotency-Key` (a replay answers the original; a different request under the same key is a 409), writes one audit row (ids and numbers only), and is limited to
+# front desk and admin of the named clinic (404 if the clinic is not visible, 403 if visible but not one of those roles). Priority levels are NOT created here: they are clinician-owned. Nothing is
+# ever deleted: a later step deactivates.
+
+SETUP_ROLES: Final = ("front_desk", "admin")
+MAX_SLOT_HOURS: Final = 24
+
+
+class LocationIn(_Body):
+    clinic_id: uuid.UUID
+    name: str = Field(min_length=1, max_length=120, pattern=r"\S")
+
+
+class ProviderIn(_Body):
+    clinic_id: uuid.UUID
+    display_name: str = Field(min_length=1, max_length=120, pattern=r"\S")
+
+
+class VisitTypeIn(_Body):
+    clinic_id: uuid.UUID
+    name: str = Field(min_length=1, max_length=120, pattern=r"\S")
+    duration_minutes: int = Field(gt=0, le=1440)
+
+
+class SlotIn(_Body):
+    clinic_id: uuid.UUID
+    provider_id: uuid.UUID
+    location_id: uuid.UUID
+    visit_type_id: uuid.UUID
+    starts_at: datetime
+    ends_at: datetime
+
+
+class CreatedOut(_Out):
+    id: uuid.UUID
+    clinic_id: uuid.UUID
+    replayed: bool
+
+
+async def _setup_gate(conn: AsyncConnection, claims: dict[str, Any], clinic_id: uuid.UUID) -> tuple[str, str]:
+    """(origin, acting role) after checking the caller holds front desk or admin at this clinic NOW. 404 if the clinic is invisible, 403 if visible but not one of those roles."""
+    clinic = (await conn.execute(text("select origin from iam.clinics where id = :c"), {"c": clinic_id})).first()
+    if clinic is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return clinic[0], await _acting_role(conn, claims, clinic_id, SETUP_ROLES)
+
+
+async def _setup_insert(
+    conn: AsyncConnection, *, table: str, clinic_id: uuid.UUID, origin: str, key: str, columns: dict[str, Any], same: Callable[[Any], bool], error_map: dict[str, tuple[int, str]]
+) -> tuple[uuid.UUID, bool]:
+    """Insert one set-up row under a key made of the table, the clinic and the client's key. Returns (id, replayed). A replay with different content is the fixed 409."""
+    names = ", ".join(columns)
+    marks = ", ".join(f":{c}" for c in columns)
+    full_key = f"setup:{table}:{clinic_id}:{key}"
+    try:
+        async with conn.begin_nested():
+            row = (
+                await conn.execute(
+                    text(f"insert into sched.{table} (clinic_id, origin, idempotency_key, {names}) values (:clinic_id, :origin, :k, {marks}) on conflict (idempotency_key) do nothing returning id"),
+                    {"clinic_id": clinic_id, "origin": origin, "k": full_key, **columns},
+                )
+            ).first()
+    except DBAPIError as exc:
+        state = getattr(exc.orig, "sqlstate", None)
+        if state in error_map:
+            status, detail = error_map[state]
+            raise HTTPException(status_code=status, detail=detail) from None
+        if state == "42501":
+            raise HTTPException(status_code=403, detail="your role may not do this") from None
+        raise
+    if row is not None:
+        return row[0], False
+    prior = (await conn.execute(text(f"select * from sched.{table} where idempotency_key = :k"), {"k": full_key})).first()
+    if prior is None or not same(prior):
+        raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request")
+    return prior.id, True
+
+
+async def _setup_audit(conn: AsyncConnection, *, clinic_id: uuid.UUID, origin: str, claims: dict[str, Any], role: str, action: str, resource_id: uuid.UUID, key: str, replayed: bool) -> None:
+    await write_audit(
+        conn, clinic_id=clinic_id, origin=origin, actor_id=uuid.UUID(claims["sub"]), actor_role=role, action=action, resource_type=action.split(".")[1].removeprefix("create_"),
+        resource_id=resource_id, details={"replayed": replayed}, idempotency_key=f"audit:{action}:{resource_id}:{key}",
+    )
+
+
+@scheduling.post("/locations", response_model=CreatedOut)
+async def create_location(body: LocationIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> CreatedOut:
+    """Create a location (room or site). 404 if the clinic is not visible to you, 403 unless you are front desk or admin there, 409 if the key was used for a different request."""
+    origin, role = await _setup_gate(conn, claims, body.clinic_id)
+    new_id, replayed = await _setup_insert(
+        conn, table="locations", clinic_id=body.clinic_id, origin=origin, key=idempotency_key, columns={"name": body.name.strip()}, same=lambda r: r.name == body.name.strip(), error_map={}
+    )
+    await _setup_audit(conn, clinic_id=body.clinic_id, origin=origin, claims=claims, role=role, action="setup.create_location", resource_id=new_id, key=idempotency_key, replayed=replayed)
+    return CreatedOut(id=new_id, clinic_id=body.clinic_id, replayed=replayed)
+
+
+@scheduling.post("/providers", response_model=CreatedOut)
+async def create_provider(body: ProviderIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> CreatedOut:
+    """Create a provider (a display name; no sign-in is linked here). 404 if the clinic is not visible to you, 403 unless you are front desk or admin there, 409 if the key was used for a different request."""
+    origin, role = await _setup_gate(conn, claims, body.clinic_id)
+    new_id, replayed = await _setup_insert(
+        conn, table="providers", clinic_id=body.clinic_id, origin=origin, key=idempotency_key, columns={"display_name": body.display_name.strip()},
+        same=lambda r: r.display_name == body.display_name.strip(), error_map={},
+    )
+    await _setup_audit(conn, clinic_id=body.clinic_id, origin=origin, claims=claims, role=role, action="setup.create_provider", resource_id=new_id, key=idempotency_key, replayed=replayed)
+    return CreatedOut(id=new_id, clinic_id=body.clinic_id, replayed=replayed)
+
+
+@scheduling.post("/visit-types", response_model=CreatedOut)
+async def create_visit_type(body: VisitTypeIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> CreatedOut:
+    """Create a visit type with its scheduling length in minutes (entered by the clinic; nothing here guesses a duration). 404 if the clinic is not visible to you, 403 unless you are front desk or admin there, 409 if the key was used for a different request."""
+    origin, role = await _setup_gate(conn, claims, body.clinic_id)
+    new_id, replayed = await _setup_insert(
+        conn, table="visit_types", clinic_id=body.clinic_id, origin=origin, key=idempotency_key, columns={"name": body.name.strip(), "duration_minutes": body.duration_minutes},
+        same=lambda r: (r.name, r.duration_minutes) == (body.name.strip(), body.duration_minutes), error_map={},
+    )
+    await _setup_audit(conn, clinic_id=body.clinic_id, origin=origin, claims=claims, role=role, action="setup.create_visit_type", resource_id=new_id, key=idempotency_key, replayed=replayed)
+    return CreatedOut(id=new_id, clinic_id=body.clinic_id, replayed=replayed)
+
+
+@scheduling.post("/slots", response_model=CreatedOut)
+async def create_slot(body: SlotIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> CreatedOut:
+    """Create one open slot. 404 if the clinic, provider, location or visit type is not visible to you in that clinic, 403 unless you are front desk or admin there, 409 if it overlaps another live slot of the same provider or the key was used for a different request, 422 for a bad time range."""
+    if body.starts_at.tzinfo is None or body.ends_at.tzinfo is None or body.ends_at <= body.starts_at or (body.ends_at - body.starts_at).total_seconds() > MAX_SLOT_HOURS * 3600:
+        raise HTTPException(status_code=422, detail="request rejected")
+    origin, role = await _setup_gate(conn, claims, body.clinic_id)
+    new_id, replayed = await _setup_insert(
+        conn, table="slots", clinic_id=body.clinic_id, origin=origin, key=idempotency_key,
+        columns={"provider_id": body.provider_id, "location_id": body.location_id, "visit_type_id": body.visit_type_id, "starts_at": body.starts_at, "ends_at": body.ends_at},
+        same=lambda r: (r.provider_id, r.location_id, r.visit_type_id, r.starts_at, r.ends_at) == (body.provider_id, body.location_id, body.visit_type_id, body.starts_at, body.ends_at),
+        error_map={"23P01": (409, "that time overlaps another slot of this provider"), "23503": (404, "not found")},
+    )
+    await _setup_audit(conn, clinic_id=body.clinic_id, origin=origin, claims=claims, role=role, action="setup.create_slot", resource_id=new_id, key=idempotency_key, replayed=replayed)
+    return CreatedOut(id=new_id, clinic_id=body.clinic_id, replayed=replayed)
+
+
 # ---- the audit-log reader (auditor only) -----------------------------------------------------------------------------------------------------------------------
 #
 # Reads `audit.log` under the existing policy `log_select_auditor` (an auditor of the row's clinic; system rows with no clinic are invisible to the application role). Newest first, keyset paging by
@@ -2467,6 +2987,7 @@ def create_app(
     settings: Settings | None = None, *, jwks: JWKSClient | None = None, engine: AsyncEngine | None = None,
     vault: DemographicVault | None = None, clock: Callable[[], float] = time.time, front_door: FrontDoorComponents | None = None,
     front_door_session_for: Callable[..., Any] = worker_session, document_intake: DocumentIntake | None = None, reply_interpreter: DecisionService | None = None,
+    auth_admin: AuthAdminPort | None = None,
 ) -> FastAPI:
     """Build the app. `jwks`, `engine`, `vault` and `clock` (for the step-up window) can be injected (tests do); otherwise they come from
     settings / the environment. `front_door` holds the Front Door's stand-in components; with None the run and review routes answer 503 and no handler is registered."""
@@ -2483,6 +3004,7 @@ def create_app(
         app.state.active_key_version = cfg.active_key_version
         app.state.step_up_max_age_seconds = cfg.step_up_max_age_seconds
         app.state.require_aal2 = cfg.require_aal2
+        app.state.erase_reasons = frozenset(w.strip() for w in (cfg.erase_reasons or "").split(",") if w.strip()) or None
         app.state.clock = clock
         app.state.required_roles = cfg.required_roles
         app.state.worker_account_id = cfg.worker_account_id
@@ -2499,6 +3021,7 @@ def create_app(
             if components is not None:
                 log.warning("DEMO PROFILE: the Front Door runs on FAKE letters, extractor and retriever (synthetic data only)")
         app.state.front_door = components
+        app.state.auth_admin = auth_admin  # None unless injected: no Auth admin adapter is wired by default (the secret key stays out of the web process); the invite route answers 503
         app.state.reply_interpreter = reply_interpreter  # None unless a decision service is injected (FAKES ONLY today): the route answers 503
         app.state.storage_adapter = None
         intake = document_intake
@@ -2507,7 +3030,9 @@ def create_app(
         app.state.document_intake = intake  # None unless storage is configured AND verified (below): the upload routes answer 503
         app.state.poker = Poker()  # routes that enqueue call `app.state.poker.poke()` after their transaction commits (7.4)
         handlers = {FRONT_DOOR_TASK: front_door_handler(components, session_for=front_door_session_for)} if components is not None else {}
-        sweeps = [lambda conn: raise_dead_letter_tasks(conn, components.dead_letters)] if components is not None else []  # a dead-lettered run is never silent
+        sweeps = [release_expired_holds_sweep]  # tidy expired holds on every tick (migration 0033); correctness never depended on it
+        if components is not None:
+            sweeps.append(lambda conn: raise_dead_letter_tasks(conn, components.dead_letters))  # a dead-lettered run is never silent
         worker: asyncio.Task | None = None
         if cfg.run_worker:
             if cfg.worker_account_id is None:
@@ -2563,8 +3088,10 @@ def create_app(
     app.include_router(staff_documents)
     app.include_router(staff_identity)
     app.include_router(staff_audit)
+    app.include_router(staff_accounts)
+    app.include_router(staff_erasure)
     app.include_router(health)
-    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
+    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
     return app
 
 
