@@ -81,7 +81,7 @@ async def test_free_text_and_anything_that_is_not_an_id_a_number_a_boolean_or_a_
 
 
 async def test_the_action_origin_key_and_tokens_are_closed():
-    for override in ({"action": "patient.erase"}, {"origin": "production"}, {"idempotency_key": "  "}, {"resource_type": "A merge"}, {"actor_role": "Front Desk"}):
+    for override in ({"action": "patient.delete"}, {"origin": "production"}, {"idempotency_key": "  "}, {"resource_type": "A merge"}, {"actor_role": "Front Desk"}):
         conn = Conn()
         with pytest.raises(AuditError):
             await write_audit(conn, details={}, **{**KW, **override})  # type: ignore[arg-type]
@@ -158,7 +158,8 @@ async def test_each_set_up_route_audits_through_the_one_helper_in_the_same_trans
 
 async def test_every_action_has_a_route_or_is_listed_as_pending():
     pending = {"clinical.tool_call"}  # written by careflow/mcp_kit.py `audited` (no clinical server is mounted yet)
-    assert set(ROUTES.values()) | set(SETUP_ROUTES.values()) | pending == set(ACTIONS)
+    written_by_the_database = {"patient.erase"}  # written by mpi.erase_patient (migration 0032) in the erase transaction; tests/test_erase_route.py pins the call
+    assert set(ROUTES.values()) | set(SETUP_ROUTES.values()) | pending | written_by_the_database == set(ACTIONS)
 
 
 async def test_the_audit_module_adds_no_dependency_and_uses_only_the_existing_table():

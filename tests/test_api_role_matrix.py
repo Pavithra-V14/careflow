@@ -320,7 +320,7 @@ def _matrix_interpreter():
 
 @pytest.fixture(scope="module")
 def app() -> FastAPI:
-    settings = Settings(_env_file=None, supabase_url=PROJECT, database_url_app=APP_URL or "", step_up_max_age_seconds=STEP_UP_WINDOW)
+    settings = Settings(_env_file=None, supabase_url=PROJECT, database_url_app=APP_URL or "", step_up_max_age_seconds=STEP_UP_WINDOW, erase_reasons="entered_in_error")
     # Stand-in components (all None): the referral routes need SOME configured front door to get past their 503; the paths tested here (404, 422, 401) never touch a component.
     built = create_app(
         settings, jwks=fake_jwks_client(), vault=TEST_VAULT, front_door=FrontDoorComponents(None, None, None, None, None, None, None, None, None),
@@ -1883,6 +1883,57 @@ def test_a_delivery_record_cannot_be_changed_or_deleted_even_by_the_owner(client
     assert len(audit) == 1 and audit[0]["actor_role"] == "front_desk"
 
 
+# ---- POST /v1/staff/patients/{patient_id}/erase (migration 0032: audited erasure; front desk of the clinic only, with a recent second factor and a reason from the configured closed list) -------------------------
+#
+# The matrix app is configured with the TEST reason `entered_in_error` (a stand-in input: the real list is the clinic's decision). A replay after the erase is `erased: false`. A patient in a live merge
+# link is a 409. Nurse, doctor, admin and the other roles that can see the patient are 403; everyone else the same 404.
+
+ERASE = "/v1/staff/patients/{patient_id}/erase"
+ERASE_REASON = "entered_in_error"
+
+
+def erase_cases(ids) -> list[tuple]:
+    fd = stepped(ids.people["front_desk_a"][0])
+    ok, _, _ = new_pair(ids, candidate=False)
+    linked_master, _linked_sub, _ = new_pair(ids)
+    _run(_owner(lambda conn: conn.execute("insert into mpi.merges (clinic_id, master_patient_id, subordinate_patient_id, candidate_id, approved_by, origin, idempotency_key) "
+                                          "select clinic_id, patient_id, candidate_patient_id, id, $2, 'test', $3 from mpi.match_candidates where patient_id = $1 or candidate_patient_id = $1 limit 1",
+                                          linked_master, ids.people["front_desk_a"][0], f"matrix-erase-merge-{uuid.uuid4().hex}")))
+    refused, _, _ = new_pair(ids, candidate=False)
+    path = lambda p: ERASE.format(patient_id=p)
+    body = lambda **o: {"reason": ERASE_REASON, **o}
+    key = _new_key()
+    erased = lambda flag: (lambda b: b == {"patient_id": str(ok), "erased": flag})
+    cases = [
+        _case(ids, "front desk erases a patient with a second factor", fd, 200, path(ok), json=body(), key=key, body=erased(True)),
+        _case(ids, "the same request again is a replay: nothing more is erased", fd, 200, path(ok), json=body(), key=key, body=erased(False)),
+        _case(ids, "a patient in a live merge link cannot be erased", fd, 409, path(linked_master), json=body(), body=lambda b: b == {"detail": "this patient is in a live merge link"}),
+        _case(ids, "a reason that is not on the clinic's list is rejected", fd, 422, path(refused), json=body(reason="because"), body=_fixed(422)),
+        _case(ids, "an unknown field is rejected", fd, 422, path(refused), json=body(surprise=1), body=_fixed(422)),
+        _case(ids, "a missing reason is rejected", fd, 422, path(refused), json={}, body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", fd, 422, path(refused), json=body(), key=None, body=_fixed(422)),
+        _case(ids, "a patient that does not exist is not found", fd, 404, path(uuid.uuid4()), json=body(), body=_fixed(404)),
+        _case(ids, "front desk of ANOTHER clinic gets the same 404", stepped(ids.people["front_desk_b"][0]), 404, path(refused), json=body(), body=_fixed(404)),
+        _case(ids, "a patient id that is not a uuid is rejected", fd, 422, path("nope"), json=body(), body=_fixed(422)),
+    ]
+    visible_but_not_front_desk = {r: 403 for r in ("nurse_a", "doctor_a", "multi")}  # staff who can SEE the patient but are not front desk
+    cases += _everyone_at_the_gate(ids, lambda: path(refused), body, visible_but_not_front_desk, 404)
+    cases += _not_stepped_cases(ids, lambda: path(refused), body)
+    return cases + _unauthenticated(ids, path(refused), body())
+
+
+def test_erasure_clears_the_identity_columns_writes_one_audit_row_and_the_app_role_cannot_do_it_by_update(client, ids):
+    patient, _, _ = new_pair(ids, candidate=False)
+    fd = ids.people["front_desk_a"][0]
+    done = client.post(ERASE.format(patient_id=patient), headers={**stepped(fd), "X-Idempotency-Key": _new_key()}, json={"reason": ERASE_REASON})
+    assert done.status_code == 200 and done.json()["erased"] is True
+    row = _run(_fetch("select name_ct, dob_ct, phone_ct, name_key_version, dob_key_version, phone_key_version, erased_at from mpi.patients where id = $1", patient))[0]
+    assert row["erased_at"] is not None and all(row[c] is None for c in ("name_ct", "dob_ct", "phone_ct", "name_key_version", "dob_key_version", "phone_key_version"))
+    audit = _run(_fetch("select actor_id, actor_role, details from audit.log where action = 'patient.erase' and resource_id = $1", str(patient)))
+    assert len(audit) == 1 and (audit[0]["actor_id"], audit[0]["actor_role"]) == (fd, "front_desk")
+    assert without_scope(audit[0]["details"]) == {"reason": ERASE_REASON}
+
+
 # ---- clinic set-up: POST /locations, /providers, /visit-types, /slots (front desk and admin of the clinic only) ----------------------------------------------------------------------------
 #
 # Front desk and admin create; nurse and doctor can SEE the clinic and are refused with 403; every other identity gets the same 404 as a clinic that is not there. A replay answers the original, the same key
@@ -2123,6 +2174,7 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", MERGE_OPEN): merge_open_cases,
     ("GET", AUDIT): audit_reader_cases,
     ("GET", HOLDS): hold_list_cases,
+    ("POST", ERASE): erase_cases,
     ("GET", OFFERS): offer_list_cases,
     ("POST", OFFER_DELIVERED): offer_delivered_cases,
     ("POST", PREFIX + "/locations"): setup_create_cases("locations"),
@@ -2312,7 +2364,7 @@ def _pool_test_app():
     are kept; only the pool's WAIT is longer than the app's 30 seconds. On the shared CI database a request can wait that long for a connection when the other two shards are busy (a pool
     timeout, never a wrong row, failed this test twice in CI: runs 40521334349 and 40879700466). No app pool setting changes: this builds the test's own engine. The caller disposes it."""
     engine = make_app_engine(APP_URL or "", pool_size=5, max_overflow=5, pool_pre_ping=True, pool_timeout=POOL_TIMEOUT_SECONDS)
-    settings = Settings(_env_file=None, supabase_url=PROJECT, database_url_app=APP_URL or "", step_up_max_age_seconds=STEP_UP_WINDOW)
+    settings = Settings(_env_file=None, supabase_url=PROJECT, database_url_app=APP_URL or "", step_up_max_age_seconds=STEP_UP_WINDOW, erase_reasons="entered_in_error")
     return create_app(settings, jwks=fake_jwks_client(), vault=TEST_VAULT, front_door=FrontDoorComponents(None, None, None, None, None, None, None, None, None), engine=engine), engine
 
 

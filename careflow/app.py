@@ -170,6 +170,8 @@ class Settings(BaseSettings):
     # until it is set the merge routes answer a visible 503 (and log an error) instead of guessing a window.
     # EVERY staff route needs a verified second factor (aal2 + a well-formed amr with TOTP), ON by default everywhere. It can be turned off ONLY in the demo profile with synthetic data, by this explicit
     # setting; create_app refuses to build with it off anywhere else (MfaSettingRefused). Step-up (recent second factor) on the merge routes is separate and unchanged.
+    # The CLOSED list of reasons a patient may be erased for (comma separated words). A privacy decision with NO default: unset means the erase route answers 503.
+    erase_reasons: str | None = Field(default=None, validation_alias=AliasChoices("CAREFLOW_ERASE_REASONS", "erase_reasons"))
     require_aal2: bool = Field(default=True, validation_alias=AliasChoices("CAREFLOW_REQUIRE_AAL2", "require_aal2"))
     step_up_max_age_seconds: int | None = Field(
         default=None, validation_alias=AliasChoices("CAREFLOW_STEP_UP_MAX_AGE_SECONDS", "step_up_max_age_seconds")
@@ -2247,6 +2249,50 @@ async def release_hold_route(hold_id: uuid.UUID, idempotency_key: IdempotencyKey
     return ReleaseOut(hold_id=released.hold_id, slot_id=released.slot_id, status="released", replayed=released.replayed)
 
 
+# ---- audited erasure of a patient's identity (migration 0032; docs/design/patient-erasure-and-update-narrowing.md) ------------------------------------------------------------------------
+#
+# `POST /v1/staff/patients/{patient_id}/erase`: front desk of the patient's clinic, with a recent second factor (step-up), a reason from the clinic's CLOSED list, and an idempotency key. The work is the database
+# function mpi.erase_patient (the only way to erase; the application role can no longer update the identity columns): it clears the encrypted name, date of birth and phone and writes the audit row in the same
+# transaction. The list of allowed reasons is a REQUIRED setting with no default (CAREFLOW_ERASE_REASONS, comma separated closed words): it is a legal and privacy decision, not an engineering one, so while it
+# is unset the route answers 503. Messages are not erased by this route. A patient in a live merge link is a 409 (break the link first).
+
+
+class EraseIn(_Body):
+    reason: str = Field(min_length=1, max_length=40, pattern=r"^[a-z][a-z0-9_]*$")
+
+
+class EraseOut(_Out):
+    patient_id: uuid.UUID
+    erased: bool  # False on a replay: the record was already erased and nothing more was written
+
+
+@staff_patients.post("/{patient_id}/erase", response_model=EraseOut, dependencies=[Depends(require_step_up)])
+async def erase_patient_route(patient_id: uuid.UUID, body: EraseIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> EraseOut:
+    """Erase a patient's identity (name, date of birth, phone). 404 if you cannot see the patient, 403 unless you are front desk of the clinic, 409 if the patient is in a live merge link, 422 for a reason not on the clinic's list, 503 while the list of reasons is not configured. STEP-UP REQUIRED."""
+    allowed: frozenset[str] | None = request.app.state.erase_reasons
+    if not allowed:
+        log.error("patient erasure is unavailable: CAREFLOW_ERASE_REASONS is not set (the list of reasons is the clinic's decision)")
+        raise HTTPException(status_code=503, detail="erasure is unavailable: not configured")
+    if body.reason not in allowed:
+        raise HTTPException(status_code=422, detail="request rejected")
+    row = (await conn.execute(text("select clinic_id from mpi.patients where id = :i"), {"i": patient_id})).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _clinic_role_held(conn, row[0], ("front_desk",)):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    try:
+        async with conn.begin_nested():
+            erased = bool((await conn.execute(text("select mpi.erase_patient(:p, :r, :k)"), {"p": patient_id, "r": body.reason, "k": idempotency_key})).scalar())
+    except DBAPIError as exc:
+        state = getattr(exc.orig, "sqlstate", None)
+        if state == "23514":
+            raise HTTPException(status_code=409, detail="this patient is in a live merge link") from None
+        if state == "42501":
+            raise HTTPException(status_code=403, detail="your role may not do this") from None
+        raise
+    return EraseOut(patient_id=patient_id, erased=erased)
+
+
 # ---- clinic set-up: create locations, providers, visit types and slots (front desk and admin; docs/design/clinic-setup-routes.md) ----------------------------------------------------------
 #
 # The tables, policies and permissions already allow front desk and admin to write these (migration 0002); there was just no route, so a clinic could not set itself up without the seed script. No migration,
@@ -2727,6 +2773,7 @@ def create_app(
         app.state.active_key_version = cfg.active_key_version
         app.state.step_up_max_age_seconds = cfg.step_up_max_age_seconds
         app.state.require_aal2 = cfg.require_aal2
+        app.state.erase_reasons = frozenset(w.strip() for w in (cfg.erase_reasons or "").split(",") if w.strip()) or None
         app.state.clock = clock
         app.state.required_roles = cfg.required_roles
         app.state.worker_account_id = cfg.worker_account_id
