@@ -234,7 +234,8 @@ async def _cleanup(ids, conn=None):
                 await conn.execute(
                     "delete from mpi.patients p where p.clinic_id = any($1) and not exists (select 1 from mpi.identity_confirmations c where c.patient_id = p.id) "
                     "and not exists (select 1 from agents.triage_proposals pr where pr.patient_id = p.id) "
-                    "and not exists (select 1 from mpi.erasure_requests e where e.patient_id = p.id)", clinics
+                    "and not exists (select 1 from mpi.erasure_requests e where e.patient_id = p.id) "
+                    "and not exists (select 1 from sched.holds h where h.patient_id = p.id)", clinics  # (a hold left behind for an append-only delivery row keeps its patient)
                 )
                 continue
             if table == "agents.review_tasks":
@@ -753,6 +754,11 @@ def new_merge(ids, state="awaiting"):
 FIXED_BODY = {
     401: {"detail": "step-up required"}, 403: {"detail": "your role may not do this"}, 404: {"detail": "not found"},
 }
+
+
+def _rejected(b):
+    """A refusal the ROUTE itself raises (a value the schema allows but the rules do not): the fixed string body, not the validation handler's list."""
+    return b == {"detail": "request rejected"} or _fixed(422)(b)  # (the validation handler's list when the schema refuses it first)
 
 
 def _fixed(status):
@@ -1930,7 +1936,7 @@ def erase_request_cases(ids) -> list[tuple]:
         _case(ids, "front desk asks for an erasure", fd, 200, path(ok), json=body(), key=key, body=asked(ok)),
         _case(ids, "the same request and key answers the same request", fd, 200, path(ok), json=body(), key=key, body=asked(ok)),
         _case(ids, "a second open request for the same patient is a conflict", fd, 409, path(ok), json=body(), body=lambda b: b == {"detail": "an erasure request is already open for this patient"}),
-        _case(ids, "a reason that is not on the clinic's list is rejected", fd, 422, path(second), json=body(reason="because"), body=_fixed(422)),
+        _case(ids, "a reason that is not on the clinic's list is rejected", fd, 422, path(second), json=body(reason="because"), body=_rejected),
         _case(ids, "an unknown field is rejected", fd, 422, path(second), json=body(surprise=1), body=_fixed(422)),
         _case(ids, "missing X-Idempotency-Key is rejected", fd, 422, path(second), json=body(), key=None, body=_fixed(422)),
         _case(ids, "a patient that does not exist is not found", fd, 404, path(uuid.uuid4()), json=body(), body=_fixed(404)),
@@ -2324,8 +2330,8 @@ def setup_create_cases(kind):
             cases += [
                 _case(ids, "a first slot is created", "front_desk_a", 200, path, json=first, body=created(False)),
                 _case(ids, "an overlapping slot of the same provider is a conflict", "front_desk_a", 409, path, json=overlap, body=lambda b: b == {"detail": "that time overlaps another slot of this provider"}),
-                _case(ids, "an end before the start is rejected", "front_desk_a", 422, path, json=_setup_body(ids, kind, ends_at="2000-01-01T00:00:00+00:00"), body=_fixed(422)),
-                _case(ids, "a time without a zone is rejected", "front_desk_a", 422, path, json=_setup_body(ids, kind, starts_at="2100-01-01T10:00:00", ends_at="2100-01-01T10:30:00"), body=_fixed(422)),
+                _case(ids, "an end before the start is rejected", "front_desk_a", 422, path, json=_setup_body(ids, kind, ends_at="2000-01-01T00:00:00+00:00"), body=_rejected),
+                _case(ids, "a time without a zone is rejected", "front_desk_a", 422, path, json=_setup_body(ids, kind, starts_at="2100-01-01T10:00:00", ends_at="2100-01-01T10:30:00"), body=_rejected),
                 _case(ids, "a slot longer than a day is rejected", "front_desk_a", 422, path, json=_setup_body(ids, kind, starts_at="2100-01-01T00:00:00+00:00", ends_at="2100-01-03T00:00:00+00:00"), body=_fixed(422)),
                 _case(ids, "an unknown provider is not found", "front_desk_a", 404, path, json=_setup_body(ids, kind, provider_id=str(uuid.uuid4())), body=_fixed(404)),
             ]

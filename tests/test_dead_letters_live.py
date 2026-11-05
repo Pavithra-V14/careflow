@@ -248,9 +248,9 @@ async def test_nobody_but_a_queue_worker_can_run_the_sweep(db, who):
 
 async def test_a_call_with_no_identity_is_refused(db):
     w = await world(db)
-    async with db.begin_nested():
-        await db.exec_driver_sql("set local role careflow_app")
-        await db.execute(text("select set_config('request.jwt.claims', '', true)"))
-        with pytest.raises(Exception, match="sweep refused"):
+    with pytest.raises(Exception, match="sweep refused"):
+        async with db.begin_nested():  # (the savepoint is rolled back by the refusal, which also undoes the local role)
+            await db.exec_driver_sql("set local role careflow_app")
+            await db.execute(text("select set_config('request.jwt.claims', '', true)"))
             await db.execute(text("select sched.release_expired_holds()"))
     assert w.a

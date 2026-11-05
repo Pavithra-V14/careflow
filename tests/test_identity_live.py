@@ -662,9 +662,12 @@ async def test_a_review_row_cannot_be_rewritten_or_reopened_by_front_desk(db, mg
     third = (await act(db, w.fd1, pipeline.ingest, clinic_id=w.a, origin="test", name="Third Person", dob="1999-09-09", phone=PHONE, idempotency_key=_key())).patient_id
     (cand,) = await rows(db, "select id from mpi.match_candidates where clinic_id = :c and status = 'pending' limit 1", c=w.a)
     for change in (f"candidate_patient_id = '{third}'", f"patient_id = '{third}'", "reason = 'ambiguous'", "matched_kinds = array['name_dob']"):
-        with pytest.raises(DBAPIError, match="names its pair once"):
+        with pytest.raises(DBAPIError, match="permission denied"):  # since 0032 front desk may not even name these columns in an update (the grant is the first layer)
             async with db.begin_nested():
                 await _sql_as(db, w.fd1, f"update mpi.match_candidates set {change} where id = :i", i=cand[0])
+        with pytest.raises(DBAPIError, match="names its pair once"):  # the trigger is the second layer: it holds even for the table's owner
+            async with db.begin_nested():
+                await db.execute(text(f"update mpi.match_candidates set {change} where id = :i"), {"i": cand[0]})
     await _sql_as(db, w.fd2, "update mpi.match_candidates set status = 'resolved', resolved_at = now(), resolved_by = :u where id = :i", i=cand[0], u=w.fd2)
     for change in ("status = 'pending', resolved_at = null, resolved_by = null", "resolved_by = null"):
         with pytest.raises(DBAPIError, match="cannot be reopened"):
