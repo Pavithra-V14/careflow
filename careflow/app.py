@@ -76,6 +76,7 @@ from careflow.auth import (
     AuthError,
     AuthUnavailable,
     JWKSClient,
+    mfa_failure,
     step_up_failure,
     verify_token,
 )
@@ -84,7 +85,12 @@ from careflow.cors import middleware_kwargs, parse_origins
 from careflow.crypto import CryptoError, DemographicVault
 from careflow.db import make_app_engine, set_request_claims
 from careflow.dead_letters import raise_dead_letter_tasks
-from careflow.demo_phase3 import refuse_demo_outside_demo, scheduling_settings_for
+from careflow.demo_phase3 import data_policy as _data_policy
+from careflow.demo_phase3 import (
+    demo_allowed,
+    refuse_demo_outside_demo,
+    scheduling_settings_for,
+)
 from careflow.documents import (
     DocumentIntake,
     UploadRejected,
@@ -159,6 +165,9 @@ class Settings(BaseSettings):
 
     # How recently a second factor must have been verified for a sensitive action (BUILD-SPEC 18.1 step-up). REQUIRED, no code default:
     # until it is set the merge routes answer a visible 503 (and log an error) instead of guessing a window.
+    # EVERY staff route needs a verified second factor (aal2 + a well-formed amr with TOTP), ON by default everywhere. It can be turned off ONLY in the demo profile with synthetic data, by this explicit
+    # setting; create_app refuses to build with it off anywhere else (MfaSettingRefused). Step-up (recent second factor) on the merge routes is separate and unchanged.
+    require_aal2: bool = Field(default=True, validation_alias=AliasChoices("CAREFLOW_REQUIRE_AAL2", "require_aal2"))
     step_up_max_age_seconds: int | None = Field(
         default=None, validation_alias=AliasChoices("CAREFLOW_STEP_UP_MAX_AGE_SECONDS", "step_up_max_age_seconds")
     )
@@ -229,9 +238,25 @@ async def _begin_request(conn: AsyncConnection, claims: dict[str, Any], active: 
         raise _active_role_refusal()
 
 
+class MfaSettingRefused(Exception):
+    """CAREFLOW_REQUIRE_AAL2 is off outside profile=demo with data_policy=synthetic_only. Fixed words."""
+
+
+def _require_mfa(request: Request, claims: dict[str, Any]) -> None:
+    """Every staff route: a verified second factor, before any database work. ONE fixed 401, `WWW-Authenticate: mfa`, no reason in the body (the code goes to the log). Off only where create_app
+    allowed it (demo + synthetic_only). Unknown state counts as ON."""
+    if getattr(request.app.state, "require_aal2", True) is False:
+        return
+    reason = mfa_failure(claims, now=request.app.state.clock())
+    if reason is not None:
+        log.info("multi-factor sign-in required: %s", reason)
+        raise HTTPException(status_code=401, detail="multi-factor sign-in required", headers={"WWW-Authenticate": "mfa"})
+
+
 async def db_conn(
     request: Request, claims: dict[str, Any] = Depends(verified_claims), active: active_role.ActiveRole | None = Depends(active_role_request)
 ) -> AsyncIterator[AsyncConnection]:
+    _require_mfa(request, claims)  # /v1/iam/me alone is exempt (db_conn_all_grants): the console needs it to find out what to enrol
     engine: AsyncEngine = request.app.state.engine
     async with engine.connect() as conn, conn.begin():
         await _begin_request(conn, claims, active)  # before any query
@@ -257,7 +282,7 @@ async def require_step_up(
     """Step-up re-authentication (BUILD-SPEC 18.1): a second factor verified within CAREFLOW_STEP_UP_MAX_AGE_SECONDS. The decision is the pure
     careflow.auth.step_up_failure; this wrapper supplies the configured window and the clock. A refusal is ONE fixed 401 with
     `WWW-Authenticate: step-up` and no reason; the reason code goes to the log, never a claim value. It runs before any database work.
-    Authentication still comes first (verified_claims). The claim shape is UNVERIFIED against a real token (docs/design/step-up-spike.md)."""
+    Authentication still comes first (verified_claims). The claim shape was verified on a real dev token on 2026-10-30 (docs/design/step-up-spike.md)."""
     max_age = request.app.state.step_up_max_age_seconds
     if not isinstance(max_age, int) or isinstance(max_age, bool) or max_age <= 0:
         log.error("step-up is unavailable: CAREFLOW_STEP_UP_MAX_AGE_SECONDS is not set to a positive number of seconds")
@@ -1316,9 +1341,10 @@ async def _validation_error_handler(request: Request, exc: RequestValidationErro
 
 # ---- staff merges: propose, approve, unmerge (BUILD-SPEC.md §17.2, §18.1; CLAUDE.md rules 3, 5, 8) ------------------------------------------
 #
-# STEP-UP IMPLEMENTED, CLAIM SHAPE PENDING LIVE VERIFICATION. Every route here needs a recently verified second factor
-# (`require_step_up`). The `amr` entry shape it reads is documented but NOT yet confirmed against a real token (Appendix B spike,
-# docs/design/step-up-spike.md): do not treat the step-up check as verified until that is recorded.
+# STEP-UP IMPLEMENTED, CLAIM SHAPE VERIFIED ON A REAL DEV TOKEN (2026-10-30). Every route here needs a recently verified second factor
+# (`require_step_up`). What that capture did not cover (legacy string `amr`, a later challenge, an expired window, an end-to-end merge call) is listed in docs/design/step-up-spike.md.
+# NOTE: the three route docstrings below still say "PENDING LIVE VERIFICATION": they are the OpenAPI descriptions the frontend's generated types copy, so they change together with the next
+# schema regeneration (docs/design/step-up-spike.md).
 #
 # STRONG_IDENTIFIERS (careflow/mpi.py) decides which matches are strong enough to avoid a review row, and it is reachable over HTTP through
 # POST /v1/staff/patients. It is PENDING SIGN-OFF by Priya (Health-information lead): no real patient data until that is recorded.
@@ -2278,12 +2304,15 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         cfg = settings or Settings()  # type: ignore[call-arg]  # fields come from the environment
+        if not cfg.require_aal2 and not demo_allowed(resolve_profile(), _data_policy(os.environ)):  # also catches a value that came from .env
+            raise MfaSettingRefused("CAREFLOW_REQUIRE_AAL2 may be turned off only in profile=demo with data_policy=synthetic_only: refusing to start")
         app.state.issuer = cfg.issuer
         app.state.jwks = jwks or JWKSClient(cfg.jwks_url)
         app.state.engine = engine or make_app_engine(cfg.database_url_app, pool_size=5, max_overflow=5, pool_pre_ping=True)
         app.state.vault = vault if vault is not None else _load_vault()
         app.state.active_key_version = cfg.active_key_version
         app.state.step_up_max_age_seconds = cfg.step_up_max_age_seconds
+        app.state.require_aal2 = cfg.require_aal2
         app.state.clock = clock
         app.state.required_roles = cfg.required_roles
         app.state.worker_account_id = cfg.worker_account_id
@@ -2329,6 +2358,9 @@ def create_app(
     origins = parse_origins(raw_origins, resolve_profile())
     if origins:
         app.add_middleware(CORSMiddleware, **middleware_kwargs(origins))
+    mfa_off = (not settings.require_aal2) if settings is not None else (os.environ.get("CAREFLOW_REQUIRE_AAL2") or "").strip().lower() in {"0", "false", "no", "off"}
+    if mfa_off and not demo_allowed(resolve_profile(), _data_policy(os.environ)):
+        raise MfaSettingRefused("CAREFLOW_REQUIRE_AAL2 may be turned off only in profile=demo with data_policy=synthetic_only: refusing to start")
     refuse_demo_outside_demo(os.environ, resolve_profile())  # the demo Phase 3 placeholders may never be present outside profile=demo + data_policy=synthetic_only
     app.add_exception_handler(RequestValidationError, _validation_error_handler)  # type: ignore[arg-type]
 
