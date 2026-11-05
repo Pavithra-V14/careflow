@@ -138,6 +138,7 @@ from careflow.scheduling import (
     SlotNotFound,
     SlotUnavailable,
     UnknownReference,
+    release_expired_holds_sweep,
 )
 from careflow.scheduling_agent import SchedulingSettings, build_scheduling_server
 from careflow.tick import Poker, worker_loop
@@ -2798,7 +2799,9 @@ def create_app(
         app.state.document_intake = intake  # None unless storage is configured AND verified (below): the upload routes answer 503
         app.state.poker = Poker()  # routes that enqueue call `app.state.poker.poke()` after their transaction commits (7.4)
         handlers = {FRONT_DOOR_TASK: front_door_handler(components, session_for=front_door_session_for)} if components is not None else {}
-        sweeps = [lambda conn: raise_dead_letter_tasks(conn, components.dead_letters)] if components is not None else []  # a dead-lettered run is never silent
+        sweeps = [release_expired_holds_sweep]  # tidy expired holds on every tick (migration 0033); correctness never depended on it
+        if components is not None:
+            sweeps.append(lambda conn: raise_dead_letter_tasks(conn, components.dead_letters))  # a dead-lettered run is never silent
         worker: asyncio.Task | None = None
         if cfg.run_worker:
             if cfg.worker_account_id is None:
