@@ -84,6 +84,7 @@ from careflow.auth import (
 )
 from careflow.auth_admin import AuthAdminError, AuthAdminPort
 from careflow.checkpointer import CheckpointerError
+from careflow.clinical_server import build_clinical_server
 from careflow.cors import middleware_kwargs, parse_origins
 from careflow.crypto import CryptoError, DemographicVault
 from careflow.db import make_app_engine, set_request_claims
@@ -142,6 +143,12 @@ from careflow.scheduling import (
     release_expired_holds_sweep,
 )
 from careflow.scheduling_agent import SchedulingSettings, build_scheduling_server
+from careflow.scheduling_runner import (
+    NoSuchRun,
+    SchedulingComponents,
+    SchedulingRunner,
+    WrongStep,
+)
 from careflow.tick import Poker, worker_loop
 from careflow.triage_store import DecisionConflict, TriageStoreError
 from careflow.triage_store import NotPermitted as TriageNotPermitted
@@ -2523,6 +2530,135 @@ async def reinstate_staff_account(account_id: uuid.UUID, idempotency_key: Idempo
     return StatusOut(account_id=account_id, status="active", changed=changed)
 
 
+# ---- backfill: the Scheduling graph behind four staff routes (careflow/scheduling_graph.py, scheduling_runner.py; docs/design/phase3-scheduling-agent.md) ----------------------------------------------
+#
+# A freed slot is offered to the best-ranked waiting patient, one at a time, and a PERSON presses every button: `POST /backfills` starts the run for a slot (it ranks the waitlist and stops at the first pause),
+# `POST /backfills/{slot_id}/decide` answers the pause "send this offer / skip this patient / stop", `POST .../reply` enters the patient's reply (or that none came), `GET /backfills/{slot_id}` shows where
+# the run is. Front desk of the clinic acts; front desk, nurse and doctor read. Every step is made by the signed-in person under their own session and row-level security (no worker identity), writes one audit row,
+# and needs an idempotency key. The graph's ports are interfaces with fakes; with no components configured the routes answer a visible 503 (after the role check, so the matrix still tells roles apart). A step
+# the run is not waiting for is a 409; nothing is delivered to the patient by the system (the front desk sends the text by hand, see mark-delivered).
+
+BackfillAction = Literal["send", "skip", "stop"]
+ReplyOutcome = Literal["replied", "timed_out"]
+
+
+class BackfillStartIn(_Body):
+    clinic_id: uuid.UUID
+    slot_id: uuid.UUID
+    visit_type_id: uuid.UUID
+
+
+class BackfillDecideIn(_Body):
+    action: BackfillAction
+
+
+class BackfillReplyIn(_Body):
+    outcome: ReplyOutcome
+    message_id: uuid.UUID | None = None  # the stored staff-entered message holding the patient's reply; required exactly when the outcome is `replied`
+
+
+class BackfillOut(_Out):
+    slot_id: uuid.UUID
+    status: str
+    waiting_for: Literal["send_decision", "reply_entry", "none"]
+    candidate_patient_id: uuid.UUID | None
+    candidate_rank: int | None
+    hold_id: uuid.UUID | None
+    task_id: uuid.UUID | None
+    finished: bool
+
+
+def _backfill_out(v: Any) -> BackfillOut:
+    return BackfillOut(
+        slot_id=v.slot_id, status=v.status, waiting_for=v.waiting_for, candidate_patient_id=v.candidate_patient_id, candidate_rank=v.candidate_rank, hold_id=v.hold_id, task_id=v.task_id, finished=v.finished
+    )
+
+
+def _backfill_runner(request: Request, conn: AsyncConnection) -> SchedulingRunner:
+    components: SchedulingComponents | None = request.app.state.scheduling
+    if components is None:
+        log.error("backfill runs are unavailable: no components are configured (nothing is run; nothing is lost)")
+        raise HTTPException(status_code=503, detail="backfill runs are unavailable: not configured")
+    return components.runner(request_session(conn))
+
+
+async def _slot_clinic(conn: AsyncConnection, slot_id: uuid.UUID, roles: tuple[str, ...], *, denied: str = "your role may not do this") -> tuple[uuid.UUID, str]:
+    """(clinic id, origin) of a slot the caller can see; 404 if invisible, 403 unless the caller holds one of `roles` there."""
+    row = (await conn.execute(text("select clinic_id, origin from sched.slots where id = :s"), {"s": slot_id})).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _clinic_role_held(conn, row.clinic_id, roles):
+        raise HTTPException(status_code=403, detail=denied)
+    return row.clinic_id, row.origin
+
+
+@contextmanager
+def _backfill_errors() -> Iterator[None]:
+    try:
+        yield
+    except offers.OfferNotConfigured as exc:
+        raise HTTPException(status_code=503, detail="offers are unavailable: not configured: " + ",".join(exc.names)) from None
+    except offers.NotACandidate:
+        raise HTTPException(status_code=409, detail="the slot or the candidate cannot be offered") from None
+    except offers.OfferConflict:
+        raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request") from None
+    except WrongStep:
+        raise HTTPException(status_code=409, detail="this run is not waiting for that") from None
+    except NoSuchRun:
+        raise HTTPException(status_code=404, detail="not found") from None
+
+
+async def _backfill_audit(conn: AsyncConnection, *, clinic_id: uuid.UUID, origin: str, claims: dict[str, Any], action: str, slot_id: uuid.UUID, key: str, details: dict[str, Any]) -> None:
+    await write_audit(
+        conn, clinic_id=clinic_id, origin=origin, actor_id=uuid.UUID(claims["sub"]), actor_role=await _acting_role(conn, claims, clinic_id, ("front_desk",)), action=action,
+        resource_type="slot", resource_id=slot_id, details=details, idempotency_key=f"audit:{action}:{slot_id}:{key}",
+    )
+
+
+@scheduling.post("/backfills", response_model=BackfillOut)
+async def start_backfill(body: BackfillStartIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> BackfillOut:
+    """Start (or find) the backfill run for a freed slot: rank the waitlist by clinical priority and stop at the first pause. 404 if the clinic is not visible to you, 403 unless you are front desk there, 503 while no components are configured."""
+    origin = await _front_desk_gate(conn, claims, body.clinic_id)
+    runner = _backfill_runner(request, conn)
+    with _backfill_errors():
+        view = await runner.start(clinic_id=body.clinic_id, slot_id=body.slot_id, visit_type_id=body.visit_type_id, origin=origin)
+    await _backfill_audit(conn, clinic_id=body.clinic_id, origin=origin, claims=claims, action="backfill.start", slot_id=body.slot_id, key=idempotency_key, details={"status": view.status})
+    return _backfill_out(view)
+
+
+@scheduling.get("/backfills/{slot_id}", response_model=BackfillOut)
+async def get_backfill(slot_id: uuid.UUID, request: Request, conn: TxConn) -> BackfillOut:
+    """Where the backfill run for this slot is. 404 if you cannot see the slot or there is no run, 403 unless you are front desk, nurse or doctor there, 503 while no components are configured."""
+    await _slot_clinic(conn, slot_id, SCHEDULING_READERS, denied="your role may not read this")
+    runner = _backfill_runner(request, conn)
+    with _backfill_errors():
+        return _backfill_out(await runner.view(slot_id))
+
+
+@scheduling.post("/backfills/{slot_id}/decide", response_model=BackfillOut)
+async def decide_backfill(slot_id: uuid.UUID, body: BackfillDecideIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> BackfillOut:
+    """Answer the pause: send the offer to the current candidate, skip them, or stop. 404 if you cannot see the slot or there is no run, 403 unless you are front desk there, 409 if the run is not waiting for this, 503 while no components are configured."""
+    clinic_id, origin = await _slot_clinic(conn, slot_id, ("front_desk",))
+    runner = _backfill_runner(request, conn)
+    with _backfill_errors(), _scheduling_errors():
+        view = await runner.decide(slot_id, body.action)
+    await _backfill_audit(conn, clinic_id=clinic_id, origin=origin, claims=claims, action="backfill.decide", slot_id=slot_id, key=idempotency_key, details={"action": body.action, "status": view.status})
+    return _backfill_out(view)
+
+
+@scheduling.post("/backfills/{slot_id}/reply", response_model=BackfillOut)
+async def reply_backfill(slot_id: uuid.UUID, body: BackfillReplyIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> BackfillOut:
+    """Enter the patient's reply (the stored message) or that none came. The deterministic red-flag rules screen it FIRST; a red flag or an unassessable reply raises the nurse task and ends the run. 404 if you cannot see the slot or there is no run, 403 unless you are front desk there, 409 if the run is not waiting for a reply, 503 while no components are configured."""
+    if (body.outcome == "replied") != (body.message_id is not None):
+        raise HTTPException(status_code=422, detail="request rejected")
+    clinic_id, origin = await _slot_clinic(conn, slot_id, ("front_desk",))
+    runner = _backfill_runner(request, conn)
+    with _backfill_errors(), _scheduling_errors():
+        view = await runner.reply(slot_id, body.outcome, body.message_id)
+    await _backfill_audit(conn, clinic_id=clinic_id, origin=origin, claims=claims, action="backfill.reply", slot_id=slot_id, key=idempotency_key, details={"outcome": body.outcome, "status": view.status})
+    return _backfill_out(view)
+
+
 # ---- clinic set-up: create locations, providers, visit types and slots (front desk and admin; docs/design/clinic-setup-routes.md) ----------------------------------------------------------
 #
 # The tables, policies and permissions already allow front desk and admin to write these (migration 0002); there was just no route, so a clinic could not set itself up without the seed script. No migration,
@@ -2987,7 +3123,7 @@ def create_app(
     settings: Settings | None = None, *, jwks: JWKSClient | None = None, engine: AsyncEngine | None = None,
     vault: DemographicVault | None = None, clock: Callable[[], float] = time.time, front_door: FrontDoorComponents | None = None,
     front_door_session_for: Callable[..., Any] = worker_session, document_intake: DocumentIntake | None = None, reply_interpreter: DecisionService | None = None,
-    auth_admin: AuthAdminPort | None = None,
+    auth_admin: AuthAdminPort | None = None, scheduling_components: SchedulingComponents | None = None,
 ) -> FastAPI:
     """Build the app. `jwks`, `engine`, `vault` and `clock` (for the step-up window) can be injected (tests do); otherwise they come from
     settings / the environment. `front_door` holds the Front Door's stand-in components; with None the run and review routes answer 503 and no handler is registered."""
@@ -3021,6 +3157,16 @@ def create_app(
             if components is not None:
                 log.warning("DEMO PROFILE: the Front Door runs on FAKE letters, extractor and retriever (synthetic data only)")
         app.state.front_door = components
+        scheduling = scheduling_components
+        if scheduling is None:  # the DEMO profile (synthetic data, switch on, keys loaded) wires the real ports over a FAKE decision engine; any other profile leaves the backfill routes at 503
+            try:
+                held_vault = app.state.vault
+                scheduling = demo_front_door.scheduling_components_from_environment(os.environ, resolve_profile(), vault=held_vault, key_version=_choose_key_version(held_vault, cfg.active_key_version))
+            except Exception:  # noqa: BLE001 - a fault in the demo configuration leaves the routes unwired, never a startup crash
+                log.error("the demo Scheduling components could not be built: the backfill routes stay unavailable")
+                scheduling = None
+        app.state.scheduling = scheduling  # None unless injected: the backfill routes answer 503 (all ports are fakes in this package)
+        app.state.clinical_server = build_clinical_server()  # the READ-ONLY `clinical` MCP server, in process only (no socket); called through careflow.mcp_kit.invoke
         app.state.auth_admin = auth_admin  # None unless injected: no Auth admin adapter is wired by default (the secret key stays out of the web process); the invite route answers 503
         app.state.reply_interpreter = reply_interpreter  # None unless a decision service is injected (FAKES ONLY today): the route answers 503
         app.state.storage_adapter = None

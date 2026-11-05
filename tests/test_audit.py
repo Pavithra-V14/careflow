@@ -156,10 +156,21 @@ async def test_each_set_up_route_audits_through_the_one_helper_in_the_same_trans
     assert "await write_audit(" in helper and 'idempotency_key=f"audit:' in helper and re.search(r"write_audit\(\s*conn,", helper)
 
 
+BACKFILL_ROUTES = {"start_backfill": "backfill.start", "decide_backfill": "backfill.decide", "reply_backfill": "backfill.reply"}
+
+
+@pytest.mark.parametrize(("function", "action"), sorted(BACKFILL_ROUTES.items()))
+async def test_each_backfill_route_audits_through_the_one_helper_after_the_step_in_the_same_transaction(function, action):
+    source = inspect.getsource(getattr(app_module, function))
+    assert f'action="{action}"' in source and "await _backfill_audit(" in source and source.index("await _backfill_audit(") > source.index("await runner.")
+    helper = inspect.getsource(app_module._backfill_audit)
+    assert "await write_audit(" in helper and 'idempotency_key=f"audit:' in helper and re.search(r"write_audit\(\s*conn,", helper)
+
+
 async def test_every_action_has_a_route_or_is_listed_as_pending():
     pending = {"clinical.tool_call"}  # written by careflow/mcp_kit.py `audited` (no clinical server is mounted yet)
     written_by_the_database = {"patient.erase_request", "patient.erase", "patient.erase_cancel", "staff.invite", "staff.grant_role", "staff.revoke_role", "staff.suspend", "staff.reinstate", "staff.activate"}  # written by the mpi.*_patient_erasure functions (migration 0032) in the same transaction; the live tests pin the rows
-    assert set(ROUTES.values()) | set(SETUP_ROUTES.values()) | pending | written_by_the_database == set(ACTIONS)
+    assert set(ROUTES.values()) | set(SETUP_ROUTES.values()) | set(BACKFILL_ROUTES.values()) | pending | written_by_the_database == set(ACTIONS)
 
 
 async def test_the_audit_module_adds_no_dependency_and_uses_only_the_existing_table():

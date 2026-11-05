@@ -45,7 +45,7 @@ from careflow.decision import DecisionService, InMemoryDecisionRecorder
 from careflow.gateway import Gateway, InMemorySpendLedger, ModelRow, SpendLimits
 from careflow.messages import encrypt_body
 from careflow.ports import AdapterResult, DecisionResult, Usage
-from tests.db_helpers import ensure_app_role_sa
+from tests.db_helpers import ensure_app_role_sa, without_scope
 from tests.test_api_role_matrix import ATTACKER, PROJECT, bearer, fake_jwks_client, mint
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -455,7 +455,7 @@ async def test_a_clear_reply_gets_a_suggestion_with_no_text_and_one_audit_row(w)
     assert PRIVATE not in r.text and PRIVATE not in again.text
     rows = await one(w, "select actor_id, actor_role, details from audit.log where action = 'offer.interpret_reply' and resource_id = :m", m=str(mid))
     assert len(rows) == 1 and rows[0][0] == w.ids["fd_a"] and rows[0][1] == "front_desk"  # one row: the replay wrote none (same audit key)
-    details = rows[0][2] if isinstance(rows[0][2], dict) else json.loads(rows[0][2])
+    details = without_scope(rows[0][2])  # (every audit writer adds role_scope since 0028)
     assert details == {"outcome": "clear", "suggestion": "accept", "reason": "none"}
 
 

@@ -33,7 +33,7 @@ from careflow.ports import (
 
 ZERO = Decimal(0)
 CLINIC, MESSAGE, ACTOR, SCREENING = (uuid.uuid4() for _ in range(4))
-SECRET = "my-private-sentence-4417"
+PRIVATE_TEXT = "my-private-sentence-4417"
 
 
 def adapter_for(choice="accept", *, calibrated=False, confidence=0.9, calls=None, error=None):
@@ -70,7 +70,7 @@ class Flow:
 
         async def read(conn, vault, message_id, *, actor_id):
             self.log.append("read")
-            return ReadMessage(message_id=message_id, thread_id=uuid.uuid4(), clinic_id=CLINIC, topic=self.topic, sender_kind=self.sender, body=SECRET)
+            return ReadMessage(message_id=message_id, thread_id=uuid.uuid4(), clinic_id=CLINIC, topic=self.topic, sender_kind=self.sender, body=PRIVATE_TEXT)
 
         monkeypatch.setattr(ri, "screen_stored_message", screen)
         monkeypatch.setattr(ri, "read_stored_message", read)
@@ -86,7 +86,7 @@ async def test_a_clear_patient_reply_is_screened_first_then_read_then_put_to_the
     out = await run(service_for(adapter_for("accept", calls=seen)))
     assert flow.log == ["screen", "read"] and len(seen) == 1  # the rules before the read, the read before the model
     request = seen[0]
-    assert request.data_class is DataClass.PHI and request.options == ri.OPTIONS and request.question_type == "offer_reply" and request.text == SECRET
+    assert request.data_class is DataClass.PHI and request.options == ri.OPTIONS and request.question_type == "offer_reply" and request.text == PRIVATE_TEXT
     assert (out.suggestion, out.outcome, out.reason, out.needs_person, out.engine) == ("accept", "clear", None, True, "fake-engine")
 
 
@@ -141,7 +141,7 @@ async def test_nothing_the_model_says_can_change_the_screening_outcome_and_the_a
     Flow(monkeypatch)
     out = await run(service_for(adapter_for("unclear")))
     assert out.outcome == "clear" and out.suggestion == "unclear"  # "unclear" is a suggestion for a person; it is never consent
-    assert SECRET not in repr(out) and set(out.__dataclass_fields__) == {
+    assert PRIVATE_TEXT not in repr(out) and set(out.__dataclass_fields__) == {
         "message_id", "screening_id", "outcome", "replayed", "suggestion", "confidence", "calibrated", "engine", "reason", "needs_person"}
 
 
@@ -253,7 +253,7 @@ def test_a_successful_answer_has_ids_and_closed_words_only_and_writes_one_audit_
     body = r.json()
     assert body == {"message_id": str(MESSAGE), "screening_id": str(SCREENING), "outcome": "clear", "replayed": False, "suggestion": "accept", "confidence": None,
                     "calibrated": False, "engine": "fake-engine", "reason": None, "needs_person": True}
-    assert SECRET not in r.text
+    assert PRIVATE_TEXT not in r.text
     (audit,) = audits
     assert (audit["action"], audit["actor_id"], audit["resource_id"], audit["details"]) == ("offer.interpret_reply", ACTOR, MESSAGE, {"outcome": "clear", "suggestion": "accept", "reason": "none"})
     assert audit["idempotency_key"] == f"audit:interpret-reply:{MESSAGE}:k-1"

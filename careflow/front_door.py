@@ -406,7 +406,7 @@ def initial_state(document_id: uuid.UUID, clinic_id: uuid.UUID, origin: str) -> 
 # ---- the agent inventory (§1, §4) ---------------------------------------------------------------------------------------------------------------
 
 AGENT_INVENTORY: Final = ("front_door", "scheduling", "care_journey", "visit_readiness")  # the four agents of §1, in build order
-BUILT_AGENTS: Final = ("front_door",)
+BUILT_AGENTS: Final = ("front_door", "scheduling")
 
 
 def feature_flags(environ: dict[str, str] | None = None) -> dict[str, bool]:

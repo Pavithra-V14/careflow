@@ -38,7 +38,7 @@ APP = os.environ.get("DATABASE_URL_APP") or _ENV.get("DATABASE_URL_APP")
 MIGRATIONS = {n: (ROOT / "db" / "migrations" / f).read_text(encoding="utf-8")
               for n, f in (("0003", "0003_mpi_match_candidates.sql"), ("0004", "0004_scheduling_operations.sql"),
                            ("0007", "0007_red_flag_rules_schema.sql"), ("0008", "0008_mpi_merge_ledger.sql"),
-                           ("0009", "0009_merge_signature_fix.sql"), ("0029", "0029_merge_state_machine.sql"))}
+                           ("0009", "0009_merge_signature_fix.sql"), ("0029", "0029_merge_state_machine.sql"), ("0036", "0036_merge_candidate_trigger_self_merge.sql"))}
 
 pytestmark = [
     pytest.mark.asyncio(loop_scope="module"),
@@ -301,10 +301,20 @@ async def test_the_database_enforces_the_link_rules_even_without_the_engine(db, 
         "merges_one_live_link_per_subordinate": (third, w.sub),
         "merges_one_live_link_per_pair": (w.sub, w.master),
     }
+    # Since 0029 a proposal must name the pending review row of the same two patients, so each case brings a review row for ITS pair (the point of this test is that the LINK rules still refuse).
+    await db.execute(
+        text("insert into mpi.match_candidates (clinic_id, patient_id, candidate_patient_id, matched_kinds, reason, origin, idempotency_key) values (:c, :p, :q, array['phone'], 'near_match', 'test', :k) on conflict do nothing"),
+        {"c": w.a, "p": third, "q": w.sub, "k": _key()},
+    )
+    pair_candidate = {
+        (w.master, w.master): cand[0],  # a record cannot be its own master: left to merges_not_self
+        (third, w.sub): await one(db, "select id from mpi.match_candidates where clinic_id = :c and patient_id = :p and candidate_patient_id = :q", c=w.a, p=third, q=w.sub),
+        (w.sub, w.master): cand[0],
+    }
     for expected, (m, s) in cases.items():
         with pytest.raises(DBAPIError, match=expected if expected != "merges_one_live_link_per_pair" else "merges_one_live_link|flat"):
             async with db.begin_nested():
-                await db.execute(text(insert), {"c": w.a, "m": m, "s": s, "cand": cand[0], "ap": w.fd1, "k": _key()})
+                await db.execute(text(insert), {"c": w.a, "m": m, "s": s, "cand": pair_candidate[(m, s)], "ap": w.fd1, "k": _key()})
 
 
 # ---- idempotency -----------------------------------------------------------------------------------
@@ -652,9 +662,12 @@ async def test_a_review_row_cannot_be_rewritten_or_reopened_by_front_desk(db, mg
     third = (await act(db, w.fd1, pipeline.ingest, clinic_id=w.a, origin="test", name="Third Person", dob="1999-09-09", phone=PHONE, idempotency_key=_key())).patient_id
     (cand,) = await rows(db, "select id from mpi.match_candidates where clinic_id = :c and status = 'pending' limit 1", c=w.a)
     for change in (f"candidate_patient_id = '{third}'", f"patient_id = '{third}'", "reason = 'ambiguous'", "matched_kinds = array['name_dob']"):
-        with pytest.raises(DBAPIError, match="names its pair once"):
+        with pytest.raises(DBAPIError, match="permission denied"):  # since 0032 front desk may not even name these columns in an update (the grant is the first layer)
             async with db.begin_nested():
                 await _sql_as(db, w.fd1, f"update mpi.match_candidates set {change} where id = :i", i=cand[0])
+        with pytest.raises(DBAPIError, match="names its pair once"):  # the trigger is the second layer: it holds even for the table's owner
+            async with db.begin_nested():
+                await db.execute(text(f"update mpi.match_candidates set {change} where id = :i"), {"i": cand[0]})
     await _sql_as(db, w.fd2, "update mpi.match_candidates set status = 'resolved', resolved_at = now(), resolved_by = :u where id = :i", i=cand[0], u=w.fd2)
     for change in ("status = 'pending', resolved_at = null, resolved_by = null", "resolved_by = null"):
         with pytest.raises(DBAPIError, match="cannot be reopened"):
