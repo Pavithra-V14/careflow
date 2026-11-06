@@ -84,6 +84,12 @@ def world(monkeypatch):
     monkeypatch.setattr(app_module, "_acting_role", acting_role)
     monkeypatch.setattr(app_module, "_referral_document", referral_document)
     monkeypatch.setattr(app_module, "_holds_role", holds_role)
+
+    async def canary_check(conn, document_id, clinic_id, reviewer, decision):
+        w.canary_checks.append((document_id, decision))
+
+    w.canary_checks = []
+    monkeypatch.setattr(app_module, "_canary_check", canary_check)
     monkeypatch.setattr(app_module.PostgresQueue, "enqueue", enqueue)
     monkeypatch.setattr(app_module, "graph_for", lambda components, session: w.graph)
     return w
@@ -166,6 +172,28 @@ def test_review_resumes_the_paused_run_with_the_reviewer_from_the_token_and_the_
     (audit,) = world.audits  # one audit row, as the token's person, ids and a closed word only
     assert (audit["actor_id"], audit["action"], audit["resource_id"], audit["details"]) == (SUB, "referral.review_decision", DOC, {"decision": "approve"})
     assert audit["idempotency_key"] == f"audit:referral-review:{DOC}:k-1"
+
+
+def test_once_the_clinic_has_a_reason_code_list_a_reject_needs_a_word_from_it_and_the_word_travels_with_the_decision(world, monkeypatch):
+    monkeypatch.setenv("CAREFLOW_REVIEW_REASON_CODES", "wrong_card,other")
+    world.graph = paused()
+    with make_client() as c:
+        assert c.post(REVIEW.format(DOC), headers=key(), json={"decision": "reject"}).status_code == 422  # a reject needs a reason
+        assert c.post(REVIEW.format(DOC), headers=key(), json={"decision": "reject", "reason_code": "not_on_the_list"}).status_code == 422
+        assert world.graph.invoked == []
+        ok = c.post(REVIEW.format(DOC), headers=key(), json={"decision": "reject", "reason_code": "wrong_card"})
+        assert ok.status_code == 200
+    ((payload, _),) = world.graph.invoked
+    assert payload.resume == {"decision": "reject", "reviewer_id": str(SUB), "reason_code": "wrong_card"}
+    assert world.canary_checks == [(DOC, "reject")]  # the canary hook runs after every recorded decision
+
+
+def test_with_no_reason_code_list_configured_a_code_is_refused_and_an_approve_needs_none(world, monkeypatch):
+    monkeypatch.delenv("CAREFLOW_REVIEW_REASON_CODES", raising=False)
+    world.graph = paused()
+    with make_client() as c:
+        assert c.post(REVIEW.format(DOC), headers=key(), json={"decision": "approve", "reason_code": "anything"}).status_code == 422
+        assert c.post(REVIEW.format(DOC), headers=key(), json={"decision": "approve"}).status_code == 200
 
 
 def test_a_body_that_names_a_reviewer_or_an_unknown_decision_is_refused_and_nothing_is_resumed(world):

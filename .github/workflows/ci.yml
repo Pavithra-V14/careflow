@@ -232,6 +232,7 @@ jobs:
               tests/test_staff_accounts_live.py
               tests/test_erasure_live.py
               tests/test_backfill_durable_db_live.py
+              tests/test_alerts_live.py
     env:
       CAREFLOW_ENV: ci
       CAREFLOW_PROFILE: demo

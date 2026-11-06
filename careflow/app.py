@@ -83,9 +83,12 @@ from careflow.auth import (
     verify_token,
 )
 from careflow.auth_admin import AuthAdminError, AuthAdminPort
+from careflow.canary import on_decision as canary_on_decision
 from careflow.checkpointer import CheckpointerError
 from careflow.clinical_server import build_clinical_server
 from careflow.cors import middleware_kwargs, parse_origins
+from careflow.cost_canvas import compute as compute_cost_canvas
+from careflow.cost_canvas import settings_from as cost_settings_from
 from careflow.crypto import CryptoError, DemographicVault
 from careflow.db import make_app_engine, set_request_claims
 from careflow.dead_letters import raise_dead_letter_tasks
@@ -123,10 +126,26 @@ from careflow.messages import (
     screen_stored_message,
 )
 from careflow.mpi import PatientIngestionPipeline
+from careflow.phase4_sql import (
+    CanaryAlertWriter,
+    SqlAlertSink,
+    measured_costs,
+    reviewer_stats_rows,
+    watchdog_sweep,
+)
 from careflow.queue import NotPermitted as QueueNotPermitted
 from careflow.queue import PostgresQueue
 from careflow.readiness import check_readiness, parse_required_roles
 from careflow.registry import RegistryError, load_registry
+from careflow.review_console import (
+    DeadlinePolicy,
+    ReasonCodes,
+    ReviewConsoleError,
+    build_reviewer_view,
+    checked_reason,
+)
+from careflow.reviewer_stats import RubberStampPolicy
+from careflow.reviewer_stats import assess as assess_reviewers
 from careflow.rules import NotPermitted as ScreeningNotPermitted
 from careflow.rules import RedFlagEngine, resolve_profile
 from careflow.scheduling import (
@@ -152,6 +171,7 @@ from careflow.scheduling_runner import (
 from careflow.tick import Poker, worker_loop
 from careflow.triage_store import DecisionConflict, TriageStoreError
 from careflow.triage_store import NotPermitted as TriageNotPermitted
+from careflow.watchdog import AlertRouter, limits_from
 
 log = logging.getLogger("careflow.app")
 _bearer = HTTPBearer(auto_error=False)
@@ -1835,6 +1855,7 @@ class RunOut(_Out):
 
 class ReviewIn(_Body):
     decision: Literal["approve", "edit", "reject"]
+    reason_code: str | None = Field(default=None, min_length=1, max_length=60, pattern=r"^[a-z][a-z0-9_]*$")  # a word from the clinic's picklist (12.2); required for reject and edit once the list is configured
 
 
 class ReviewOut(_Out):
@@ -1894,6 +1915,10 @@ async def review_referral(
     doc = await _referral_document(conn, document_id)
     if not await _holds_role(conn, claims, doc.clinic_id, ("nurse", "doctor")):
         raise HTTPException(status_code=403, detail="your role may not review a referral")
+    try:
+        reason = checked_reason(request.app.state.reason_codes, body.decision, body.reason_code)
+    except ReviewConsoleError:
+        raise HTTPException(status_code=422, detail="request rejected") from None
     reviewer = claims["sub"]
     graph = graph_for(components, request_session(conn))
     config = run_config(document_id, doc.clinic_id, doc.origin)
@@ -1906,7 +1931,7 @@ async def review_referral(
             return ReviewOut(document_id=document_id, decision=body.decision, replayed=True)
         raise HTTPException(status_code=409, detail="this referral is not waiting for a decision")
     try:
-        await graph.ainvoke(Command(resume={"decision": body.decision, "reviewer_id": reviewer}), config)
+        await graph.ainvoke(Command(resume={"decision": body.decision, "reviewer_id": reviewer, **({"reason_code": reason} if reason else {})}), config)
     except DecisionConflict:
         raise HTTPException(status_code=409, detail="this referral is not waiting for a decision") from None
     except TriageNotPermitted:
@@ -1923,7 +1948,61 @@ async def review_referral(
         action="referral.review_decision", resource_type="document", resource_id=document_id, details={"decision": body.decision},
         idempotency_key=f"audit:referral-review:{document_id}:{idempotency_key}",
     )
+    await _canary_check(conn, document_id, doc.clinic_id, uuid.UUID(reviewer), body.decision)
     return ReviewOut(document_id=document_id, decision=body.decision, replayed=False)
+
+
+class ReviewViewOut(_Out):
+    task_id: uuid.UUID
+    kind: str
+    proposal: dict[str, Any]
+    evidence: list[dict[str, Any]]
+    alternatives: list[dict[str, Any]]
+    on_approve: str
+    on_reject: str
+    on_edit: str
+    engine: str | None
+    confidence: float | None
+    triggering_rule: str | None
+    reason_codes: list[str]
+
+
+@staff_referrals.get("/{document_id}/review-view", response_model=ReviewViewOut)
+async def referral_review_view(document_id: uuid.UUID, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> ReviewViewOut:
+    """The reviewer view of a referral's triage proposal (12.2): the proposal, evidence, alternatives with probabilities (null when the engine gave none), what approve and reject do, the engine and its confidence (null while not recorded), the rule that triggered review, and the clinic's reason-code picklist. A canary looks exactly like a real case. 404 if you cannot see the document or it has no proposal, 403 unless nurse or doctor there."""
+    doc = await _referral_document(conn, document_id)
+    if not await _holds_role(conn, claims, doc.clinic_id, ("nurse", "doctor")):
+        raise HTTPException(status_code=403, detail="your role may not review a referral")
+    p = (
+        await conn.execute(
+            text(
+                "select p.review_task_id, p.candidates, p.abstained, p.mode, p.origin, t.kind from agents.triage_proposals p join agents.review_tasks t on t.id = p.review_task_id and t.clinic_id = p.clinic_id "
+                "where p.document_id = :d and p.clinic_id = :c"
+            ),
+            {"d": document_id, "c": doc.clinic_id},
+        )
+    ).first()
+    if p is None:
+        raise HTTPException(status_code=404, detail="not found")
+    view = build_reviewer_view(
+        task_id=str(p.review_task_id), kind=p.kind, origin=p.origin, candidates=p.candidates, abstained=p.abstained, mode=p.mode, reason_codes=request.app.state.reason_codes
+    ).for_reviewer()
+    return ReviewViewOut(**{**view, "task_id": p.review_task_id})
+
+
+async def _canary_check(conn: AsyncConnection, document_id: uuid.UUID, clinic_id: uuid.UUID, reviewer: uuid.UUID, decision: str) -> None:
+    """12.4: approving a canary raises a SILENT alert for admin in this same transaction. The reviewer's response never mentions it (the alert is aimed at admin, whom the reviewer is not)."""
+    row = (
+        await conn.execute(
+            text(
+                "select d.id, d.origin from agents.review_decisions d join agents.triage_proposals p on p.id = d.proposal_id and p.clinic_id = d.clinic_id "
+                "where p.document_id = :d and d.clinic_id = :c and d.decided_by = :u"
+            ),
+            {"d": document_id, "c": clinic_id, "u": reviewer},
+        )
+    ).first()
+    if row is not None:
+        await canary_on_decision(origin=row.origin, decision=decision, decision_id=str(row.id), clinic_id=str(clinic_id), alerts=CanaryAlertWriter(SqlAlertSink(conn)))
 
 
 # ---- application -----------------------------------------------------------------------------------
@@ -3090,6 +3169,188 @@ async def open_referral(document_id: uuid.UUID, conn: TxConn, claims: dict[str, 
     return ReferralDetailOut(**_referral_fields(r), holds=[ReferralHoldOut(task_id=h.id, assigned_role=h.assigned_role, status=h.status) for h in holds], proposal=proposal)
 
 
+# ---- the console: alerts, reviewer statistics, the cost canvas, the reason-code list (Phase 4; migrations 0039, 0040; docs/design/phase4-review-console.md) -----------------------------------------------
+#
+# `GET /v1/staff/console/alerts` lists the in-app alerts aimed at a role you hold in a clinic (the database shows you only those; a canary alert is aimed at admin and no reviewer can read it) and
+# `POST .../alerts/{id}/acknowledge` acknowledges one, once, as yourself. `GET .../reviewer-stats` (admin) shows each reviewer's approval rate and time-to-decide with the rubber-stamp verdict; while its
+# policy is not configured every verdict is `not_configured`. `GET .../cost-canvas` (admin) shows W x A x U + P + F from measured spend; a term that is not configured or not measured stays null with the reason.
+# `GET .../reason-codes` (nurse or doctor) says whether the clinic's reason-code list is configured and what it is. Nothing here writes a clinical record, and no body contains patient data.
+
+staff_console = APIRouter(prefix="/v1/staff/console", tags=["staff console"])
+ALERT_READERS = ("front_desk", "nurse", "doctor", "admin")
+
+
+class AlertOut(_Out):
+    alert_id: uuid.UUID
+    clinic_id: uuid.UUID
+    alert_class: str
+    audience_role: str
+    count: int
+    ref: str | None
+    created_at: datetime
+    acknowledged: bool
+
+
+class AlertList(_Out):
+    items: list[AlertOut]
+    limit: int
+    has_more: bool
+
+
+class AlertAckOut(_Out):
+    alert_id: uuid.UUID
+    acknowledged: bool
+
+
+class ReviewerStatOut(_Out):
+    reviewer: str
+    decisions: int
+    approvals: int
+    edits: int
+    rejections: int
+    approval_rate: float | None
+    median_seconds: float | None
+    canaries_seen: int
+    canaries_approved: int
+    verdict: str
+    reasons: list[str]
+
+
+class ReviewerStatsOut(_Out):
+    clinic_id: uuid.UUID
+    days: int
+    policy_configured: bool
+    reviewers: list[ReviewerStatOut]
+
+
+class CostColumnOut(_Out):
+    workflows_per_day: float
+    calls_per_workflow: float | None
+    usd_per_call: float | None
+    workload_x_amplification_x_unit_per_month: float | None
+    platform_floor_per_month: float | None
+    failure_tax_per_month: float | None
+    total_per_month: float | None
+
+
+class CostCanvasOut(_Out):
+    clinic_id: uuid.UUID
+    state: str
+    reasons: list[str]
+    actual: CostColumnOut | None
+    shadow: CostColumnOut | None
+    amplification_over_ceiling: bool
+
+
+class ReasonCodesOut(_Out):
+    configured: bool
+    codes: list[str]
+
+
+async def _console_clinic(conn: AsyncConnection, clinic_id: uuid.UUID, roles: tuple[str, ...]) -> str:
+    """The clinic's origin after checking the caller holds one of `roles` there. 404 if the clinic is invisible, 403 if visible but the role is not held."""
+    clinic = (await conn.execute(text("select origin from iam.clinics where id = :c"), {"c": clinic_id})).first()
+    if clinic is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _clinic_role_held(conn, clinic_id, roles):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    return clinic[0]
+
+
+def _alert_out(r: Any) -> AlertOut:
+    return AlertOut(
+        alert_id=r.id, clinic_id=r.clinic_id, alert_class=r.class_, audience_role=r.audience_role, count=r.alert_count, ref=r.ref, created_at=r.created_at, acknowledged=r.acknowledged_at is not None
+    )
+
+
+@staff_console.get("/alerts", response_model=AlertList)
+async def list_alerts(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), include_acknowledged: bool = False, limit: Limit = 100) -> AlertList:
+    """The alerts aimed at a role you hold in this clinic, newest first (open ones unless `include_acknowledged`). Class, count and an opaque id only. 404 if the clinic is not visible to you, 403 unless you are front desk, nurse, doctor or admin there."""
+    await _console_clinic(conn, clinic_id, ALERT_READERS)
+    rows = (
+        await conn.execute(
+            text(
+                "select id, clinic_id, class as class_, audience_role, alert_count, ref, created_at, acknowledged_at from ops.alerts "
+                "where clinic_id = :c and (:all or acknowledged_at is null) order by created_at desc, id limit :n"
+            ),
+            {"c": clinic_id, "all": include_acknowledged, "n": limit + 1},
+        )
+    ).all()
+    return AlertList(items=[_alert_out(r) for r in rows[:limit]], limit=limit, has_more=len(rows) > limit)
+
+
+@staff_console.post("/alerts/{alert_id}/acknowledge", response_model=AlertAckOut)
+async def acknowledge_alert(alert_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> AlertAckOut:
+    """Acknowledge an alert aimed at your role, once, as yourself. 404 if you cannot see it (or it does not exist), 409 if it was already acknowledged."""
+    row = (await conn.execute(text("select clinic_id, acknowledged_at from ops.alerts where id = :i"), {"i": alert_id})).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if row.acknowledged_at is not None:
+        raise HTTPException(status_code=409, detail="already acknowledged")
+    done = (
+        await conn.execute(
+            text("update ops.alerts set acknowledged_by = auth.uid(), acknowledged_at = clock_timestamp() where id = :i and acknowledged_at is null returning id"), {"i": alert_id}
+        )
+    ).first()
+    if done is None:
+        raise HTTPException(status_code=409, detail="already acknowledged")
+    clinic = (await conn.execute(text("select origin from iam.clinics where id = :c"), {"c": row.clinic_id})).first()
+    await write_audit(
+        conn, clinic_id=row.clinic_id, origin=clinic[0], actor_id=uuid.UUID(claims["sub"]), actor_role=await _acting_role(conn, claims, row.clinic_id, ALERT_READERS), action="alert.acknowledge",
+        resource_type="alert", resource_id=alert_id, details={}, idempotency_key=f"audit:alert-ack:{alert_id}:{idempotency_key}",
+    )
+    return AlertAckOut(alert_id=alert_id, acknowledged=True)
+
+
+@staff_console.get("/reviewer-stats", response_model=ReviewerStatsOut)
+async def reviewer_stats(clinic_id: uuid.UUID, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), days: Annotated[int, Query(ge=1, le=365)] = 30) -> ReviewerStatsOut:
+    """Each reviewer's decisions, approval rate and median time-to-decide over the last `days`, with the rubber-stamp verdict (`not_configured` while the policy setting is unset). Admin only. 404 if the clinic is not visible to you, 403 unless you are admin there."""
+    await _console_clinic(conn, clinic_id, ("admin",))
+    policy = request.app.state.rubber_stamp_policy
+    reports = assess_reviewers(await reviewer_stats_rows(conn, clinic_id, days), policy)
+    return ReviewerStatsOut(
+        clinic_id=clinic_id, days=days, policy_configured=policy is not None,
+        reviewers=[
+            ReviewerStatOut(
+                reviewer=r.row.reviewer, decisions=r.row.decisions, approvals=r.row.approvals, edits=r.row.edits, rejections=r.row.rejections, approval_rate=r.row.approval_rate,
+                median_seconds=r.row.median_seconds, canaries_seen=r.row.canaries_seen, canaries_approved=r.row.canaries_approved, verdict=r.verdict, reasons=list(r.reasons),
+            )
+            for r in reports
+        ],
+    )
+
+
+def _cost_column(c: Any) -> CostColumnOut | None:
+    if c is None:
+        return None
+    f = lambda v: None if v is None else float(v)
+    return CostColumnOut(
+        workflows_per_day=float(c.w_workflows_per_day), calls_per_workflow=f(c.a_calls_per_workflow), usd_per_call=f(c.u_usd_per_call), workload_x_amplification_x_unit_per_month=f(c.wau_month),
+        platform_floor_per_month=f(c.p_floor), failure_tax_per_month=f(c.f_failure), total_per_month=f(c.total_month),
+    )
+
+
+@staff_console.get("/cost-canvas", response_model=CostCanvasOut)
+async def cost_canvas_view(clinic_id: uuid.UUID, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), days: Annotated[int, Query(ge=1, le=90)] = 30) -> CostCanvasOut:
+    """Monthly cost = W x A x U + P + F from the spend ledger and the completed jobs of the last `days` (live origin only), in two columns: actual and at-scale shadow. Fewer than seven days of traffic is `insufficient_data`; a term that is not configured or not measured is null with the reason. Admin only. 404 if the clinic is not visible to you, 403 unless you are admin there."""
+    await _console_clinic(conn, clinic_id, ("admin",))
+    measured = await measured_costs(conn, clinic_id, days)
+    canvas = compute_cost_canvas(measured, request.app.state.cost_settings)
+    return CostCanvasOut(
+        clinic_id=clinic_id, state=canvas.state, reasons=list(canvas.reasons), actual=_cost_column(canvas.actual), shadow=_cost_column(canvas.shadow),
+        amplification_over_ceiling=canvas.amplification_over_ceiling,
+    )
+
+
+@staff_console.get("/reason-codes", response_model=ReasonCodesOut)
+async def reason_codes(request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> ReasonCodesOut:
+    """The clinic's picklist of review reason codes (a setting; empty while it is unset, and then no decision carries one). 403 unless you are a nurse or doctor somewhere."""
+    if not await _any_role_held(conn, ("nurse", "doctor")):
+        raise HTTPException(status_code=403, detail="your role may not read this")
+    codes = request.app.state.reason_codes
+    return ReasonCodesOut(configured=codes is not None, codes=sorted(codes.codes) if codes else [])
+
+
 def _intake_from_environment(supabase_url: str) -> tuple[DocumentIntake | None, Any]:
     """The real document intake over Supabase Storage, or (None, None) so the upload routes answer 503. Built ONLY when ALL hold: `CAREFLOW_STORAGE_BUCKET` is set, `CAREFLOW_STORAGE_VERIFIED` names the
     date the owner confirmed the real service with `scripts/storage_spike.py` (Appendix B: an external service's behaviour is confirmed by a real call before code depends on it), the profile is demo and the
@@ -3140,6 +3401,9 @@ def create_app(
         app.state.active_key_version = cfg.active_key_version
         app.state.step_up_max_age_seconds = cfg.step_up_max_age_seconds
         app.state.require_aal2 = cfg.require_aal2
+        app.state.reason_codes = ReasonCodes.from_setting(os.environ.get("CAREFLOW_REVIEW_REASON_CODES"))
+        app.state.rubber_stamp_policy = RubberStampPolicy.from_setting(os.environ.get("CAREFLOW_RUBBER_STAMP_POLICY"))
+        app.state.cost_settings = cost_settings_from()
         app.state.erase_reasons = frozenset(w.strip() for w in (cfg.erase_reasons or "").split(",") if w.strip()) or None
         app.state.clock = clock
         app.state.required_roles = cfg.required_roles
@@ -3179,6 +3443,12 @@ def create_app(
         sweeps = [release_expired_holds_sweep]  # tidy expired holds on every tick (migration 0033); correctness never depended on it
         if components is not None:
             sweeps.append(lambda conn: raise_dead_letter_tasks(conn, components.dead_letters))  # a dead-lettered run is never silent
+        # The independent in-app watchdog (13.3): every tick, as the worker, it reads overdue tasks, queue age and dead letters and writes ops.alerts. Its limits and the task deadlines are required settings
+        # (unset: that check does not run and the result says so). E-mail and Slack are not configured here (external services, rule 13): a nudge that cannot be sent raises a delivery_failed alert for admin.
+        deadlines = DeadlinePolicy.from_setting(os.environ.get("CAREFLOW_REVIEW_DEADLINE_MINUTES"))
+        watchdog_limits = limits_from(os.environ.get("CAREFLOW_WATCHDOG_LIMITS"))
+        sign_in_url = os.environ.get("CAREFLOW_SIGN_IN_URL") or "(sign-in link not configured)"
+        sweeps.append(lambda conn: watchdog_sweep(conn, AlertRouter(SqlAlertSink(conn), {}, sign_in_url), deadlines, watchdog_limits))
         worker: asyncio.Task | None = None
         if cfg.run_worker:
             if cfg.worker_account_id is None:
@@ -3236,8 +3506,9 @@ def create_app(
     app.include_router(staff_audit)
     app.include_router(staff_accounts)
     app.include_router(staff_erasure)
+    app.include_router(staff_console)
     app.include_router(health)
-    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
+    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
     return app
 
 
