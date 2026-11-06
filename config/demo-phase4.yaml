@@ -49,9 +49,6 @@ settings:
   sign_in_url:
     value: "http://localhost:5173/sign-in"
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
-  canary_max_per_day:
-    value: "20"
-    label: "DEMO ONLY - NOT A CLINICAL DECISION"
   care_gap_alert_days:
     value: "14"
     label: "DEMO ONLY - NOT A CLINICAL DECISION"

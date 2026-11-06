@@ -146,7 +146,7 @@ async def record_barrier(conn: AsyncConnection, *, clinic_id: uuid.UUID, origin:
         return row.id, True
     except IntegrityError as exc:
         state = sqlstate(exc)
-        if state == "23503":
+        if state in ("23503", "23001"):  # no such patient of this clinic, or the patient is erased (trigger, migration 0047)
             raise LookupError("no such patient in this clinic") from None
         if state != "23505":
             raise

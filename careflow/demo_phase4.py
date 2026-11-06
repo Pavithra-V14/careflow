@@ -35,7 +35,6 @@ VARIABLES: Final = {
     "cost_platform_floor": "CAREFLOW_COST_PLATFORM_FLOOR",
     "cost_reviewer_rates": "CAREFLOW_COST_REVIEWER_RATES",
     "sign_in_url": "CAREFLOW_SIGN_IN_URL",
-    "canary_max_per_day": "CAREFLOW_CANARY_MAX_PER_DAY",
     "care_gap_alert_days": "CAREFLOW_CARE_GAP_ALERT_DAYS",
     "voice_transcript_retention_days": "CAREFLOW_VOICE_TRANSCRIPT_RETENTION_DAYS",
 }

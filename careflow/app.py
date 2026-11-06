@@ -3570,6 +3570,85 @@ async def open_voice_session(body: VoiceSessionIn, idempotency_key: IdempotencyK
     return VoiceSessionOut(session_id=session_id, created=created, mic="ok")
 
 
+# ---- Voice transcripts: admin-only, audited reading and purging (migration 0047; BUILD-SPEC.md 9.4) ----------------------------------------------------------------------------------------------------------
+#
+# Admin of the clinic only, with a verified second factor checked AGAIN in the database (iam.aal2_session). Reading returns decrypted text, never cached, and the database writes one audit row per read.
+# The purge deletes only chunks past their expiry and writes its own audit row. Which sessions exist is the metadata list (no patient identity, no text).
+
+staff_voice = APIRouter(prefix="/v1/staff/voice", tags=["staff voice transcripts"])
+
+
+class VoiceSessionRowOut(_Out):
+    session_id: uuid.UUID
+    workflow: str
+    status: str
+    started_at: datetime
+    retention_days: int
+    chunk_count: int
+    expired_chunk_count: int
+
+
+class VoiceSessionListOut(_Out):
+    sessions: list[VoiceSessionRowOut]
+
+
+class VoiceChunkOut(_Out):
+    seq: int
+    text: str
+
+
+class VoiceTranscriptOut(_Out):
+    session_id: uuid.UUID
+    chunks: list[VoiceChunkOut]
+
+
+class VoicePurgeIn(_Body):
+    clinic_id: uuid.UUID
+    limit: int = Field(default=500, ge=1, le=1000)
+
+
+class VoicePurgeOut(_Out):
+    deleted: int
+
+
+@staff_voice.get("/sessions", response_model=VoiceSessionListOut)
+async def list_voice_sessions(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> VoiceSessionListOut:
+    """Voice sessions of the clinic, newest first (metadata only). 404 if the clinic is not visible to you, 403 unless you are an admin there with a verified second factor."""
+    await _console_clinic(conn, clinic_id, ("admin",))
+    try:
+        rows = await voice_sql.admin_sessions(conn, clinic_id)
+    except voice_sql.VoiceAccessRefused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return VoiceSessionListOut(sessions=[VoiceSessionRowOut(session_id=r.session_id, workflow=r.workflow, status=r.status, started_at=r.started_at, retention_days=r.retention_days, chunk_count=r.chunk_count, expired_chunk_count=r.expired_chunk_count) for r in rows])
+
+
+@staff_voice.get("/sessions/{session_id}/transcript", response_model=VoiceTranscriptOut)
+async def read_voice_transcript(session_id: uuid.UUID, clinic_id: uuid.UUID, request: Request, response: Response, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> VoiceTranscriptOut:
+    """Read a session's unexpired transcript (audited by the database). 404 if the clinic or session is not visible to you, 403 unless you are an admin there with a verified second factor, 503 if encryption keys are not configured."""
+    await _console_clinic(conn, clinic_id, ("admin",))
+    vault: DemographicVault | None = request.app.state.vault
+    if vault is None:
+        raise HTTPException(status_code=503, detail="message reading is unavailable: encryption keys are not configured")
+    try:
+        chunks = await voice_sql.admin_read(conn, vault, clinic_id, session_id)
+    except voice_sql.VoiceAccessRefused:
+        raise HTTPException(status_code=404, detail="not found") from None
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    return VoiceTranscriptOut(session_id=session_id, chunks=[VoiceChunkOut(seq=q, text=t) for q, t in chunks])
+
+
+@staff_voice.post("/purge", response_model=VoicePurgeOut)
+async def purge_voice_transcripts(body: VoicePurgeIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> VoicePurgeOut:
+    """Delete up to `limit` EXPIRED transcript chunks of the clinic (never an unexpired one), audited by the database. Idempotent on the key. 404 if the clinic is not visible to you, 403 unless you are an admin there with a verified second factor."""
+    await _console_clinic(conn, body.clinic_id, ("admin",))
+    try:
+        deleted = await voice_sql.admin_purge(conn, body.clinic_id, idempotency_key, body.limit)
+    except voice_sql.VoiceAccessRefused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return VoicePurgeOut(deleted=deleted)
+
+
 def _positive_int(raw: str | None) -> int | None:
     """A required numeric setting: unset, blank, non-numeric or below 1 is None (unset), never a default."""
     try:
@@ -3660,13 +3739,8 @@ def create_app(
         except CanaryError:
             log.error("CAREFLOW_CANARY_RATE is invalid: no canaries are injected")
             canary_rate = None
-        try:
-            canary_max_per_day: int | None = int(p4env["CAREFLOW_CANARY_MAX_PER_DAY"].strip()) if (p4env.get("CAREFLOW_CANARY_MAX_PER_DAY") or "").strip() else None
-        except ValueError:
-            log.error("CAREFLOW_CANARY_MAX_PER_DAY is invalid: no canaries are injected")
-            canary_max_per_day = None
-        if canary_rate is not None and canary_max_per_day is not None and components is not None and demo_phase3.demo_allowed(resolve_profile(), demo_phase3.data_policy(os.environ)) and demo_phase3.switched_on(os.environ):
-            sweeps.append(lambda conn: canary_sweep(conn, canary_rate, canary_max_per_day))
+        if canary_rate is not None and components is not None and demo_phase3.demo_allowed(resolve_profile(), demo_phase3.data_policy(os.environ)) and demo_phase3.switched_on(os.environ):
+            sweeps.append(lambda conn: canary_sweep(conn, canary_rate))
         worker: asyncio.Task | None = None
         if cfg.run_worker:
             if cfg.worker_account_id is None:
@@ -3727,8 +3801,9 @@ def create_app(
     app.include_router(staff_console)
     app.include_router(staff_care_gaps)
     app.include_router(portal_voice)
+    app.include_router(staff_voice)
     app.include_router(health)
-    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
+    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, staff_voice])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
     return app
 
 

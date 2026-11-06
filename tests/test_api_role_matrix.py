@@ -2670,6 +2670,52 @@ def voice_session_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, VOICE_SESSIONS, body())
 
 
+# ---- admin-only voice transcripts (migration 0047) -------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Admin of the clinic only (and the database checks a verified second factor again). Everyone else who sees the clinic gets 403, everyone else the one 404. The functions against the real tables
+# (read, purge, expiry, audit rows, password-only refusal) are in tests/test_voice_admin_db_live.py.
+
+VOICE_ADMIN_VISIBLE = ("front_desk_a", "nurse_a", "doctor_a", "business_owner_a", "auditor_a", "multi")
+VOICE_ADMIN = "/v1/staff/voice"
+
+
+def voice_sessions_list_cases(ids) -> list[tuple]:
+    path = lambda **o: VOICE_ADMIN + "/sessions?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
+    ok = lambda b: b == {"sessions": []}
+    cases = _console_clinic_cases(ids, path, allowed=("admin_a",), ok_status=200, ok_body=ok, visible_refused=VOICE_ADMIN_VISIBLE)
+    cases += [
+        _case(ids, "an unknown clinic is not found", "admin_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "a clinic id that is not a uuid is rejected", "admin_a", 422, path(clinic_id="nope"), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
+def voice_transcript_read_cases(ids) -> list[tuple]:
+    path = lambda **o: f"{VOICE_ADMIN}/sessions/{uuid.uuid4()}/transcript?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
+    cases = _console_clinic_cases(ids, path, allowed=(), ok_status=200, ok_body=None, visible_refused=VOICE_ADMIN_VISIBLE)
+    cases = [c for c in cases if "admin_a" not in c[0]]  # the admin's own case: a session that does not exist is the one 404 (the same answer as a session in another clinic)
+    cases.append(_case(ids, "admin_a reading a session that does not exist is the one not-found", "admin_a", 404, path(), key=None, body=_fixed(404)))
+    cases += [
+        _case(ids, "an unknown clinic is not found", "admin_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "a session id that is not a uuid is rejected", "admin_a", 422, f"{VOICE_ADMIN}/sessions/nope/transcript?clinic_id={ids.clinic_a}", key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
+def voice_purge_cases(ids) -> list[tuple]:
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), **o}
+    done = lambda b: b == {"deleted": 0}
+    cases = [_case(ids, "admin_a purges (nothing has expired)", "admin_a", 200, VOICE_ADMIN + "/purge", json=body(), body=done)]
+    cases += [_case(ids, f"{p} sees the clinic but is refused", p, 403, VOICE_ADMIN + "/purge", json=body(), body=NOT_YOUR_ROLE) for p in VOICE_ADMIN_VISIBLE]
+    others = [p for p in ids.people if p != "admin_a" and p not in VOICE_ADMIN_VISIBLE]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused with the one not-found", p, 404, VOICE_ADMIN + "/purge", json=body(), body=_fixed(404)) for p in others]
+    cases += [
+        _case(ids, "a limit above 1000 is rejected", "admin_a", 422, VOICE_ADMIN + "/purge", json=body(limit=1001), body=_fixed(422)),
+        _case(ids, "an extra field is rejected", "admin_a", 422, VOICE_ADMIN + "/purge", json=body(extra=1), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "admin_a", 422, VOICE_ADMIN + "/purge", json=body(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, VOICE_ADMIN + "/purge", body())
+
+
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
     ("POST", HOLD): lambda ids: slot_write_cases(ids, "hold"),
@@ -2719,6 +2765,9 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", VOICE_PREF): voice_preference_get_cases,
     ("PUT", VOICE_PREF): voice_preference_put_cases,
     ("POST", VOICE_SESSIONS): voice_session_cases,
+    ("GET", VOICE_ADMIN + "/sessions"): voice_sessions_list_cases,
+    ("GET", VOICE_ADMIN + "/sessions/{session_id}/transcript"): voice_transcript_read_cases,
+    ("POST", VOICE_ADMIN + "/purge"): voice_purge_cases,
     ("GET", ACCOUNTS): staff_list_cases,
     ("POST", ACCOUNTS + "/invite"): staff_invite_cases,
     ("POST", ACCOUNTS + "/activate-me"): staff_activate_cases,

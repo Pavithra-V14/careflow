@@ -122,7 +122,7 @@ async def test_all_eleven_schemas_exist_and_nine_have_no_tables(db):
         "kb": {"red_flag_rules"},
         "agents": {"review_tasks", "triage_proposals", "review_decisions", "graph_checkpoints", "graph_checkpoint_blobs", "graph_checkpoint_writes"},  # 0018, 0021
         "ai": {"model_registry"},  # migration 0015
-        "docs": {"documents"},  # migration 0017
+        "docs": {"documents", "canary_settings"},  # migrations 0017 and 0047
         "msg": {"threads", "messages", "message_rotation_batches", "screenings", "voice_preferences", "voice_sessions", "voice_transcript_chunks"},  # migrations 0011, 0013 and 0045
     }
 
