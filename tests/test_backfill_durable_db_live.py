@@ -240,8 +240,8 @@ async def test_only_the_special_negative_index_writes_of_a_scheduling_thread_can
     await call(db, w.people["fd"], WRITE.replace("'tk'", "'tk2'") + " returning 1", c=w.a, t=mine, x=0, k=f"w-{_u()}")
     update = "with u as (update agents.graph_checkpoint_writes set write_blob = '\x09'::bytea where thread_id = :t and idx = :x returning 1) select count(*) from u"
     assert await call(db, w.people["fd"], update, t=mine, x=-1) == 1  # a special entry is replaced
-    with pytest.raises(Exception, match="append-only|restrict"):
-        await call(db, w.people["fd"], update, t=mine, x=0)  # a regular write is final, for everyone
+    assert await call(db, w.people["fd"], update, t=mine, x=0) == 0  # a regular write is final: the policy never lets front desk reach it (and the trigger blocks it for everyone else)
+    assert await one(db, "select count(*) from agents.graph_checkpoint_writes where thread_id = :t and idx = 0 and write_blob = ''::bytea", t=mine) == 1
     assert await call(db, w.people["fd_b"], update, t=mine, x=-1) == 0  # another clinic cannot even see it
 
 
@@ -265,3 +265,41 @@ async def test_the_task_function_is_executable_by_the_application_role_only_and_
         assert granted is False, role
     await raise_task(db, w)
     assert (await db.execute(text("select clinic_id, origin from audit.log where resource_id = :s and action = 'backfill.task_raised'"), {"s": str(w.slot)})).one() == (w.a, "test")
+
+
+# ---- 0041: the thread must name a slot of the clinic -------------------------------------------------------------------------------------------------------------
+
+
+async def test_front_desk_cannot_write_a_scheduling_thread_for_a_slot_that_does_not_exist_or_is_in_another_clinic(db):
+    w = await world(db)
+    with pytest.raises(Exception, match="row-level security"):
+        await call(db, w.people["fd"], CHECKPOINT + " returning 1", c=w.a, t=f"scheduling:{_u()}", i="c1", k=f"cp-{_u()}")  # no such slot
+    with pytest.raises(Exception, match="row-level security"):
+        await call(db, w.people["fd"], CHECKPOINT + " returning 1", c=w.a, t="scheduling:not-a-uuid", i="c1", k=f"cp-{_u()}")  # not even an id
+    assert await call(db, w.people["fd"], CHECKPOINT + " returning 1", c=w.a, t=f"scheduling:{w.slot}", i="c1", k=f"cp-{_u()}") == 1  # the clinic's own slot still works
+
+
+async def test_a_thread_row_for_a_missing_slot_is_invisible_to_front_desk(db):
+    w = await world(db)
+    ghost = f"scheduling:{_u()}"
+    await raw(db, f"insert into agents.graph_checkpoints (clinic_id, origin, thread_id, checkpoint_ns, checkpoint_id, checkpoint_type, checkpoint, metadata_type, metadata, idempotency_key) values ('{w.a}', 'test', '{ghost}', '', 'c9', 'msgpack', '\x01', 'json', '\x02', 'cp-{_u()}')")
+    assert await call(db, w.people["fd"], "select count(*) from agents.graph_checkpoints where thread_id = :t", t=ghost) == 0
+
+
+async def test_a_slot_of_another_clinic_and_the_other_two_tables_are_closed_too(db):
+    w = await world(db)
+    foreign = f"scheduling:{w.slot_b}"
+    with pytest.raises(Exception, match="row-level security"):
+        await call(db, w.people["fd"], CHECKPOINT + " returning 1", c=w.a, t=foreign, i="c1", k=f"cp-{_u()}")  # clinic A's row for clinic B's slot
+    with pytest.raises(Exception, match="row-level security"):
+        await call(db, w.people["fd"], CHECKPOINT + " returning 1", c=w.b, t=f"scheduling:{w.slot_b}", i="c1", k=f"cp-{_u()}")  # a clinic the caller is not in
+    with pytest.raises(Exception, match="row-level security"):
+        await call(db, w.people["fd"], CHECKPOINT + " returning 1", c=w.a, t=f"scheduling:{str(w.slot).upper()}", i="c1", k=f"cp-{_u()}")  # only the canonical lower-case id matches
+    ghost = f"scheduling:{_u()}"
+    for sql, params in ((BLOB, {"v": "9"}), (WRITE, {"x": -1}), (WRITE, {"x": 0})):
+        with pytest.raises(Exception, match="row-level security"):
+            await call(db, w.people["fd"], sql + " returning 1", c=w.a, t=ghost, k=f"x-{_u()}", **params)
+    await raw(db, f"insert into agents.graph_checkpoint_writes (clinic_id, origin, thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, write_type, write_blob, idempotency_key) values ('{w.a}', 'test', '{ghost}', '', 'c1', 'tk', -1, 'ch', 'msgpack', '\x01', 'gw-{_u()}')")
+    assert await call(db, w.people["fd"], "select count(*) from agents.graph_checkpoint_writes where thread_id = :t", t=ghost) == 0
+    update = "with u as (update agents.graph_checkpoint_writes set write_blob = '	'::bytea where thread_id = :t and idx = -1 returning 1) select count(*) from u"
+    assert await call(db, w.people["fd"], update, t=ghost) == 0

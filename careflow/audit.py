@@ -38,7 +38,7 @@ ACTIONS: Final = frozenset(
         "setup.create_location", "setup.create_provider", "setup.create_visit_type", "setup.create_slot",  # a front-desk person or admin set the clinic up (careflow/app.py set-up routes): ids only
         "patient.erase_request", "patient.erase", "patient.erase_cancel",  # the two-person erasure of a patient's identity (written by the mpi.*_patient_erasure functions in the same transaction): reason code and role scope only
         "staff.invite", "staff.grant_role", "staff.revoke_role", "staff.suspend", "staff.reinstate", "staff.activate",  # staff account changes, written by the iam.* functions (migration 0034): role word and scope only
-        "backfill.start", "backfill.decide", "backfill.reply", "backfill.task_raised", "alert.acknowledge",  # a front-desk person started a backfill run for a freed slot, or answered one of its pauses: the closed action or outcome word and the run status only
+        "backfill.start", "backfill.decide", "backfill.reply", "backfill.task_raised", "canary.injected", "alert.acknowledge",  # a front-desk person started a backfill run for a freed slot, or answered one of its pauses: the closed action or outcome word and the run status only
         "offer.mark_delivered",  # a front-desk person delivered an offer by hand (channel manual): hold id and the closed channel word only
         "hold.release",  # a front-desk person gave a held slot back before its time ran out
         "offer.send", "offer.interpret_reply",  # a front-desk person sent an offer: the slot hold and the offer message (careflow/offers.py)

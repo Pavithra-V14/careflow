@@ -238,6 +238,15 @@ def _digest(*parts: str) -> str:
     return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
 
 
+
+async def _letter_text(texts: Any, document_id: uuid.UUID, origin: str) -> str:
+    """The letter text. A text source may offer `text_for_origin` (the DEMO source does, to make a canary's fabricated letter for origin `canary`); every other source is asked the plain way."""
+    by_origin = getattr(texts, "text_for_origin", None)
+    if by_origin is not None:
+        return await by_origin(document_id, origin)
+    return await texts.text_for(document_id)
+
+
 def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[str, str] | None = None):
     """Compile the Front Door graph. `checkpointer` is required (no default): a graph without durable state is not allowed to run (§7.2)."""
     assert_tracing_off(environ)
@@ -251,7 +260,7 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
         document_id, _ = _ids(state)
         async with deps.session() as conn:
             try:
-                text_ = await deps.texts.text_for(document_id)
+                text_ = await _letter_text(deps.texts, document_id, state["origin"])
             except ExtractionNeedsManual as exc:
                 return _unavailable(exc)
             try:
@@ -273,7 +282,7 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
         document_id, _ = _ids(state)
         async with deps.session() as conn:
             try:
-                text_ = await deps.texts.text_for(document_id)
+                text_ = await _letter_text(deps.texts, document_id, state["origin"])
             except ExtractionNeedsManual as exc:
                 return _unavailable(exc)
             held = _suspect_text(text_)  # a resume can land here without passing through `screen`: the extractor must not read a suspect letter
@@ -291,7 +300,7 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
         # Rules first on EVERY path, including a resume that lands here after a crash: the retriever embeds the letter text with a model.
         async with deps.session() as conn:
             try:
-                text_ = await deps.texts.text_for(document_id)
+                text_ = await _letter_text(deps.texts, document_id, state["origin"])
             except ExtractionNeedsManual as exc:
                 return _unavailable(exc)
             screened = await screen_referral(conn, deps.engine, document_id, text_, profile=deps.profile)  # type: ignore[arg-type]

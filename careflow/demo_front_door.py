@@ -25,6 +25,7 @@ from collections.abc import Mapping
 from typing import Final
 
 from careflow import demo_phase3
+from careflow.canary import MARKER
 from careflow.crypto import DemographicVault
 from careflow.dead_letters import SqlDeadLetterTaskWriter
 from careflow.front_door_runner import FrontDoorComponents
@@ -60,11 +61,25 @@ def demo_letter(document_id: uuid.UUID) -> str:
     return f"Referral letter (DEMO, fictional). Patient: {name}, DOB {dob}" + (f", Mobile {phone}" if phone else "") + ". Please see this patient."
 
 
+# THE CANARY (docs/design/phase4-review-console.md). Its letter is read like any demo letter, but the DEMO retriever then proposes one card id that does not exist in the clinic's list: that is the planted
+# error, and a careful reviewer rejects the proposal. LIMIT: the demo reviewer view shows card ids, not the letter, so this planted error is only as visible as the card list; a real canary needs the
+# reviewer to see the evidence it is planted in (a clinic decision about what the console shows).
+CANARY_CARD: Final = ("demo-synthetic-card-NONEXISTENT", 1)
+
+
+def canary_letter(document_id: uuid.UUID) -> str:
+    serial = document_id.int % 1_000_000
+    return f"Referral letter ({MARKER}). Patient: Canary Test {serial:06d}, DOB 1990-01-01. Please see this patient."
+
+
 class DemoTexts:
-    """A fictional letter made up from the document's id. It reads no stored file and calls nothing."""
+    """A fictional letter made up from the document's id. It reads no stored file and calls nothing. For origin `canary` it makes the canary's fabricated letter instead."""
 
     async def text_for(self, document_id: uuid.UUID) -> str:
         return demo_letter(document_id)
+
+    async def text_for_origin(self, document_id: uuid.UUID, origin: str) -> str:
+        return canary_letter(document_id) if origin == "canary" else demo_letter(document_id)
 
 
 class DemoExtractor:
@@ -84,6 +99,8 @@ class DemoRetriever:
     """FAKE retriever: proposes the two fictional card ids. No card text, no embedding, no vector store."""
 
     async def retrieve(self, query: str, *, scope: dict[str, str]) -> Retrieval:
+        if "SYNTHETIC CANARY" in query:
+            return Retrieval(False, None, (Candidate(CANARY_CARD[0], CANARY_CARD[1], 0.03, 0.9, 0.5),))
         return Retrieval(False, None, tuple(Candidate(card, version, 0.03 - i * 0.01, 0.9, 0.5) for i, (card, version) in enumerate(DEMO_CARDS)))
 
 
