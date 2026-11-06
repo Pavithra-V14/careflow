@@ -64,6 +64,7 @@ from careflow import (
     active_role,
     demo_front_door,
     demo_phase3,
+    demo_phase4,
     identity,
     mpi,
     offers,
@@ -83,7 +84,10 @@ from careflow.auth import (
     verify_token,
 )
 from careflow.auth_admin import AuthAdminError, AuthAdminPort
+from careflow.canary import CanaryError
 from careflow.canary import on_decision as canary_on_decision
+from careflow.canary import rate_from as canary_rate_from
+from careflow.canary_injection import canary_sweep
 from careflow.checkpointer import CheckpointerError
 from careflow.clinical_server import build_clinical_server
 from careflow.cors import middleware_kwargs, parse_origins
@@ -3401,9 +3405,11 @@ def create_app(
         app.state.active_key_version = cfg.active_key_version
         app.state.step_up_max_age_seconds = cfg.step_up_max_age_seconds
         app.state.require_aal2 = cfg.require_aal2
-        app.state.reason_codes = ReasonCodes.from_setting(os.environ.get("CAREFLOW_REVIEW_REASON_CODES"))
-        app.state.rubber_stamp_policy = RubberStampPolicy.from_setting(os.environ.get("CAREFLOW_RUBBER_STAMP_POLICY"))
-        app.state.cost_settings = cost_settings_from()
+        p4env = demo_phase4.effective_environ(os.environ, resolve_profile())  # the environment, plus the labelled DEMO placeholders ONLY under demo + synthetic_only + CAREFLOW_DEMO_PHASE4 (refuses to start elsewhere)
+        app.state.p4env = p4env
+        app.state.reason_codes = ReasonCodes.from_setting(p4env.get("CAREFLOW_REVIEW_REASON_CODES"))
+        app.state.rubber_stamp_policy = RubberStampPolicy.from_setting(p4env.get("CAREFLOW_RUBBER_STAMP_POLICY"))
+        app.state.cost_settings = cost_settings_from(p4env)
         app.state.erase_reasons = frozenset(w.strip() for w in (cfg.erase_reasons or "").split(",") if w.strip()) or None
         app.state.clock = clock
         app.state.required_roles = cfg.required_roles
@@ -3445,10 +3451,18 @@ def create_app(
             sweeps.append(lambda conn: raise_dead_letter_tasks(conn, components.dead_letters))  # a dead-lettered run is never silent
         # The independent in-app watchdog (13.3): every tick, as the worker, it reads overdue tasks, queue age and dead letters and writes ops.alerts. Its limits and the task deadlines are required settings
         # (unset: that check does not run and the result says so). E-mail and Slack are not configured here (external services, rule 13): a nudge that cannot be sent raises a delivery_failed alert for admin.
-        deadlines = DeadlinePolicy.from_setting(os.environ.get("CAREFLOW_REVIEW_DEADLINE_MINUTES"))
-        watchdog_limits = limits_from(os.environ.get("CAREFLOW_WATCHDOG_LIMITS"))
-        sign_in_url = os.environ.get("CAREFLOW_SIGN_IN_URL") or "(sign-in link not configured)"
+        deadlines = DeadlinePolicy.from_setting(p4env.get("CAREFLOW_REVIEW_DEADLINE_MINUTES"))
+        watchdog_limits = limits_from(p4env.get("CAREFLOW_WATCHDOG_LIMITS"))
+        sign_in_url = p4env.get("CAREFLOW_SIGN_IN_URL") or "(sign-in link not configured)"
         sweeps.append(lambda conn: watchdog_sweep(conn, AlertRouter(SqlAlertSink(conn), {}, sign_in_url), deadlines, watchdog_limits))
+        # Canary injection (12.4): DEMO profile only, and only when a canary rate is configured (an unset rate injects nothing). Real wiring for a clinic is a later decision.
+        try:
+            canary_rate = canary_rate_from(p4env)
+        except CanaryError:
+            log.error("CAREFLOW_CANARY_RATE is invalid: no canaries are injected")
+            canary_rate = None
+        if canary_rate is not None and components is not None and demo_phase3.demo_allowed(resolve_profile(), demo_phase3.data_policy(os.environ)) and demo_phase3.switched_on(os.environ):
+            sweeps.append(lambda conn: canary_sweep(conn, canary_rate))
         worker: asyncio.Task | None = None
         if cfg.run_worker:
             if cfg.worker_account_id is None:

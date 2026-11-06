@@ -21,6 +21,15 @@ ALERT = (
 )
 
 
+class Failure(str):
+    """The SQLSTATE (so it compares like one), carrying the full message for an assertion that fails."""
+
+    def __new__(cls, state, detail):
+        obj = super().__new__(cls, state)
+        obj.detail = detail
+        return obj
+
+
 async def seq(conn, uid, *statements):
     """Run the statements in order as `careflow_app` with the account's claims, all in one savepoint that is rolled back. Each statement is (sql, fetch?). Returns the results, or the SQLSTATE of the first failure."""
     await conn.execute("savepoint seq")
@@ -32,7 +41,7 @@ async def seq(conn, uid, *statements):
             out.append(await conn.fetch(sql) if fetch else await conn.execute(sql))
         return out
     except asyncpg.PostgresError as exc:
-        return exc.sqlstate
+        return Failure(exc.sqlstate, f"{exc.sqlstate}: {exc}")
     finally:
         await conn.execute("rollback to savepoint seq")
 
@@ -69,7 +78,8 @@ async def test_a_reviewer_can_raise_only_the_silent_canary_alert_for_their_own_c
     w = await world(db)
     decision = await canary_decision(db, w)
     raised = await seq(db, w.people["nurse_a"], (canary_alert(w, decision), False), ("select id from ops.alerts", True))
-    assert isinstance(raised, list) and raised[1] == []  # accepted, and the reviewer sees no alert at all
+    assert isinstance(raised, list), getattr(raised, "detail", raised)
+    assert raised[1] == []  # accepted, and the reviewer sees no alert at all
     await db.execute(canary_alert(w, decision))  # (the owner writes the same row so the admin's view can be read next)
     seen = await seq(db, w.people["admin_a"], ("select class, audience_role, ref from ops.alerts", True))
     assert [tuple(r) for r in seen[0]] == [("canary_approved", "admin", str(decision))]
@@ -98,7 +108,8 @@ async def test_a_reviewer_cannot_raise_any_other_alert_nor_one_for_a_decision_th
 async def test_the_worker_raises_alerts_each_role_reads_only_its_own_and_a_repeat_is_a_no_op(db):  # noqa: F811
     w = await world(db)
     key = f"k-{_u()}"
-    assert isinstance(await seq(db, w.people["worker_a"], (alert(w, aud="admin", key=key), False), (alert(w, aud="admin", key=key), False)), list)
+    first = await seq(db, w.people["worker_a"], (alert(w, aud="admin", key=key), False), (alert(w, aud="admin", key=key), False))
+    assert isinstance(first, list), getattr(first, "detail", first)
     await db.execute(alert(w, aud="admin", key=key))
     await db.execute(alert(w, aud="nurse", cls="red_flag_overdue", key=f"k-{_u()}"))
     count = lambda who: seq(db, w.people[who], (f"select count(*) from ops.alerts where clinic_id = '{w.a}'", True))
@@ -113,7 +124,8 @@ async def test_an_alert_is_acknowledged_once_by_its_own_audience_with_the_databa
     w = await world(db)
     await db.execute(alert(w, aud="admin", key="k-ack"))
     ack = "update ops.alerts set acknowledged_by = auth.uid(), acknowledged_at = '2001-01-01' where idempotency_key = 'k-ack'"
-    assert await seq(db, w.people["nurse_a"], (ack, False)) == ["UPDATE 0"]  # a role the alert is not aimed at cannot see the row, so it updates nothing
+    nurse_ack = await seq(db, w.people["nurse_a"], (ack, False))
+    assert nurse_ack == ["UPDATE 0"], getattr(nurse_ack, "detail", nurse_ack)  # a role the alert is not aimed at cannot see the row, so it updates nothing
     done = await seq(db, w.people["admin_a"], (ack, False), ("select acknowledged_at > '2020-01-01' from ops.alerts where idempotency_key = 'k-ack'", True))
     assert isinstance(done, list) and done[0] == "UPDATE 1" and done[1][0][0] is True  # the caller's time is replaced by the database's
     await db.execute("update ops.alerts set acknowledged_by = $1, acknowledged_at = now() where idempotency_key = 'k-ack'", w.people["admin_a"])
