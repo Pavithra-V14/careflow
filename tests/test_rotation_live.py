@@ -178,7 +178,10 @@ async def rotate_as(conn, vault, uid, **kwargs):
     # Not wrapped in `as_user`'s savepoint: that would roll back batches the engine had already finished, and the
     # engine's own per-batch savepoints are exactly what the failure tests exercise.
     # Since migration 0032 the application role can no longer UPDATE a patient's identity columns or an identity token, so rotation runs where the maintenance script runs it: as the migrator (the
-    # connection `conn` already is). `uid` is kept so the call sites read as before; it no longer selects a clinic (the owner rotates every clinic).
+    # connection `conn` already is). `uid` only names WHICH CLINIC to rotate: the owner could rotate every clinic, but the shared test database holds other suites' patients with ciphertext that is
+    # not ours to decrypt, so each call is scoped to the clinic of the account it is given.
+    if "clinic_id" not in kwargs:
+        kwargs["clinic_id"] = (await q(conn, "select clinic_id from iam.staff_roles where account_id = :u and revoked_at is null limit 1", u=uid))[0][0]
     return await rotate_key_version(conn, vault, **kwargs)
 
 
@@ -345,8 +348,8 @@ async def test_only_front_desk_of_the_clinic_rotates_and_only_that_clinic(db, va
                 await rotate_key_version(db, vault, from_version=1, to_version=2)
     assert (await snapshot(db, a), await snapshot(db, b)) == (before_a, before_b)
 
-    report = await rotate_as(db, vault, p["fd_b"])  # the maintenance connection (the owner) rotates every clinic
-    assert report.patients_rotated == 4
+    rotated = [(await rotate_as(db, vault, p[who])).patients_rotated for who in ("fd_a", "fd_b")]  # the maintenance connection (the owner) rotates each clinic it names
+    assert sum(rotated) == 4
     assert {r[0] for r in await q(db, "select name_key_version from mpi.patients where clinic_id = :c", c=b)} == {2}
 
 
