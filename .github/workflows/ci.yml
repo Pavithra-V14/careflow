@@ -102,6 +102,14 @@ jobs:
       - name: Gate scorecard
         run: uv run python scripts/gate_scorecard.py --report-only
 
+      # The gold set (BUILD-SPEC.md 14.1): a malformed case, or a frozen held-out case that was edited or removed, FAILS this step (the held-out split is never retuned). Empty today: no clinician has reviewed a case.
+      - name: Gold set is well-formed and the held-out split is frozen
+        run: uv run python scripts/gold_freeze.py
+
+      # The pre-deployment go/no-go (14.6), REPORT ONLY: the answer is NO-GO until real evidence exists, and that is printed, not hidden.
+      - name: Pre-deployment go/no-go (report only)
+        run: uv run python scripts/predeploy_check.py --report-only
+
       - name: "Offline tests (a skipped test is a failure)"
         run: |
           set -o pipefail

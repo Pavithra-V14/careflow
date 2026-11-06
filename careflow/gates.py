@@ -90,6 +90,13 @@ def evaluate_gate(gate: Gate, entry: object) -> Result:
             return Result(gate, "NOT MEASURED", "bar not set (a clinician sets it)", src)
         if value is None:
             return Result(gate, "NOT MEASURED", "value is not a number", src)
+        if "band_low" in entry or "baseline_mean" in entry:  # 14.3: judged against the variance band, not a single-run dip, once a 3-run baseline exists
+            band_low, mean = _number(entry.get("band_low")), _number(entry.get("baseline_mean"))
+            if band_low is None or mean is None:
+                return Result(gate, "NOT MEASURED", "variance band is malformed", src)
+            if mean < bar:
+                return Result(gate, "FAILED", "baseline is below the bar", src)  # the established baseline itself must reach the bar
+            return Result(gate, "MEASURED", "at or above the variance band", src) if value >= band_low else Result(gate, "FAILED", "below the variance band", src)
         return Result(gate, "MEASURED", "at or above the bar", src) if value >= bar else Result(gate, "FAILED", "below the bar", src)
     return Result(gate, "MEASURED", "reported", src) if value is not None else Result(gate, "NOT MEASURED", "value is not a number", src)
 
