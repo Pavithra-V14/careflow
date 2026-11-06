@@ -1,0 +1,11 @@
+# Evidence for the pre-deployment go/no-go (careflow/predeploy.py; BUILD-SPEC.md 14.6). EMPTY ON PURPOSE: nothing has been measured, so the decision is NO-GO. Every claim needs
+# `evidence` (a pointer: a CI run id, a document, a drill record) and `verified_on` (an ISO date). A claim without both counts as NOT MEASURED.
+#
+# Shapes:
+#   scorecard:   {<rubric item id>: {met: true, evidence: "...", verified_on: "YYYY-MM-DD"}}
+#   load_test, on_call_runbooks, golden_set_and_band, residency_access_audit, business_owner_signoff:   {met: true|false, evidence, verified_on}
+#   red_team, compliance, harness_contract_chaos:  {pass_rate: 1.0, evidence, verified_on}
+#   security_scan:  {critical_open: 0, high_open: 0, evidence, verified_on}
+#   rollback_drill: {end_to_end: true, seconds: 240, evidence, verified_on}
+#   cost_projection: {projected: n, actual: n, evidence, verified_on}
+scorecard: {}

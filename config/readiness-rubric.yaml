@@ -1,0 +1,29 @@
+# The production-readiness scorecard rubric (BUILD-SPEC.md 14.6; careflow/predeploy.py). This is engineering's STARTING rubric, owned and editable by the project owner: five categories
+# (Architecture, Observability, Security, Compliance, Operations), four items each, five points each, 20 per category. It asserts no clinical fact and sets no clinical threshold. An item scores
+# its points ONLY when ops/predeploy-evidence.yaml names evidence for it (a CI run, a document, a drill record) and a verification date; a missing claim scores zero. `evidence_hint` says what would count.
+categories:
+  architecture:
+    - {id: rls_forced_everywhere, points: 5, what: "Every clinic-scoped table has forced RLS and the role-matrix test passes against the restricted role", evidence_hint: "CI run of the live shards"}
+    - {id: rules_before_models_structural, points: 5, what: "The structural tests (rules before any model; a pausing node causes no side effect) pass", evidence_hint: "CI run, offline job"}
+    - {id: every_write_has_a_key, points: 5, what: "No write path lacks an idempotency key", evidence_hint: "CI run, idempotency tests"}
+    - {id: profiles_degrade_visibly, points: 5, what: "clinical without an approved route reports not ready and degrades visibly, never silently", evidence_hint: "readiness test run"}
+  observability:
+    - {id: dashboard_from_catalog, points: 5, what: "The dashboard and alert rules are generated from metrics-catalog.yaml and the CI check passes", evidence_hint: "CI run, --check step"}
+    - {id: independent_watchdog, points: 5, what: "The in-app watchdog alerts without any third party and a dead channel raises delivery_failed", evidence_hint: "watchdog tests plus a drill record"}
+    - {id: audit_completeness, points: 5, what: "Every human clinical decision writes an audit row and the audit reader shows it", evidence_hint: "live test run"}
+    - {id: cost_visible, points: 5, what: "Spend and cost per outcome are visible against the budget", evidence_hint: "cost canvas page with real inputs"}
+  security:
+    - {id: role_matrix_green, points: 5, what: "Every route has a role-matrix case and the matrix passes", evidence_hint: "CI run"}
+    - {id: keys_rotated, points: 5, what: "Every key that was ever in a local file is rotated and the rotation drill was run", evidence_hint: "pre-launch checklist item 12 closed"}
+    - {id: text_guard_and_scan, points: 5, what: "Untrusted text is isolated and scanned before any model and the red-team set passes", evidence_hint: "red-team run"}
+    - {id: uploads_scanned, points: 5, what: "Uploads pass a real malware scanner before they are read", evidence_hint: "pre-launch checklist item 2 closed"}
+  compliance:
+    - {id: data_flow_register_current, points: 5, what: "data-flow-register.yaml lists every external call that can see patient text and each is approved", evidence_hint: "register review"}
+    - {id: retention_and_erasure_built, points: 5, what: "Retention and erasure are built, with periods set by the privacy owner", evidence_hint: "pre-launch checklist item 4 closed"}
+    - {id: privacy_owner_confirmed, points: 5, what: "The privacy owner confirmed the patient-view field list in writing", evidence_hint: "pre-launch checklist item 17 closed"}
+    - {id: residency_decided, points: 5, what: "Hosting region and data residency decided and recorded", evidence_hint: "decision record"}
+  operations:
+    - {id: runbooks_written, points: 5, what: "Runbooks exist for each alert class and were read by the on-call person", evidence_hint: "runbook index and sign-off"}
+    - {id: on_call_staffed, points: 5, what: "An on-call rotation is staffed with named people", evidence_hint: "rotation record"}
+    - {id: rollback_drilled, points: 5, what: "A rollback was executed end to end", evidence_hint: "drill record"}
+    - {id: restore_drilled, points: 5, what: "A database restore was executed and checked", evidence_hint: "drill record"}
