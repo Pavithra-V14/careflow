@@ -7,12 +7,12 @@ INSERT with ON CONFLICT (see careflow/phase4_sql.py). A repeat of a key is a uni
 import uuid
 
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from careflow.care_gap_sql import sqlstate
 from careflow.crypto import DemographicVault
-from careflow.messages import encrypt_body
+from careflow.messages import decrypt_voice_chunk, encrypt_body
 
 
 async def get_preference(conn: AsyncConnection, account_id: uuid.UUID) -> bool:
@@ -79,3 +79,35 @@ class SqlTranscriptSink:
             if sqlstate(exc) != "23505":
                 raise  # a repeated (session, seq) or key is a replay
         self._seq[session_id] = seq + 1
+
+
+# ---- admin-only, audited reading and purging (migration 0047; BUILD-SPEC.md 9.4). The database functions check admin + aal2 and write the audit row themselves. ----------------------------------------------
+
+
+class VoiceAccessRefused(Exception):
+    """The database refused (42501): not an admin of the clinic, no verified second factor, or no such session. One answer for all of them."""
+
+
+async def _admin_call(conn: AsyncConnection, sql: str, params: dict) -> list:
+    try:
+        async with conn.begin_nested():
+            return list((await conn.execute(text(sql), params)).all())
+    except DBAPIError as exc:
+        if sqlstate(exc) == "42501":
+            raise VoiceAccessRefused from None
+        raise
+
+
+async def admin_sessions(conn: AsyncConnection, clinic_id: uuid.UUID) -> list:
+    return await _admin_call(conn, "select * from msg.voice_sessions_for_admin(:c)", {"c": clinic_id})
+
+
+async def admin_read(conn: AsyncConnection, vault: DemographicVault, clinic_id: uuid.UUID, session_id: uuid.UUID) -> list[tuple[int, str]]:
+    """[(seq, text)] of the unexpired chunks, decrypted here (the database holds only ciphertext). The caller owns the text and must not log it."""
+    rows = await _admin_call(conn, "select * from msg.read_voice_transcript(:c, :s)", {"c": clinic_id, "s": session_id})
+    return [(r.seq, decrypt_voice_chunk(vault, r.body_ct, clinic_id=clinic_id, session_id=session_id, seq=r.seq, key_version=r.body_key_version)) for r in rows]
+
+
+async def admin_purge(conn: AsyncConnection, clinic_id: uuid.UUID, idempotency_key: str, limit: int) -> int:
+    rows = await _admin_call(conn, "select msg.purge_expired_voice_chunks(:c, :k, :n)", {"c": clinic_id, "k": idempotency_key, "n": limit})
+    return int(rows[0][0])

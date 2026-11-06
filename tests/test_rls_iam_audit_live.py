@@ -118,11 +118,11 @@ async def test_all_eleven_schemas_exist_and_nine_have_no_tables(db):
     assert found == {
         "mpi": {"patients", "identity_tokens", "match_candidates", "merges", "identity_confirmations", "erasure_requests"},  # identity_confirmations: migration 0023; erasure_requests: 0032
         "sched": {"locations", "providers", "visit_types", "slots", "priority_levels", "holds", "bookings", "waitlist", "offer_deliveries"},  # offer_deliveries: 0031
-        "ops": {"queue", "outbox", "key_rotation_batches", "spend_ledger", "alerts", "care_recurrence_rules", "care_episodes", "care_episode_rules", "care_barriers", "care_review_samples"},  # spend_ledger: 0016; care_*: 0044
+        "ops": {"queue", "outbox", "key_rotation_batches", "spend_ledger", "alerts", "care_recurrence_rules", "care_episodes", "care_episode_rules", "care_barriers", "care_review_samples", "autonomy_changes"},  # spend_ledger: 0016; care_*: 0044; autonomy_changes: 0048
         "kb": {"red_flag_rules"},
         "agents": {"review_tasks", "triage_proposals", "review_decisions", "graph_checkpoints", "graph_checkpoint_blobs", "graph_checkpoint_writes"},  # 0018, 0021
         "ai": {"model_registry"},  # migration 0015
-        "docs": {"documents"},  # migration 0017
+        "docs": {"documents", "canary_settings"},  # migrations 0017 and 0047
         "msg": {"threads", "messages", "message_rotation_batches", "screenings", "voice_preferences", "voice_sessions", "voice_transcript_chunks"},  # migrations 0011, 0013 and 0045
     }
 

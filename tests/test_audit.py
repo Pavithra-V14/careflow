@@ -168,6 +168,10 @@ async def test_each_backfill_route_audits_through_the_one_helper_after_the_step_
 
 
 CONSOLE_ROUTES = {"acknowledge_alert": "alert.acknowledge"}
+PRODUCER_ROUTES = {
+    "set_autonomy": ("autonomy.set", "set_mode"), "create_care_episode": ("care_gap.episode_create", "create_episode"), "record_rule_done": ("care_gap.rule_done", "record_done"),
+    "recheck_care_sample": ("care_gap.sample_recheck", "recheck_sample"),
+}  # (migration 0048)
 CARE_GAP_ROUTES = {"record_barrier": ("care_gap.barrier_record", "record_barrier"), "resolve_barrier": ("care_gap.barrier_resolve", "resolve_barrier")}
 
 
@@ -175,6 +179,13 @@ CARE_GAP_ROUTES = {"record_barrier": ("care_gap.barrier_record", "record_barrier
 async def test_acknowledging_an_alert_audits_in_the_same_transaction_after_the_update(function, action):
     source = inspect.getsource(getattr(app_module, function))
     assert f'action="{action}"' in source and "await write_audit(" in source and source.index("await write_audit(") > source.index("update ops.alerts")
+
+
+@pytest.mark.parametrize(("function", "spec"), sorted(PRODUCER_ROUTES.items()))
+async def test_the_producer_routes_audit_in_the_same_transaction_after_the_write(function, spec):
+    action, helper = spec
+    source = inspect.getsource(getattr(app_module, function))
+    assert f'action="{action}"' in source and "await write_audit(" in source and source.index("await write_audit(") > source.index(f"producers_sql.{helper}(")
 
 
 @pytest.mark.parametrize(("function", "spec"), sorted(CARE_GAP_ROUTES.items()))
@@ -186,8 +197,8 @@ async def test_the_care_gap_write_routes_audit_in_the_same_transaction_after_the
 
 async def test_every_action_has_a_route_or_is_listed_as_pending():
     pending = {"clinical.tool_call"}  # written by careflow/mcp_kit.py `audited` (no clinical server is mounted yet)
-    written_by_the_database = {"patient.erase_request", "patient.erase", "patient.erase_cancel", "staff.invite", "staff.grant_role", "staff.revoke_role", "staff.suspend", "staff.reinstate", "staff.activate", "backfill.task_raised", "canary.injected"}  # (canary.injected: by docs.register_canary_document, migration 0042) (backfill.task_raised: by agents.raise_backfill_task, migration 0038) written by the mpi.*_patient_erasure functions (migration 0032) in the same transaction; the live tests pin the rows
-    assert set(ROUTES.values()) | set(SETUP_ROUTES.values()) | set(BACKFILL_ROUTES.values()) | set(CONSOLE_ROUTES.values()) | {a for a, _ in CARE_GAP_ROUTES.values()} | pending | written_by_the_database == set(ACTIONS)
+    written_by_the_database = {"patient.erase_request", "patient.erase", "patient.erase_cancel", "staff.invite", "staff.grant_role", "staff.revoke_role", "staff.suspend", "staff.reinstate", "staff.activate", "backfill.task_raised", "canary.injected", "voice.transcript_read", "voice.transcript_purge"}  # (voice.*: msg.read_voice_transcript and msg.purge_expired_voice_chunks, migration 0047) (canary.injected: by docs.register_canary_document, migration 0042) (backfill.task_raised: by agents.raise_backfill_task, migration 0038) written by the mpi.*_patient_erasure functions (migration 0032) in the same transaction; the live tests pin the rows
+    assert set(ROUTES.values()) | set(SETUP_ROUTES.values()) | set(BACKFILL_ROUTES.values()) | set(CONSOLE_ROUTES.values()) | {a for a, _ in CARE_GAP_ROUTES.values()} | {a for a, _ in PRODUCER_ROUTES.values()} | pending | written_by_the_database == set(ACTIONS)
 
 
 async def test_the_audit_module_adds_no_dependency_and_uses_only_the_existing_table():

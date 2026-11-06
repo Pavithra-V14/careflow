@@ -97,6 +97,12 @@ def decrypt_body(
     )
 
 
+def decrypt_voice_chunk(vault: DemographicVault, body_ct: bytes, *, clinic_id: uuid.UUID, session_id: uuid.UUID, seq: int, key_version: int) -> str:
+    """A stored voice-transcript chunk back to text (migration 0047: admin-only, audited reading). The chunk was bound to its session and sequence number when it was written (voice_sql.SqlTranscriptSink),
+    so a chunk moved to another session or position does not decrypt. The one place a voice chunk is decrypted; the caller owns the text and must not log it."""
+    return decrypt_body(vault, body_ct, clinic_id=clinic_id, thread_id=session_id, message_id=uuid.uuid5(session_id, f"chunk:{seq}"), key_version=key_version)
+
+
 @dataclass(frozen=True)
 class ScreenedMessage:
     """What a screening of a stored message produced: ids and enums only. There is no text, rule phrase or patient detail here."""

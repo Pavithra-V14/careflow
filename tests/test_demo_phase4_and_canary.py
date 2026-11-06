@@ -161,32 +161,32 @@ NOW = lambda: datetime(2026, 11, 6, 10, 30, tzinfo=UTC)
 
 def test_no_rate_injects_nothing_and_reads_nothing():
     conn = _Conn([uuid.uuid4()], 5)
-    assert asyncio.run(canary_injection.canary_sweep(conn, None, 20)) == 0
+    assert asyncio.run(canary_injection.canary_sweep(conn, None)) == 0
     assert conn.calls == [] and _Queue.enqueued == []
 
 
 def test_with_no_live_tasks_there_is_nothing_to_draw_against():
     conn = _Conn([uuid.uuid4()], 0)
-    assert asyncio.run(canary_injection.canary_sweep(conn, 0.02, 20, draw=lambda: 0.0, now=NOW)) == 0
+    assert asyncio.run(canary_injection.canary_sweep(conn, 0.02, draw=lambda: 0.0, now=NOW)) == 0
     assert _Queue.enqueued == []
 
 
 def test_a_winning_draw_registers_one_canary_document_and_enqueues_a_canary_origin_run():
     clinic = uuid.uuid4()
     conn = _Conn([clinic], 3)
-    assert asyncio.run(canary_injection.canary_sweep(conn, 0.02, 20, draw=lambda: 0.0, now=NOW)) == 1  # three winning draws still make ONE canary per clinic per tick
+    assert asyncio.run(canary_injection.canary_sweep(conn, 0.02, draw=lambda: 0.0, now=NOW)) == 1  # three winning draws still make ONE canary per clinic per tick
     (c, origin, _task, payload, key), = _Queue.enqueued
     assert (c, origin) == (clinic, "canary") and payload["document_id"] in key and key.startswith("canary-run:")
     register = [p for sql, p in conn.calls if "register_canary_document" in sql]
-    assert len(register) == 1 and register[0]["k"] == f"canary:{payload['document_id']}" and register[0]["m"] == 20
+    assert len(register) == 1 and register[0]["k"] == f"canary:{payload['document_id']}"
 
 
 def test_a_losing_draw_injects_nothing_and_the_same_minute_gives_the_same_ids():
     conn = _Conn([uuid.uuid4()], 4)
-    assert asyncio.run(canary_injection.canary_sweep(conn, 0.02, 20, draw=lambda: 0.99, now=NOW)) == 0
+    assert asyncio.run(canary_injection.canary_sweep(conn, 0.02, draw=lambda: 0.99, now=NOW)) == 0
     clinic = uuid.uuid4()
     for _ in range(2):
-        asyncio.run(canary_injection.canary_sweep(_Conn([clinic], 1), 0.5, 20, draw=lambda: 0.0, now=NOW))
+        asyncio.run(canary_injection.canary_sweep(_Conn([clinic], 1), 0.5, draw=lambda: 0.0, now=NOW))
     assert _Queue.enqueued[0][3:] == _Queue.enqueued[1][3:]  # a retried tick names the same document and key: nothing doubles
 
 
@@ -200,7 +200,7 @@ def test_one_clinic_failing_does_not_stop_the_others():
             await super().enqueue(conn, clinic_id, origin, task_type, payload, key)
 
     canary_injection.PostgresQueue = _Failing
-    assert asyncio.run(canary_injection.canary_sweep(_Conn([bad, good], 1), 1.0, 20, draw=lambda: 0.0, now=NOW)) == 1
+    assert asyncio.run(canary_injection.canary_sweep(_Conn([bad, good], 1), 1.0, draw=lambda: 0.0, now=NOW)) == 1
     assert [e[0] for e in _Queue.enqueued] == [good]
 
 
@@ -210,14 +210,6 @@ def test_the_sweep_is_wired_only_when_the_demo_gate_holds_and_a_rate_is_set():
     assert "demo_allowed" in wired and "switched_on" in wired and "canary_rate is not None" in wired
 
 
-def test_no_daily_cap_injects_nothing_and_reads_nothing():
-    for cap in (None, 0, -1):
-        conn = _Conn([uuid.uuid4()], 5)
-        assert asyncio.run(canary_injection.canary_sweep(conn, 0.5, cap, draw=lambda: 0.0, now=NOW)) == 0
-        assert conn.calls == [] and _Queue.enqueued == []
-
-
-def test_the_sweep_is_wired_only_with_a_daily_cap_too():
+def test_the_sweep_takes_no_cap_from_the_application():
     source = (Path(__file__).resolve().parent.parent / "careflow" / "app.py").read_text(encoding="utf-8")
-    wired = source[source.index("canary_rate = canary_rate_from"): source.index("worker: asyncio.Task | None = None")]
-    assert "canary_max_per_day is not None" in wired
+    assert "canary_max_per_day" not in source and "CANARY_MAX_PER_DAY" not in source  # the cap is docs.canary_settings (migration 0047)

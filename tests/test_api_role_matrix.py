@@ -136,6 +136,10 @@ async def _seed() -> Identities:
         await conn.execute("insert into iam.accounts (id, account_type, status, origin) values ($1, 'staff', 'active', 'test')", ids.fd2)
         await conn.execute("insert into iam.staff_roles (account_id, clinic_id, role, origin) values ($1, $2, 'front_desk', 'test')", ids.fd2, ids.clinic_a)
         await _seed_scheduling(ids, conn)
+        rule, episode, ids.episode_rule = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        await conn.execute("insert into ops.care_recurrence_rules (id, clinic_id, origin, rule_code, interval_days, overdue_after_days, idempotency_key) values ($1, $2, 'test', 'matrix_seed_rule', 30, 5, $3)", rule, ids.clinic_a, f"mx-r-{rule}")
+        await conn.execute("insert into ops.care_episodes (id, clinic_id, origin, patient_id, episode_code, started_on, idempotency_key) values ($1, $2, 'test', $3, 'matrix_seed_episode', current_date - 60, $4)", episode, ids.clinic_a, ids.patients_a[42], f"mx-e-{episode}")
+        await conn.execute("insert into ops.care_episode_rules (id, clinic_id, origin, episode_id, rule_id, idempotency_key) values ($1, $2, 'test', $3, $4, $5)", ids.episode_rule, ids.clinic_a, episode, rule, f"mx-er-{ids.episode_rule}")
     except Exception:
         await _cleanup(ids, conn)
         await conn.close()
@@ -236,6 +240,7 @@ async def _cleanup(ids, conn=None):
                     "and not exists (select 1 from agents.triage_proposals pr where pr.patient_id = p.id) "
                     "and not exists (select 1 from mpi.erasure_requests e where e.patient_id = p.id) "
                     "and not exists (select 1 from ops.care_barriers b where b.patient_id = p.id) "
+                    "and not exists (select 1 from ops.care_episodes ce where ce.patient_id = p.id) "
                     "and not exists (select 1 from sched.holds h where h.patient_id = p.id)", clinics  # (a hold left behind for an append-only delivery row keeps its patient)
                 )
                 continue
@@ -2670,6 +2675,170 @@ def voice_session_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, VOICE_SESSIONS, body())
 
 
+# ---- admin-only voice transcripts (migration 0047) -------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Admin of the clinic only (and the database checks a verified second factor again). Everyone else who sees the clinic gets 403, everyone else the one 404. The functions against the real tables
+# (read, purge, expiry, audit rows, password-only refusal) are in tests/test_voice_admin_db_live.py.
+
+VOICE_ADMIN_VISIBLE = ("front_desk_a", "nurse_a", "doctor_a", "business_owner_a", "auditor_a", "multi")
+VOICE_ADMIN = "/v1/staff/voice"
+
+
+def voice_sessions_list_cases(ids) -> list[tuple]:
+    path = lambda **o: VOICE_ADMIN + "/sessions?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
+    ok = lambda b: b == {"sessions": []}
+    cases = _console_clinic_cases(ids, path, allowed=("admin_a",), ok_status=200, ok_body=ok, visible_refused=VOICE_ADMIN_VISIBLE)
+    cases += [
+        _case(ids, "an unknown clinic is not found", "admin_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "a clinic id that is not a uuid is rejected", "admin_a", 422, path(clinic_id="nope"), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
+def voice_transcript_read_cases(ids) -> list[tuple]:
+    path = lambda **o: f"{VOICE_ADMIN}/sessions/{uuid.uuid4()}/transcript?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
+    cases = _console_clinic_cases(ids, path, allowed=(), ok_status=200, ok_body=None, visible_refused=VOICE_ADMIN_VISIBLE)
+    cases = [c for c in cases if "admin_a" not in c[0]]  # the admin's own case: a session that does not exist is the one 404 (the same answer as a session in another clinic)
+    cases.append(_case(ids, "admin_a reading a session that does not exist is the one not-found", "admin_a", 404, path(), key=None, body=_fixed(404)))
+    cases += [
+        _case(ids, "an unknown clinic is not found", "admin_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "a session id that is not a uuid is rejected", "admin_a", 422, f"{VOICE_ADMIN}/sessions/nope/transcript?clinic_id={ids.clinic_a}", key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
+def voice_purge_cases(ids) -> list[tuple]:
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), **o}
+    done = lambda b: b == {"deleted": 0}
+    cases = [_case(ids, "admin_a purges (nothing has expired)", "admin_a", 200, VOICE_ADMIN + "/purge", json=body(), body=done)]
+    cases += [_case(ids, f"{p} sees the clinic but is refused", p, 403, VOICE_ADMIN + "/purge", json=body(), body=NOT_YOUR_ROLE) for p in VOICE_ADMIN_VISIBLE]
+    others = [p for p in ids.people if p != "admin_a" and p not in VOICE_ADMIN_VISIBLE]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused with the one not-found", p, 404, VOICE_ADMIN + "/purge", json=body(), body=_fixed(404)) for p in others]
+    cases += [
+        _case(ids, "a limit above 1000 is rejected", "admin_a", 422, VOICE_ADMIN + "/purge", json=body(limit=1001), body=_fixed(422)),
+        _case(ids, "an extra field is rejected", "admin_a", 422, VOICE_ADMIN + "/purge", json=body(extra=1), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "admin_a", 422, VOICE_ADMIN + "/purge", json=body(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, VOICE_ADMIN + "/purge", body())
+
+
+# ---- autonomy, care-gap producers, dashboard (migration 0048) --------------------------------------------------------------------------------------------------------------------------------------------------
+# Every case here is a route this change added (rule 8). The producer success cases write append-only rows (episodes, rules, the autonomy history); the cleanup leaves the patients and clinics they pin
+# behind, tagged origin='test', like the barrier cases above. The database-level behaviour (the aal2 policy, the guards, the worker read) is in tests/test_care_gap_producers_db_live.py.
+
+AUTONOMY = "/v1/staff/console/autonomy"
+DASHBOARD = "/v1/staff/console/dashboard"
+EPISODES = "/v1/staff/care-gaps/episodes"
+EPISODE_RULE_DONE = "/v1/staff/care-gaps/episode-rules/{episode_rule_id}/done"
+SAMPLE_RECHECK = "/v1/staff/care-gaps/samples/{sample_id}/recheck"
+CARE_WRITERS = ("nurse_a", "doctor_a", "multi")
+CARE_WRITERS_VISIBLE_REFUSED = ("front_desk_a", "admin_a", "business_owner_a", "auditor_a")
+ADMIN_ONLY_VISIBLE_REFUSED = ("front_desk_a", "nurse_a", "doctor_a", "business_owner_a", "auditor_a", "multi")
+CARE_RULES_SETTING = '{"rules": {"demo_rule": {"interval_days": 30, "overdue_after_days": 5}}, "episodes": {"demo_episode": ["demo_rule"]}}'  # a labelled DEMO placeholder, matrix only
+os.environ.setdefault("CAREFLOW_CARE_GAP_RULES", CARE_RULES_SETTING)
+
+
+def autonomy_get_cases(ids) -> list[tuple]:
+    path = lambda **o: AUTONOMY + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
+    ok = lambda b: set(b) == {"clinic_id", "mode", "configured"} and b["mode"] in ("shadow", "assisted")
+    allowed = ("front_desk_a", "nurse_a", "doctor_a", "admin_a", "multi")
+    cases = _console_clinic_cases(ids, path, allowed=allowed, ok_status=200, ok_body=ok, visible_refused=("business_owner_a", "auditor_a"))
+    cases += [
+        _case(ids, "an unknown clinic is not found", "admin_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "a clinic id that is not a uuid is rejected", "admin_a", 422, path(clinic_id="nope"), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
+def autonomy_set_cases(ids) -> list[tuple]:
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "mode": "assisted", **o}
+    key = _new_key()
+    cases = [
+        _case(ids, "admin_a sets the mode", "admin_a", 200, AUTONOMY, json=body(), key=key, body=lambda b: b == {"mode": "assisted", "created": True}),
+        _case(ids, "the same key again is the same change", "admin_a", 200, AUTONOMY, json=body(), key=key, body=lambda b: b == {"mode": "assisted", "created": False}),
+        _case(ids, "admin_a may set it back to shadow", "admin_a", 200, AUTONOMY, json=body(mode="shadow"), body=lambda b: b == {"mode": "shadow", "created": True}),
+    ]
+    cases += [_case(ids, f"{p} sees the clinic but is refused", p, 403, AUTONOMY, json=body(), body=NOT_YOUR_ROLE) for p in ADMIN_ONLY_VISIBLE_REFUSED]
+    others = [p for p in ids.people if p != "admin_a" and p not in ADMIN_ONLY_VISIBLE_REFUSED]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused with the one not-found", p, 404, AUTONOMY, json=body(), body=_fixed(404)) for p in others]
+    cases += [
+        _case(ids, "autonomous is a two-person act and is not accepted here", "admin_a", 422, AUTONOMY, json=body(mode="autonomous"), body=_fixed(422)),
+        _case(ids, "an unknown mode is rejected", "admin_a", 422, AUTONOMY, json=body(mode="bad"), body=_fixed(422)),
+        _case(ids, "an extra field is rejected", "admin_a", 422, AUTONOMY, json=body(extra=1), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "admin_a", 422, AUTONOMY, json=body(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, AUTONOMY, body())
+
+
+def dashboard_cases(ids) -> list[tuple]:
+    path = lambda **o: DASHBOARD + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
+
+    def ok(b):
+        by_id = {m["metric_id"]: m for m in b["metrics"]}
+        return (set(b) == {"clinic_id", "metrics", "not_measured"} and {"queue_depth_and_oldest_age", "dead_letter_count", "review_queue_age", "care_gap_open_count"} <= set(by_id)
+                and all((m["value"] is None) == (m["state"] != "measured") for m in b["metrics"]) and not set(by_id) & set(b["not_measured"]) and len(b["not_measured"]) > 10)
+
+    cases = _console_clinic_cases(ids, path, allowed=("admin_a",), ok_status=200, ok_body=ok, visible_refused=ADMIN_ONLY_VISIBLE_REFUSED)
+    cases += [
+        _case(ids, "an unknown clinic is not found", "admin_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "a clinic id that is not a uuid is rejected", "admin_a", 422, path(clinic_id="nope"), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
+def episode_create_cases(ids) -> list[tuple]:
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "patient_id": str(ids.patients_a[41]), "episode_code": "demo_episode", "started_on": "2026-01-15", **o}
+    made = lambda b: set(b) == {"episode_id", "created", "episode_rule_ids"} and b["created"] is True and len(b["episode_rule_ids"]) == 1
+    key = _new_key()
+    cases = [
+        _case(ids, "nurse_a starts an episode", "nurse_a", 201, EPISODES, json=body(), key=key, body=made),
+        _case(ids, "the same key again is the same episode", "nurse_a", 201, EPISODES, json=body(), key=key, body=lambda b: b["created"] is False and len(b["episode_rule_ids"]) == 1),
+        _case(ids, "doctor_a starts an episode", "doctor_a", 201, EPISODES, json=body(), body=made),
+        _case(ids, "multi (a nurse here) starts an episode", "multi", 201, EPISODES, json=body(), body=made),
+    ]
+    cases += [_case(ids, f"{p} sees the clinic but is refused", p, 403, EPISODES, json=body(), body=NOT_YOUR_ROLE) for p in CARE_WRITERS_VISIBLE_REFUSED]
+    others = [p for p in ids.people if p not in (*CARE_WRITERS, *CARE_WRITERS_VISIBLE_REFUSED)]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused with the one not-found", p, 404, EPISODES, json=body(), body=_fixed(404)) for p in others]
+    cases += [
+        _case(ids, "an episode code that is not in the setting is not found", "nurse_a", 404, EPISODES, json=body(episode_code="unknown_episode"), body=_fixed(404)),
+        _case(ids, "a patient that is not in this clinic is not found", "nurse_a", 404, EPISODES, json=body(patient_id=str(uuid.uuid4())), body=_fixed(404)),
+        _case(ids, "an episode code with a bad shape is rejected", "nurse_a", 422, EPISODES, json=body(episode_code="Bad Code"), body=_fixed(422)),
+        _case(ids, "an extra field is rejected", "nurse_a", 422, EPISODES, json=body(extra=1), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "nurse_a", 422, EPISODES, json=body(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, EPISODES, body())
+
+
+def episode_rule_done_cases(ids) -> list[tuple]:
+    path = lambda: EPISODE_RULE_DONE.format(episode_rule_id=ids.episode_rule)
+    today = time.strftime("%Y-%m-%d", time.gmtime())
+    yesterday = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 86400))
+    cases = [
+        _case(ids, "nurse_a records today", "nurse_a", 200, path(), json={"done_on": today}, body=lambda b: b["recorded"] is True),
+        _case(ids, "doctor_a records the same day again", "doctor_a", 200, path(), json={"done_on": today}, body=lambda b: b["recorded"] is True),
+        _case(ids, "an earlier date than the recorded one is refused", "nurse_a", 409, path(), json={"done_on": yesterday}, body=lambda b: b["detail"] == "the date cannot move backwards or into the future"),
+        _case(ids, "a future date is refused", "nurse_a", 409, path(), json={"done_on": "2999-01-01"}, body=lambda b: b["detail"] == "the date cannot move backwards or into the future"),
+    ]
+    refused = [p for p in ids.people if p not in CARE_WRITERS]  # not able to change the row: it is invisible (404), or visible but not theirs to change (admin: also 404)
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused with the one not-found", p, 404, path(), json={"done_on": today}, body=_fixed(404)) for p in refused]
+    cases += [
+        _case(ids, "an unknown episode rule is not found", "nurse_a", 404, EPISODE_RULE_DONE.format(episode_rule_id=uuid.uuid4()), json={"done_on": today}, body=_fixed(404)),
+        _case(ids, "a date that is not a date is rejected", "nurse_a", 422, path(), json={"done_on": "soon"}, body=_fixed(422)),
+        _case(ids, "an extra field is rejected", "nurse_a", 422, path(), json={"done_on": today, "extra": 1}, body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "nurse_a", 422, path(), json={"done_on": today}, key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), {"done_on": today})
+
+
+def sample_recheck_cases(ids) -> list[tuple]:
+    path = lambda: SAMPLE_RECHECK.format(sample_id=uuid.uuid4())
+    cases = [_case(ids, f"{p} cannot re-check a sample that does not exist", p, 404, path(), body=_fixed(404)) for p in ids.people]
+    cases += [
+        _case(ids, "missing X-Idempotency-Key is rejected", "nurse_a", 422, path(), key=None, body=_fixed(422)),
+        _case(ids, "a sample id that is not a uuid is rejected", "nurse_a", 422, "/v1/staff/care-gaps/samples/nope/recheck", body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)
+
+
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
     ("POST", HOLD): lambda ids: slot_write_cases(ids, "hold"),
@@ -2719,6 +2888,15 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", VOICE_PREF): voice_preference_get_cases,
     ("PUT", VOICE_PREF): voice_preference_put_cases,
     ("POST", VOICE_SESSIONS): voice_session_cases,
+    ("GET", AUTONOMY): autonomy_get_cases,
+    ("POST", AUTONOMY): autonomy_set_cases,
+    ("GET", DASHBOARD): dashboard_cases,
+    ("POST", EPISODES): episode_create_cases,
+    ("POST", EPISODE_RULE_DONE): episode_rule_done_cases,
+    ("POST", SAMPLE_RECHECK): sample_recheck_cases,
+    ("GET", VOICE_ADMIN + "/sessions"): voice_sessions_list_cases,
+    ("GET", VOICE_ADMIN + "/sessions/{session_id}/transcript"): voice_transcript_read_cases,
+    ("POST", VOICE_ADMIN + "/purge"): voice_purge_cases,
     ("GET", ACCOUNTS): staff_list_cases,
     ("POST", ACCOUNTS + "/invite"): staff_invite_cases,
     ("POST", ACCOUNTS + "/activate-me"): staff_activate_cases,

@@ -36,7 +36,7 @@ APP_SCHEMAS = ["iam", "mpi", "sched", "clinical", "docs", "msg", "kb", "agents",
 # access and write tests are tests/test_rls_ai_registry_live.py and tests/test_rls_spend_and_approval_live.py.
 NO_CLINIC_COLUMN = {"iam.clinics", "iam.accounts", "ai.model_registry", "msg.voice_preferences"}  # voice_preferences is keyed by the patient ACCOUNT (owner-only policy); its isolation cases are in tests/test_voice_db_live.py
 # (child table, parent table): a foreign key between two clinic-scoped tables that does not carry clinic_id on both sides. Empty since 0014.
-KNOWN_GAPS: set[tuple[str, str]] = {("ops.care_review_samples", "agents.review_decisions")}  # 0044: the sample row names a decision by id only; the app role cannot write the table (no producer yet), reviewed, documented residual in docs/design/phase8-9-followups.md
+KNOWN_GAPS: set[tuple[str, str]] = set()  # (0047 pinned care_review_samples to its decision's clinic)
 
 
 def _u() -> uuid.UUID:
