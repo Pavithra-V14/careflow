@@ -188,7 +188,9 @@ async def test_who_may_write_what_and_what_the_tables_refuse(db, monkeypatch):
     assert await state_of(db, doctor, "select count(*) from ops.care_plans where clinic_id = :c", c=clinic) == [(2,)]
     assert await state_of(db, doctor_b, "select count(*) from ops.care_plans where clinic_id = :c", c=clinic) == [(0,)]  # another clinic sees nothing
     assert await state_of(db, nurse, "update ops.care_plans set plan_ct = '\\x09'::bytea where id = :i", i=plan_id) == "42501"  # only the status is writable
-    assert await state_of(db, doctor, "update ops.care_plans set status = 'completed' where id = :i", i=plan_id) == 1
+    assert await state_of(db, nurse, "update ops.care_plans set status = 'active' where id = :i", i=plan_id) == "42501"  # a nurse cannot confirm the doctor's plan
+    assert await state_of(db, doctor, "update ops.care_plans set status = 'completed' where id = :i", i=plan_id) == "23001"  # not a legal step from awaiting_confirmation
+    assert await state_of(db, doctor, "update ops.care_plans set status = 'rejected' where id = :i", i=plan_id) == 1
     assert await state_of(db, doctor, "update ops.care_plans set status = 'active' where id = :i", i=plan_id) == "23001"  # a finished plan is final
     assert await state_of(db, doctor, "delete from ops.care_plans") == "42501"
     res = "insert into clinical.results (clinic_id, origin, patient_id, code, measures, verified, valid_from, recorded_by, idempotency_key) values (:c, 'test', :p, 'DEMO-T1.z', '{}'::jsonb, true, now(), :by, :k)"
@@ -198,6 +200,31 @@ async def test_who_may_write_what_and_what_the_tables_refuse(db, monkeypatch):
     assert await state_of(db, nurse, "update clinical.results set verified = false") == "42501"
     assert await state_of(db, nurse, "delete from clinical.results") == "42501"
     assert (await state_of(db, nurse, "select count(*) from clinical.results where clinic_id = :c", c=clinic)) == [(1,)]
+
+
+async def test_a_step_closes_only_on_a_verified_result_of_the_plans_own_patient_and_a_wait_is_claimed_only_by_that_patient(db, monkeypatch):
+    clinic, doctor, nurse, _, patient = await world(db)
+    handle = (await db.get_raw_connection()).driver_connection
+    other = uuid.uuid4()
+    await handle.execute("insert into mpi.patients (id, clinic_id, name_ct, name_key_version, dob_ct, dob_key_version, origin, idempotency_key) values ($1, $2, '\x01'::bytea, 1, '\x01'::bytea, 1, 'test', $3)", other, clinic, f"cj-{other}")
+    comps = components(lambda text_: _async(GOOD), monkeypatch)
+    async with as_user(db, doctor) as c:
+        plan_id, _, _ = await make_plan(c, comps, clinic, doctor, patient, "p6")
+        await comps.runner(c, clinic_id=clinic, origin="test").confirm(plan_id, "approve")
+        add_step = "insert into ops.care_plan_steps (clinic_id, plan_id, step_key, position, kind, label, idempotency_key) values (:c, :p, 'late_step', 9, 'task', 'DEMO late', 'late')"
+    assert await state_of(db, doctor, add_step, c=clinic, p=plan_id) == "23001"  # an active plan's steps are closed
+    async with as_user(db, nurse) as c:
+        mine_unverified, _ = await cj.record_result(c, clinic_id=clinic, origin="test", patient_id=patient, code="DEMO-T1.u", measures={"demo_value": 1.0}, verified=False, valid_from=VF, valid_to=None, supersedes_id=None, recorded_by=nurse, idempotency_key="u1")
+        theirs, _ = await cj.record_result(c, clinic_id=clinic, origin="test", patient_id=other, code="DEMO-T1.o", measures={"demo_value": 1.0}, verified=True, valid_from=VF, valid_to=None, supersedes_id=None, recorded_by=nurse, idempotency_key="o1")
+        wrong_code, _ = await cj.record_result(c, clinic_id=clinic, origin="test", patient_id=patient, code="ZZZ-1", measures={"demo_value": 1.0}, verified=True, valid_from=VF, valid_to=None, supersedes_id=None, recorded_by=nurse, idempotency_key="z1")
+        with pytest.raises(cj.Refused):  # a correction cannot name another patient's result
+            await cj.record_result(c, clinic_id=clinic, origin="test", patient_id=patient, code="DEMO-T1.x", measures={}, verified=True, valid_from=VF, valid_to=None, supersedes_id=theirs, recorded_by=nurse, idempotency_key="x1")
+    close = "update ops.care_plan_steps set status = 'met', evidence_result_id = :r where plan_id = :p and step_key = 'demo_test'"
+    for bad in (mine_unverified, theirs, wrong_code):
+        assert await state_of(db, nurse, close, r=bad, p=plan_id) == "23001", bad  # unverified, another patient, a different test: none closes the step
+    claim = "update ops.care_plan_waits set claimed_result_id = :r where plan_id = :p"
+    assert await state_of(db, nurse, claim, r=theirs, p=plan_id) == "23001"  # another patient's result cannot hold this patient's wait
+    assert await state_of(db, nurse, claim, r=wrong_code, p=plan_id) == "23001"  # a result for a different test cannot either
 
 
 async def test_a_correction_supersedes_a_result_once_and_the_valid_range_must_make_sense(db):

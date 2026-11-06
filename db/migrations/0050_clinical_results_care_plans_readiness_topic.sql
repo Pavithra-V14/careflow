@@ -37,10 +37,11 @@ create table clinical.results (
     idempotency_key text not null check (length(idempotency_key) between 1 and 300),
     constraint results_key_per_clinic unique (clinic_id, idempotency_key),
     constraint results_id_clinic unique (id, clinic_id),
+    constraint results_id_clinic_patient unique (id, clinic_id, patient_id),
     constraint results_superseded_once unique (supersedes_id),
     constraint results_valid_range check (valid_to is null or valid_to > valid_from),
     foreign key (patient_id, clinic_id) references mpi.patients (id, clinic_id),
-    foreign key (supersedes_id, clinic_id) references clinical.results (id, clinic_id)
+    foreign key (supersedes_id, clinic_id, patient_id) references clinical.results (id, clinic_id, patient_id)  -- a correction names a result of the SAME patient
 );
 create index results_patient_idx on clinical.results (clinic_id, patient_id, valid_from desc);
 
@@ -54,6 +55,7 @@ $$;
 revoke all on function clinical.results_guard() from public;
 create trigger results_no_update_delete before update or delete on clinical.results for each row execute function clinical.results_guard();
 create trigger results_no_truncate before truncate on clinical.results for each statement execute function clinical.results_guard();
+create trigger results_not_erased before insert on clinical.results for each row execute function ops.care_barriers_not_erased();
 
 alter table clinical.results enable row level security;
 alter table clinical.results force row level security;
@@ -81,6 +83,7 @@ create table ops.care_plans (
     idempotency_key  text not null check (length(idempotency_key) between 1 and 300),
     constraint care_plans_key_per_clinic unique (clinic_id, idempotency_key),
     constraint care_plans_id_clinic unique (id, clinic_id),
+    constraint care_plans_id_clinic_patient unique (id, clinic_id, patient_id),
     foreign key (patient_id, clinic_id) references mpi.patients (id, clinic_id)
 );
 
@@ -95,7 +98,7 @@ create table ops.care_plan_steps (
     result_prefix      text check (result_prefix ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$'),
     cond_field         text check (cond_field ~ '^[a-z][a-z0-9_]{0,39}$'),
     cond_op            text check (cond_op in ('lt', 'le', 'gt', 'ge', 'eq')),
-    cond_threshold     double precision,
+    cond_threshold     double precision check (cond_threshold = cond_threshold and abs(cond_threshold) < 'Infinity'::float8),  -- no NaN, no infinity: they would satisfy a rule without real data
     on_met             text check (on_met in ('propose_referral')),
     status             text not null default 'open' check (status in ('open', 'met', 'not_met', 'needs_doctor', 'closed')),
     evidence_result_id uuid,
@@ -119,16 +122,15 @@ create table ops.care_plan_waits (
     step_key           text not null,
     wait_key           text not null check (length(wait_key) between 1 and 200),
     patient_id         uuid not null,
-    prefix             text not null,
+    prefix             text not null check (prefix ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$'),
     open               boolean not null default true,
     claimed_result_id  uuid,
     idempotency_key    text not null check (length(idempotency_key) between 1 and 300),
-    constraint care_plan_waits_wait_key unique (wait_key),
+    constraint care_plan_waits_wait_key unique (clinic_id, wait_key),
     constraint care_plan_waits_key_per_clinic unique (clinic_id, idempotency_key),
     foreign key (plan_id, step_key) references ops.care_plan_steps (plan_id, step_key),
-    foreign key (plan_id, clinic_id) references ops.care_plans (id, clinic_id),
-    foreign key (patient_id, clinic_id) references mpi.patients (id, clinic_id),
-    foreign key (claimed_result_id, clinic_id) references clinical.results (id, clinic_id)
+    foreign key (plan_id, clinic_id, patient_id) references ops.care_plans (id, clinic_id, patient_id),  -- a wait belongs to the plan's own patient
+    foreign key (claimed_result_id, clinic_id, patient_id) references clinical.results (id, clinic_id, patient_id)  -- and can be claimed only by a result of that patient
 );
 create index care_plan_waits_open_idx on ops.care_plan_waits (clinic_id, patient_id) where open;
 
@@ -147,6 +149,20 @@ begin
        or new.plan_key_version <> old.plan_key_version or new.created_by <> old.created_by or new.created_at <> old.created_at or new.idempotency_key <> old.idempotency_key then
         raise exception 'only the status of a care plan can change' using errcode = 'restrict_violation';
     end if;
+    if new.status <> old.status then
+        -- the closed transitions: screening -> awaiting_confirmation | held | rejected; awaiting_confirmation -> active | rejected | held; held -> awaiting_confirmation | active | rejected; active -> completed | held
+        if not ((old.status, new.status) in (('screening', 'awaiting_confirmation'), ('screening', 'held'), ('screening', 'rejected'), ('awaiting_confirmation', 'active'), ('awaiting_confirmation', 'rejected'),
+                                             ('awaiting_confirmation', 'held'), ('held', 'awaiting_confirmation'), ('held', 'active'), ('held', 'rejected'), ('active', 'completed'), ('active', 'held'))) then
+            raise exception 'that care plan status change is not allowed' using errcode = 'restrict_violation';
+        end if;
+        -- only a DOCTOR confirms (activates) or rejects a plan, and a plan with no steps cannot be activated
+        if new.status in ('active', 'rejected') and not iam.has_clinic_role(new.clinic_id, array['doctor']) then
+            raise exception 'only a doctor can confirm or reject a care plan' using errcode = 'insufficient_privilege';
+        end if;
+        if new.status = 'active' and not exists (select 1 from ops.care_plan_steps s where s.plan_id = new.id and s.clinic_id = new.clinic_id) then
+            raise exception 'a care plan with no steps cannot be activated' using errcode = 'restrict_violation';
+        end if;
+    end if;
     new.updated_at := clock_timestamp();
     return new;
 end
@@ -163,6 +179,20 @@ begin
     end if;
     if (to_jsonb(new) - 'status' - 'evidence_result_id') <> (to_jsonb(old) - 'status' - 'evidence_result_id') then
         raise exception 'only the status and the evidence of a step can change' using errcode = 'restrict_violation';
+    end if;
+    if exists (select 1 from ops.care_plans p where p.id = new.plan_id and p.clinic_id = new.clinic_id and p.status in ('completed', 'rejected')) then
+        raise exception 'the care plan is finished' using errcode = 'restrict_violation';
+    end if;
+    if new.status in ('met', 'not_met') then
+        -- a step closes only on a result of the plan's OWN patient, VERIFIED, not superseded, whose code starts with the step's prefix (an unverified result satisfies no rule)
+        if new.kind <> 'wait_result' or not exists (
+            select 1 from clinical.results r join ops.care_plans p on p.id = new.plan_id and p.clinic_id = new.clinic_id
+             where r.id = new.evidence_result_id and r.clinic_id = new.clinic_id and r.patient_id = p.patient_id and r.verified
+               and left(lower(r.code), length(new.result_prefix)) = lower(new.result_prefix)
+               and not exists (select 1 from clinical.results s where s.supersedes_id = r.id)
+        ) then
+            raise exception 'a step can close only on a verified result of this patient that matches the step' using errcode = 'restrict_violation';
+        end if;
     end if;
     return new;
 end
@@ -183,6 +213,15 @@ begin
     if old.open is false and new.open is true then
         raise exception 'a closed wait stays closed' using errcode = 'restrict_violation';
     end if;
+    if exists (select 1 from ops.care_plans p where p.id = new.plan_id and p.clinic_id = new.clinic_id and p.status in ('completed', 'rejected')) then
+        raise exception 'the care plan is finished' using errcode = 'restrict_violation';
+    end if;
+    if new.claimed_result_id is not null and old.claimed_result_id is null and not exists (
+        select 1 from clinical.results r where r.id = new.claimed_result_id and r.clinic_id = new.clinic_id and r.patient_id = new.patient_id
+           and left(lower(r.code), length(new.prefix)) = lower(new.prefix)
+    ) then
+        raise exception 'a wait can be claimed only by a result of this patient that matches its prefix' using errcode = 'restrict_violation';
+    end if;
     return new;
 end
 $$;
@@ -194,6 +233,27 @@ create trigger care_plan_steps_no_truncate before truncate on ops.care_plan_step
 create trigger care_plan_waits_guard before update or delete on ops.care_plan_waits for each row execute function ops.care_plan_waits_guard();
 create trigger care_plan_waits_no_truncate before truncate on ops.care_plan_waits for each statement execute function ops.care_plan_waits_guard();
 create trigger care_plans_not_erased before insert on ops.care_plans for each row execute function ops.care_barriers_not_erased();
+
+-- steps may be added only while the plan is being proposed (status screening); waits only once a doctor has activated it
+create function ops.care_plan_children_insert_guard() returns trigger
+    language plpgsql set search_path = ''
+as $$
+declare
+    v_status text;
+begin
+    select status into v_status from ops.care_plans where id = new.plan_id and clinic_id = new.clinic_id;
+    if tg_table_name = 'care_plan_steps' and v_status is distinct from 'screening' then
+        raise exception 'steps can be added only while the plan is being proposed' using errcode = 'restrict_violation';
+    end if;
+    if tg_table_name = 'care_plan_waits' and v_status is distinct from 'active' then
+        raise exception 'waits can be added only to an active plan' using errcode = 'restrict_violation';
+    end if;
+    return new;
+end
+$$;
+revoke all on function ops.care_plan_children_insert_guard() from public;
+create trigger care_plan_steps_insert_guard before insert on ops.care_plan_steps for each row execute function ops.care_plan_children_insert_guard();
+create trigger care_plan_waits_insert_guard before insert on ops.care_plan_waits for each row execute function ops.care_plan_children_insert_guard();
 
 alter table ops.care_plans enable row level security;
 alter table ops.care_plans force row level security;
@@ -211,14 +271,14 @@ create policy care_plans_aal2_insert on ops.care_plans as restrictive for insert
 create policy care_plans_aal2_update on ops.care_plans as restrictive for update to careflow_app using (iam.aal2_session()) with check (iam.aal2_session());
 
 create policy care_plan_steps_select on ops.care_plan_steps for select to careflow_app using (iam.has_clinic_role(clinic_id, array['nurse', 'doctor']));
-create policy care_plan_steps_insert on ops.care_plan_steps for insert to careflow_app with check (iam.has_clinic_role(clinic_id, array['nurse', 'doctor']));
+create policy care_plan_steps_insert on ops.care_plan_steps for insert to careflow_app with check (iam.has_clinic_role(clinic_id, array['doctor']));
 create policy care_plan_steps_update on ops.care_plan_steps for update to careflow_app
     using (iam.has_clinic_role(clinic_id, array['nurse', 'doctor'])) with check (iam.has_clinic_role(clinic_id, array['nurse', 'doctor']));
 create policy care_plan_steps_aal2_insert on ops.care_plan_steps as restrictive for insert to careflow_app with check (iam.aal2_session());
 create policy care_plan_steps_aal2_update on ops.care_plan_steps as restrictive for update to careflow_app using (iam.aal2_session()) with check (iam.aal2_session());
 
 create policy care_plan_waits_select on ops.care_plan_waits for select to careflow_app using (iam.has_clinic_role(clinic_id, array['nurse', 'doctor']));
-create policy care_plan_waits_insert on ops.care_plan_waits for insert to careflow_app with check (iam.has_clinic_role(clinic_id, array['nurse', 'doctor']));
+create policy care_plan_waits_insert on ops.care_plan_waits for insert to careflow_app with check (iam.has_clinic_role(clinic_id, array['doctor']));
 create policy care_plan_waits_update on ops.care_plan_waits for update to careflow_app
     using (iam.has_clinic_role(clinic_id, array['nurse', 'doctor'])) with check (iam.has_clinic_role(clinic_id, array['nurse', 'doctor']));
 create policy care_plan_waits_aal2_insert on ops.care_plan_waits as restrictive for insert to careflow_app with check (iam.aal2_session());
@@ -245,6 +305,12 @@ begin
             execute format('revoke all on function ops.care_plans_guard() from %I', r);
             execute format('revoke all on function ops.care_plan_steps_guard() from %I', r);
             execute format('revoke all on function ops.care_plan_waits_guard() from %I', r);
+            execute format('revoke all on function ops.care_plan_children_insert_guard() from %I', r);
+        end if;
+    end loop;
+    foreach t in array array['clinical.results_guard()', 'ops.care_plans_guard()', 'ops.care_plan_steps_guard()', 'ops.care_plan_waits_guard()', 'ops.care_plan_children_insert_guard()', 'ops.care_barriers_not_erased()'] loop
+        if has_function_privilege('public', t, 'execute') or has_function_privilege('careflow_app', t, 'execute') then
+            raise exception '0050: % must not be executable by PUBLIC or the application role', t;
         end if;
     end loop;
     foreach t in array array['clinical.results', 'ops.care_plans', 'ops.care_plan_steps', 'ops.care_plan_waits'] loop

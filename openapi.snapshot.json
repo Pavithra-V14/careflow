@@ -1,6 +1,20 @@
 {
   "components": {
     "schemas": {
+      "ActivateOut": {
+        "additionalProperties": false,
+        "properties": {
+          "activated": {
+            "title": "Activated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "activated"
+        ],
+        "title": "ActivateOut",
+        "type": "object"
+      },
       "AlertAckOut": {
         "additionalProperties": false,
         "properties": {
@@ -3343,6 +3357,25 @@
         "title": "PatientViewOut",
         "type": "object"
       },
+      "PortalActivateOut": {
+        "additionalProperties": false,
+        "properties": {
+          "result": {
+            "enum": [
+              "activated",
+              "already_active",
+              "consent_required"
+            ],
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "PortalActivateOut",
+        "type": "object"
+      },
       "PortalMeOut": {
         "additionalProperties": false,
         "properties": {
@@ -5961,39 +5994,6 @@
         ],
         "title": "WaitlistList",
         "type": "object"
-      },
-      "careflow__app__ActivateOut__1": {
-        "additionalProperties": false,
-        "properties": {
-          "activated": {
-            "title": "Activated",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "activated"
-        ],
-        "title": "ActivateOut",
-        "type": "object"
-      },
-      "careflow__app__ActivateOut__2": {
-        "additionalProperties": false,
-        "properties": {
-          "result": {
-            "enum": [
-              "activated",
-              "already_active",
-              "consent_required"
-            ],
-            "title": "Result",
-            "type": "string"
-          }
-        },
-        "required": [
-          "result"
-        ],
-        "title": "ActivateOut",
-        "type": "object"
       }
     },
     "securitySchemes": {
@@ -6097,7 +6097,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/careflow__app__ActivateOut__2"
+                  "$ref": "#/components/schemas/PortalActivateOut"
                 }
               }
             },
@@ -6827,7 +6827,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/careflow__app__ActivateOut__1"
+                  "$ref": "#/components/schemas/ActivateOut"
                 }
               }
             },

@@ -3819,7 +3819,7 @@ class ConsentOut(_Out):
     recorded: bool  # false = a repeat of the same key
 
 
-class ActivateOut(_Out):
+class PortalActivateOut(_Out):
     result: Literal["activated", "already_active", "consent_required"]
 
 
@@ -3871,15 +3871,15 @@ async def portal_record_consent(body: ConsentIn, idempotency_key: IdempotencyKey
     return ConsentOut(recorded=recorded)
 
 
-@portal.post("/activate", response_model=ActivateOut)
-async def portal_activate(idempotency_key: IdempotencyKey, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> ActivateOut:
+@portal.post("/activate", response_model=PortalActivateOut)
+async def portal_activate(idempotency_key: IdempotencyKey, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> PortalActivateOut:
     """Activate your account once you have granted the current care-delivery consent; otherwise `consent_required`. 403 unless you are a patient account (invited or active)."""
     await _patient_account(conn, claims, ("invited", "active"))
     try:
         result = await portal_sql.activate(conn)
     except portal_sql.PortalRefused:
         raise HTTPException(status_code=403, detail="your role may not do this") from None
-    return ActivateOut(result=result)  # type: ignore[arg-type]
+    return PortalActivateOut(result=result)  # type: ignore[arg-type]
 
 
 @portal.post("/claims", response_model=ClaimOut)

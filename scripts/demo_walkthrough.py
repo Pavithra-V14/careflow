@@ -35,6 +35,10 @@ def http_steps() -> None:
     say("5 offer", "POST /v1/staff/scheduling/backfills (a freed slot) -> POST .../backfills/{slot_id}/decide (send | skip | stop). The highest clinical priority is offered first, not the longest wait. Offers are delivered by hand: POST .../offers/{hold_id}/mark-delivered.")
     say("6 reply", "POST /v1/staff/scheduling/backfills/{slot_id}/reply with the patient's reply message; the rules screen it first, then POST .../offers/interpret-reply gives a suggestion a person confirms.")
     say("7 alerts and gaps", "GET /v1/staff/console/alerts; GET /v1/staff/care-gaps?clinic_id=...; POST /v1/staff/care-gaps/barriers to record a barrier.")
+    say("7b care-gap producers", "POST /v1/staff/care-gaps/episodes (nurse/doctor; the rules come only from CAREFLOW_CARE_GAP_RULES) then POST .../episode-rules/{id}/done; the worker tick raises the overdue alert through a narrow read; POST .../samples/{id}/recheck closes a review sample.")
+    say("11 patient portal", "A patient signs in (phone OTP in Supabase Auth), then POST /v1/portal/register, GET /v1/portal/consents, POST /v1/portal/consents (against the CURRENT notice), POST /v1/portal/activate, POST /v1/portal/claims (verified phone + name + date of birth; pending_review goes to the front desk).")
+    say("12 care plans and results", "POST /v1/staff/care-plans (doctor; 503 until a model route and the task settings are configured), POST .../{id}/confirm, POST /v1/staff/results (nurse/doctor) wakes the plan whose wait it matches.")
+    say("13 admin", "POST /v1/staff/console/autonomy (shadow or assisted; no row means shadow), GET /v1/staff/console/dashboard, GET /v1/staff/voice/sessions and .../transcript (audited), POST /v1/staff/voice/purge (expired chunks only).")
 
 
 async def care_journey_demo() -> None:
@@ -80,12 +84,39 @@ async def voice_demo() -> None:
     print("   ", result)
 
 
+def extras_demo() -> None:
+    from careflow.context_assembler import assemble
+
+    say("14 context assembler", "A declared budget; the lowest priority is dropped first and what was dropped is reported by label only.")
+    a = assemble("DEMO instruction", budget=12, patient_facts=[("f1", "fact " * 3)], evidence=[("e1", "evidence " * 20)], history=[("h1", "old turn"), ("h2", "new turn")], count_tokens=lambda t: len(t.split()))
+    print("   included:", a.included, "dropped:", a.dropped)
+
+
+async def scanner_demo() -> None:
+    from careflow.adapters.fake import FakeScanner
+    from careflow.scanner_worker import rescan_batch
+
+    say("15 scanner worker", "Documents last scanned with an older signature are rescanned; a failure is never recorded as clean.")
+    done: dict[str, str] = {}
+
+    async def read(doc: str) -> bytes:
+        return b"%PDF-1.4 DEMO"
+
+    async def record(doc: str, result) -> None:
+        done[doc] = result.verdict
+
+    counts = await rescan_batch(FakeScanner(), [("doc-old", "sig-1"), ("doc-current", "sig-2")], read, record, current_signature="sig-2")
+    print("   ", counts, done)
+
+
 def main() -> int:
     print("CareFlow synthetic walkthrough (demo profile, synthetic data only). Start the app with: CAREFLOW_PROFILE=demo CAREFLOW_DATA_POLICY=synthetic_only CAREFLOW_DEMO_PHASE3=1 CAREFLOW_DEMO_PHASE4=1")
     http_steps()
     asyncio.run(care_journey_demo())
     asyncio.run(readiness_demo())
     asyncio.run(voice_demo())
+    extras_demo()
+    asyncio.run(scanner_demo())
     print("\nDone. Nothing was stored, sent or called.")
     return 0
 
