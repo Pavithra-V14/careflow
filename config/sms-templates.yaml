@@ -1,0 +1,12 @@
+# SMS templates registered (or to be registered) with DLT (BUILD-SPEC.md 18.2; careflow/sms.py; docs/runbooks/sms-dlt-registration.md).
+#
+# EMPTY ON PURPOSE. A template's WORDING is registered by the hospital as the principal entity and is not stored or invented here; this file records only the shape the carrier registration fixes:
+# an id, a language (Tamil and English are separate registrations), the KIND of each variable (link, brand, slot_time, short_code; at most 5; the brand must be one), and the DLT status
+# (not_registered | pending | registered). In the clinical profile only `registered` templates are sent; in demo everything goes to the sandbox sink.
+#
+# Example entry (commented; not a real template):
+#   - id: appointment_offer_en
+#     language: en
+#     variables: [brand, slot_time, link]
+#     dlt_status: not_registered
+templates: []
