@@ -116,7 +116,7 @@ async def test_all_eleven_schemas_exist_and_nine_have_no_tables(db):
     # 0001 created these nine empty. Later phases add tables only where their migration says so; any other
     # table appearing here is unplanned, so this list is updated in the same change as the migration.
     assert found == {
-        "mpi": {"patients", "identity_tokens", "match_candidates", "merges", "identity_confirmations", "erasure_requests"},  # identity_confirmations: migration 0023; erasure_requests: 0032
+        "mpi": {"patients", "identity_tokens", "match_candidates", "merges", "identity_confirmations", "erasure_requests", "claim_attempts", "claim_requests"},  # claim_*: 0049;  # identity_confirmations: migration 0023; erasure_requests: 0032
         "sched": {"locations", "providers", "visit_types", "slots", "priority_levels", "holds", "bookings", "waitlist", "offer_deliveries"},  # offer_deliveries: 0031
         "ops": {"queue", "outbox", "key_rotation_batches", "spend_ledger", "alerts", "care_recurrence_rules", "care_episodes", "care_episode_rules", "care_barriers", "care_review_samples", "autonomy_changes"},  # spend_ledger: 0016; care_*: 0044; autonomy_changes: 0048
         "kb": {"red_flag_rules"},
@@ -133,7 +133,7 @@ async def test_every_table_has_forced_rls(db):
            join pg_namespace n on n.oid = c.relnamespace
            where n.nspname in ('iam', 'audit') and c.relkind = 'r'"""
     )
-    assert {r["relname"] for r in rows} == {"clinics", "accounts", "staff_roles", "log"}
+    assert {r["relname"] for r in rows} == {"clinics", "accounts", "staff_roles", "log", "consent_notices", "consent_events"}  # (consent_*: migration 0049)
     assert all(r["relrowsecurity"] and r["relforcerowsecurity"] for r in rows)
 
 

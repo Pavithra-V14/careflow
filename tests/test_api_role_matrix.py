@@ -136,6 +136,8 @@ async def _seed() -> Identities:
         await conn.execute("insert into iam.accounts (id, account_type, status, origin) values ($1, 'staff', 'active', 'test')", ids.fd2)
         await conn.execute("insert into iam.staff_roles (account_id, clinic_id, role, origin) values ($1, $2, 'front_desk', 'test')", ids.fd2, ids.clinic_a)
         await _seed_scheduling(ids, conn)
+        ids.claimant = uuid.uuid4()  # an ACTIVE patient account for the portal claim cases: its claim rows are append-only and are left behind with it
+        await conn.execute("insert into iam.accounts (id, account_type, status, origin) values ($1, 'patient', 'active', 'test')", ids.claimant)
         rule, episode, ids.episode_rule = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
         await conn.execute("insert into ops.care_recurrence_rules (id, clinic_id, origin, rule_code, interval_days, overdue_after_days, idempotency_key) values ($1, $2, 'test', 'matrix_seed_rule', 30, 5, $3)", rule, ids.clinic_a, f"mx-r-{rule}")
         await conn.execute("insert into ops.care_episodes (id, clinic_id, origin, patient_id, episode_code, started_on, idempotency_key) values ($1, $2, 'test', $3, 'matrix_seed_episode', current_date - 60, $4)", episode, ids.clinic_a, ids.patients_a[42], f"mx-e-{episode}")
@@ -2839,6 +2841,88 @@ def sample_recheck_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(), None)
 
 
+# ---- patient portal (migration 0049) --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Patient accounts only. The `patient` identity is an ACTIVE patient account; `guardian`, `closed` and every staff identity get the one 403. Registration is the one route a user with no account may call; it
+# refuses a staff account. The claim cases use a dedicated active patient (`ids.claimant`) whose rows are left behind, so the shared identities stay deletable. The database behaviour (consent, activation, the
+# claim match and its lock) is in tests/test_patient_portal_db_live.py.
+
+PORTAL = "/v1/portal"
+PORTAL_ME, PORTAL_CONSENTS, PORTAL_ACTIVATE, PORTAL_CLAIMS, PORTAL_REGISTER = PORTAL + "/me", PORTAL + "/consents", PORTAL + "/activate", PORTAL + "/claims", PORTAL + "/register"
+NOT_A_PATIENT = lambda b: b == {"detail": "your role may not do this"}
+
+
+def _non_patients(ids):
+    return [p for p in ids.people if p != "patient"]
+
+
+def portal_register_cases(ids) -> list[tuple]:
+    fresh = uuid.uuid4()
+    who = bearer(mint(fresh))
+    cases = [
+        _case(ids, "a signed-in user with no account registers", who, 201, PORTAL_REGISTER, body=lambda b: b == {"result": "registered"}),
+        _case(ids, "registering again is the same registration", who, 201, PORTAL_REGISTER, body=lambda b: b == {"result": "exists"}),
+        _case(ids, "an existing patient account gets `exists`", "patient", 201, PORTAL_REGISTER, body=lambda b: b == {"result": "exists"}),
+    ]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) holds a non-patient account and is refused", p, 403, PORTAL_REGISTER, body=NOT_A_PATIENT) for p in ids.people if p not in ("patient", "closed")]
+    cases += [_case(ids, "missing X-Idempotency-Key is rejected", "patient", 422, PORTAL_REGISTER, key=None, body=_fixed(422))]
+    return cases + _unauthenticated(ids, PORTAL_REGISTER, None)
+
+
+def portal_me_cases(ids) -> list[tuple]:
+    ok = lambda b: set(b) == {"status", "bound_to_a_patient_record", "consents"} and b["status"] == "active" and b["bound_to_a_patient_record"] is False and set(b["consents"]) == {"care_delivery", "ai_processing", "service_improvement"}
+    cases = [_case(ids, "an active patient account reads its state", "patient", 200, PORTAL_ME, key=None, body=ok)]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, PORTAL_ME, key=None, body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, PORTAL_ME, key=None, body=NOT_A_PATIENT))
+    return cases + _unauthenticated(ids, PORTAL_ME, None)[:4]
+
+
+def portal_consents_get_cases(ids) -> list[tuple]:
+    cases = [_case(ids, "an active patient account reads the current notices (none are published in the test database)", "patient", 200, PORTAL_CONSENTS, key=None, body=lambda b: set(b) == {"notices"} and isinstance(b["notices"], list))]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, PORTAL_CONSENTS, key=None, body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, PORTAL_CONSENTS, key=None, body=NOT_A_PATIENT))
+    return cases + _unauthenticated(ids, PORTAL_CONSENTS, None)[:4]
+
+
+def portal_consents_post_cases(ids) -> list[tuple]:
+    body = lambda **o: {"purpose": "care_delivery", "notice_id": str(uuid.uuid4()), "action": "granted", **o}
+    cases = [_case(ids, "a notice that is not the current one is refused", "patient", 409, PORTAL_CONSENTS, json=body(), body=lambda b: b == {"detail": "that is not the current notice for this purpose"})]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, PORTAL_CONSENTS, json=body(), body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases += [
+        _case(ids, "an unknown purpose is rejected", "patient", 422, PORTAL_CONSENTS, json=body(purpose="marketing"), body=_fixed(422)),
+        _case(ids, "an unknown action is rejected", "patient", 422, PORTAL_CONSENTS, json=body(action="maybe"), body=_fixed(422)),
+        _case(ids, "an extra field is rejected", "patient", 422, PORTAL_CONSENTS, json=body(extra=1), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "patient", 422, PORTAL_CONSENTS, json=body(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, PORTAL_CONSENTS, body())
+
+
+def portal_activate_cases(ids) -> list[tuple]:
+    cases = [_case(ids, "an already active patient account gets `already_active`", "patient", 200, PORTAL_ACTIVATE, body=lambda b: b == {"result": "already_active"})]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, PORTAL_ACTIVATE, body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases += [_case(ids, "missing X-Idempotency-Key is rejected", "patient", 422, PORTAL_ACTIVATE, key=None, body=_fixed(422))]
+    return cases + _unauthenticated(ids, PORTAL_ACTIVATE, None)
+
+
+def portal_claim_cases(ids) -> list[tuple]:
+    phone = "+919876543210"
+    claimant = bearer(mint(ids.claimant, phone=phone))
+    no_phone = bearer(mint(ids.claimant))
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "name": "DEMO Claimant", "dob": "1990-01-01", **o}
+    cases = [
+        _case(ids, "no record matches: a request for the front desk", claimant, 200, PORTAL_CLAIMS, json=body(), body=lambda b: b == {"outcome": "pending_review"}),
+        _case(ids, "the same claim again gives the same word", claimant, 200, PORTAL_CLAIMS, json=body(), body=lambda b: b == {"outcome": "pending_review"}),
+        _case(ids, "a token with no verified phone cannot claim", no_phone, 403, PORTAL_CLAIMS, json=body(), body=NOT_A_PATIENT),
+        _case(ids, "an unknown clinic is refused the same way", claimant, 403, PORTAL_CLAIMS, json=body(clinic_id=str(uuid.uuid4())), body=NOT_A_PATIENT),
+        _case(ids, "a date that is not a date is rejected", claimant, 422, PORTAL_CLAIMS, json=body(dob="soon"), body=_rejected),
+        _case(ids, "an age is not a date of birth", claimant, 422, PORTAL_CLAIMS, json=body(dob="34"), body=_rejected),
+        _case(ids, "a blank name is rejected", claimant, 422, PORTAL_CLAIMS, json=body(name=""), body=_fixed(422)),
+        _case(ids, "an extra field is rejected", claimant, 422, PORTAL_CLAIMS, json=body(extra=1), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", claimant, 422, PORTAL_CLAIMS, json=body(), key=None, body=_fixed(422)),
+    ]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused even with a phone", bearer(mint(ids.people[p][0], phone=phone)), 403, PORTAL_CLAIMS, json=body(), body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    return cases + _unauthenticated(ids, PORTAL_CLAIMS, body())
+
+
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
     ("POST", HOLD): lambda ids: slot_write_cases(ids, "hold"),
@@ -2888,6 +2972,12 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", VOICE_PREF): voice_preference_get_cases,
     ("PUT", VOICE_PREF): voice_preference_put_cases,
     ("POST", VOICE_SESSIONS): voice_session_cases,
+    ("POST", PORTAL_REGISTER): portal_register_cases,
+    ("GET", PORTAL_ME): portal_me_cases,
+    ("GET", PORTAL_CONSENTS): portal_consents_get_cases,
+    ("POST", PORTAL_CONSENTS): portal_consents_post_cases,
+    ("POST", PORTAL_ACTIVATE): portal_activate_cases,
+    ("POST", PORTAL_CLAIMS): portal_claim_cases,
     ("GET", AUTONOMY): autonomy_get_cases,
     ("POST", AUTONOMY): autonomy_set_cases,
     ("GET", DASHBOARD): dashboard_cases,

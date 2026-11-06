@@ -75,6 +75,7 @@ from careflow import (
     offers,
     openapi_errors,
     patient_view,
+    portal_sql,
     producers_sql,
     reply_interpretation,
     review_tasks,
@@ -3728,11 +3729,11 @@ class VoiceSessionOut(_Out):
     mic: str
 
 
-async def _patient_account(conn: AsyncConnection, claims: dict[str, Any]) -> tuple[uuid.UUID, str]:
-    """(account id, origin) of the caller if they are an ACTIVE PATIENT account; otherwise one fixed 403."""
+async def _patient_account(conn: AsyncConnection, claims: dict[str, Any], statuses: tuple[str, ...] = ("active",)) -> tuple[uuid.UUID, str]:
+    """(account id, origin) of the caller if they are a PATIENT account in one of `statuses` (active by default); otherwise one fixed 403."""
     account_id = uuid.UUID(claims["sub"])
     row = (await conn.execute(text("select account_type, status, origin from iam.accounts where id = :i"), {"i": account_id})).first()
-    if row is None or row.account_type != "patient" or row.status != "active":
+    if row is None or row.account_type != "patient" or row.status not in statuses:
         raise HTTPException(status_code=403, detail="your role may not do this")
     return account_id, row.origin
 
@@ -3772,6 +3773,132 @@ async def open_voice_session(body: VoiceSessionIn, idempotency_key: IdempotencyK
     except LookupError:
         raise HTTPException(status_code=409, detail="that key belongs to another session") from None
     return VoiceSessionOut(session_id=session_id, created=created, mic="ok")
+
+
+# ---- Patient portal: registration, consent, activation, claim (migration 0049; BUILD-SPEC.md 17.2, 18.4, 20.1) ---------------------------------------------------------------------------------------------------
+#
+# Patient-account routes (no staff role, no staff multi-factor: tests/test_mfa.py pins the narrow exemption). Every route except registration refuses anything that is not a PATIENT account in an allowed state
+# before it does anything else; registration is the one route a user with no account may call, and it refuses a user who holds a staff account. The state changes are database functions that check the signed-in
+# caller themselves. The claim compares keyed hashes of the verified phone claim and the submitted name and date of birth; nothing is returned about WHY a claim did not succeed.
+
+portal = APIRouter(prefix="/v1/portal", tags=["patient portal"])
+
+
+class PortalRegisterOut(_Out):
+    result: Literal["registered", "exists"]
+
+
+class PortalMeOut(_Out):
+    status: str
+    bound_to_a_patient_record: bool
+    consents: dict[str, bool | None]  # purpose -> granted / withdrawn / never decided (or decided against an older notice text)
+
+
+class NoticeOut(_Out):
+    notice_id: uuid.UUID
+    purpose: str
+    version: int
+    body: str
+    decision: bool | None
+
+
+class NoticeList(_Out):
+    notices: list[NoticeOut]
+
+
+class ConsentIn(_Body):
+    purpose: Literal["care_delivery", "ai_processing", "service_improvement"]
+    notice_id: uuid.UUID
+    action: Literal["granted", "withdrawn"]
+
+
+class ConsentOut(_Out):
+    recorded: bool  # false = a repeat of the same key
+
+
+class ActivateOut(_Out):
+    result: Literal["activated", "already_active", "consent_required"]
+
+
+class ClaimIn(_Body):
+    clinic_id: uuid.UUID
+    name: str = Field(min_length=1, max_length=200)
+    dob: str = Field(min_length=1, max_length=10, description="YYYY-MM-DD")
+
+
+class ClaimOut(_Out):
+    outcome: Literal["claimed", "pending_review", "locked", "already_bound"]
+
+
+@portal.post("/register", response_model=PortalRegisterOut, status_code=201)
+async def portal_register(idempotency_key: IdempotencyKey, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> PortalRegisterOut:
+    """Create your patient sign-in account (invited, not yet active). Repeating it returns `exists`. 403 if you already hold a staff or other non-patient account."""
+    origin = "test" if resolve_profile() == "demo" else "live"  # the deployment profile decides the origin tag, never the client
+    try:
+        result = await portal_sql.register(conn, origin)
+    except portal_sql.PortalRefused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return PortalRegisterOut(result=result)  # type: ignore[arg-type]
+
+
+@portal.get("/me", response_model=PortalMeOut)
+async def portal_me(conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> PortalMeOut:
+    """Your account state and consent decisions. 403 unless you are a patient account (invited or active)."""
+    account_id, _ = await _patient_account(conn, claims, ("invited", "active"))
+    state = await portal_sql.account_state(conn, account_id)
+    return PortalMeOut(status=state["status"], bound_to_a_patient_record=state["bound"], consents=state["consents"])
+
+
+@portal.get("/consents", response_model=NoticeList)
+async def portal_consents(conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> NoticeList:
+    """The current notice for each purpose (exact text and version) with your decision on it. With no notice published the list is empty. 403 unless you are a patient account (invited or active)."""
+    account_id, _ = await _patient_account(conn, claims, ("invited", "active"))
+    decided = await portal_sql.latest_decisions(conn, account_id)
+    return NoticeList(notices=[NoticeOut(notice_id=n.id, purpose=n.purpose, version=n.version, body=n.body, decision=decided.get(n.purpose)) for n in await portal_sql.current_notices(conn)])
+
+
+@portal.post("/consents", response_model=ConsentOut, status_code=201)
+async def portal_record_consent(body: ConsentIn, idempotency_key: IdempotencyKey, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> ConsentOut:
+    """Grant or withdraw one consent purpose against the CURRENT notice of that purpose. Idempotent on the key. 403 unless you are a patient account (invited or active); 409 if the notice is not the current one for that purpose."""
+    account_id, _ = await _patient_account(conn, claims, ("invited", "active"))
+    try:
+        recorded = await portal_sql.record_consent(conn, account_id=account_id, purpose=body.purpose, notice_id=body.notice_id, action=body.action, idempotency_key=f"consent:{idempotency_key}")
+    except portal_sql.PortalRefused:
+        raise HTTPException(status_code=409, detail="that is not the current notice for this purpose") from None
+    return ConsentOut(recorded=recorded)
+
+
+@portal.post("/activate", response_model=ActivateOut)
+async def portal_activate(idempotency_key: IdempotencyKey, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> ActivateOut:
+    """Activate your account once you have granted the current care-delivery consent; otherwise `consent_required`. 403 unless you are a patient account (invited or active)."""
+    await _patient_account(conn, claims, ("invited", "active"))
+    try:
+        result = await portal_sql.activate(conn)
+    except portal_sql.PortalRefused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return ActivateOut(result=result)  # type: ignore[arg-type]
+
+
+@portal.post("/claims", response_model=ClaimOut)
+async def portal_claim(body: ClaimIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> ClaimOut:
+    """Claim the patient record that matches your VERIFIED phone and the name and date of birth you give. `claimed` binds your account; anything else is `pending_review` (a front-desk person decides; the same word whether nothing or several matched), `locked` after repeated failures, or `already_bound`. 403 unless you are an ACTIVE patient account or you have no verified phone; 422 if the date or name is unusable; 503 if encryption keys are not configured."""
+    await _patient_account(conn, claims)
+    phone = claims.get("phone")
+    vault: DemographicVault | None = request.app.state.vault
+    key_version = _active_key_version(request)
+    if vault is None or key_version is None:
+        raise HTTPException(status_code=503, detail="claims are unavailable: encryption keys are not configured")
+    if not isinstance(phone, str) or not phone.strip():
+        raise HTTPException(status_code=403, detail="your role may not do this")  # no verified phone: nothing to claim with
+    try:
+        phone_token, name_dob_token = portal_sql.claim_tokens(vault, phone=phone, name=body.name, dob=body.dob, key_version=key_version)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="request rejected") from None
+    try:
+        outcome = await portal_sql.claim(conn, clinic_id=body.clinic_id, phone_token=phone_token, name_dob_token=name_dob_token, key_version=key_version)
+    except portal_sql.PortalRefused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return ClaimOut(outcome=outcome)  # type: ignore[arg-type]
 
 
 # ---- Voice transcripts: admin-only, audited reading and purging (migration 0047; BUILD-SPEC.md 9.4) ----------------------------------------------------------------------------------------------------------
@@ -4017,9 +4144,10 @@ def create_app(
     app.include_router(staff_console)
     app.include_router(staff_care_gaps)
     app.include_router(portal_voice)
+    app.include_router(portal)
     app.include_router(staff_voice)
     app.include_router(health)
-    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, staff_voice])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
+    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, portal, staff_voice])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
     return app
 
 
