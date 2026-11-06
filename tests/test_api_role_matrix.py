@@ -2191,7 +2191,7 @@ def staff_activate_cases(ids) -> list[tuple]:
         _case(ids, "doing it again is a replay", bearer(mint(mine)), 200, path, body=lambda b: b == {"activated": False}),
         _case(ids, "an invited account with no live role cannot activate", bearer(mint(no_role)), 403, path, body=lambda b: b == {"detail": "your role may not do this"}),
         _case(ids, "an already active account is a no-op", bearer(mint(active)), 200, path, body=lambda b: b == {"activated": False}),
-        _case(ids, "a password-only session is refused before anything runs", password_only[0], 401, path, body=_fixed(401)),
+        _case(ids, "a password-only session is refused before anything runs", password_only[0], 401, path, body=lambda b: b == {"detail": "multi-factor sign-in required"}),
         _case(ids, "a valid user with no account is refused", bearer(mint(ids.no_account)), 403, path, body=lambda b: b == {"detail": "your role may not do this"}),
     ] + _unauthenticated(ids, path, None)
 
@@ -2276,8 +2276,8 @@ def backfill_reply_cases(ids) -> list[tuple]:
     body = lambda **o: {"outcome": "timed_out", **o}
     cases = _backfill_gate_cases(ids, lambda: path, body, allowed={"front_desk_a"}, status_for_visible=SLOT_VISIBLE_NOT_FRONT_DESK)
     cases += [
-        _case(ids, "a reply without its message is rejected", "front_desk_a", 422, path, json={"outcome": "replied"}, body=_fixed(422)),
-        _case(ids, "a message with a timed-out outcome is rejected", "front_desk_a", 422, path, json=body(message_id=str(uuid.uuid4())), body=_fixed(422)),
+        _case(ids, "a reply without its message is rejected", "front_desk_a", 422, path, json={"outcome": "replied"}, body=_rejected),
+        _case(ids, "a message with a timed-out outcome is rejected", "front_desk_a", 422, path, json=body(message_id=str(uuid.uuid4())), body=_rejected),
         _case(ids, "an outcome that is not listed is rejected", "front_desk_a", 422, path, json=body(outcome="maybe"), body=_fixed(422)),
         _case(ids, "missing X-Idempotency-Key is rejected", "front_desk_a", 422, path, json=body(), key=None, body=_fixed(422)),
     ]
@@ -2341,7 +2341,7 @@ def setup_create_cases(kind):
                 _case(ids, "an overlapping slot of the same provider is a conflict", "front_desk_a", 409, path, json=overlap, body=lambda b: b == {"detail": "that time overlaps another slot of this provider"}),
                 _case(ids, "an end before the start is rejected", "front_desk_a", 422, path, json=_setup_body(ids, kind, ends_at="2000-01-01T00:00:00+00:00"), body=_rejected),
                 _case(ids, "a time without a zone is rejected", "front_desk_a", 422, path, json=_setup_body(ids, kind, starts_at="2100-01-01T10:00:00", ends_at="2100-01-01T10:30:00"), body=_rejected),
-                _case(ids, "a slot longer than a day is rejected", "front_desk_a", 422, path, json=_setup_body(ids, kind, starts_at="2100-01-01T00:00:00+00:00", ends_at="2100-01-03T00:00:00+00:00"), body=_fixed(422)),
+                _case(ids, "a slot longer than a day is rejected", "front_desk_a", 422, path, json=_setup_body(ids, kind, starts_at="2100-01-01T00:00:00+00:00", ends_at="2100-01-03T00:00:00+00:00"), body=_rejected),
                 _case(ids, "an unknown provider is not found", "front_desk_a", 404, path, json=_setup_body(ids, kind, provider_id=str(uuid.uuid4())), body=_fixed(404)),
             ]
         for p in [*ids.people, "no account"]:
