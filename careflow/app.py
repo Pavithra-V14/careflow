@@ -62,6 +62,8 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from careflow import (
     active_role,
+    care_gap_sql,
+    care_gaps,
     demo_front_door,
     demo_phase3,
     demo_phase4,
@@ -72,6 +74,7 @@ from careflow import (
     patient_view,
     reply_interpretation,
     review_tasks,
+    voice_sql,
 )
 from careflow.adapters.storage import DOCUMENT_BUCKET, SupabaseUploadAdapter
 from careflow.audit import write_audit
@@ -175,6 +178,7 @@ from careflow.scheduling_runner import (
 from careflow.tick import Poker, worker_loop
 from careflow.triage_store import DecisionConflict, TriageStoreError
 from careflow.triage_store import NotPermitted as TriageNotPermitted
+from careflow.voice import mic_state, voice_feature_on
 from careflow.watchdog import AlertRouter, limits_from
 
 log = logging.getLogger("careflow.app")
@@ -3293,7 +3297,8 @@ async def acknowledge_alert(alert_id: uuid.UUID, idempotency_key: IdempotencyKey
         raise HTTPException(status_code=409, detail="already acknowledged")
     done = (
         await conn.execute(
-            text("update ops.alerts set acknowledged_by = auth.uid(), acknowledged_at = clock_timestamp() where id = :i and acknowledged_at is null returning id"), {"i": alert_id}
+            text("update ops.alerts set acknowledged_by = :me, acknowledged_at = clock_timestamp() where id = :i and acknowledged_at is null returning id"),
+            {"i": alert_id, "me": uuid.UUID(claims["sub"])},  # (the application role cannot call auth.uid() by name; the policy still checks acknowledged_by = auth.uid())
         )
     ).first()
     if done is None:
@@ -3384,6 +3389,196 @@ def _intake_from_environment(supabase_url: str) -> tuple[DocumentIntake | None, 
     return DocumentIntake(adapter, profile=resolve_profile()), adapter
 
 
+# ---- Care Gaps (Phase 9 follow-up; migration 0044; BUILD-SPEC.md 24) -----------------------------------------------------------------------------------------------------------------------------------------
+#
+# `GET /v1/staff/care-gaps?clinic_id=` is the combined panel: overdue recurrence, the after-the-fact review sample and unresolved social/resource barriers, as source + opaque id + age (no name, no value).
+# `POST /v1/staff/care-gaps/barriers` records a barrier and `POST .../barriers/{id}/resolve` resolves one (final). Nurse, doctor and admin of the clinic only; row-level security decides, and the role is
+# checked first so a refusal is the same 403/404 as the other console routes. NOTHING here resolves a recurrence or a sample: the panel reads.
+
+staff_care_gaps = APIRouter(prefix="/v1/staff/care-gaps", tags=["staff care gaps"])
+CARE_GAP_ROLES = ("nurse", "doctor", "admin")
+
+
+class CareGapRowOut(_Out):
+    source: str
+    item_id: str
+    age_days: int | None
+    flagged_overdue: bool  # older than the configured alert age (false whenever that setting is unset)
+
+
+class CareGapSummaryOut(_Out):
+    source: str
+    open_count: int | None  # null = the source could not be read (never 0)
+    median_age_days: float | None
+    undated: int
+
+
+class CareGapPanelOut(_Out):
+    clinic_id: uuid.UUID
+    rows: list[CareGapRowOut]
+    summaries: list[CareGapSummaryOut]
+    unreadable: list[str]
+    recurrence_rules_with_unknown_last_done: int
+    alert_age_configured: bool
+    after_the_fact_error_rate: float | None  # not wired here yet (reviewer statistics are admin-only): always null
+
+
+class BarrierIn(_Body):
+    clinic_id: uuid.UUID
+    patient_id: uuid.UUID
+    barrier: Literal["transport", "cost", "childcare", "forgot", "scheduling_conflict", "other"]
+
+
+class BarrierOut(_Out):
+    barrier_id: uuid.UUID
+    created: bool
+
+
+class BarrierResolveOut(_Out):
+    barrier_id: uuid.UUID
+    resolved: bool
+
+
+@staff_care_gaps.get("", response_model=CareGapPanelOut)
+async def care_gap_panel(clinic_id: uuid.UUID, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> CareGapPanelOut:
+    """The Care Gaps panel for a clinic: rows (source, opaque id, age in days), a summary per source (a source that cannot be read has a null count, never 0), and the number of recurrence rules whose last-done date is unknown. 404 if the clinic is not visible to you, 403 unless you are nurse, doctor or admin there."""
+    origin = await _console_clinic(conn, clinic_id, CARE_GAP_ROLES)
+    sources = care_gap_sql.sources_for(conn, clinic_id, origin)
+    now = (await conn.execute(text("select clock_timestamp()"))).scalar_one()
+    panel = await care_gaps.build_panel(sources, now=now)
+    limit = request.app.state.care_gap_alert_days
+    check = care_gaps.alerts_for(panel, clinic_id=str(clinic_id), origin=origin, alert_after_days=limit)
+    flagged = {a.ref for a in check.alerts}
+    return CareGapPanelOut(
+        clinic_id=clinic_id,
+        rows=[CareGapRowOut(source=r.source, item_id=r.item_id, age_days=r.age_days, flagged_overdue=r.item_id in flagged) for r in panel.rows],
+        summaries=[CareGapSummaryOut(source=s.source, open_count=s.open_count, median_age_days=s.median_age_days, undated=s.undated) for s in panel.summaries],
+        unreadable=list(panel.unreadable),
+        recurrence_rules_with_unknown_last_done=sources[0].unknown_dates,
+        alert_age_configured=not check.alert_unconfigured,
+        after_the_fact_error_rate=None,
+    )
+
+
+@staff_care_gaps.post("/barriers", response_model=BarrierOut, status_code=201)
+async def record_barrier(body: BarrierIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> BarrierOut:
+    """Record a no-show barrier for a patient of the clinic (a closed set of types). Idempotent on the key. 404 if the clinic or the patient is not visible to you, 403 unless you are nurse, doctor or admin there."""
+    origin = await _console_clinic(conn, body.clinic_id, CARE_GAP_ROLES)
+    try:
+        barrier_id, created = await care_gap_sql.record_barrier(
+            conn, clinic_id=body.clinic_id, origin=origin, patient_id=body.patient_id, barrier=body.barrier, idempotency_key=f"barrier:{idempotency_key}"
+        )
+    except LookupError:
+        raise HTTPException(status_code=404, detail="not found") from None
+    if created:
+        await write_audit(
+            conn, clinic_id=body.clinic_id, origin=origin, actor_id=uuid.UUID(claims["sub"]), actor_role=await _acting_role(conn, claims, body.clinic_id, CARE_GAP_ROLES), action="care_gap.barrier_record",
+            resource_type="care_barrier", resource_id=barrier_id, details={"barrier": body.barrier}, idempotency_key=f"audit:care-barrier-record:{barrier_id}",
+        )
+    return BarrierOut(barrier_id=barrier_id, created=created)
+
+
+@staff_care_gaps.post("/barriers/{barrier_id}/resolve", response_model=BarrierResolveOut)
+async def resolve_barrier(barrier_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> BarrierResolveOut:
+    """Resolve an open barrier, once, as yourself. 404 if you cannot see it or it does not exist, 409 if it was already resolved."""
+    row = (await conn.execute(text("select clinic_id, origin from ops.care_barriers where id = :i"), {"i": barrier_id})).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    outcome = await care_gap_sql.resolve_barrier(conn, barrier_id=barrier_id, resolved_by=uuid.UUID(claims["sub"]))
+    if outcome != "resolved":
+        raise HTTPException(status_code=409, detail="already resolved")
+    await write_audit(
+        conn, clinic_id=row.clinic_id, origin=row.origin, actor_id=uuid.UUID(claims["sub"]), actor_role=await _acting_role(conn, claims, row.clinic_id, CARE_GAP_ROLES), action="care_gap.barrier_resolve",
+        resource_type="care_barrier", resource_id=barrier_id, details={}, idempotency_key=f"audit:care-barrier-resolve:{barrier_id}",
+    )
+    return BarrierResolveOut(barrier_id=barrier_id, resolved=True)
+
+
+# ---- Voice (Phase 8 follow-up; migration 0045; BUILD-SPEC.md 19.4, 23) --------------------------------------------------------------------------------------------------------------------------------------
+#
+# Patient-account routes (no staff role, and no multi-factor requirement: patients do not have staff MFA). `GET/PUT /v1/portal/voice/preference` is the account's own `voice_enabled` (off by default).
+# `POST /v1/portal/voice/sessions` opens a scoped session record after the patient's per-session consent. It answers 503 unless ALL of: the clinic flag FEATURE_VOICE_CHANNEL, an engine, and the transcript
+# retention setting are configured; the database then also checks the patient's own preference, that the account is an active patient and that it is bound to a patient of the clinic. There is no real
+# engine: with none wired the route answers 503 and no row is written.
+
+portal_voice = APIRouter(prefix="/v1/portal/voice", tags=["portal voice"])
+
+
+class VoicePreferenceIn(_Body):
+    voice_enabled: bool
+
+
+class VoicePreferenceOut(_Out):
+    voice_enabled: bool
+
+
+class VoiceSessionIn(_Body):
+    clinic_id: uuid.UUID
+    workflow: Literal["slot_offer", "intake_question", "readiness_item"]
+    consent: Literal[True]  # the spoken and on-screen consent and recording disclosure, given in THIS session (23.4); anything but true is a 422
+
+
+class VoiceSessionOut(_Out):
+    session_id: uuid.UUID
+    created: bool
+    mic: str
+
+
+async def _patient_account(conn: AsyncConnection, claims: dict[str, Any]) -> tuple[uuid.UUID, str]:
+    """(account id, origin) of the caller if they are an ACTIVE PATIENT account; otherwise one fixed 403."""
+    account_id = uuid.UUID(claims["sub"])
+    row = (await conn.execute(text("select account_type, status, origin from iam.accounts where id = :i"), {"i": account_id})).first()
+    if row is None or row.account_type != "patient" or row.status != "active":
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    return account_id, row.origin
+
+
+@portal_voice.get("/preference", response_model=VoicePreferenceOut)
+async def get_voice_preference(conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> VoicePreferenceOut:
+    """Your own voice preference (false until you choose). 403 unless you are an active patient account."""
+    account_id, _ = await _patient_account(conn, claims)
+    return VoicePreferenceOut(voice_enabled=await voice_sql.get_preference(conn, account_id))
+
+
+@portal_voice.put("/preference", response_model=VoicePreferenceOut)
+async def put_voice_preference(body: VoicePreferenceIn, idempotency_key: IdempotencyKey, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> VoicePreferenceOut:
+    """Turn voice on or off for yourself. Idempotent by nature (it sets a value). 403 unless you are an active patient account."""
+    account_id, origin = await _patient_account(conn, claims)
+    await voice_sql.set_preference(conn, account_id, origin, body.voice_enabled)
+    return VoicePreferenceOut(voice_enabled=body.voice_enabled)
+
+
+@portal_voice.post("/sessions", response_model=VoiceSessionOut, status_code=201)
+async def open_voice_session(body: VoiceSessionIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> VoiceSessionOut:
+    """Open a scoped voice session after consent. 403 unless you are an active patient account; 503 if voice is not configured (clinic flag, an engine, the transcript retention setting); 403 if you have not turned voice on; 404 if you are not a patient of that clinic."""
+    account_id, origin = await _patient_account(conn, claims)
+    state = request.app.state
+    configured = mic_state(clinic_flag=state.voice_feature_on, patient_voice_enabled=True, engine_available=state.voice_engine is not None, rules_assessable=True)
+    if not configured.visible or state.voice_retention_days is None:
+        raise HTTPException(status_code=503, detail="voice is not available")
+    if not await voice_sql.get_preference(conn, account_id):
+        raise HTTPException(status_code=403, detail="voice is not turned on for you")
+    bound = (await conn.execute(text("select 1 from mpi.patients where account_id = :a and clinic_id = :c and erased_at is null"), {"a": account_id, "c": body.clinic_id})).first()
+    if bound is None:
+        raise HTTPException(status_code=404, detail="not found")
+    try:
+        session_id, created = await voice_sql.open_session(
+            conn, clinic_id=body.clinic_id, account_id=account_id, origin=origin, workflow=body.workflow, retention_days=state.voice_retention_days, idempotency_key=f"voice:{idempotency_key}"
+        )
+    except LookupError:
+        raise HTTPException(status_code=409, detail="that key belongs to another session") from None
+    return VoiceSessionOut(session_id=session_id, created=created, mic="ok")
+
+
+def _positive_int(raw: str | None) -> int | None:
+    """A required numeric setting: unset, blank, non-numeric or below 1 is None (unset), never a default."""
+    try:
+        value = int((raw or "").strip())
+    except ValueError:
+        return None
+    return value if value >= 1 else None
+
+
 def create_app(
     settings: Settings | None = None, *, jwks: JWKSClient | None = None, engine: AsyncEngine | None = None,
     vault: DemographicVault | None = None, clock: Callable[[], float] = time.time, front_door: FrontDoorComponents | None = None,
@@ -3410,6 +3605,10 @@ def create_app(
         app.state.reason_codes = ReasonCodes.from_setting(p4env.get("CAREFLOW_REVIEW_REASON_CODES"))
         app.state.rubber_stamp_policy = RubberStampPolicy.from_setting(p4env.get("CAREFLOW_RUBBER_STAMP_POLICY"))
         app.state.cost_settings = cost_settings_from(p4env)
+        app.state.voice_feature_on = voice_feature_on(os.environ)
+        app.state.voice_engine = None  # no real voice engine exists (owner decision 2026-11-06): the session route answers 503
+        app.state.voice_retention_days = _positive_int(p4env.get('CAREFLOW_VOICE_TRANSCRIPT_RETENTION_DAYS'))
+        app.state.care_gap_alert_days = _positive_int(p4env.get('CAREFLOW_CARE_GAP_ALERT_DAYS'))
         app.state.erase_reasons = frozenset(w.strip() for w in (cfg.erase_reasons or "").split(",") if w.strip()) or None
         app.state.clock = clock
         app.state.required_roles = cfg.required_roles
@@ -3461,8 +3660,13 @@ def create_app(
         except CanaryError:
             log.error("CAREFLOW_CANARY_RATE is invalid: no canaries are injected")
             canary_rate = None
-        if canary_rate is not None and components is not None and demo_phase3.demo_allowed(resolve_profile(), demo_phase3.data_policy(os.environ)) and demo_phase3.switched_on(os.environ):
-            sweeps.append(lambda conn: canary_sweep(conn, canary_rate))
+        try:
+            canary_max_per_day: int | None = int(p4env["CAREFLOW_CANARY_MAX_PER_DAY"].strip()) if (p4env.get("CAREFLOW_CANARY_MAX_PER_DAY") or "").strip() else None
+        except ValueError:
+            log.error("CAREFLOW_CANARY_MAX_PER_DAY is invalid: no canaries are injected")
+            canary_max_per_day = None
+        if canary_rate is not None and canary_max_per_day is not None and components is not None and demo_phase3.demo_allowed(resolve_profile(), demo_phase3.data_policy(os.environ)) and demo_phase3.switched_on(os.environ):
+            sweeps.append(lambda conn: canary_sweep(conn, canary_rate, canary_max_per_day))
         worker: asyncio.Task | None = None
         if cfg.run_worker:
             if cfg.worker_account_id is None:
@@ -3521,8 +3725,10 @@ def create_app(
     app.include_router(staff_accounts)
     app.include_router(staff_erasure)
     app.include_router(staff_console)
+    app.include_router(staff_care_gaps)
+    app.include_router(portal_voice)
     app.include_router(health)
-    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
+    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
     return app
 
 

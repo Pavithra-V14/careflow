@@ -1,4 +1,4 @@
-"""docs.register_canary_document (migration 0042) against the real database, as the restricted `careflow_app` role inside ONE never-committed outer transaction."""
+"""docs.register_canary_document (migrations 0042 and 0043) against the real database, as the restricted `careflow_app` role inside ONE never-committed outer transaction."""
 
 import json
 import os
@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parent.parent
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or dotenv_values(ROOT / ".env").get("DATABASE_URL_MIGRATOR")
 pytestmark = [pytest.mark.asyncio(loop_scope="module"), pytest.mark.skipif(not MIGRATOR, reason="DATABASE_URL_MIGRATOR not configured")]
 REFUSED = "canary document refused"
-CALL = "select docs.register_canary_document(:c, :d, :k)"
+CALL = "select docs.register_canary_document(:c, :d, :k, :m)"
 
 
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
@@ -65,6 +65,7 @@ async def world(db):
 
 async def call_as(db, person, sql, **params):
     """One statement as `careflow_app` with the account's claims in a savepoint; a refusal rolls the savepoint back (which also restores the role)."""
+    params.setdefault("m", 20)
     async with db.begin_nested():
         await db.exec_driver_sql("set local role careflow_app")
         await db.execute(text("select set_config('request.jwt.claims', :c, true)"), {"c": json.dumps({"sub": str(person), "role": "authenticated"})})
@@ -91,7 +92,7 @@ async def test_only_a_queue_worker_of_the_clinic_can_register_a_canary_document_
         async with db.begin_nested():
             await db.exec_driver_sql("set local role careflow_app")
             await db.execute(text("select set_config('request.jwt.claims', '', true)"))
-            await db.execute(text(CALL), {"c": a, "d": uuid.uuid4(), "k": "canary:x"})
+            await db.execute(text(CALL), {"c": a, "d": uuid.uuid4(), "k": "canary:x", "m": 20})
 
 
 async def test_the_key_must_be_bound_to_the_document_id_and_a_replay_writes_nothing_more(db):
@@ -110,7 +111,7 @@ async def test_the_function_is_executable_by_the_application_role_only(db):
         exists = (await db.execute(text("select exists (select 1 from pg_roles where rolname = :r) or :r = 'public'"), {"r": role})).scalar()
         if not exists:
             continue
-        granted = (await db.execute(text("select has_function_privilege(:r, 'docs.register_canary_document(uuid, uuid, text)', 'execute')"), {"r": role})).scalar()
+        granted = (await db.execute(text("select has_function_privilege(:r, 'docs.register_canary_document(uuid, uuid, text, integer)', 'execute')"), {"r": role})).scalar()
         assert granted is expected, role
 
 
@@ -124,3 +125,30 @@ async def test_a_replay_adds_no_second_row_and_a_key_held_by_a_real_document_is_
     await raw(db, f"insert into docs.documents (id, clinic_id, origin, kind, storage_path, content_type, size_bytes, sha256, registered_by, idempotency_key) values ('{real}', '{a}', 'test', 'referral', 'clinic/{a}/doc/{real}', 'application/pdf', 1, '{'1' * 64}', '{people['fd']}', 'canary:{real}')")
     with pytest.raises(Exception, match=REFUSED):  # the key belongs to a non-canary document: not returned, not overwritten
         await call_as(db, people["worker"], CALL, c=a, d=real, k=f"canary:{real}")
+
+
+async def test_the_daily_cap_refuses_a_new_document_but_never_a_replay_and_an_unset_cap_is_refused(db):
+    a, _, people = await world(db)
+    docs = [uuid.uuid4() for _ in range(3)]
+    for d in docs[:2]:
+        assert await call_as(db, people["worker"], CALL, c=a, d=d, k=f"canary:{d}", m=2) == d
+    with pytest.raises(Exception, match=REFUSED):  # the third new document today exceeds a cap of 2
+        await call_as(db, people["worker"], CALL, c=a, d=docs[2], k=f"canary:{docs[2]}", m=2)
+    assert await call_as(db, people["worker"], CALL, c=a, d=docs[0], k=f"canary:{docs[0]}", m=2) == docs[0]  # a replay is still answered
+    for bad in (None, 0, -5):
+        fresh = uuid.uuid4()
+        with pytest.raises(Exception, match=REFUSED):
+            await call_as(db, people["worker"], CALL, c=a, d=fresh, k=f"canary:{fresh}", m=bad)
+
+
+async def test_the_cap_counts_only_this_clinic_and_only_canary_documents(db):
+    a, b, people = await world(db)
+    worker_b_doc = uuid.uuid4()
+    assert await call_as(db, people["worker_b"], CALL, c=b, d=worker_b_doc, k=f"canary:{worker_b_doc}", m=1) == worker_b_doc
+    d = uuid.uuid4()
+    assert await call_as(db, people["worker"], CALL, c=a, d=d, k=f"canary:{d}", m=1) == d  # clinic B's canary does not use clinic A's day
+
+
+async def test_the_old_uncapped_function_is_gone(db):
+    n = (await db.execute(text("select count(*) from pg_proc p join pg_namespace s on s.oid = p.pronamespace where s.nspname = 'docs' and p.proname = 'register_canary_document' and p.pronargs = 3"))).scalar()
+    assert n == 0

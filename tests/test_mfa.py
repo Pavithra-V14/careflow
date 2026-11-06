@@ -1,5 +1,6 @@
 """Every staff route demands a verified second factor (aal2 + a well-formed TOTP amr); ON by default; off only in demo + synthetic_only (careflow/auth.py mfa_failure, careflow/app.py). Offline."""
 
+import inspect
 import time
 
 import httpx
@@ -150,6 +151,10 @@ def test_every_v1_route_except_me_goes_through_the_connection_dependency_that_en
     """Structural: the check lives in db_conn, so a route that does not depend on it would silently skip the rule."""
     found = {route.path: route for route in _api_routes(create_app(_settings()).routes) if route.path.startswith("/v1")}
     assert "/v1/iam/me" in found and len(found) > 30, sorted(found)
-    missing = [path for path, route in found.items() if path != "/v1/iam/me" and not _uses_db_conn(route.dependant)]
+    portal = {path for path in found if path.startswith("/v1/portal/")}  # PATIENT-account routes: staff multi-factor is a staff rule (patients sign in by one-time code, BUILD-SPEC.md 17.2, 18.2)
+    missing = [path for path, route in found.items() if path != "/v1/iam/me" and path not in portal and not _uses_db_conn(route.dependant)]
     assert not missing, f"routes that skip the second-factor rule: {missing}"
-    assert not _uses_db_conn(found["/v1/iam/me"].dependant)  # the one exemption
+    assert not _uses_db_conn(found["/v1/iam/me"].dependant)  # the one exemption for staff routes
+    for path in portal:  # the portal exemption is narrow: each such route must refuse anything but an active patient account before it does anything else
+        assert not _uses_db_conn(found[path].dependant)
+        assert "_patient_account(" in inspect.getsource(found[path].endpoint), path

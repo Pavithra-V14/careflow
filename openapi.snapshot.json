@@ -446,6 +446,80 @@
         "title": "BackfillStartIn",
         "type": "object"
       },
+      "BarrierIn": {
+        "additionalProperties": false,
+        "properties": {
+          "barrier": {
+            "enum": [
+              "transport",
+              "cost",
+              "childcare",
+              "forgot",
+              "scheduling_conflict",
+              "other"
+            ],
+            "title": "Barrier",
+            "type": "string"
+          },
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "patient_id",
+          "barrier"
+        ],
+        "title": "BarrierIn",
+        "type": "object"
+      },
+      "BarrierOut": {
+        "additionalProperties": false,
+        "properties": {
+          "barrier_id": {
+            "format": "uuid",
+            "title": "Barrier Id",
+            "type": "string"
+          },
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "barrier_id",
+          "created"
+        ],
+        "title": "BarrierOut",
+        "type": "object"
+      },
+      "BarrierResolveOut": {
+        "additionalProperties": false,
+        "properties": {
+          "barrier_id": {
+            "format": "uuid",
+            "title": "Barrier Id",
+            "type": "string"
+          },
+          "resolved": {
+            "title": "Resolved",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "barrier_id",
+          "resolved"
+        ],
+        "title": "BarrierResolveOut",
+        "type": "object"
+      },
       "BeginUploadIn": {
         "additionalProperties": false,
         "properties": {
@@ -783,6 +857,146 @@
           "version"
         ],
         "title": "CardCandidateOut",
+        "type": "object"
+      },
+      "CareGapPanelOut": {
+        "additionalProperties": false,
+        "properties": {
+          "after_the_fact_error_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After The Fact Error Rate"
+          },
+          "alert_age_configured": {
+            "title": "Alert Age Configured",
+            "type": "boolean"
+          },
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "recurrence_rules_with_unknown_last_done": {
+            "title": "Recurrence Rules With Unknown Last Done",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/CareGapRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "summaries": {
+            "items": {
+              "$ref": "#/components/schemas/CareGapSummaryOut"
+            },
+            "title": "Summaries",
+            "type": "array"
+          },
+          "unreadable": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unreadable",
+            "type": "array"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "rows",
+          "summaries",
+          "unreadable",
+          "recurrence_rules_with_unknown_last_done",
+          "alert_age_configured",
+          "after_the_fact_error_rate"
+        ],
+        "title": "CareGapPanelOut",
+        "type": "object"
+      },
+      "CareGapRowOut": {
+        "additionalProperties": false,
+        "properties": {
+          "age_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Days"
+          },
+          "flagged_overdue": {
+            "title": "Flagged Overdue",
+            "type": "boolean"
+          },
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "item_id",
+          "age_days",
+          "flagged_overdue"
+        ],
+        "title": "CareGapRowOut",
+        "type": "object"
+      },
+      "CareGapSummaryOut": {
+        "additionalProperties": false,
+        "properties": {
+          "median_age_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Age Days"
+          },
+          "open_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Open Count"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "undated": {
+            "title": "Undated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source",
+          "open_count",
+          "median_age_days",
+          "undated"
+        ],
+        "title": "CareGapSummaryOut",
         "type": "object"
       },
       "ConfirmIdentityOut": {
@@ -4676,6 +4890,90 @@
         "title": "VisitTypeOut",
         "type": "object"
       },
+      "VoicePreferenceIn": {
+        "additionalProperties": false,
+        "properties": {
+          "voice_enabled": {
+            "title": "Voice Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "voice_enabled"
+        ],
+        "title": "VoicePreferenceIn",
+        "type": "object"
+      },
+      "VoicePreferenceOut": {
+        "additionalProperties": false,
+        "properties": {
+          "voice_enabled": {
+            "title": "Voice Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "voice_enabled"
+        ],
+        "title": "VoicePreferenceOut",
+        "type": "object"
+      },
+      "VoiceSessionIn": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "consent": {
+            "const": true,
+            "title": "Consent",
+            "type": "boolean"
+          },
+          "workflow": {
+            "enum": [
+              "slot_offer",
+              "intake_question",
+              "readiness_item"
+            ],
+            "title": "Workflow",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "workflow",
+          "consent"
+        ],
+        "title": "VoiceSessionIn",
+        "type": "object"
+      },
+      "VoiceSessionOut": {
+        "additionalProperties": false,
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "mic": {
+            "title": "Mic",
+            "type": "string"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "created",
+          "mic"
+        ],
+        "title": "VoiceSessionOut",
+        "type": "object"
+      },
       "WaitlistEntryOut": {
         "additionalProperties": false,
         "properties": {
@@ -4892,6 +5190,237 @@
           }
         ],
         "summary": "Me"
+      }
+    },
+    "/v1/portal/voice/preference": {
+      "get": {
+        "description": "Your own voice preference (false until you choose). 403 unless you are an active patient account.",
+        "operationId": "get_voice_preference_v1_portal_voice_preference_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoicePreferenceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Voice Preference",
+        "tags": [
+          "portal voice"
+        ]
+      },
+      "put": {
+        "description": "Turn voice on or off for yourself. Idempotent by nature (it sets a value). 403 unless you are an active patient account.",
+        "operationId": "put_voice_preference_v1_portal_voice_preference_put",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoicePreferenceIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoicePreferenceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Put Voice Preference",
+        "tags": [
+          "portal voice"
+        ]
+      }
+    },
+    "/v1/portal/voice/sessions": {
+      "post": {
+        "description": "Open a scoped voice session after consent. 403 unless you are an active patient account; 503 if voice is not configured (clinic flag, an engine, the transcript retention setting); 403 if you have not turned voice on; 404 if you are not a patient of that clinic.",
+        "operationId": "open_voice_session_v1_portal_voice_sessions_post",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoiceSessionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceSessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Open Voice Session",
+        "tags": [
+          "portal voice"
+        ]
       }
     },
     "/v1/staff/accounts": {
@@ -5705,6 +6234,271 @@
         "summary": "Read Audit Log",
         "tags": [
           "staff audit"
+        ]
+      }
+    },
+    "/v1/staff/care-gaps": {
+      "get": {
+        "description": "The Care Gaps panel for a clinic: rows (source, opaque id, age in days), a summary per source (a source that cannot be read has a null count, never 0), and the number of recurrence rules whose last-done date is unknown. 404 if the clinic is not visible to you, 403 unless you are nurse, doctor or admin there.",
+        "operationId": "care_gap_panel_v1_staff_care_gaps_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Clinic Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CareGapPanelOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Care Gap Panel",
+        "tags": [
+          "staff care gaps"
+        ]
+      }
+    },
+    "/v1/staff/care-gaps/barriers": {
+      "post": {
+        "description": "Record a no-show barrier for a patient of the clinic (a closed set of types). Idempotent on the key. 404 if the clinic or the patient is not visible to you, 403 unless you are nurse, doctor or admin there.",
+        "operationId": "record_barrier_v1_staff_care_gaps_barriers_post",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BarrierIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BarrierOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Record Barrier",
+        "tags": [
+          "staff care gaps"
+        ]
+      }
+    },
+    "/v1/staff/care-gaps/barriers/{barrier_id}/resolve": {
+      "post": {
+        "description": "Resolve an open barrier, once, as yourself. 404 if you cannot see it or it does not exist, 409 if it was already resolved.",
+        "operationId": "resolve_barrier_v1_staff_care_gaps_barriers__barrier_id__resolve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "barrier_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Barrier Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BarrierResolveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Resolve Barrier",
+        "tags": [
+          "staff care gaps"
         ]
       }
     },

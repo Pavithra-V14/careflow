@@ -235,6 +235,7 @@ async def _cleanup(ids, conn=None):
                     "delete from mpi.patients p where p.clinic_id = any($1) and not exists (select 1 from mpi.identity_confirmations c where c.patient_id = p.id) "
                     "and not exists (select 1 from agents.triage_proposals pr where pr.patient_id = p.id) "
                     "and not exists (select 1 from mpi.erasure_requests e where e.patient_id = p.id) "
+                    "and not exists (select 1 from ops.care_barriers b where b.patient_id = p.id) "
                     "and not exists (select 1 from sched.holds h where h.patient_id = p.id)", clinics  # (a hold left behind for an append-only delivery row keeps its patient)
                 )
                 continue
@@ -248,6 +249,7 @@ async def _cleanup(ids, conn=None):
                 await conn.execute(f"delete from {table} t where t.clinic_id = any($1) and {LEFT_BEHIND_WHERE[table]}", clinics)
                 continue
             await conn.execute(f"delete from {table} where clinic_id = any($1)", clinics)
+        await conn.execute("delete from msg.voice_preferences where account_id = any($1)", accounts)
         await conn.execute("delete from iam.staff_roles where clinic_id = any($1)", [ids.clinic_a, ids.clinic_b])
         for statement, args in (("delete from iam.accounts where id = any($1)", accounts), ("delete from iam.clinics where id = any($1)", [ids.clinic_a, ids.clinic_b])):
             try:
@@ -2575,6 +2577,99 @@ def console_reason_codes_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, CONSOLE_REASONS, None)[:4]
 
 
+# ---- Care Gaps and the patient voice routes (migrations 0044 and 0045) --------------------------------------------------------------------------------------------------------------------------------------
+#
+# Care Gaps: nurse, doctor and admin of the clinic read the panel and record barriers; front desk, business owner and auditor see the clinic and are refused (403); everyone else gets the one 404. The
+# real record/replay/resolve flows against the tables are in tests/test_care_gaps_db_live.py. Voice: PATIENT accounts only (every other identity gets the one 403). The session route answers 503 in this
+# app (no voice flag, no engine, no retention setting configured); the database rules (opt-in, binding, expiry, consent time) are in tests/test_voice_db_live.py.
+
+CARE_GAPS = "/v1/staff/care-gaps"
+CARE_BARRIERS = CARE_GAPS + "/barriers"
+CARE_BARRIER_RESOLVE = CARE_GAPS + "/barriers/{barrier_id}/resolve"
+VOICE_PREF = "/v1/portal/voice/preference"
+VOICE_SESSIONS = "/v1/portal/voice/sessions"
+CARE_ROLES = ("nurse_a", "doctor_a", "admin_a", "multi")
+CARE_VISIBLE_REFUSED = ("front_desk_a", "business_owner_a", "auditor_a")
+
+
+def care_gap_panel_cases(ids) -> list[tuple]:
+    path = lambda **o: CARE_GAPS + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
+    fields = {"clinic_id", "rows", "summaries", "unreadable", "recurrence_rules_with_unknown_last_done", "alert_age_configured", "after_the_fact_error_rate"}
+    ok = lambda b: set(b) == fields and b["rows"] == [] and len(b["summaries"]) == 3 and b["alert_age_configured"] is False and b["after_the_fact_error_rate"] is None
+    cases = _console_clinic_cases(ids, path, allowed=CARE_ROLES, ok_status=200, ok_body=ok, visible_refused=CARE_VISIBLE_REFUSED)
+    cases += [
+        _case(ids, "an unknown clinic is not found", "admin_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "a clinic id that is not a uuid is rejected", "admin_a", 422, path(clinic_id="nope"), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
+def care_barrier_record_cases(ids) -> list[tuple]:
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "patient_id": str(ids.patients_a[0]), "barrier": "transport", **o}
+    created = lambda b: set(b) == {"barrier_id", "created"} and b["created"] is True
+    cases = [_case(ids, f"{p} may record a barrier", p, 201, CARE_BARRIERS, json=body(), body=created) for p in ("nurse_a", "doctor_a", "admin_a")]
+    key = _new_key()
+    first = _case(ids, "a replay of the same key is the same barrier (first)", "nurse_a", 201, CARE_BARRIERS, json=body(), key=key, body=created)
+    again = _case(ids, "a replay of the same key is the same barrier (again)", "nurse_a", 201, CARE_BARRIERS, json=body(), key=key, body=lambda b: set(b) == {"barrier_id", "created"} and b["created"] is False)
+    cases += [first, again]
+    cases += [_case(ids, f"{p} sees the clinic but is refused", p, 403, CARE_BARRIERS, json=body(), body=NOT_YOUR_ROLE) for p in CARE_VISIBLE_REFUSED]
+    others = [p for p in ids.people if p not in (*CARE_ROLES, *CARE_VISIBLE_REFUSED)]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused with the one not-found", p, 404, CARE_BARRIERS, json=body(), body=_fixed(404)) for p in others]
+    cases += [
+        _case(ids, "a patient of another clinic (an unknown id) is not found", "nurse_a", 404, CARE_BARRIERS, json=body(patient_id=str(uuid.uuid4())), body=_fixed(404)),
+        _case(ids, "a barrier outside the closed set is rejected", "nurse_a", 422, CARE_BARRIERS, json=body(barrier="bad"), body=_fixed(422)),
+        _case(ids, "an extra field is rejected", "nurse_a", 422, CARE_BARRIERS, json=body(extra=1), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "nurse_a", 422, CARE_BARRIERS, json=body(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, CARE_BARRIERS, body())
+
+
+def care_barrier_resolve_cases(ids) -> list[tuple]:
+    path = lambda: f"{CARE_GAPS}/barriers/{uuid.uuid4()}/resolve"
+    cases = [_case(ids, f"{p} cannot resolve a barrier that does not exist", p, 404, path(), body=_fixed(404)) for p in ids.people]
+    cases += [
+        _case(ids, "missing X-Idempotency-Key is rejected", "nurse_a", 422, path(), key=None, body=_fixed(422)),
+        _case(ids, "a barrier id that is not a uuid is rejected", "nurse_a", 422, f"{CARE_GAPS}/barriers/nope/resolve", body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)
+
+
+def voice_preference_get_cases(ids) -> list[tuple]:
+    refused = lambda b: b == {"detail": "your role may not do this"}
+    cases = [_case(ids, "an active patient account reads its own preference (off by default)", "patient", 200, VOICE_PREF, key=None, body=lambda b: b == {"voice_enabled": False})]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, VOICE_PREF, key=None, body=refused) for p in ids.people if p != "patient"]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, VOICE_PREF, key=None, body=refused))
+    return cases + _unauthenticated(ids, VOICE_PREF, None)[:4]
+
+
+def voice_preference_put_cases(ids) -> list[tuple]:
+    refused = lambda b: b == {"detail": "your role may not do this"}
+    off = {"voice_enabled": False}
+    cases = [_case(ids, "an active patient account sets its own preference", "patient", 200, VOICE_PREF, json=off, body=lambda b: b == off)]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, VOICE_PREF, json=off, body=refused) for p in ids.people if p != "patient"]
+    cases += [
+        _case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, VOICE_PREF, json=off, body=refused),
+        _case(ids, "a non-boolean value is rejected", "patient", 422, VOICE_PREF, json={"voice_enabled": "maybe"}, body=_fixed(422)),
+        _case(ids, "an extra field is rejected", "patient", 422, VOICE_PREF, json={**off, "x": 1}, body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "patient", 422, VOICE_PREF, json=off, key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, VOICE_PREF, off)
+
+
+def voice_session_cases(ids) -> list[tuple]:
+    refused = lambda b: b == {"detail": "your role may not do this"}
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "workflow": "slot_offer", "consent": True, **o}
+    cases = [_case(ids, "an active patient account gets 503 while voice is not configured (no flag, no engine, no retention setting)", "patient", 503, VOICE_SESSIONS, json=body(), body=_fixed(503))]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, VOICE_SESSIONS, json=body(), body=refused) for p in ids.people if p != "patient"]
+    cases += [
+        _case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, VOICE_SESSIONS, json=body(), body=refused),
+        _case(ids, "consent that is not true is rejected", "patient", 422, VOICE_SESSIONS, json=body(consent=False), body=_fixed(422)),
+        _case(ids, "a workflow outside the three is rejected", "patient", 422, VOICE_SESSIONS, json=body(workflow="open_ended"), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "patient", 422, VOICE_SESSIONS, json=body(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, VOICE_SESSIONS, body())
+
+
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
     ("POST", HOLD): lambda ids: slot_write_cases(ids, "hold"),
@@ -2618,6 +2713,12 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", CONSOLE_STATS): console_stats_cases,
     ("GET", CONSOLE_COST): console_cost_cases,
     ("GET", CONSOLE_REASONS): console_reason_codes_cases,
+    ("GET", CARE_GAPS): care_gap_panel_cases,
+    ("POST", CARE_BARRIERS): care_barrier_record_cases,
+    ("POST", CARE_BARRIER_RESOLVE): care_barrier_resolve_cases,
+    ("GET", VOICE_PREF): voice_preference_get_cases,
+    ("PUT", VOICE_PREF): voice_preference_put_cases,
+    ("POST", VOICE_SESSIONS): voice_session_cases,
     ("GET", ACCOUNTS): staff_list_cases,
     ("POST", ACCOUNTS + "/invite"): staff_invite_cases,
     ("POST", ACCOUNTS + "/activate-me"): staff_activate_cases,
