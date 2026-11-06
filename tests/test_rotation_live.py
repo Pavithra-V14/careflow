@@ -350,6 +350,8 @@ async def test_only_front_desk_of_the_clinic_rotates_and_only_that_clinic(db, va
                 assert "permission denied" in str(exc), who  # a role that can see patients is refused the write
             else:
                 assert report.patients_rotated == 0, who  # a role that sees no patient has nothing to rewrite
+            finally:
+                await db.exec_driver_sql("reset role")  # the handled error leaves the savepoint released, not rolled back: put the owner role back
     assert (await snapshot(db, a), await snapshot(db, b)) == (before_a, before_b)
 
     rotated = [(await rotate_as(db, vault, p[who])).patients_rotated for who in ("fd_a", "fd_b")]  # the maintenance connection (the owner) rotates each clinic it names

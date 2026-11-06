@@ -108,6 +108,8 @@ async def test_a_reviewer_cannot_raise_any_other_alert_nor_one_for_a_decision_th
 async def test_the_worker_raises_alerts_each_role_reads_only_its_own_and_a_repeat_is_a_no_op(db):  # noqa: F811
     w = await world(db)
     key = f"k-{_u()}"
+    probe = await seq(db, w.people["worker_a"], (f"select iam.has_clinic_role('{w.a}', array['queue_worker']), current_user::text, current_setting('request.jwt.claims', true)", True))
+    assert isinstance(probe, list) and probe[0][0][0] is True, getattr(probe, "detail", probe[0][0] if isinstance(probe, list) else probe)  # diagnostic: the helper itself, before the policy
     first = await seq(db, w.people["worker_a"], (alert(w, aud="admin", key=key), False), (alert(w, aud="admin", key=key), False))
     assert isinstance(first, list), getattr(first, "detail", first)
     await db.execute(alert(w, aud="admin", key=key))
@@ -123,7 +125,7 @@ async def test_the_worker_raises_alerts_each_role_reads_only_its_own_and_a_repea
 async def test_an_alert_is_acknowledged_once_by_its_own_audience_with_the_database_clock_and_nothing_else_changes(db):  # noqa: F811
     w = await world(db)
     await db.execute(alert(w, aud="admin", key="k-ack"))
-    ack = "update ops.alerts set acknowledged_by = auth.uid(), acknowledged_at = '2001-01-01' where idempotency_key = 'k-ack'"
+    ack = f"update ops.alerts set acknowledged_by = '{w.people['admin_a']}', acknowledged_at = '2001-01-01' where idempotency_key = 'k-ack'"  # (a literal: the caller's own id, since the app role may not call auth.uid() in a statement)
     nurse_ack = await seq(db, w.people["nurse_a"], (ack, False))
     assert nurse_ack == ["UPDATE 0"], getattr(nurse_ack, "detail", nurse_ack)  # a role the alert is not aimed at cannot see the row, so it updates nothing
     done = await seq(db, w.people["admin_a"], (ack, False), ("select acknowledged_at > '2020-01-01' from ops.alerts where idempotency_key = 'k-ack'", True))
