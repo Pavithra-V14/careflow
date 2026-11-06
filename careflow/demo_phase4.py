@@ -36,6 +36,7 @@ VARIABLES: Final = {
     "cost_reviewer_rates": "CAREFLOW_COST_REVIEWER_RATES",
     "sign_in_url": "CAREFLOW_SIGN_IN_URL",
     "care_gap_alert_days": "CAREFLOW_CARE_GAP_ALERT_DAYS",
+    "care_gap_rules": "CAREFLOW_CARE_GAP_RULES",
     "voice_transcript_retention_days": "CAREFLOW_VOICE_TRANSCRIPT_RETENTION_DAYS",
 }
 

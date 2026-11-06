@@ -123,18 +123,18 @@ async def test_nurse_doctor_and_admin_of_the_clinic_read_every_table_and_nobody_
             assert (await state_of(db, people[who], f"select count(*) from ops.{t}"))[0][0] == 0, (who, t)
 
 
-async def test_the_application_role_can_only_read_rules_episodes_episode_rules_and_samples(db):
+async def test_an_admin_cannot_write_rules_episodes_or_episode_rules_and_nobody_deletes(db):
     a, _, people, pa, _ = await world(db)
     await seed_gap_data(db, a, pa)
     for sql in (
         f"insert into ops.care_recurrence_rules (clinic_id, origin, rule_code, interval_days, overdue_after_days, idempotency_key) values ('{a}', 'test', 'x_rule', 1, 0, 'zz')",
         f"insert into ops.care_episodes (clinic_id, origin, patient_id, episode_code, started_on, idempotency_key) values ('{a}', 'test', '{uuid.uuid4()}', 'x_ep', '2026-01-01', 'zz')",
-        "update ops.care_episode_rules set last_done_on = current_date",
         "update ops.care_recurrence_rules set overdue_after_days = 0",
         "delete from ops.care_episodes",
         "delete from ops.care_barriers",
     ):
         assert await state_of(db, people["admin"], sql) == "42501", sql
+    assert await state_of(db, people["admin"], "update ops.care_episode_rules set last_done_on = current_date") == 0  # (0048) the column is writable by nurse and doctor only: for an admin no row matches
 
 
 async def test_a_barrier_is_recorded_by_nurse_doctor_or_admin_only_for_a_patient_of_the_clinic(db):

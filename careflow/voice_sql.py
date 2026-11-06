@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from careflow.care_gap_sql import sqlstate
 from careflow.crypto import DemographicVault
-from careflow.messages import encrypt_body
+from careflow.messages import decrypt_voice_chunk, encrypt_body
 
 
 async def get_preference(conn: AsyncConnection, account_id: uuid.UUID) -> bool:
@@ -104,10 +104,8 @@ async def admin_sessions(conn: AsyncConnection, clinic_id: uuid.UUID) -> list:
 
 async def admin_read(conn: AsyncConnection, vault: DemographicVault, clinic_id: uuid.UUID, session_id: uuid.UUID) -> list[tuple[int, str]]:
     """[(seq, text)] of the unexpired chunks, decrypted here (the database holds only ciphertext). The caller owns the text and must not log it."""
-    from careflow.messages import decrypt_body
-
     rows = await _admin_call(conn, "select * from msg.read_voice_transcript(:c, :s)", {"c": clinic_id, "s": session_id})
-    return [(r.seq, decrypt_body(vault, r.body_ct, clinic_id=clinic_id, thread_id=session_id, message_id=uuid.uuid5(session_id, f"chunk:{r.seq}"), key_version=r.body_key_version)) for r in rows]
+    return [(r.seq, decrypt_voice_chunk(vault, r.body_ct, clinic_id=clinic_id, session_id=session_id, seq=r.seq, key_version=r.body_key_version)) for r in rows]
 
 
 async def admin_purge(conn: AsyncConnection, clinic_id: uuid.UUID, idempotency_key: str, limit: int) -> int:

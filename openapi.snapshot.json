@@ -284,6 +284,83 @@
         "title": "AuditRowOut",
         "type": "object"
       },
+      "AutonomyOut": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "mode": {
+            "enum": [
+              "shadow",
+              "assisted",
+              "autonomous"
+            ],
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "mode",
+          "configured"
+        ],
+        "title": "AutonomyOut",
+        "type": "object"
+      },
+      "AutonomySetIn": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "shadow",
+              "assisted"
+            ],
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "mode"
+        ],
+        "title": "AutonomySetIn",
+        "type": "object"
+      },
+      "AutonomySetOut": {
+        "additionalProperties": false,
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "mode": {
+            "enum": [
+              "shadow",
+              "assisted"
+            ],
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "created"
+        ],
+        "title": "AutonomySetOut",
+        "type": "object"
+      },
       "BackfillDecideIn": {
         "additionalProperties": false,
         "properties": {
@@ -1193,6 +1270,72 @@
         "title": "CreatedOut",
         "type": "object"
       },
+      "DashboardMetricOut": {
+        "additionalProperties": false,
+        "properties": {
+          "metric_id": {
+            "title": "Metric Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "measured",
+              "unreadable"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "metric_id",
+          "state",
+          "value"
+        ],
+        "title": "DashboardMetricOut",
+        "type": "object"
+      },
+      "DashboardOut": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardMetricOut"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "not_measured": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Not Measured",
+            "type": "array"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "metrics",
+          "not_measured"
+        ],
+        "title": "DashboardOut",
+        "type": "object"
+      },
       "DuplicateList": {
         "additionalProperties": false,
         "properties": {
@@ -1348,6 +1491,68 @@
           "status"
         ],
         "title": "Envelope",
+        "type": "object"
+      },
+      "EpisodeIn": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "episode_code": {
+            "pattern": "^[a-z][a-z0-9_]{0,59}$",
+            "title": "Episode Code",
+            "type": "string"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "started_on": {
+            "format": "date",
+            "title": "Started On",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "patient_id",
+          "episode_code",
+          "started_on"
+        ],
+        "title": "EpisodeIn",
+        "type": "object"
+      },
+      "EpisodeOut": {
+        "additionalProperties": false,
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "episode_id": {
+            "format": "uuid",
+            "title": "Episode Id",
+            "type": "string"
+          },
+          "episode_rule_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Episode Rule Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "episode_id",
+          "created",
+          "episode_rule_ids"
+        ],
+        "title": "EpisodeOut",
         "type": "object"
       },
       "EraseRequestIn": {
@@ -4220,6 +4425,41 @@
         "title": "RoleGrant",
         "type": "object"
       },
+      "RuleDoneIn": {
+        "additionalProperties": false,
+        "properties": {
+          "done_on": {
+            "format": "date",
+            "title": "Done On",
+            "type": "string"
+          }
+        },
+        "required": [
+          "done_on"
+        ],
+        "title": "RuleDoneIn",
+        "type": "object"
+      },
+      "RuleDoneOut": {
+        "additionalProperties": false,
+        "properties": {
+          "episode_rule_id": {
+            "format": "uuid",
+            "title": "Episode Rule Id",
+            "type": "string"
+          },
+          "recorded": {
+            "title": "Recorded",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "episode_rule_id",
+          "recorded"
+        ],
+        "title": "RuleDoneOut",
+        "type": "object"
+      },
       "RunOut": {
         "additionalProperties": false,
         "properties": {
@@ -4238,6 +4478,26 @@
           "replayed"
         ],
         "title": "RunOut",
+        "type": "object"
+      },
+      "SampleRecheckOut": {
+        "additionalProperties": false,
+        "properties": {
+          "rechecked": {
+            "title": "Rechecked",
+            "type": "boolean"
+          },
+          "sample_id": {
+            "format": "uuid",
+            "title": "Sample Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sample_id",
+          "rechecked"
+        ],
+        "title": "SampleRecheckOut",
         "type": "object"
       },
       "ScreenOut": {
@@ -4890,6 +5150,25 @@
         "title": "VisitTypeOut",
         "type": "object"
       },
+      "VoiceChunkOut": {
+        "additionalProperties": false,
+        "properties": {
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "text"
+        ],
+        "title": "VoiceChunkOut",
+        "type": "object"
+      },
       "VoicePreferenceIn": {
         "additionalProperties": false,
         "properties": {
@@ -4916,6 +5195,42 @@
           "voice_enabled"
         ],
         "title": "VoicePreferenceOut",
+        "type": "object"
+      },
+      "VoicePurgeIn": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "limit": {
+            "default": 500,
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "clinic_id"
+        ],
+        "title": "VoicePurgeIn",
+        "type": "object"
+      },
+      "VoicePurgeOut": {
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "title": "VoicePurgeOut",
         "type": "object"
       },
       "VoiceSessionIn": {
@@ -4949,6 +5264,23 @@
         "title": "VoiceSessionIn",
         "type": "object"
       },
+      "VoiceSessionListOut": {
+        "additionalProperties": false,
+        "properties": {
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/VoiceSessionRowOut"
+            },
+            "title": "Sessions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sessions"
+        ],
+        "title": "VoiceSessionListOut",
+        "type": "object"
+      },
       "VoiceSessionOut": {
         "additionalProperties": false,
         "properties": {
@@ -4972,6 +5304,75 @@
           "mic"
         ],
         "title": "VoiceSessionOut",
+        "type": "object"
+      },
+      "VoiceSessionRowOut": {
+        "additionalProperties": false,
+        "properties": {
+          "chunk_count": {
+            "title": "Chunk Count",
+            "type": "integer"
+          },
+          "expired_chunk_count": {
+            "title": "Expired Chunk Count",
+            "type": "integer"
+          },
+          "retention_days": {
+            "title": "Retention Days",
+            "type": "integer"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "workflow": {
+            "title": "Workflow",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "workflow",
+          "status",
+          "started_at",
+          "retention_days",
+          "chunk_count",
+          "expired_chunk_count"
+        ],
+        "title": "VoiceSessionRowOut",
+        "type": "object"
+      },
+      "VoiceTranscriptOut": {
+        "additionalProperties": false,
+        "properties": {
+          "chunks": {
+            "items": {
+              "$ref": "#/components/schemas/VoiceChunkOut"
+            },
+            "title": "Chunks",
+            "type": "array"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "chunks"
+        ],
+        "title": "VoiceTranscriptOut",
         "type": "object"
       },
       "WaitlistEntryOut": {
@@ -6502,6 +6903,295 @@
         ]
       }
     },
+    "/v1/staff/care-gaps/episode-rules/{episode_rule_id}/done": {
+      "post": {
+        "description": "Record the date a rule was last done (it can only move forward and never into the future). 404 if you cannot see the rule or may not change it, 409 if the date would move backwards or into the future.",
+        "operationId": "record_rule_done_v1_staff_care_gaps_episode_rules__episode_rule_id__done_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "episode_rule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Episode Rule Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleDoneIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleDoneOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Record Rule Done",
+        "tags": [
+          "staff care gaps"
+        ]
+      }
+    },
+    "/v1/staff/care-gaps/episodes": {
+      "post": {
+        "description": "Start a care episode for a patient of the clinic and attach the rules the setting names for that kind of episode. Idempotent on the key. 404 if the clinic or patient is not visible, the episode code is not in the setting, or the patient is another clinic's; 403 unless nurse or doctor there; 503 while the rules setting is not configured.",
+        "operationId": "create_care_episode_v1_staff_care_gaps_episodes_post",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EpisodeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EpisodeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Care Episode",
+        "tags": [
+          "staff care gaps"
+        ]
+      }
+    },
+    "/v1/staff/care-gaps/samples/{sample_id}/recheck": {
+      "post": {
+        "description": "Mark an after-the-fact review sample as re-checked, once, as yourself. 404 if you cannot see it, it was already re-checked, or you may not change it.",
+        "operationId": "recheck_care_sample_v1_staff_care_gaps_samples__sample_id__recheck_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sample_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Sample Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SampleRecheckOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Recheck Care Sample",
+        "tags": [
+          "staff care gaps"
+        ]
+      }
+    },
     "/v1/staff/console/alerts": {
       "get": {
         "description": "The alerts aimed at a role you hold in this clinic, newest first (open ones unless `include_acknowledged`). Class, count and an opaque id only. 404 if the clinic is not visible to you, 403 unless you are front desk, nurse, doctor or admin there.",
@@ -6696,6 +7386,186 @@
         ]
       }
     },
+    "/v1/staff/console/autonomy": {
+      "get": {
+        "description": "The clinic's autonomy mode (shadow when never set). 404 if the clinic is not visible to you, 403 unless you are front desk, nurse, doctor or admin there.",
+        "operationId": "get_autonomy_v1_staff_console_autonomy_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Clinic Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutonomyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Autonomy",
+        "tags": [
+          "staff console"
+        ]
+      },
+      "post": {
+        "description": "Set the clinic's autonomy mode to shadow or assisted, as an admin with a verified second factor (checked again by the database). Idempotent on the key. 404 if the clinic is not visible to you, 403 unless you are an admin there, 409 if the key belongs to another change.",
+        "operationId": "set_autonomy_v1_staff_console_autonomy_post",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutonomySetIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutonomySetOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Autonomy",
+        "tags": [
+          "staff console"
+        ]
+      }
+    },
     "/v1/staff/console/cost-canvas": {
       "get": {
         "description": "Monthly cost = W x A x U + P + F from the spend ledger and the completed jobs of the last `days` (live origin only), in two columns: actual and at-scale shadow. Fewer than seven days of traffic is `insufficient_data`; a term that is not configured or not measured is null with the reason. Admin only. 404 if the clinic is not visible to you, 403 unless you are admin there.",
@@ -6782,6 +7652,85 @@
           }
         ],
         "summary": "Cost Canvas View",
+        "tags": [
+          "staff console"
+        ]
+      }
+    },
+    "/v1/staff/console/dashboard": {
+      "get": {
+        "description": "The admin's metrics data for a clinic. A value is a number from the database, or null with state `unreadable`; every catalog metric without a query behind it is listed in `not_measured`. 404 if the clinic is not visible to you, 403 unless you are admin there.",
+        "operationId": "dashboard_data_v1_staff_console_dashboard_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Clinic Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Dashboard Data",
         "tags": [
           "staff console"
         ]
@@ -12417,6 +13366,277 @@
         "summary": "Join Waitlist",
         "tags": [
           "staff scheduling"
+        ]
+      }
+    },
+    "/v1/staff/voice/purge": {
+      "post": {
+        "description": "Delete up to `limit` EXPIRED transcript chunks of the clinic (never an unexpired one), audited by the database. Idempotent on the key. 404 if the clinic is not visible to you, 403 unless you are an admin there with a verified second factor.",
+        "operationId": "purge_voice_transcripts_v1_staff_voice_purge_post",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoicePurgeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoicePurgeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Purge Voice Transcripts",
+        "tags": [
+          "staff voice transcripts"
+        ]
+      }
+    },
+    "/v1/staff/voice/sessions": {
+      "get": {
+        "description": "Voice sessions of the clinic, newest first (metadata only). 404 if the clinic is not visible to you, 403 unless you are an admin there with a verified second factor.",
+        "operationId": "list_voice_sessions_v1_staff_voice_sessions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Clinic Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceSessionListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Voice Sessions",
+        "tags": [
+          "staff voice transcripts"
+        ]
+      }
+    },
+    "/v1/staff/voice/sessions/{session_id}/transcript": {
+      "get": {
+        "description": "Read a session's unexpired transcript (audited by the database). 404 if the clinic or session is not visible to you, 403 unless you are an admin there with a verified second factor, 503 if encryption keys are not configured.",
+        "operationId": "read_voice_transcript_v1_staff_voice_sessions__session_id__transcript_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Clinic Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceTranscriptOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read Voice Transcript",
+        "tags": [
+          "staff voice transcripts"
         ]
       }
     }

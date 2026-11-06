@@ -21,14 +21,23 @@ as $$
             and jsonb_typeof(c.j -> 'amr') = 'array'
             and exists (
                 select 1 from jsonb_array_elements(c.j -> 'amr') e
-                where jsonb_typeof(e) = 'object' and e ->> 'method' = 'totp' and (e ->> 'timestamp') ~ '^[0-9]{1,12}$'
-                  and (e ->> 'timestamp')::bigint <= extract(epoch from clock_timestamp())
+                where jsonb_typeof(e) = 'object' and e ->> 'method' = 'totp'
+                  and case when (e ->> 'timestamp') ~ '^[0-9]{1,12}$' then (e ->> 'timestamp')::bigint <= extract(epoch from clock_timestamp()) else false end
             )
          from c),
         false)
 $$;
 revoke all on function iam.aal2_session() from public;
 grant execute on function iam.aal2_session() to careflow_app;
+do $$
+declare r text;
+begin
+    foreach r in array array['anon', 'authenticated', 'service_role'] loop
+        if exists (select 1 from pg_roles where rolname = r) then
+            execute format('revoke all on function iam.aal2_session() from %I', r);
+        end if;
+    end loop;
+end $$;
 
 -- (E1)
 create function ops.care_barriers_not_erased() returns trigger
@@ -42,6 +51,15 @@ begin
 end
 $$;
 revoke all on function ops.care_barriers_not_erased() from public;
+do $$
+declare r text;
+begin
+    foreach r in array array['anon', 'authenticated', 'service_role'] loop
+        if exists (select 1 from pg_roles where rolname = r) then
+            execute format('revoke all on function ops.care_barriers_not_erased() from %I', r);
+        end if;
+    end loop;
+end $$;
 create trigger care_barriers_not_erased before insert on ops.care_barriers for each row execute function ops.care_barriers_not_erased();
 
 -- (E2)
@@ -119,6 +137,15 @@ end
 $$;
 revoke all on function docs.register_canary_document(uuid, uuid, text) from public;
 grant execute on function docs.register_canary_document(uuid, uuid, text) to careflow_app;
+do $$
+declare r text;
+begin
+    foreach r in array array['anon', 'authenticated', 'service_role'] loop
+        if exists (select 1 from pg_roles where rolname = r) then
+            execute format('revoke all on function docs.register_canary_document(uuid, uuid, text) from %I', r);
+        end if;
+    end loop;
+end $$;
 
 -- (D)
 create function msg.voice_sessions_for_admin(p_clinic_id uuid) returns table (session_id uuid, workflow text, status text, started_at timestamptz, retention_days integer, chunk_count bigint, expired_chunk_count bigint)
@@ -194,6 +221,16 @@ begin
         foreach r in array array['anon', 'authenticated', 'service_role'] loop
             if exists (select 1 from pg_roles where rolname = r) then
                 execute format('revoke all on function %s from %I', f, r);
+            end if;
+        end loop;
+    end loop;
+    foreach f in array array['ops.care_barriers_not_erased()', 'iam.aal2_session()', 'docs.register_canary_document(uuid,uuid,text)', 'msg.voice_sessions_for_admin(uuid)', 'msg.read_voice_transcript(uuid,uuid)', 'msg.purge_expired_voice_chunks(uuid,text,integer)'] loop
+        if has_function_privilege('public', f, 'execute') then
+            raise exception '0047: % must not be executable by PUBLIC', f;
+        end if;
+        foreach r in array array['anon', 'authenticated', 'service_role'] loop
+            if exists (select 1 from pg_roles where rolname = r) and has_function_privilege(r, f, 'execute') then
+                raise exception '0047: % must not be executable by %', f, r;
             end if;
         end loop;
     end loop;

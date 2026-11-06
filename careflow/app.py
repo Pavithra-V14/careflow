@@ -62,16 +62,20 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from careflow import (
     active_role,
+    care_gap_rules,
     care_gap_sql,
     care_gaps,
     demo_front_door,
     demo_phase3,
     demo_phase4,
     identity,
+    learning_labels,
+    metrics_catalog,
     mpi,
     offers,
     openapi_errors,
     patient_view,
+    producers_sql,
     reply_interpretation,
     review_tasks,
     voice_sql,
@@ -140,6 +144,7 @@ from careflow.phase4_sql import (
     reviewer_stats_rows,
     watchdog_sweep,
 )
+from careflow.producer_sweeps import care_gap_overdue_sweep, sampler_sweep
 from careflow.queue import NotPermitted as QueueNotPermitted
 from careflow.queue import PostgresQueue
 from careflow.readiness import check_readiness, parse_required_roles
@@ -3494,6 +3499,205 @@ async def resolve_barrier(barrier_id: uuid.UUID, idempotency_key: IdempotencyKey
     return BarrierResolveOut(barrier_id=barrier_id, resolved=True)
 
 
+# ---- Autonomy setting, care-gap producers, dashboard data (migration 0048; BUILD-SPEC.md 9.3, 12.1, 12.6, 24) -----------------------------------------------------------------------------------------------------------
+#
+# `GET/POST /v1/staff/console/autonomy`: the clinic's mode as an append-only history (no row = shadow). Admin sets it (shadow or assisted; `autonomous` is the two-person act of 12.5 and is NOT built), audited.
+# `POST /v1/staff/care-gaps/episodes`, `.../episode-rules/{id}/done`, `.../samples/{id}/recheck`: the care-gap producers (nurse and doctor). Rule definitions come ONLY from the required setting
+# CAREFLOW_CARE_GAP_RULES; unset means 503. `GET /v1/staff/console/dashboard` is the admin's metrics data: each value is a number, or null with a state (never a made-up zero).
+
+AUTONOMY_SETTERS = ("admin",)
+
+
+class AutonomyOut(_Out):
+    clinic_id: uuid.UUID
+    mode: Literal["shadow", "assisted", "autonomous"]
+    configured: bool  # false = no row: the effective mode is shadow
+
+
+class AutonomySetIn(_Body):
+    clinic_id: uuid.UUID
+    mode: Literal["shadow", "assisted"]
+
+
+class AutonomySetOut(_Out):
+    mode: Literal["shadow", "assisted"]
+    created: bool
+
+
+@staff_console.get("/autonomy", response_model=AutonomyOut)
+async def get_autonomy(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> AutonomyOut:
+    """The clinic's autonomy mode (shadow when never set). 404 if the clinic is not visible to you, 403 unless you are front desk, nurse, doctor or admin there."""
+    await _console_clinic(conn, clinic_id, ALERT_READERS)
+    mode, configured = await producers_sql.read_mode(conn, clinic_id)
+    return AutonomyOut(clinic_id=clinic_id, mode=mode, configured=configured)
+
+
+@staff_console.post("/autonomy", response_model=AutonomySetOut)
+async def set_autonomy(body: AutonomySetIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> AutonomySetOut:
+    """Set the clinic's autonomy mode to shadow or assisted, as an admin with a verified second factor (checked again by the database). Idempotent on the key. 404 if the clinic is not visible to you, 403 unless you are an admin there, 409 if the key belongs to another change."""
+    origin = await _console_clinic(conn, body.clinic_id, AUTONOMY_SETTERS)
+    actor = uuid.UUID(claims["sub"])
+    try:
+        change_id, created = await producers_sql.set_mode(conn, clinic_id=body.clinic_id, origin=origin, mode=body.mode, changed_by=actor, idempotency_key=f"autonomy:{idempotency_key}")
+    except producers_sql.Refused:
+        raise HTTPException(status_code=409, detail="that key belongs to another change") from None
+    except DBAPIError as exc:
+        if care_gap_sql.sqlstate(exc) == "42501":
+            raise HTTPException(status_code=403, detail="your role may not do this") from None
+        raise
+    if created:
+        await write_audit(
+            conn, clinic_id=body.clinic_id, origin=origin, actor_id=actor, actor_role=await _acting_role(conn, claims, body.clinic_id, AUTONOMY_SETTERS), action="autonomy.set",
+            resource_type="autonomy", resource_id=change_id, details={"mode": body.mode}, idempotency_key=f"audit:autonomy-set:{change_id}",
+        )
+    return AutonomySetOut(mode=body.mode, created=created)
+
+
+class EpisodeIn(_Body):
+    clinic_id: uuid.UUID
+    patient_id: uuid.UUID
+    episode_code: str = Field(pattern=r"^[a-z][a-z0-9_]{0,59}$")
+    started_on: date
+
+
+class EpisodeOut(_Out):
+    episode_id: uuid.UUID
+    created: bool
+    episode_rule_ids: list[uuid.UUID]
+
+
+class RuleDoneIn(_Body):
+    done_on: date
+
+
+class RuleDoneOut(_Out):
+    episode_rule_id: uuid.UUID
+    recorded: bool
+
+
+class SampleRecheckOut(_Out):
+    sample_id: uuid.UUID
+    rechecked: bool
+
+
+def _care_rules(request: Request):
+    rules = request.app.state.care_gap_rules
+    if rules is None:
+        raise HTTPException(status_code=503, detail="care episodes are unavailable: the rules setting is not configured")
+    return rules
+
+
+@staff_care_gaps.post("/episodes", response_model=EpisodeOut, status_code=201)
+async def create_care_episode(body: EpisodeIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> EpisodeOut:
+    """Start a care episode for a patient of the clinic and attach the rules the setting names for that kind of episode. Idempotent on the key. 404 if the clinic or patient is not visible, the episode code is not in the setting, or the patient is another clinic's; 403 unless nurse or doctor there; 503 while the rules setting is not configured."""
+    origin = await _console_clinic(conn, body.clinic_id, ("nurse", "doctor"))
+    rules = _care_rules(request).rules_for(body.episode_code)
+    if rules is None:
+        raise HTTPException(status_code=404, detail="not found")
+    try:
+        episode_id, created, links = await producers_sql.create_episode(
+            conn, clinic_id=body.clinic_id, origin=origin, patient_id=body.patient_id, episode_code=body.episode_code, started_on=body.started_on, rules=rules, idempotency_key=f"episode:{idempotency_key}"
+        )
+    except producers_sql.Refused:
+        raise HTTPException(status_code=404, detail="not found") from None
+    except DBAPIError as exc:
+        if care_gap_sql.sqlstate(exc) == "42501":
+            raise HTTPException(status_code=403, detail="your role may not do this") from None
+        raise
+    if created:
+        await write_audit(
+            conn, clinic_id=body.clinic_id, origin=origin, actor_id=uuid.UUID(claims["sub"]), actor_role=await _acting_role(conn, claims, body.clinic_id, ("nurse", "doctor")), action="care_gap.episode_create",
+            resource_type="care_episode", resource_id=episode_id, details={"episode_code": body.episode_code}, idempotency_key=f"audit:care-episode-create:{episode_id}",
+        )
+    return EpisodeOut(episode_id=episode_id, created=created, episode_rule_ids=links)
+
+
+@staff_care_gaps.post("/episode-rules/{episode_rule_id}/done", response_model=RuleDoneOut)
+async def record_rule_done(episode_rule_id: uuid.UUID, body: RuleDoneIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> RuleDoneOut:
+    """Record the date a rule was last done (it can only move forward and never into the future). 404 if you cannot see the rule or may not change it, 409 if the date would move backwards or into the future."""
+    row = (await conn.execute(text("select clinic_id, origin from ops.care_episode_rules where id = :i"), {"i": episode_rule_id})).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    try:
+        outcome = await producers_sql.record_done(conn, episode_rule_id=episode_rule_id, done_on=body.done_on)
+    except DBAPIError as exc:
+        if care_gap_sql.sqlstate(exc) == "42501":
+            raise HTTPException(status_code=403, detail="your role may not do this") from None
+        raise
+    if outcome == "not_found":
+        raise HTTPException(status_code=404, detail="not found")
+    if outcome == "refused":
+        raise HTTPException(status_code=409, detail="the date cannot move backwards or into the future")
+    await write_audit(
+        conn, clinic_id=row.clinic_id, origin=row.origin, actor_id=uuid.UUID(claims["sub"]), actor_role=await _acting_role(conn, claims, row.clinic_id, ("nurse", "doctor")), action="care_gap.rule_done",
+        resource_type="care_episode_rule", resource_id=episode_rule_id, details={}, idempotency_key=f"audit:care-rule-done:{episode_rule_id}:{idempotency_key}",
+    )
+    return RuleDoneOut(episode_rule_id=episode_rule_id, recorded=True)
+
+
+@staff_care_gaps.post("/samples/{sample_id}/recheck", response_model=SampleRecheckOut)
+async def recheck_care_sample(sample_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> SampleRecheckOut:
+    """Mark an after-the-fact review sample as re-checked, once, as yourself. 404 if you cannot see it, it was already re-checked, or you may not change it."""
+    row = (await conn.execute(text("select clinic_id, origin from ops.care_review_samples where id = :i"), {"i": sample_id})).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    me = uuid.UUID(claims["sub"])
+    try:
+        outcome = await producers_sql.recheck_sample(conn, sample_id=sample_id, by=me)
+    except DBAPIError as exc:
+        if care_gap_sql.sqlstate(exc) == "42501":
+            raise HTTPException(status_code=403, detail="your role may not do this") from None
+        raise
+    if outcome != "rechecked":
+        raise HTTPException(status_code=404, detail="not found")
+    await write_audit(
+        conn, clinic_id=row.clinic_id, origin=row.origin, actor_id=me, actor_role=await _acting_role(conn, claims, row.clinic_id, ("nurse", "doctor")), action="care_gap.sample_recheck",
+        resource_type="care_review_sample", resource_id=sample_id, details={}, idempotency_key=f"audit:care-sample-recheck:{sample_id}",
+    )
+    return SampleRecheckOut(sample_id=sample_id, rechecked=True)
+
+
+class DashboardMetricOut(_Out):
+    metric_id: str
+    state: Literal["measured", "unreadable"]
+    value: float | None  # null whenever the state is not `measured`: never a made-up zero
+
+
+class DashboardOut(_Out):
+    clinic_id: uuid.UUID
+    metrics: list[DashboardMetricOut]
+    not_measured: list[str]  # catalog metric ids with no query behind them yet (the catalog is the only list of metrics)
+
+
+async def _scalar_or_none(conn: AsyncConnection, sql: str, params: dict) -> float | None:
+    try:
+        async with conn.begin_nested():
+            value = (await conn.execute(text(sql), params)).scalar()
+    except DBAPIError:
+        return None
+    return None if value is None else float(value)
+
+
+@staff_console.get("/dashboard", response_model=DashboardOut)
+async def dashboard_data(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> DashboardOut:
+    """The admin's metrics data for a clinic. A value is a number from the database, or null with state `unreadable`; every catalog metric without a query behind it is listed in `not_measured`. 404 if the clinic is not visible to you, 403 unless you are admin there."""
+    await _console_clinic(conn, clinic_id, ("admin",))
+    c = {"c": clinic_id}
+    queries = {
+        "queue_depth_and_oldest_age": "select count(*) from ops.queue where clinic_id = :c and state in ('unclaimed', 'claimed')",
+        "dead_letter_count": "select count(*) from ops.queue where clinic_id = :c and state = 'dead_lettered'",
+        "review_queue_age": "select coalesce(extract(epoch from clock_timestamp() - min(created_at)), 0) from agents.review_tasks where clinic_id = :c and status = 'open'",
+        "care_gap_open_count": "select (select count(*) from ops.care_barriers where clinic_id = :c and status = 'open') + (select count(*) from ops.care_review_samples where clinic_id = :c and rechecked_at is null)",
+    }
+    metrics: list[DashboardMetricOut] = []
+    for metric_id, sql in queries.items():
+        value = await _scalar_or_none(conn, sql, c)
+        metrics.append(DashboardMetricOut(metric_id=metric_id, state="unreadable" if value is None else "measured", value=value))
+    catalog = metrics_catalog.load()
+    known = {m["id"] for m in catalog.get("metrics", []) if isinstance(m, dict) and "id" in m}
+    return DashboardOut(clinic_id=clinic_id, metrics=metrics, not_measured=sorted(known - set(queries)))
+
+
 # ---- Voice (Phase 8 follow-up; migration 0045; BUILD-SPEC.md 19.4, 23) --------------------------------------------------------------------------------------------------------------------------------------
 #
 # Patient-account routes (no staff role, and no multi-factor requirement: patients do not have staff MFA). `GET/PUT /v1/portal/voice/preference` is the account's own `voice_enabled` (off by default).
@@ -3688,6 +3892,11 @@ def create_app(
         app.state.voice_engine = None  # no real voice engine exists (owner decision 2026-11-06): the session route answers 503
         app.state.voice_retention_days = _positive_int(p4env.get('CAREFLOW_VOICE_TRANSCRIPT_RETENTION_DAYS'))
         app.state.care_gap_alert_days = _positive_int(p4env.get('CAREFLOW_CARE_GAP_ALERT_DAYS'))
+        try:
+            app.state.care_gap_rules = care_gap_rules.parse(p4env.get("CAREFLOW_CARE_GAP_RULES"))
+        except care_gap_rules.CareGapRulesError:
+            log.error("CAREFLOW_CARE_GAP_RULES is invalid: no care episodes can be created")
+            app.state.care_gap_rules = None
         app.state.erase_reasons = frozenset(w.strip() for w in (cfg.erase_reasons or "").split(",") if w.strip()) or None
         app.state.clock = clock
         app.state.required_roles = cfg.required_roles
@@ -3733,6 +3942,13 @@ def create_app(
         watchdog_limits = limits_from(p4env.get("CAREFLOW_WATCHDOG_LIMITS"))
         sign_in_url = p4env.get("CAREFLOW_SIGN_IN_URL") or "(sign-in link not configured)"
         sweeps.append(lambda conn: watchdog_sweep(conn, AlertRouter(SqlAlertSink(conn), {}, sign_in_url), deadlines, watchdog_limits))
+        sweeps.append(lambda conn: care_gap_overdue_sweep(conn, app.state.care_gap_alert_days))  # raises nothing while the alert age is unset
+        try:
+            review_sample_rate = learning_labels.sample_rate_from(p4env)
+        except learning_labels.LabelError:
+            log.error("CAREFLOW_AUTO_REVIEW_SAMPLE_RATE is invalid: no review samples are drawn")
+            review_sample_rate = None
+        sweeps.append(lambda conn: sampler_sweep(conn, review_sample_rate))  # writes nothing while the rate is unset (and there is no auto-approval path yet)
         # Canary injection (12.4): DEMO profile only, and only when a canary rate is configured (an unset rate injects nothing). Real wiring for a clinic is a later decision.
         try:
             canary_rate = canary_rate_from(p4env)
