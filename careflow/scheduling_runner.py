@@ -12,6 +12,7 @@ from typing import Any, Final, Literal
 from langgraph.types import Command
 
 from careflow.autonomy import Policy
+from careflow.checkpointer import PostgresCheckpointSaver, SqlCheckpointStore
 from careflow.scheduling_graph import (
     REPLY_OUTCOMES,
     SEND_ACTIONS,
@@ -80,21 +81,31 @@ class SchedulingComponents:
     task_priority: str
     task_role: str
     checkpointer: Any
+    durable: bool = False  # True: the runs are saved in our own Postgres checkpoint tables (migrations 0021, 0037), scoped to the clinic; False: `checkpointer` (memory, tests)
 
-    def runner(self, session: Any) -> "SchedulingRunner":
+    def runner(self, session: Any, *, clinic_id: uuid.UUID | None = None, origin: str | None = None) -> "SchedulingRunner":
         deps = SchedulingDeps(
             session=session, ranker=self.ranker, sender=self.sender, screener=self.screener, interpreter=self.interpreter, booker=self.booker, releaser=self.releaser, tasks=self.tasks,
             policy=self.policy, max_candidates=self.max_candidates, task_priority=self.task_priority, task_role=self.task_role,
         )
-        return SchedulingRunner(build_scheduling_graph(deps, self.checkpointer))
+        checkpointer = self.checkpointer
+        if self.durable:
+            if clinic_id is None or origin is None:
+                raise ValueError("a durable run needs its clinic and origin")
+            checkpointer = PostgresCheckpointSaver(SqlCheckpointStore(session))
+        return SchedulingRunner(build_scheduling_graph(deps, checkpointer), clinic_id=clinic_id if self.durable else None, origin=origin if self.durable else None)
 
 
 class SchedulingRunner:
-    def __init__(self, graph: Any) -> None:
+    def __init__(self, graph: Any, *, clinic_id: uuid.UUID | None = None, origin: str | None = None) -> None:
         self._graph = graph
+        self._clinic_id, self._origin = clinic_id, origin
+
+    def _config(self, slot_id: uuid.UUID) -> dict[str, Any]:
+        return run_config(slot_id, self._clinic_id, self._origin)
 
     async def start(self, *, clinic_id: uuid.UUID, slot_id: uuid.UUID, visit_type_id: uuid.UUID, origin: str) -> RunView:
-        config = run_config(slot_id)
+        config = self._config(slot_id)
         existing = await self._graph.aget_state(config)
         if existing.values:  # a second start for the same freed slot is the same run, not a second one
             return _view(slot_id, existing)
@@ -102,7 +113,7 @@ class SchedulingRunner:
         return _view(slot_id, await self._graph.aget_state(config))
 
     async def view(self, slot_id: uuid.UUID) -> RunView:
-        snapshot = await self._graph.aget_state(run_config(slot_id))
+        snapshot = await self._graph.aget_state(self._config(slot_id))
         if not snapshot.values:
             raise NoSuchRun
         return _view(slot_id, snapshot)
@@ -118,7 +129,7 @@ class SchedulingRunner:
         return await self._resume(slot_id, "await_reply", {"outcome": outcome, **({"message_id": str(message_id)} if message_id else {})})
 
     async def _resume(self, slot_id: uuid.UUID, expected_pause: str, answer: dict[str, str]) -> RunView:
-        config = run_config(slot_id)
+        config = self._config(slot_id)
         snapshot = await self._graph.aget_state(config)
         if not snapshot.values:
             raise NoSuchRun

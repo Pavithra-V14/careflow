@@ -169,7 +169,7 @@ async def test_each_backfill_route_audits_through_the_one_helper_after_the_step_
 
 async def test_every_action_has_a_route_or_is_listed_as_pending():
     pending = {"clinical.tool_call"}  # written by careflow/mcp_kit.py `audited` (no clinical server is mounted yet)
-    written_by_the_database = {"patient.erase_request", "patient.erase", "patient.erase_cancel", "staff.invite", "staff.grant_role", "staff.revoke_role", "staff.suspend", "staff.reinstate", "staff.activate"}  # written by the mpi.*_patient_erasure functions (migration 0032) in the same transaction; the live tests pin the rows
+    written_by_the_database = {"patient.erase_request", "patient.erase", "patient.erase_cancel", "staff.invite", "staff.grant_role", "staff.revoke_role", "staff.suspend", "staff.reinstate", "staff.activate", "backfill.task_raised"}  # (backfill.task_raised: by agents.raise_backfill_task, migration 0038) written by the mpi.*_patient_erasure functions (migration 0032) in the same transaction; the live tests pin the rows
     assert set(ROUTES.values()) | set(SETUP_ROUTES.values()) | set(BACKFILL_ROUTES.values()) | pending | written_by_the_database == set(ACTIONS)
 
 

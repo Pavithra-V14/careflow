@@ -2574,12 +2574,12 @@ def _backfill_out(v: Any) -> BackfillOut:
     )
 
 
-def _backfill_runner(request: Request, conn: AsyncConnection) -> SchedulingRunner:
+def _backfill_runner(request: Request, conn: AsyncConnection, clinic_id: uuid.UUID, origin: str) -> SchedulingRunner:
     components: SchedulingComponents | None = request.app.state.scheduling
     if components is None:
         log.error("backfill runs are unavailable: no components are configured (nothing is run; nothing is lost)")
         raise HTTPException(status_code=503, detail="backfill runs are unavailable: not configured")
-    return components.runner(request_session(conn))
+    return components.runner(request_session(conn), clinic_id=clinic_id, origin=origin)
 
 
 async def _slot_clinic(conn: AsyncConnection, slot_id: uuid.UUID, roles: tuple[str, ...], *, denied: str = "your role may not do this") -> tuple[uuid.UUID, str]:
@@ -2619,7 +2619,7 @@ async def _backfill_audit(conn: AsyncConnection, *, clinic_id: uuid.UUID, origin
 async def start_backfill(body: BackfillStartIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> BackfillOut:
     """Start (or find) the backfill run for a freed slot: rank the waitlist by clinical priority and stop at the first pause. 404 if the clinic is not visible to you, 403 unless you are front desk there, 503 while no components are configured."""
     origin = await _front_desk_gate(conn, claims, body.clinic_id)
-    runner = _backfill_runner(request, conn)
+    runner = _backfill_runner(request, conn, body.clinic_id, origin)
     with _backfill_errors():
         view = await runner.start(clinic_id=body.clinic_id, slot_id=body.slot_id, visit_type_id=body.visit_type_id, origin=origin)
     await _backfill_audit(conn, clinic_id=body.clinic_id, origin=origin, claims=claims, action="backfill.start", slot_id=body.slot_id, key=idempotency_key, details={"status": view.status})
@@ -2629,8 +2629,8 @@ async def start_backfill(body: BackfillStartIn, idempotency_key: IdempotencyKey,
 @scheduling.get("/backfills/{slot_id}", response_model=BackfillOut)
 async def get_backfill(slot_id: uuid.UUID, request: Request, conn: TxConn) -> BackfillOut:
     """Where the backfill run for this slot is. 404 if you cannot see the slot or there is no run, 403 unless you are front desk, nurse or doctor there, 503 while no components are configured."""
-    await _slot_clinic(conn, slot_id, SCHEDULING_READERS, denied="your role may not read this")
-    runner = _backfill_runner(request, conn)
+    clinic_id, origin = await _slot_clinic(conn, slot_id, SCHEDULING_READERS, denied="your role may not read this")
+    runner = _backfill_runner(request, conn, clinic_id, origin)
     with _backfill_errors():
         return _backfill_out(await runner.view(slot_id))
 
@@ -2639,7 +2639,7 @@ async def get_backfill(slot_id: uuid.UUID, request: Request, conn: TxConn) -> Ba
 async def decide_backfill(slot_id: uuid.UUID, body: BackfillDecideIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> BackfillOut:
     """Answer the pause: send the offer to the current candidate, skip them, or stop. 404 if you cannot see the slot or there is no run, 403 unless you are front desk there, 409 if the run is not waiting for this, 503 while no components are configured."""
     clinic_id, origin = await _slot_clinic(conn, slot_id, ("front_desk",))
-    runner = _backfill_runner(request, conn)
+    runner = _backfill_runner(request, conn, clinic_id, origin)
     with _backfill_errors(), _scheduling_errors():
         view = await runner.decide(slot_id, body.action)
     await _backfill_audit(conn, clinic_id=clinic_id, origin=origin, claims=claims, action="backfill.decide", slot_id=slot_id, key=idempotency_key, details={"action": body.action, "status": view.status})
@@ -2652,7 +2652,7 @@ async def reply_backfill(slot_id: uuid.UUID, body: BackfillReplyIn, idempotency_
     if (body.outcome == "replied") != (body.message_id is not None):
         raise HTTPException(status_code=422, detail="request rejected")
     clinic_id, origin = await _slot_clinic(conn, slot_id, ("front_desk",))
-    runner = _backfill_runner(request, conn)
+    runner = _backfill_runner(request, conn, clinic_id, origin)
     with _backfill_errors(), _scheduling_errors():
         view = await runner.reply(slot_id, body.outcome, body.message_id)
     await _backfill_audit(conn, clinic_id=clinic_id, origin=origin, claims=claims, action="backfill.reply", slot_id=slot_id, key=idempotency_key, details={"outcome": body.outcome, "status": view.status})

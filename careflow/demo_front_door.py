@@ -126,6 +126,7 @@ def scheduling_components_from_environment(environ: Mapping[str, str], profile: 
     from careflow.demo_decision import demo_decision_service
     from careflow.scheduling_ports import (
         BookerPort,
+        DurableTasks,
         HoldReleaserPort,
         OfferSenderPort,
         ReplyInterpreterPort,
@@ -142,9 +143,12 @@ def scheduling_components_from_environment(environ: Mapping[str, str], profile: 
     pack = demo_phase3.load_demo_phase3(profile, demo_phase3.data_policy(environ))
     settings = pack.scheduling_settings()
     engine = RedFlagEngine()
+    # Durable (our own Postgres tables, migrations 0037 and 0038) unless CAREFLOW_DURABLE_RUNS says `memory` (a database that has not had those migrations yet).
+    durable = environ.get("CAREFLOW_DURABLE_RUNS", "durable").strip().lower() != "memory"
+    tasks = DurableTasks() if durable else StateOnlyTasks()
     return SchedulingComponents(
         ranker=SlotRanker(), sender=OfferSenderPort(vault, settings, key_version), screener=ReplyScreenerPort(vault, engine, profile),
-        interpreter=ReplyInterpreterPort(vault, engine, demo_decision_service()), booker=BookerPort(), releaser=HoldReleaserPort(), tasks=StateOnlyTasks(),
+        interpreter=ReplyInterpreterPort(vault, engine, demo_decision_service()), booker=BookerPort(), releaser=HoldReleaserPort(), tasks=tasks,
         policy=policy_from(environ.get("CAREFLOW_AUTONOMY_MODE")), max_candidates=settings.backfill_candidates or 1, task_priority=pack.scheduling_task_priority, task_role=pack.scheduling_task_role,
-        checkpointer=InMemorySaver(),
+        checkpointer=InMemorySaver(), durable=durable,
     )

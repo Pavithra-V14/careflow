@@ -27,6 +27,7 @@ from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from typing import Any, Final, Protocol, TypedDict
 
+from langgraph._internal._constants import CONFIG_KEY_DURABILITY
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 from sqlalchemy.ext.asyncio import AsyncConnection
@@ -148,8 +149,13 @@ def initial_state(clinic_id: uuid.UUID, slot_id: uuid.UUID, visit_type_id: uuid.
     return {"clinic_id": str(clinic_id), "slot_id": str(slot_id), "visit_type_id": str(visit_type_id), "origin": origin, "status": "started", "reasons": [], "index": 0}
 
 
-def run_config(slot_id: uuid.UUID) -> dict[str, Any]:
-    return {"configurable": {"thread_id": thread_id_for(slot_id)}, "recursion_limit": RECURSION_LIMIT}
+def run_config(slot_id: uuid.UUID, clinic_id: uuid.UUID | None = None, origin: str | None = None) -> dict[str, Any]:
+    """The config of one run. With a clinic and origin it is the config the Postgres checkpointer scopes every row by (rule 8, no origin default) and writes synchronously (a step is saved before the next
+    starts, 7.2); without them it is the in-memory form used by tests."""
+    configurable: dict[str, Any] = {"thread_id": thread_id_for(slot_id)}
+    if clinic_id is not None and origin is not None:
+        configurable.update({"clinic_id": str(clinic_id), "origin": origin, CONFIG_KEY_DURABILITY: "sync"})
+    return {"configurable": configurable, "recursion_limit": RECURSION_LIMIT}
 
 
 def build_scheduling_graph(deps: SchedulingDeps, checkpointer: Any, *, environ: dict[str, str] | None = None):
