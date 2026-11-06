@@ -27,9 +27,9 @@ log = logging.getLogger("careflow.canary_injection")
 WINDOW_SECONDS: Final = 60
 
 
-async def canary_sweep(conn: AsyncConnection, rate: float | None, *, draw: Callable[[], float] = random, now: Callable[[], datetime] = lambda: datetime.now(UTC), origin: str = "live") -> int:
-    """One pass. Returns how many canaries were enqueued. No rate: returns 0 without reading anything."""
-    if rate is None:
+async def canary_sweep(conn: AsyncConnection, rate: float | None, max_per_day: int | None = None, *, draw: Callable[[], float] = random, now: Callable[[], datetime] = lambda: datetime.now(UTC), origin: str = "live") -> int:
+    """One pass. Returns how many canaries were enqueued. No rate or no daily cap (both required settings): returns 0 without reading anything. The cap is enforced by the database (migration 0043)."""
+    if rate is None or max_per_day is None or max_per_day < 1:
         return 0
     clinics = [r[0] for r in (await conn.execute(text("select id from iam.clinics where origin = :o and iam.has_clinic_role(id, array['queue_worker']) order by id"), {"o": origin})).all()]
     made = 0
@@ -46,7 +46,7 @@ async def canary_sweep(conn: AsyncConnection, rate: float | None, *, draw: Calla
             bucket = now().strftime("%Y%m%d%H%M")
             document_id = document_id_for(clinic, f"canary-bucket:{bucket}")
             async with conn.begin_nested():
-                await conn.execute(text("select docs.register_canary_document(:c, :d, :k)"), {"c": clinic, "d": document_id, "k": f"canary:{document_id}"})
+                await conn.execute(text("select docs.register_canary_document(:c, :d, :k, :m)"), {"c": clinic, "d": document_id, "k": f"canary:{document_id}", "m": max_per_day})
                 await PostgresQueue().enqueue(conn, clinic, "canary", FRONT_DOOR_TASK, {"document_id": str(document_id)}, f"canary-run:{document_id}")
             made += 1
         except Exception as exc:  # noqa: BLE001 - one clinic failing must not stop the others, and a canary is never worth a failed tick

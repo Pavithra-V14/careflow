@@ -1,6 +1,6 @@
 """The SQL halves of the Phase 4 ports, each running on the CALLER's own transaction under row-level security (migrations 0039, 0040). No policy is decided here.
 
-* `SqlAlertSink`: inserts into ops.alerts and NEVER uses RETURNING (the writer, a queue worker or a reviewer, has no SELECT right on what it writes). A repeat is a no-op (the key is unique per clinic).
+* `SqlAlertSink`: inserts into ops.alerts and NEVER uses RETURNING (the writer, a queue worker or a reviewer, has no SELECT right on what it writes). A repeat is a no-op (the key is unique per clinic), caught from a plain insert.
 * `SqlWatchdogReader`: the facts the watchdog needs, read as the queue worker: open review tasks of the clinic and the queue's age and dead-letter count. Counts and ages only; no payload is read.
 * `watchdog_sweep`: the tick's end-of-tick sweep: for every clinic the worker serves, run the watchdog once. A failing clinic is logged by class and skipped; the rest still run.
 * `reviewer_stats_rows`: calls agents.reviewer_stats (admin only; the database refuses anyone else).
@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from careflow.cost_canvas import Measured
@@ -36,13 +37,19 @@ class SqlAlertSink:
     # (the canary module calls it `raise_alert` with keywords; this adapter is given to it through `CanaryAlertWriter`)
 
     async def _insert(self, clinic_id: str, origin: str, alert_class: str, audience_role: str, count: int, ref: str | None, key: str) -> None:
-        await self._conn.execute(
-            text(
-                "insert into ops.alerts (clinic_id, origin, class, audience_role, alert_count, ref, idempotency_key) "
-                "values (:c, :o, :k, :a, :n, :r, :i) on conflict (clinic_id, idempotency_key) do nothing"
-            ),
-            {"c": uuid.UUID(clinic_id), "o": origin, "k": alert_class, "a": audience_role, "n": count, "r": ref, "i": key},
-        )
+        """A PLAIN insert in a savepoint; a repeat (the unique key) is caught and is a no-op. NOT `on conflict do nothing`: with row-level security PostgreSQL also checks the table's SELECT policy for an
+        INSERT that has an ON CONFLICT clause, and the writer (a queue worker, or a reviewer for the silent canary alert) is deliberately not in the audience that may read the row (CI run 42201883307)."""
+        try:
+            async with self._conn.begin_nested():
+                await self._conn.execute(
+                    text(
+                        "insert into ops.alerts (clinic_id, origin, class, audience_role, alert_count, ref, idempotency_key) values (:c, :o, :k, :a, :n, :r, :i)"
+                    ),
+                    {"c": uuid.UUID(clinic_id), "o": origin, "k": alert_class, "a": audience_role, "n": count, "r": ref, "i": key},
+                )
+        except IntegrityError as exc:
+            if getattr(exc.orig, "sqlstate", None) != "23505" and "23505" not in str(getattr(exc.orig, "pgcode", "")) and "UniqueViolation" not in type(getattr(exc.orig, "__cause__", exc.orig)).__name__:
+                raise  # only the repeat of the same key is a no-op; any other integrity error is real
 
 
 class CanaryAlertWriter:

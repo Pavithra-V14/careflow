@@ -17,7 +17,7 @@ from tests.test_rls_triage_live import (  # noqa: F401  (the fixture and the wor
 pytestmark = [pytest.mark.asyncio, pytest.mark.skipif(not MIGRATOR, reason="DATABASE_URL_MIGRATOR not configured")]
 ALERT = (
     "insert into ops.alerts (clinic_id, origin, class, audience_role, alert_count, ref, idempotency_key) values "
-    "('{clinic}', '{origin}', '{cls}', '{aud}', {n}, {ref}, '{key}') on conflict (clinic_id, idempotency_key) do nothing"
+    "('{clinic}', '{origin}', '{cls}', '{aud}', {n}, {ref}, '{key}')"
 )
 
 
@@ -110,11 +110,10 @@ async def test_the_worker_raises_alerts_each_role_reads_only_its_own_and_a_repea
     key = f"k-{_u()}"
     probe = await seq(db, w.people["worker_a"], (f"select iam.has_clinic_role('{w.a}', array['queue_worker']), current_user::text, current_setting('request.jwt.claims', true)", True))
     assert isinstance(probe, list) and probe[0][0][0] is True, getattr(probe, "detail", probe[0][0] if isinstance(probe, list) else probe)  # diagnostic: the helper itself, before the policy
-    first = await seq(db, w.people["worker_a"], (alert(w, aud="admin", key=key), False), (alert(w, aud="admin", key=key), False))
-    if not isinstance(first, list):  # diagnostic for a failure we could not reproduce locally: the live policies and a plain insert without ON CONFLICT
-        pols = [tuple(r) for r in await db.fetch("select policyname, cmd, roles::text, with_check from pg_policies where schemaname = 'ops' and tablename = 'alerts' order by 1")]
-        plain = await seq(db, w.people["worker_a"], (alert(w, aud="admin", key=f"plain-{_u()}").split(" on conflict")[0], False))
-        pytest.fail(f"{getattr(first, 'detail', first)} | plain insert: {getattr(plain, 'detail', plain)} | policies: {pols}")
+    first = await seq(db, w.people["worker_a"], (alert(w, aud="admin", key=key), False))
+    assert isinstance(first, list), getattr(first, "detail", first)
+    repeat = await seq(db, w.people["worker_a"], (alert(w, aud="admin", key=key), False), (alert(w, aud="admin", key=key), False))
+    assert repeat == "23505"  # the same key twice is a unique violation; careflow/phase4_sql.py catches exactly this and treats it as a no-op (no ON CONFLICT: see its docstring)
     await db.execute(alert(w, aud="admin", key=key))
     await db.execute(alert(w, aud="nurse", cls="red_flag_overdue", key=f"k-{_u()}"))
     count = lambda who: seq(db, w.people[who], (f"select count(*) from ops.alerts where clinic_id = '{w.a}'", True))
