@@ -29,7 +29,9 @@ import asyncio
 import contextlib
 import json
 import logging
+import math
 import os
+import re
 import time
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterator
@@ -65,6 +67,7 @@ from careflow import (
     care_gap_rules,
     care_gap_sql,
     care_gaps,
+    care_journey_sql,
     demo_front_door,
     demo_phase3,
     demo_phase4,
@@ -3827,7 +3830,7 @@ class ClaimIn(_Body):
 
 
 class ClaimOut(_Out):
-    outcome: Literal["claimed", "pending_review", "locked", "already_bound"]
+    outcome: Literal["claimed", "pending_review", "locked", "already_bound", "consent_required"]
 
 
 @portal.post("/register", response_model=PortalRegisterOut, status_code=201)
@@ -3881,7 +3884,7 @@ async def portal_activate(idempotency_key: IdempotencyKey, conn: TxConnAllGrants
 
 @portal.post("/claims", response_model=ClaimOut)
 async def portal_claim(body: ClaimIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> ClaimOut:
-    """Claim the patient record that matches your VERIFIED phone and the name and date of birth you give. `claimed` binds your account; anything else is `pending_review` (a front-desk person decides; the same word whether nothing or several matched), `locked` after repeated failures, or `already_bound`. 403 unless you are an ACTIVE patient account or you have no verified phone; 422 if the date or name is unusable; 503 if encryption keys are not configured."""
+    """Claim the patient record that matches your VERIFIED phone and the name and date of birth you give. `claimed` binds your account; anything else is `pending_review` (a front-desk person decides; the same word whether nothing or several matched), `locked` after repeated failures, `already_bound`, or `consent_required` (grant the current care-delivery notice first). 403 unless you are an ACTIVE patient account or you have no verified phone; 422 if the date or name is unusable; 503 if encryption keys are not configured."""
     await _patient_account(conn, claims)
     phone = claims.get("phone")
     vault: DemographicVault | None = request.app.state.vault
@@ -3899,6 +3902,173 @@ async def portal_claim(body: ClaimIn, idempotency_key: IdempotencyKey, request: 
     except portal_sql.PortalRefused:
         raise HTTPException(status_code=403, detail="your role may not do this") from None
     return ClaimOut(outcome=outcome)  # type: ignore[arg-type]
+
+
+# ---- Care Journey: plans, confirmation, results (migration 0050; BUILD-SPEC.md Phase 6, 9.5) ----------------------------------------------------------------------------------------------------------------------
+#
+# A doctor writes a plan (encrypted at rest); the rules screen it first, then the (approved) model PORT proposes a closed-schema list of steps, and a doctor confirms before anything is activated. A result recorded
+# by a nurse or doctor wakes the plan whose open wait it matches. With no components wired (the Care Journey flag, a rules engine, the required task settings) the plan routes answer 503 and NOTHING is written;
+# recording a result works without them (it is clinical record, and no plan has to exist). With no approved model route the plan is held for a doctor: the graph never guesses a step.
+
+staff_care_plans = APIRouter(prefix="/v1/staff/care-plans", tags=["staff care plans"])
+staff_results = APIRouter(prefix="/v1/staff/results", tags=["staff results"])
+CARE_PLAN_AUTHORS = ("doctor",)
+CARE_PLAN_READERS = ("nurse", "doctor")
+RESULT_WRITERS = ("nurse", "doctor")
+
+
+class CarePlanIn(_Body):
+    clinic_id: uuid.UUID
+    patient_id: uuid.UUID
+    plan_text: str = Field(min_length=1, max_length=4000)
+
+
+class CarePlanOut(_Out):
+    plan_id: uuid.UUID
+    created: bool
+    status: str
+    waiting_for: Literal["confirmation", "result", "none"]
+    task_id: uuid.UUID | None
+
+
+class CarePlanRowOut(_Out):
+    plan_id: uuid.UUID
+    patient_id: uuid.UUID
+    status: str
+    created_at: datetime
+
+
+class CarePlanList(_Out):
+    plans: list[CarePlanRowOut]
+
+
+class CarePlanConfirmIn(_Body):
+    action: Literal["approve", "reject"]
+
+
+class ResultIn(_Body):
+    clinic_id: uuid.UUID
+    patient_id: uuid.UUID
+    code: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$")
+    measures: dict[str, float | None] = Field(max_length=20)
+    verified: bool
+    valid_from: datetime
+    valid_to: datetime | None = None
+    supersedes_id: uuid.UUID | None = None
+
+
+class ResultOut(_Out):
+    result_id: uuid.UUID
+    created: bool
+    plans_woken: list[uuid.UUID]
+
+
+_MEASURE_KEY = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
+
+
+def _cj_runner(components, conn: AsyncConnection, clinic_id: uuid.UUID, origin: str):
+    try:
+        return components.runner(conn, clinic_id=clinic_id, origin=origin)
+    except care_journey_sql.Unavailable:
+        raise HTTPException(status_code=503, detail="care plans are unavailable: not configured") from None
+
+
+def _care_journey(request: Request):
+    components = request.app.state.care_journey
+    if components is None:
+        raise HTTPException(status_code=503, detail="care plans are unavailable: not configured")
+    return components
+
+
+@staff_care_plans.post("", response_model=CarePlanOut, status_code=201)
+async def create_care_plan(body: CarePlanIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> CarePlanOut:
+    """A doctor writes a care plan for a patient of the clinic; the rules screen it first, then it waits for a doctor's confirmation (or is held for a person). Idempotent on the key. 404 if the clinic or patient is not visible, 403 unless you are a doctor there, 503 while care plans are not configured (nothing is written)."""
+    origin = await _console_clinic(conn, body.clinic_id, CARE_PLAN_AUTHORS)
+    components = _care_journey(request)
+    key_version = _active_key_version(request)
+    if key_version is None:
+        raise HTTPException(status_code=503, detail="care plans are unavailable: encryption keys are not configured")
+    actor = uuid.UUID(claims["sub"])
+    try:
+        plan_id, created = await care_journey_sql.create_plan(
+            conn, components.vault, clinic_id=body.clinic_id, origin=origin, patient_id=body.patient_id, plan_text=body.plan_text, created_by=actor, key_version=key_version, idempotency_key=f"plan:{idempotency_key}"
+        )
+    except care_journey_sql.Refused:
+        raise HTTPException(status_code=404, detail="not found") from None
+    except DBAPIError as exc:
+        if care_gap_sql.sqlstate(exc) == "42501":
+            raise HTTPException(status_code=403, detail="your role may not do this") from None
+        raise
+    view = await _cj_runner(components, conn, body.clinic_id, origin).start(clinic_id=body.clinic_id, plan_id=plan_id, patient_id=body.patient_id, origin=origin)
+    if created:
+        await write_audit(
+            conn, clinic_id=body.clinic_id, origin=origin, actor_id=actor, actor_role="doctor", action="care_plan.create", resource_type="care_plan", resource_id=plan_id, details={"status": view.status},
+            idempotency_key=f"audit:care-plan-create:{plan_id}",
+        )
+    return CarePlanOut(plan_id=plan_id, created=created, status=view.status, waiting_for=view.waiting_for, task_id=view.task_id)
+
+
+@staff_care_plans.get("", response_model=CarePlanList)
+async def list_care_plans(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 100) -> CarePlanList:
+    """Care plans of the clinic, newest first: ids and status only, never the plan text. 404 if the clinic is not visible to you, 403 unless you are a nurse or doctor there."""
+    await _console_clinic(conn, clinic_id, CARE_PLAN_READERS)
+    rows = (await conn.execute(text("select id, patient_id, status, created_at from ops.care_plans where clinic_id = :c order by created_at desc, id limit :n"), {"c": clinic_id, "n": limit})).all()
+    return CarePlanList(plans=[CarePlanRowOut(plan_id=r.id, patient_id=r.patient_id, status=r.status, created_at=r.created_at) for r in rows])
+
+
+@staff_care_plans.post("/{plan_id}/confirm", response_model=CarePlanOut)
+async def confirm_care_plan(plan_id: uuid.UUID, body: CarePlanConfirmIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> CarePlanOut:
+    """A doctor approves or rejects the proposed plan; nothing runs before this. 404 if you cannot see the plan, 403 unless you are a doctor there, 409 if the plan is not waiting for a confirmation, 503 while care plans are not configured."""
+    row = (await conn.execute(text("select clinic_id, origin from ops.care_plans where id = :p"), {"p": plan_id})).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _clinic_role_held(conn, row.clinic_id, CARE_PLAN_AUTHORS):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    components = _care_journey(request)
+    try:
+        view = await _cj_runner(components, conn, row.clinic_id, row.origin).confirm(plan_id, body.action)
+    except (care_journey_sql.WrongStep, care_journey_sql.NoSuchPlan):
+        raise HTTPException(status_code=409, detail="the plan is not waiting for a confirmation") from None
+    await write_audit(
+        conn, clinic_id=row.clinic_id, origin=row.origin, actor_id=uuid.UUID(claims["sub"]), actor_role="doctor", action="care_plan.confirm", resource_type="care_plan", resource_id=plan_id, details={"action": body.action},
+        idempotency_key=f"audit:care-plan-confirm:{plan_id}",
+    )
+    return CarePlanOut(plan_id=plan_id, created=False, status=view.status, waiting_for=view.waiting_for, task_id=view.task_id)
+
+
+@staff_results.post("", response_model=ResultOut, status_code=201)
+async def record_result(body: ResultIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> ResultOut:
+    """Record a result for a patient of the clinic (append-only; a correction names the result it supersedes) and wake any care plan whose open wait it matches. Idempotent on the key. 404 if the clinic or patient is not visible, 403 unless you are a nurse or doctor there, 422 for a malformed measure."""
+    origin = await _console_clinic(conn, body.clinic_id, RESULT_WRITERS)
+    if any(not _MEASURE_KEY.match(k) or (v is not None and not math.isfinite(v)) for k, v in body.measures.items()) or (body.valid_to is not None and body.valid_to <= body.valid_from):
+        raise HTTPException(status_code=422, detail="request rejected")
+    actor = uuid.UUID(claims["sub"])
+    try:
+        result_id, created = await care_journey_sql.record_result(
+            conn, clinic_id=body.clinic_id, origin=origin, patient_id=body.patient_id, code=body.code, measures=body.measures, verified=body.verified, valid_from=body.valid_from,
+            valid_to=body.valid_to, supersedes_id=body.supersedes_id, recorded_by=actor, idempotency_key=f"result:{idempotency_key}",
+        )
+    except care_journey_sql.Refused:
+        raise HTTPException(status_code=404, detail="not found") from None
+    except DBAPIError as exc:
+        if care_gap_sql.sqlstate(exc) == "42501":
+            raise HTTPException(status_code=403, detail="your role may not do this") from None
+        raise
+    woken: list[uuid.UUID] = []
+    components = request.app.state.care_journey
+    if created:
+        await write_audit(
+            conn, clinic_id=body.clinic_id, origin=origin, actor_id=actor, actor_role=await _acting_role(conn, claims, body.clinic_id, RESULT_WRITERS), action="result.record", resource_type="result", resource_id=result_id,
+            details={"verified": body.verified}, idempotency_key=f"audit:result-record:{result_id}",
+        )
+        if components is not None:
+            for plan_id in await care_journey_sql.plans_waiting_for(conn, clinic_id=body.clinic_id, patient_id=body.patient_id, code=body.code):
+                try:
+                    await _cj_runner(components, conn, body.clinic_id, origin).deliver_result(plan_id, result_id)
+                    woken.append(plan_id)
+                except (care_journey_sql.WrongStep, care_journey_sql.NoSuchPlan):
+                    continue  # the plan is not at a result pause: the result stays recorded and unclaimed
+    return ResultOut(result_id=result_id, created=created, plans_woken=woken)
 
 
 # ---- Voice transcripts: admin-only, audited reading and purging (migration 0047; BUILD-SPEC.md 9.4) ----------------------------------------------------------------------------------------------------------
@@ -3994,6 +4164,7 @@ def create_app(
     vault: DemographicVault | None = None, clock: Callable[[], float] = time.time, front_door: FrontDoorComponents | None = None,
     front_door_session_for: Callable[..., Any] = worker_session, document_intake: DocumentIntake | None = None, reply_interpreter: DecisionService | None = None,
     auth_admin: AuthAdminPort | None = None, scheduling_components: SchedulingComponents | None = None,
+    care_journey_components: "care_journey_sql.CareJourneyComponents | None" = None,
 ) -> FastAPI:
     """Build the app. `jwks`, `engine`, `vault` and `clock` (for the step-up window) can be injected (tests do); otherwise they come from
     settings / the environment. `front_door` holds the Front Door's stand-in components; with None the run and review routes answer 503 and no handler is registered."""
@@ -4049,6 +4220,7 @@ def create_app(
             except Exception:  # noqa: BLE001 - a fault in the demo configuration leaves the routes unwired, never a startup crash
                 log.error("the demo Scheduling components could not be built: the backfill routes stay unavailable")
                 scheduling = None
+        app.state.care_journey = care_journey_components  # None unless injected: no model route is approved and the required task settings are owner decisions, so the plan routes answer 503
         app.state.scheduling = scheduling  # None unless injected: the backfill routes answer 503 (all ports are fakes in this package)
         app.state.clinical_server = build_clinical_server()  # the READ-ONLY `clinical` MCP server, in process only (no socket); called through careflow.mcp_kit.invoke
         app.state.auth_admin = auth_admin  # None unless injected: no Auth admin adapter is wired by default (the secret key stays out of the web process); the invite route answers 503
@@ -4146,8 +4318,10 @@ def create_app(
     app.include_router(portal_voice)
     app.include_router(portal)
     app.include_router(staff_voice)
+    app.include_router(staff_care_plans)
+    app.include_router(staff_results)
     app.include_router(health)
-    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, portal, staff_voice])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
+    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, portal, staff_voice, staff_care_plans, staff_results])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
     return app
 
 

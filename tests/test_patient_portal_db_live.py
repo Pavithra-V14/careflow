@@ -92,6 +92,8 @@ async def world(db):
     await handle.execute("update mpi.identity_tokens set token = $2 where patient_id = $1 and kind = 'phone'", ids["unconfirmed"], PHONE)
     await handle.execute("update mpi.identity_tokens set token = $2 where patient_id = $1 and kind = 'name_dob'", ids["unconfirmed"], NAME_DOB)
     await handle.execute("insert into iam.consent_notices (id, purpose, version, body) values ($1, 'care_delivery', 1, 'DEMO notice v1'), ($2, 'care_delivery', 2, 'DEMO notice v2')", ids["notice_old"], ids["notice_new"])
+    for who in ("active", "active2", "active3", "other_origin"):  # these accounts have granted the CURRENT care-delivery notice (the claim checks it again)
+        await handle.execute("insert into iam.consent_events (account_id, purpose, notice_id, action, idempotency_key) values ($1, 'care_delivery', $2, 'granted', $3)", ids[who], ids["notice_new"], f"w-{who}")
     return a, b, ids
 
 
@@ -166,6 +168,27 @@ async def test_the_account_is_locked_after_five_failed_claims_and_the_lock_never
         assert await state_of(db, w["active"], CLAIM, c=a, p=WRONG, n=WRONG) == [("pending_review",)]
     assert await state_of(db, w["active"], CLAIM, c=a, p=PHONE, n=NAME_DOB) == [("locked",)]  # even the right details, while locked
     assert (await db.execute(text("select count(*) from mpi.patients where account_id = :i"), {"i": w["active"]})).scalar() == 0
+
+
+async def test_a_revoked_confirmation_a_withdrawn_consent_and_a_fresh_account_do_not_open_the_gate(db):
+    a, _, w = await world(db)
+    handle = await pg(db)
+    await handle.execute("insert into mpi.identity_confirmations (clinic_id, patient_id, confirmed_by, origin, idempotency_key, kind, reason) values ($1, $2, $3, 'test', $4, 'revoke', 'planted_or_suspect')", a, w["confirmed"], w["front_desk"], f"rv-{uuid.uuid4()}")
+    assert await state_of(db, w["active"], CLAIM, c=a, p=PHONE, n=NAME_DOB) == [("pending_review",)]  # confirmed once, then revoked: not claimable
+    assert (await db.execute(text("select count(*) from mpi.patients where account_id is not null and id = :i"), {"i": w["confirmed"]})).scalar() == 0
+    await handle.execute("insert into mpi.identity_confirmations (clinic_id, patient_id, confirmed_by, origin, idempotency_key) values ($1, $2, $3, 'test', $4)", a, w["confirmed"], w["front_desk"], f"rc-{uuid.uuid4()}")
+    ins = "insert into iam.consent_events (account_id, purpose, notice_id, action, idempotency_key) values (:a, 'care_delivery', :n, 'withdrawn', 'wd')"
+    assert await state_of(db, w["active2"], ins, a=w["active2"], n=w["notice_new"]) == 1
+    assert await state_of(db, w["active2"], CLAIM, c=a, p=PHONE, n=NAME_DOB) == [("consent_required",)]  # a withdrawal after activation stops the claim
+    assert await state_of(db, w["active"], CLAIM, c=a, p=PHONE, n=NAME_DOB) == [("claimed",)]  # re-confirmed and still consenting
+
+
+async def test_the_failure_limit_follows_the_phone_token_so_new_accounts_do_not_reset_it(db):
+    a, _, w = await world(db)
+    for _ in range(5):
+        assert await state_of(db, w["active"], CLAIM, c=a, p=WRONG, n=WRONG) == [("pending_review",)]
+    assert await state_of(db, w["active2"], CLAIM, c=a, p=WRONG, n=NAME_DOB) == [("locked",)]  # a different account with the same phone token is locked too
+    assert await state_of(db, w["active3"], CLAIM, c=a, p=PHONE, n=NAME_DOB) == [("claimed",)]  # another phone is unaffected
 
 
 async def test_a_claim_is_refused_for_a_non_patient_an_invited_account_an_unknown_clinic_a_different_origin_and_a_malformed_token(db):

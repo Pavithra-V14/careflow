@@ -13,7 +13,7 @@
 -- (5) mpi.claim_patient_record(...): see the function. Fixed words as results, never the reason a claim failed; five failed claims in 24 hours lock the account (a guessing limit, a security constant, not clinical);
 --     a claim that finds no single CONFIRMED record becomes a pending request for the front desk. An unconfirmed record (one the unattended worker made, migration 0023) is never claimed automatically: a planted
 --     record must not be capturable by the person it names.
--- RESIDUALS. (a) The tokens are computed by the application from the verified phone claim and the submitted name and date of birth; the database compares them and cannot know the phone was the verified one. (b) A patient
+-- RESIDUALS. (0) CONFIRMED means the newest identity event of the record is a confirmation; a front-desk-created record with no event is NOT claimable (it becomes a pending request): deliberate, and the safer reading. A pending request cannot yet be resolved by anyone; a record that is the subordinate of a merge is not checked. (a) The tokens are computed by the application from the verified phone claim and the submitted name and date of birth; the database compares them and cannot know the phone was the verified one. (b) A patient
 -- with a recycled phone number AND the right name and date of birth would claim the record: the same risk 17.2 accepts. (c) The origin of a registered account is chosen by the application from the deployment
 -- profile.
 
@@ -57,9 +57,11 @@ create table mpi.claim_attempts (
     id          uuid primary key default gen_random_uuid(),
     account_id  uuid not null references iam.accounts (id),
     clinic_id   uuid not null references iam.clinics (id),
+    phone_token bytea not null,
     occurred_at timestamptz not null default clock_timestamp()
 );
 create index claim_attempts_account_idx on mpi.claim_attempts (account_id, occurred_at desc);
+create index claim_attempts_phone_idx on mpi.claim_attempts (clinic_id, phone_token, occurred_at desc);
 
 create table mpi.claim_requests (
     id          uuid primary key default gen_random_uuid(),
@@ -121,14 +123,14 @@ begin
     if v_actor is null or p_origin is null or p_origin not in ('live', 'test', 'eval', 'canary') then
         raise exception 'patient registration refused' using errcode = 'insufficient_privilege';
     end if;
-    select account_type into v_type from iam.accounts where id = v_actor;
-    if found then
-        if v_type <> 'patient' then
+    insert into iam.accounts (id, account_type, status, origin) values (v_actor, 'patient', 'invited', p_origin) on conflict (id) do nothing;
+    if not found then
+        select account_type into v_type from iam.accounts where id = v_actor;
+        if v_type is distinct from 'patient' then
             raise exception 'patient registration refused' using errcode = 'insufficient_privilege';
         end if;
-        return 'exists';  -- a repeat is the same registration
+        return 'exists';  -- a repeat (or a concurrent twin) is the same registration
     end if;
-    insert into iam.accounts (id, account_type, status, origin) values (v_actor, 'patient', 'invited', p_origin);
     insert into audit.log (origin, clinic_id, actor_id, actor_role, action, resource_type, resource_id, details, idempotency_key)
     values (p_origin, null, v_actor, 'patient', 'patient.register', 'account', v_actor::text, '{}'::jsonb, 'sys:patient-register:' || v_actor::text);
     return 'registered';
@@ -164,6 +166,9 @@ begin
         return 'consent_required';
     end if;
     update iam.accounts set status = 'active' where id = v_actor and status = 'invited';
+    if not found then
+        return 'already_active';
+    end if;
     insert into audit.log (origin, clinic_id, actor_id, actor_role, action, resource_type, resource_id, details, idempotency_key)
     values (v_acc.origin, null, v_actor, 'patient', 'patient.activate', 'account', v_actor::text, '{}'::jsonb, 'sys:patient-activate:' || v_actor::text)
     on conflict (idempotency_key) do nothing;
@@ -180,6 +185,7 @@ declare
     v_origin text;
     v_ids    uuid[];
     v_failed integer;
+    v_latest text;
 begin
     if v_actor is null or p_clinic_id is null or p_phone_token is null or p_name_dob_token is null or p_key_version is null or p_key_version < 1
        or octet_length(p_phone_token) <> 32 or octet_length(p_name_dob_token) <> 32 then
@@ -193,14 +199,27 @@ begin
     if exists (select 1 from mpi.patients where account_id = v_actor) then
         return 'already_bound';
     end if;
-    select count(*) into v_failed from mpi.claim_attempts where account_id = v_actor and occurred_at > clock_timestamp() - interval '24 hours';
+    -- consent is checked at claim time too, not only at activation: a withdrawal (or a new notice text nobody has accepted) stops the claim
+    select e.action into v_latest
+      from iam.consent_events e join iam.consent_notices n on n.id = e.notice_id
+     where e.account_id = v_actor and e.purpose = 'care_delivery' and n.version = (select max(version) from iam.consent_notices where purpose = 'care_delivery')
+     order by e.occurred_at desc, e.id desc limit 1;
+    if v_latest is distinct from 'granted' then
+        return 'consent_required';
+    end if;
+    -- the lock is per account AND per phone token and clinic, so opening fresh accounts does not reset a guesser's allowance
+    select count(*) into v_failed from mpi.claim_attempts
+     where occurred_at > clock_timestamp() - interval '24 hours' and (account_id = v_actor or (clinic_id = p_clinic_id and phone_token = p_phone_token));
     if v_failed >= 5 then
         return 'locked';
     end if;
     select array_agg(p.id) into v_ids
       from mpi.patients p
      where p.clinic_id = p_clinic_id and p.origin = v_origin and p.account_id is null and p.erased_at is null
-       and exists (select 1 from mpi.identity_confirmations c where c.patient_id = p.id and c.clinic_id = p.clinic_id)
+       and exists (  -- CONFIRMED means the NEWEST identity event of the record is a confirmation (a revoke after it, e.g. planted_or_suspect, takes the record out of reach); a record with no event is not confirmed
+           select 1 from mpi.identity_confirmations c
+            where c.patient_id = p.id and c.clinic_id = p.clinic_id and c.kind = 'confirm'
+              and c.seq = (select max(x.seq) from mpi.identity_confirmations x where x.patient_id = p.id))
        and exists (select 1 from mpi.identity_tokens t where t.patient_id = p.id and t.clinic_id = p.clinic_id and t.kind = 'phone' and t.key_version = p_key_version and t.token = p_phone_token)
        and exists (select 1 from mpi.identity_tokens t where t.patient_id = p.id and t.clinic_id = p.clinic_id and t.kind = 'name_dob' and t.key_version = p_key_version and t.token = p_name_dob_token);
     if coalesce(array_length(v_ids, 1), 0) = 1 then
@@ -210,7 +229,7 @@ begin
         return 'claimed';
     end if;
     -- no single confirmed record agrees on BOTH: count it, and leave a request for the front desk (one pending per account and clinic). The same word for none and for several.
-    insert into mpi.claim_attempts (account_id, clinic_id) values (v_actor, p_clinic_id);
+    insert into mpi.claim_attempts (account_id, clinic_id, phone_token) values (v_actor, p_clinic_id, p_phone_token);
     insert into mpi.claim_requests (clinic_id, origin, account_id) values (p_clinic_id, v_origin, v_actor) on conflict do nothing;
     return 'pending_review';
 end
@@ -231,6 +250,16 @@ begin
         end loop;
         if has_function_privilege('public', f, 'execute') then
             raise exception '0049: % must not be executable by PUBLIC', f;
+        end if;
+        foreach r in array array['anon', 'authenticated', 'service_role'] loop
+            if exists (select 1 from pg_roles where rolname = r) and has_function_privilege(r, f, 'execute') then
+                raise exception '0049: % must not be executable by %', f, r;
+            end if;
+        end loop;
+    end loop;
+    foreach f in array array['iam.consent_notices', 'iam.consent_events', 'mpi.claim_attempts', 'mpi.claim_requests'] loop
+        if not (select c.relrowsecurity and c.relforcerowsecurity from pg_class c where c.oid = f::regclass) then
+            raise exception '0049: % must have forced row-level security', f;
         end if;
     end loop;
     if has_table_privilege('careflow_app', 'mpi.claim_attempts', 'select') or has_table_privilege('careflow_app', 'mpi.claim_attempts', 'insert')
