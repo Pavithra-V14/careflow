@@ -174,6 +174,7 @@ async def open_one(db, who, a, retention=30):
     return sid
 
 
+DENIED = ("42501", "23001")  # a refused insert: the missing grant/policy (42501), or the guard trigger finding no session visible to the caller (23001; it runs first)
 CHUNK = "insert into msg.voice_transcript_chunks (session_id, clinic_id, seq, body_ct, body_key_version, idempotency_key) values (:s, :c, :q, '\\x0102'::bytea, 1, :k)"
 
 
@@ -184,13 +185,13 @@ async def test_chunks_go_only_into_the_patients_own_open_session_and_the_expiry_
     row = (await db.execute(text("select expires_at - created_at from msg.voice_transcript_chunks where session_id = :s"), {"s": sid})).scalar_one()
     assert row.days == 7  # from the session's retention, chosen by no caller
     assert await state_of(db, who["bound"], "insert into msg.voice_transcript_chunks (session_id, clinic_id, seq, body_ct, body_key_version, idempotency_key, expires_at) values (:s, :c, 1, '\\x01'::bytea, 1, 'e', '2001-01-01')", s=sid, c=a) == "42501"
-    assert await state_of(db, who["unbound"], CHUNK, s=sid, c=a, q=1, k="other") == "42501"  # someone else's session
-    assert await state_of(db, who["nurse"], CHUNK, s=sid, c=a, q=1, k="staff") == "42501"
+    assert await state_of(db, who["unbound"], CHUNK, s=sid, c=a, q=1, k="other") in DENIED  # someone else's session
+    assert await state_of(db, who["nurse"], CHUNK, s=sid, c=a, q=1, k="staff") in DENIED
     assert await state_of(db, who["bound"], CHUNK, s=sid, c=a, q=0, k="c0b") == "23505"  # the same sequence number again
     assert await state_of(db, who["bound"], CHUNK, s=sid, c=a, q=2, k="c0") == "23505"  # the same key again: a replay
     assert await state_of(db, who["bound"], "insert into msg.voice_transcript_chunks (session_id, clinic_id, seq, body_ct, body_key_version, idempotency_key) values (:s, :c, 3, '\\x'::bytea, 1, 'empty')", s=sid, c=a) == "23514"
     await state_of(db, who["bound"], "update msg.voice_sessions set status = 'ended' where id = :i", i=sid)
-    assert await state_of(db, who["bound"], CHUNK, s=sid, c=a, q=4, k="late") == "42501"  # an ended session takes no more
+    assert await state_of(db, who["bound"], CHUNK, s=sid, c=a, q=4, k="late") in DENIED  # an ended session takes no more
 
 
 async def test_the_application_role_can_only_insert_chunks_and_nothing_is_deleted_before_it_expires(db):
