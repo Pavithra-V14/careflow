@@ -432,8 +432,7 @@ def feature_flags(environ: dict[str, str] | None = None) -> dict[str, bool]:
 
 
 def agents_to_build(environ: dict[str, str] | None = None) -> tuple[str, ...]:
-    """The agent graphs this process may build. Care Journey is built only with FEATURE_CARE_JOURNEY on. A flag that is ON for an agent whose graph does not exist yet (Visit Readiness) is an error, never a silent no-op."""
+    """The agent graphs this process may build, in build order. Care Journey and Visit Readiness are built only with their own flag on (each off by default; Visit Readiness comes after Care Journey, 22)."""
     flags = feature_flags(environ)
-    if flags["FEATURE_VISIT_READINESS"]:
-        raise FrontDoorError("a feature flag is on for an agent that is not built yet: visit_readiness")
-    return (*BUILT_AGENTS, "care_journey") if flags["FEATURE_CARE_JOURNEY"] else BUILT_AGENTS
+    extra = tuple(name for name, on in (("care_journey", flags["FEATURE_CARE_JOURNEY"]), ("visit_readiness", flags["FEATURE_VISIT_READINESS"])) if on)
+    return (*BUILT_AGENTS, *extra)
