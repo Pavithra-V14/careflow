@@ -106,7 +106,7 @@ class SqlTriageProposer:
 
 class SqlReviewRecorder:
     async def record(
-        self, conn: AsyncConnection, *, proposal_id: uuid.UUID, clinic_id: uuid.UUID, decision: str, reviewer_id: uuid.UUID, idempotency_key: str
+        self, conn: AsyncConnection, *, proposal_id: uuid.UUID, clinic_id: uuid.UUID, decision: str, reviewer_id: uuid.UUID, idempotency_key: str, reason_code: str | None = None
     ) -> None:
         if decision not in ("approve", "edit", "reject"):
             raise TriageStoreError("unknown decision")
@@ -120,10 +120,10 @@ class SqlReviewRecorder:
                 inserted = (
                     await conn.execute(
                         text(
-                            "insert into agents.review_decisions (clinic_id, origin, proposal_id, decision, decided_by, idempotency_key) "
-                            "values (:c, :o, :p, :d, :u, :k) on conflict (clinic_id, idempotency_key) do nothing returning id"
+                            "insert into agents.review_decisions (clinic_id, origin, proposal_id, decision, decided_by, idempotency_key, reason_code) "
+                            "values (:c, :o, :p, :d, :u, :k, :rc) on conflict (clinic_id, idempotency_key) do nothing returning id"
                         ),
-                        {"c": clinic_id, "o": origin_row.origin, "p": proposal_id, "d": decision, "u": reviewer_id, "k": idempotency_key},
+                        {"c": clinic_id, "o": origin_row.origin, "p": proposal_id, "d": decision, "u": reviewer_id, "k": idempotency_key, "rc": reason_code},
                     )
                 ).first()
         except DBAPIError as exc:

@@ -1012,6 +1012,15 @@ def interpret_reply_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, INTERPRET, body())
 
 
+REVIEW_VIEW = "/v1/staff/referrals/{document_id}/review-view"
+
+
+def referral_review_view_cases(ids) -> list[tuple]:
+    """A document that does not exist is the one fixed 404 for everyone; the real view (and that a canary looks exactly like a case) is built by tests/test_phase4_modules.py. A read carries no idempotency key."""
+    cases = [(label, who, status, body, {**req, "headers": {}}) for label, who, status, body, req in _referral_cases(ids, REVIEW_VIEW, None)]
+    return [c for c in cases if "X-Idempotency-Key" not in c[0]]
+
+
 def referral_review_cases(ids) -> list[tuple]:
     cases = _referral_cases(ids, REVIEW_REFERRAL, {"decision": "approve"})
     path = lambda: REVIEW_REFERRAL.format(document_id=uuid.uuid4())
@@ -2481,6 +2490,91 @@ def patient_labels_cases(ids) -> list[tuple]:
 
 
 # One entry per route: add the new route's cases here in the same change that adds the route.
+# ---- /v1/staff/console: alerts, reviewer statistics, the cost canvas, the reason-code list (Phase 4; migrations 0039 and 0040) ---------------------------------------------------------------------------
+#
+# Alerts: front desk, nurse, doctor and admin of the clinic read their own audience's alerts; business owner and auditor see the clinic but are refused (403); everyone else gets the one 404. Acknowledge
+# is exercised here on an alert that does not exist (the same 404 for everyone: the database shows nobody a row that is not theirs); the real acknowledge, once-only, audience and canary-secrecy cases
+# are in tests/test_alerts_live.py against the real tables. Reviewer statistics and the cost canvas are ADMIN only. The reason-code list is for a nurse or doctor somewhere.
+
+CONSOLE = "/v1/staff/console"
+CONSOLE_ALERTS = CONSOLE + "/alerts"
+CONSOLE_ACK = CONSOLE + "/alerts/{alert_id}/acknowledge"
+CONSOLE_STATS = CONSOLE + "/reviewer-stats"
+CONSOLE_COST = CONSOLE + "/cost-canvas"
+CONSOLE_REASONS = CONSOLE + "/reason-codes"
+NOT_YOUR_ROLE = lambda b: b == {"detail": "your role may not do this"}
+
+
+def _console_clinic_cases(ids, make_path, *, allowed, ok_status, ok_body, visible_refused):
+    """One case per identity for a route that takes `clinic_id`: `allowed` get `ok_status`; the roles that see the clinic but are refused get 403; everyone else the one 404."""
+    cases = []
+    for p in [*ids.people, "no account"]:
+        who = bearer(mint(ids.no_account)) if p == "no account" else p
+        if p in allowed:
+            cases.append(_case(ids, f"{p} is allowed", who, ok_status, make_path(), key=None, body=ok_body))
+        elif p in visible_refused:
+            cases.append(_case(ids, f"{p} sees the clinic but is refused", who, 403, make_path(), key=None, body=NOT_YOUR_ROLE))
+        else:
+            cases.append(_case(ids, f"{p} is refused with the one not-found", who, 404, make_path(), key=None, body=_fixed(404)))
+    return cases
+
+
+def console_alerts_cases(ids) -> list[tuple]:
+    path = lambda **o: CONSOLE_ALERTS + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
+    allowed = ("front_desk_a", "nurse_a", "doctor_a", "admin_a", "multi")
+    cases = _console_clinic_cases(ids, path, allowed=allowed, ok_status=200, ok_body=_page(ids), visible_refused=("business_owner_a", "auditor_a"))
+    cases += [
+        _case(ids, "an unknown clinic is not found", "admin_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "limit=0 is rejected", "admin_a", 422, path(limit=0), key=None, body=_fixed(422)),
+        _case(ids, "a clinic id that is not a uuid is rejected", "admin_a", 422, path(clinic_id="nope"), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
+def console_ack_cases(ids) -> list[tuple]:
+    path = lambda: f"{CONSOLE}/alerts/{uuid.uuid4()}/acknowledge"
+    cases = [_case(ids, f"{p} cannot acknowledge an alert that does not exist", p, 404, path(), body=_fixed(404)) for p in ids.people]
+    cases += [
+        _case(ids, "missing X-Idempotency-Key is rejected", "admin_a", 422, path(), key=None, body=_fixed(422)),
+        _case(ids, "an alert id that is not a uuid is rejected", "admin_a", 422, f"{CONSOLE}/alerts/nope/acknowledge", body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)
+
+
+def console_stats_cases(ids) -> list[tuple]:
+    path = lambda **o: CONSOLE_STATS + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
+    ok = lambda b: set(b) == {"clinic_id", "days", "policy_configured", "reviewers"} and b["policy_configured"] is False and isinstance(b["reviewers"], list)
+    visible = ("front_desk_a", "nurse_a", "doctor_a", "business_owner_a", "auditor_a", "multi")
+    cases = _console_clinic_cases(ids, path, allowed=("admin_a",), ok_status=200, ok_body=ok, visible_refused=visible)
+    cases += [
+        _case(ids, "days=0 is rejected", "admin_a", 422, path(days=0), key=None, body=_fixed(422)),
+        _case(ids, "days=366 is rejected", "admin_a", 422, path(days=366), key=None, body=_fixed(422)),
+        _case(ids, "an unknown clinic is not found", "admin_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
+def console_cost_cases(ids) -> list[tuple]:
+    path = lambda **o: CONSOLE_COST + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
+    ok = lambda b: b["state"] == "insufficient_data" and b["actual"] is None and b["shadow"] is None and b["reasons"]
+    visible = ("front_desk_a", "nurse_a", "doctor_a", "business_owner_a", "auditor_a", "multi")
+    cases = _console_clinic_cases(ids, path, allowed=("admin_a",), ok_status=200, ok_body=ok, visible_refused=visible)
+    cases += [
+        _case(ids, "days=0 is rejected", "admin_a", 422, path(days=0), key=None, body=_fixed(422)),
+        _case(ids, "an unknown clinic is not found", "admin_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
+def console_reason_codes_cases(ids) -> list[tuple]:
+    allowed = ("nurse_a", "doctor_a", "multi")
+    cases = [_case(ids, f"{p} may read the list", p, 200, CONSOLE_REASONS, key=None, body=lambda b: b == {"configured": False, "codes": []}) for p in allowed]
+    denied = [p for p in ids.people if p not in allowed]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, CONSOLE_REASONS, key=None, body=lambda b: b == {"detail": "your role may not read this"}) for p in denied]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, CONSOLE_REASONS, key=None, body=lambda b: b == {"detail": "your role may not read this"}))
+    return cases + _unauthenticated(ids, CONSOLE_REASONS, None)[:4]
+
+
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
     ("POST", HOLD): lambda ids: slot_write_cases(ids, "hold"),
@@ -2519,6 +2613,11 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", BACKFILLS + "/{slot_id}"): backfill_get_cases,
     ("POST", BACKFILLS + "/{slot_id}/decide"): backfill_decide_cases,
     ("POST", BACKFILLS + "/{slot_id}/reply"): backfill_reply_cases,
+    ("GET", CONSOLE_ALERTS): console_alerts_cases,
+    ("POST", CONSOLE_ACK): console_ack_cases,
+    ("GET", CONSOLE_STATS): console_stats_cases,
+    ("GET", CONSOLE_COST): console_cost_cases,
+    ("GET", CONSOLE_REASONS): console_reason_codes_cases,
     ("GET", ACCOUNTS): staff_list_cases,
     ("POST", ACCOUNTS + "/invite"): staff_invite_cases,
     ("POST", ACCOUNTS + "/activate-me"): staff_activate_cases,
@@ -2546,6 +2645,7 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", THREAD_HEADERS): thread_headers_cases,
     ("POST", RUN_REFERRAL): referral_run_cases,
     ("POST", REVIEW_REFERRAL): referral_review_cases,
+    ("GET", REVIEW_VIEW): referral_review_view_cases,
     ("POST", INTERPRET): interpret_reply_cases,
 }
 

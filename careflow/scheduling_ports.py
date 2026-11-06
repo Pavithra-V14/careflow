@@ -93,6 +93,24 @@ class HoldReleaserPort:
         await self._slots.release_hold(conn, hold_id)
 
 
+class DurableTasks:
+    """Raises the review task through agents.raise_backfill_task (migration 0038), the ONLY way front desk can: it checks the caller, the clinic and the slot, fixes the kind and the provenance, and writes
+    the audit row itself. The conflict between a replay and the first write is the function's, so a replay returns the same task."""
+
+    async def raise_task(
+        self, conn: AsyncConnection, *, clinic_id: uuid.UUID, origin: str, slot_id: uuid.UUID, status: str, reasons: list[str], priority: str, assigned_role: str, idempotency_key: str
+    ) -> uuid.UUID:
+        value = (
+            await conn.execute(
+                text("select agents.raise_backfill_task(:c, :s, :st, :p, :r, :k)"),
+                {"c": clinic_id, "s": slot_id, "st": status, "p": priority, "r": assigned_role, "k": idempotency_key},
+            )
+        ).scalar()
+        if value is None:
+            raise PermissionError("the review task was not raised")
+        return value if isinstance(value, uuid.UUID) else uuid.UUID(str(value))
+
+
 class StateOnlyTasks:
     """No row is written: the run's visible status and this deterministic id are the signal (see the module docstring)."""
 

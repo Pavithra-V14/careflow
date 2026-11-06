@@ -98,6 +98,39 @@ async def test_only_accept_and_decline_are_actionable_everything_else_is_unclear
     assert result == {"answer": answer, "reason": why}
 
 
+async def test_the_durable_task_writer_calls_only_the_narrow_function_and_a_missing_answer_is_an_error():
+    seen = []
+
+    class C:
+        def __init__(self, value):
+            self.value = value
+
+        async def execute(self, statement, params=None):
+            seen.append((str(statement), params))
+            return _Scalar(self.value)
+
+    args = {"clinic_id": CLINIC, "origin": "test", "slot_id": SLOT, "status": "needs_human", "reasons": ["x"], "priority": "standard", "assigned_role": "front_desk", "idempotency_key": f"sched-hold:{SLOT}:needs_human"}
+    task = uuid.uuid4()
+    assert await scheduling_ports.DurableTasks().raise_task(C(task), **args) == task  # type: ignore[arg-type]
+    assert "agents.raise_backfill_task" in seen[0][0] and "insert" not in seen[0][0].lower() and "reasons" not in seen[0][1]  # no free text goes to the database
+    with pytest.raises(PermissionError):
+        await scheduling_ports.DurableTasks().raise_task(C(None), **args)  # type: ignore[arg-type]
+
+
+def test_a_durable_run_is_scoped_to_its_clinic_and_a_durable_runner_without_one_is_refused():
+    from careflow.scheduling_graph import run_config
+    from careflow.scheduling_runner import SchedulingComponents
+
+    plain = run_config(SLOT)["configurable"]
+    scoped = run_config(SLOT, CLINIC, "test")["configurable"]
+    assert plain == {"thread_id": f"scheduling:{SLOT}"} and scoped["clinic_id"] == str(CLINIC) and scoped["origin"] == "test" and scoped["thread_id"].startswith("scheduling:")
+    built = demo_front_door.scheduling_components_from_environment(DEMO, "demo", vault=vault(), key_version=1)
+    assert isinstance(built, SchedulingComponents)
+    with pytest.raises(ValueError):
+        built.runner(lambda: None)
+    assert built.runner(lambda: None, clinic_id=CLINIC, origin="test") is not None
+
+
 async def test_the_state_only_task_writer_writes_nothing_and_returns_a_stable_id():
     writer = StateOnlyTasks()
     args = {"clinic_id": CLINIC, "origin": "test", "slot_id": SLOT, "status": "needs_human", "reasons": [], "priority": "p", "assigned_role": "r", "idempotency_key": "sched-hold:x:needs_human"}
@@ -128,7 +161,9 @@ def test_clinical_profile_and_missing_keys_give_none_even_with_the_switch_on():
 def test_inside_the_gate_the_components_exist_with_real_ports_a_fake_engine_and_the_most_human_default_mode():
     built = demo_front_door.scheduling_components_from_environment(DEMO, "demo", vault=vault(), key_version=1)
     assert built is not None and built.policy.mode == "shadow" and not built.policy.may_run_without_a_human_first("booking")
-    assert type(built.screener).__name__ == "ReplyScreenerPort" and type(built.tasks).__name__ == "StateOnlyTasks"
+    assert type(built.screener).__name__ == "ReplyScreenerPort" and type(built.tasks).__name__ == "DurableTasks" and built.durable  # durable by default (migrations 0037, 0038)
+    memory = demo_front_door.scheduling_components_from_environment({**DEMO, "CAREFLOW_DURABLE_RUNS": "memory"}, "demo", vault=vault(), key_version=1)
+    assert memory is not None and not memory.durable and type(memory.tasks).__name__ == "StateOnlyTasks"
     assert built.task_priority and built.task_role and built.max_candidates >= 1  # the labelled DEMO ONLY pack values
     assisted = demo_front_door.scheduling_components_from_environment({**DEMO, "CAREFLOW_AUTONOMY_MODE": "assisted"}, "demo", vault=vault(), key_version=1)
     assert assisted is not None and assisted.policy.may_run_without_a_human_first("booking")

@@ -45,7 +45,7 @@ settings:
     value: standard
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
   scheduling_task_role:
-    value: front_desk
+    value: nurse
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
   revoke_reasons:
     value: ["wrong_person", "planted_or_suspect", "mistaken_click", "other"]

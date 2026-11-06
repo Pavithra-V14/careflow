@@ -44,6 +44,7 @@ environment (CLAUDE.md rule 7: patient data leaves the trust boundary only throu
 
 import hashlib
 import os
+import re
 import uuid
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
@@ -157,7 +158,7 @@ class HoldTaskWriter(Protocol):
 
 class ReviewRecorder(Protocol):
     async def record(
-        self, conn: AsyncConnection, *, proposal_id: uuid.UUID, clinic_id: uuid.UUID, decision: str, reviewer_id: uuid.UUID, idempotency_key: str
+        self, conn: AsyncConnection, *, proposal_id: uuid.UUID, clinic_id: uuid.UUID, decision: str, reviewer_id: uuid.UUID, idempotency_key: str, reason_code: str | None = None
     ) -> None: ...
 
 
@@ -341,15 +342,22 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
             uuid.UUID(answer["reviewer_id"])
         except ValueError:
             raise FrontDoorError("a review needs a decision and a reviewer") from None
-        return {"decision": {"decision": answer["decision"], "reviewer_id": answer["reviewer_id"]}}
+        decision = {"decision": answer["decision"], "reviewer_id": answer["reviewer_id"]}
+        reason = answer.get("reason_code")
+        if reason is not None:
+            if not isinstance(reason, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,59}", reason):
+                raise FrontDoorError("a review needs a decision and a reviewer")
+            decision["reason_code"] = reason  # a picklist word (12.2), checked against the clinic's list by the route before the run resumes
+        return {"decision": decision}
 
     async def apply_review(state: FrontDoorState) -> FrontDoorState:
         assert_tracing_off()  # also at run time: the environment can change after the graph was built
         document_id, clinic_id = _ids(state)
         async with deps.session() as conn:
+            extra = {"reason_code": state["decision"]["reason_code"]} if state["decision"].get("reason_code") else {}
             await deps.recorder.record(
                 conn, proposal_id=uuid.UUID(state["proposal_id"]), clinic_id=clinic_id, decision=state["decision"]["decision"],
-                reviewer_id=uuid.UUID(state["decision"]["reviewer_id"]), idempotency_key=f"review:{document_id}",
+                reviewer_id=uuid.UUID(state["decision"]["reviewer_id"]), idempotency_key=f"review:{document_id}", **extra,
             )
         return {"status": "reviewed"}
 

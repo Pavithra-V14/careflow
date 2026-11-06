@@ -15,6 +15,112 @@
         "title": "ActivateOut",
         "type": "object"
       },
+      "AlertAckOut": {
+        "additionalProperties": false,
+        "properties": {
+          "acknowledged": {
+            "title": "Acknowledged",
+            "type": "boolean"
+          },
+          "alert_id": {
+            "format": "uuid",
+            "title": "Alert Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "alert_id",
+          "acknowledged"
+        ],
+        "title": "AlertAckOut",
+        "type": "object"
+      },
+      "AlertList": {
+        "additionalProperties": false,
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AlertOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "limit",
+          "has_more"
+        ],
+        "title": "AlertList",
+        "type": "object"
+      },
+      "AlertOut": {
+        "additionalProperties": false,
+        "properties": {
+          "acknowledged": {
+            "title": "Acknowledged",
+            "type": "boolean"
+          },
+          "alert_class": {
+            "title": "Alert Class",
+            "type": "string"
+          },
+          "alert_id": {
+            "format": "uuid",
+            "title": "Alert Id",
+            "type": "string"
+          },
+          "audience_role": {
+            "title": "Audience Role",
+            "type": "string"
+          },
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          }
+        },
+        "required": [
+          "alert_id",
+          "clinic_id",
+          "alert_class",
+          "audience_role",
+          "count",
+          "ref",
+          "created_at",
+          "acknowledged"
+        ],
+        "title": "AlertOut",
+        "type": "object"
+      },
       "ApproveErasureOut": {
         "additionalProperties": false,
         "properties": {
@@ -704,6 +810,147 @@
           "replayed"
         ],
         "title": "ConfirmIdentityOut",
+        "type": "object"
+      },
+      "CostCanvasOut": {
+        "additionalProperties": false,
+        "properties": {
+          "actual": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CostColumnOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "amplification_over_ceiling": {
+            "title": "Amplification Over Ceiling",
+            "type": "boolean"
+          },
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "shadow": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CostColumnOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "state",
+          "reasons",
+          "actual",
+          "shadow",
+          "amplification_over_ceiling"
+        ],
+        "title": "CostCanvasOut",
+        "type": "object"
+      },
+      "CostColumnOut": {
+        "additionalProperties": false,
+        "properties": {
+          "calls_per_workflow": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calls Per Workflow"
+          },
+          "failure_tax_per_month": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Tax Per Month"
+          },
+          "platform_floor_per_month": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform Floor Per Month"
+          },
+          "total_per_month": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Per Month"
+          },
+          "usd_per_call": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usd Per Call"
+          },
+          "workflows_per_day": {
+            "title": "Workflows Per Day",
+            "type": "number"
+          },
+          "workload_x_amplification_x_unit_per_month": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workload X Amplification X Unit Per Month"
+          }
+        },
+        "required": [
+          "workflows_per_day",
+          "calls_per_workflow",
+          "usd_per_call",
+          "workload_x_amplification_x_unit_per_month",
+          "platform_floor_per_month",
+          "failure_tax_per_month",
+          "total_per_month"
+        ],
+        "title": "CostColumnOut",
         "type": "object"
       },
       "CreatedOut": {
@@ -2616,6 +2863,28 @@
         "title": "ProviderOut",
         "type": "object"
       },
+      "ReasonCodesOut": {
+        "additionalProperties": false,
+        "properties": {
+          "codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Codes",
+            "type": "array"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "configured",
+          "codes"
+        ],
+        "title": "ReasonCodesOut",
+        "type": "object"
+      },
       "ReferralDetailOut": {
         "additionalProperties": false,
         "properties": {
@@ -3022,6 +3291,20 @@
             ],
             "title": "Decision",
             "type": "string"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
           }
         },
         "required": [
@@ -3337,6 +3620,223 @@
           "replayed"
         ],
         "title": "ReviewTaskTransitionOut",
+        "type": "object"
+      },
+      "ReviewViewOut": {
+        "additionalProperties": false,
+        "properties": {
+          "alternatives": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Alternatives",
+            "type": "array"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "engine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine"
+          },
+          "evidence": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "on_approve": {
+            "title": "On Approve",
+            "type": "string"
+          },
+          "on_edit": {
+            "title": "On Edit",
+            "type": "string"
+          },
+          "on_reject": {
+            "title": "On Reject",
+            "type": "string"
+          },
+          "proposal": {
+            "additionalProperties": true,
+            "title": "Proposal",
+            "type": "object"
+          },
+          "reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "triggering_rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Triggering Rule"
+          }
+        },
+        "required": [
+          "task_id",
+          "kind",
+          "proposal",
+          "evidence",
+          "alternatives",
+          "on_approve",
+          "on_reject",
+          "on_edit",
+          "engine",
+          "confidence",
+          "triggering_rule",
+          "reason_codes"
+        ],
+        "title": "ReviewViewOut",
+        "type": "object"
+      },
+      "ReviewerStatOut": {
+        "additionalProperties": false,
+        "properties": {
+          "approval_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Rate"
+          },
+          "approvals": {
+            "title": "Approvals",
+            "type": "integer"
+          },
+          "canaries_approved": {
+            "title": "Canaries Approved",
+            "type": "integer"
+          },
+          "canaries_seen": {
+            "title": "Canaries Seen",
+            "type": "integer"
+          },
+          "decisions": {
+            "title": "Decisions",
+            "type": "integer"
+          },
+          "edits": {
+            "title": "Edits",
+            "type": "integer"
+          },
+          "median_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Seconds"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "rejections": {
+            "title": "Rejections",
+            "type": "integer"
+          },
+          "reviewer": {
+            "title": "Reviewer",
+            "type": "string"
+          },
+          "verdict": {
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reviewer",
+          "decisions",
+          "approvals",
+          "edits",
+          "rejections",
+          "approval_rate",
+          "median_seconds",
+          "canaries_seen",
+          "canaries_approved",
+          "verdict",
+          "reasons"
+        ],
+        "title": "ReviewerStatOut",
+        "type": "object"
+      },
+      "ReviewerStatsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          },
+          "policy_configured": {
+            "title": "Policy Configured",
+            "type": "boolean"
+          },
+          "reviewers": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewerStatOut"
+            },
+            "title": "Reviewers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "days",
+          "policy_configured",
+          "reviewers"
+        ],
+        "title": "ReviewerStatsOut",
         "type": "object"
       },
       "RevokeIdentityIn": {
@@ -5205,6 +5705,429 @@
         "summary": "Read Audit Log",
         "tags": [
           "staff audit"
+        ]
+      }
+    },
+    "/v1/staff/console/alerts": {
+      "get": {
+        "description": "The alerts aimed at a role you hold in this clinic, newest first (open ones unless `include_acknowledged`). Class, count and an opaque id only. 404 if the clinic is not visible to you, 403 unless you are front desk, nurse, doctor or admin there.",
+        "operationId": "list_alerts_v1_staff_console_alerts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Clinic Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_acknowledged",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Acknowledged",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Alerts",
+        "tags": [
+          "staff console"
+        ]
+      }
+    },
+    "/v1/staff/console/alerts/{alert_id}/acknowledge": {
+      "post": {
+        "description": "Acknowledge an alert aimed at your role, once, as yourself. 404 if you cannot see it (or it does not exist), 409 if it was already acknowledged.",
+        "operationId": "acknowledge_alert_v1_staff_console_alerts__alert_id__acknowledge_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "alert_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Alert Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertAckOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Acknowledge Alert",
+        "tags": [
+          "staff console"
+        ]
+      }
+    },
+    "/v1/staff/console/cost-canvas": {
+      "get": {
+        "description": "Monthly cost = W x A x U + P + F from the spend ledger and the completed jobs of the last `days` (live origin only), in two columns: actual and at-scale shadow. Fewer than seven days of traffic is `insufficient_data`; a term that is not configured or not measured is null with the reason. Admin only. 404 if the clinic is not visible to you, 403 unless you are admin there.",
+        "operationId": "cost_canvas_view_v1_staff_console_cost_canvas_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Clinic Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CostCanvasOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Cost Canvas View",
+        "tags": [
+          "staff console"
+        ]
+      }
+    },
+    "/v1/staff/console/reason-codes": {
+      "get": {
+        "description": "The clinic's picklist of review reason codes (a setting; empty while it is unset, and then no decision carries one). 403 unless you are a nurse or doctor somewhere.",
+        "operationId": "reason_codes_v1_staff_console_reason_codes_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReasonCodesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reason Codes",
+        "tags": [
+          "staff console"
+        ]
+      }
+    },
+    "/v1/staff/console/reviewer-stats": {
+      "get": {
+        "description": "Each reviewer's decisions, approval rate and median time-to-decide over the last `days`, with the rubber-stamp verdict (`not_configured` while the policy setting is unset). Admin only. 404 if the clinic is not visible to you, 403 unless you are admin there.",
+        "operationId": "reviewer_stats_v1_staff_console_reviewer_stats_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Clinic Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewerStatsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reviewer Stats",
+        "tags": [
+          "staff console"
         ]
       }
     },
@@ -7693,6 +8616,85 @@
           }
         ],
         "summary": "Review Referral",
+        "tags": [
+          "staff referrals"
+        ]
+      }
+    },
+    "/v1/staff/referrals/{document_id}/review-view": {
+      "get": {
+        "description": "The reviewer view of a referral's triage proposal (12.2): the proposal, evidence, alternatives with probabilities (null when the engine gave none), what approve and reject do, the engine and its confidence (null while not recorded), the rule that triggered review, and the clinic's reason-code picklist. A canary looks exactly like a real case. 404 if you cannot see the document or it has no proposal, 403 unless nurse or doctor there.",
+        "operationId": "referral_review_view_v1_staff_referrals__document_id__review_view_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewViewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Referral Review View",
         "tags": [
           "staff referrals"
         ]
