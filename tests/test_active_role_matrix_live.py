@@ -54,7 +54,7 @@ from tests.test_api_role_matrix import (  # noqa: F401  (the fixtures are import
 )
 
 EXEMPT = {("GET", "/v1/iam/me")}  # the picker needs every grant: the header is ignored there on purpose
-ROUTES = sorted(set(MATRIX) - EXEMPT)
+ROUTES = sorted(k for k in set(MATRIX) - EXEMPT if not k[1].startswith("/v1/portal/"))  # patient routes carry no staff active-role header
 STEP_UP_ROUTES = {("POST", MERGES), ("POST", APPROVE), ("POST", UNMERGE)}
 FIXED = {"detail": "active role not available"}
 HEADER = active_role.HEADER

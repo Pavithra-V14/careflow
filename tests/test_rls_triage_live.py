@@ -152,7 +152,8 @@ async def test_the_owner_cannot_edit_either_table_either(db):
         "update agents.triage_proposals set abstained = false", "delete from agents.triage_proposals", "truncate agents.triage_proposals cascade",
         "update agents.review_decisions set decision = 'reject'", "delete from agents.review_decisions", "truncate agents.review_decisions",
     ):
-        assert await outcome(db, stmt) == "23001", stmt  # restrict_violation
+        # restrict_violation from the guard; a TRUNCATE of review_decisions is refused earlier (0A000) because ops.care_review_samples now references it (0044): still refused, by the foreign key
+        assert await outcome(db, stmt) in (("23001", "0A000") if stmt == "truncate agents.review_decisions" else ("23001",)), stmt
 
 
 async def test_only_the_worker_nurse_and_doctor_of_the_clinic_can_write_a_proposal(db):

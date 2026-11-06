@@ -754,7 +754,7 @@ def new_merge(ids, state="awaiting"):
 
 
 FIXED_BODY = {
-    401: {"detail": "step-up required"}, 403: {"detail": "your role may not do this"}, 404: {"detail": "not found"},
+    401: {"detail": "step-up required"}, 503: {"detail": "voice is not available"}, 403: {"detail": "your role may not do this"}, 404: {"detail": "not found"},
 }
 
 
@@ -2862,7 +2862,7 @@ PASSWORD_ONLY = [
 ]
 
 
-@pytest.mark.parametrize(("method", "path"), sorted(k for k in MATRIX if k[1] != "/v1/iam/me"))
+@pytest.mark.parametrize(("method", "path"), sorted(k for k in MATRIX if k[1] != "/v1/iam/me" and not k[1].startswith("/v1/portal/")))  # patient routes take no staff second factor: tests/test_mfa.py pins that exemption
 def test_every_staff_route_refuses_a_session_without_a_verified_second_factor(client, ids, method, path):
     sub = ids.people["front_desk_a"][0]
     for over in PASSWORD_ONLY:
