@@ -4,3 +4,6 @@
 question_type   # a fixed label from the code (for example "message_intent"), never taken from the input
 options_block   # the numbered option strings the code offers, fixed by the caller, never taken from the input
 input_text      # the text to classify; it may be patient text, so it reaches a model only through the gateway's data-class routing (careflow/gateway.py)
+workflow_label  # a fixed label from the code (for example "slot_offer"), never taken from the input
+scripted_text   # the clinic's own governed text to be read out (an offer, a card's intake question, a checklist item); fixed by the caller before the session, never composed by a model
+decline_text    # the clinic's pre-approved sentence to say when the patient goes beyond the task; fixed by the caller, never composed by a model
