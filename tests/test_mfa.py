@@ -157,4 +157,6 @@ def test_every_v1_route_except_me_goes_through_the_connection_dependency_that_en
     assert not _uses_db_conn(found["/v1/iam/me"].dependant)  # the one exemption for staff routes
     for path in portal:  # the portal exemption is narrow: each such route must refuse anything but an active patient account before it does anything else
         assert not _uses_db_conn(found[path].dependant)
-        assert "_patient_account(" in inspect.getsource(found[path].endpoint), path
+        source = inspect.getsource(found[path].endpoint)
+        # every portal route checks the caller is a patient account first; registration is the one route a user with NO account may call, and it hands the check to the database function that refuses a staff account
+        assert "_patient_account(" in source or (path == "/v1/portal/register" and "portal_sql.register(" in source), path

@@ -437,8 +437,16 @@ async def test_unknown_topic_is_refused(db):
     w = await seed(db)
     async with claims(db, w.people["nurse_a"]):
         patient = await new_patient(db, w.a)
-        assert await fails(db, thread_sql(w.a, patient, "readiness", w.people["nurse_a"])) == "23514"
-        assert await fails(db, message_sql(w.a, w.threads["care"], "readiness", w.people["nurse_a"])) == "23514"
+        assert await fails(db, thread_sql(w.a, patient, "marketing", w.people["nurse_a"])) == "23514"  # ('readiness' became a topic in migration 0050)
+        assert await fails(db, message_sql(w.a, w.threads["care"], "marketing", w.people["nurse_a"])) == "23514"
+
+
+async def test_the_readiness_topic_is_nurse_and_doctor_only(db):
+    w = await seed(db)
+    patient = await new_patient(db, w.a)
+    nurse, fd = w.people["nurse_a"], w.people["front_desk_a"]
+    assert (await attempts(db, nurse, [thread_sql(w.a, patient, "readiness", nurse)])) != [DENIED]  # a nurse may open a readiness thread
+    assert (await attempts(db, fd, [thread_sql(w.a, patient, "readiness", fd)])) == [DENIED]  # front desk may not: its topic allowlist is appointments and safety
 
 
 # =====================================================================================================================

@@ -103,6 +103,16 @@ def decrypt_voice_chunk(vault: DemographicVault, body_ct: bytes, *, clinic_id: u
     return decrypt_body(vault, body_ct, clinic_id=clinic_id, thread_id=session_id, message_id=uuid.uuid5(session_id, f"chunk:{seq}"), key_version=key_version)
 
 
+def encrypt_plan_text(vault: DemographicVault, text_: str, *, clinic_id: uuid.UUID, plan_id: uuid.UUID, key_version: int) -> bytes:
+    """A care plan's free text, encrypted before it is stored (migration 0050): bound to the clinic and the plan so a ciphertext moved to another plan does not decrypt."""
+    return encrypt_body(vault, text_, clinic_id=clinic_id, thread_id=plan_id, key_version=key_version, message_id=uuid.uuid5(plan_id, "care-plan-text")).body_ct
+
+
+def decrypt_plan_text(vault: DemographicVault, body_ct: bytes, *, clinic_id: uuid.UUID, plan_id: uuid.UUID, key_version: int) -> str:
+    """The one place a stored care plan text is decrypted; the caller owns the text and must not log it."""
+    return decrypt_body(vault, body_ct, clinic_id=clinic_id, thread_id=plan_id, message_id=uuid.uuid5(plan_id, "care-plan-text"), key_version=key_version)
+
+
 @dataclass(frozen=True)
 class ScreenedMessage:
     """What a screening of a stored message produced: ids and enums only. There is no text, rule phrase or patient detail here."""
