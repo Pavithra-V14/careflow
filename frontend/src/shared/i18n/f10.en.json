@@ -1,0 +1,232 @@
+{
+  "nav": {
+    "readiness": "Visit readiness",
+    "claims": "Portal claims",
+    "access": "Break-glass",
+    "notes": "Notes"
+  },
+  "tasks": {
+    "kind": {
+      "result_correction": "Result correction"
+    }
+  },
+  "care": {
+    "links": {
+      "notes": "Notes"
+    },
+    "results": {
+      "change": "What kind of change is this?",
+      "changeNone": "Not stated (the system works it out)",
+      "changeHint": "Only when this result replaces another. An amendment is a new measurement; a correction means the earlier value was wrong and starts a review.",
+      "changes": {
+        "amendment": "Amendment",
+        "correction": "Correction"
+      }
+    }
+  },
+  "readiness": {
+    "title": "Visit readiness",
+    "note": "There is no list of visits here: enter the visit id. The questions and checklist belong to the clinic and are not shown, only where the run is.",
+    "visitId": "Visit id",
+    "visitIdBad": "That is not a visit id.",
+    "open": "Show the run",
+    "run": "Run for visit",
+    "noRun": "There is no readiness run for this visit yet.",
+    "status": "Status",
+    "waitingFor": "Waiting for",
+    "waiting": {
+      "reply": "The patient's reply",
+      "none": "Nothing"
+    },
+    "currentItem": "Current item",
+    "escalation": "Review task",
+    "noEscalation": "None raised",
+    "finished": "Finished",
+    "start": "Start readiness",
+    "startTitle": "Start readiness for this visit?",
+    "startBody": "Starts the run for this visit, or shows the one already running. Starting twice returns the same run.",
+    "started": "The run is started.",
+    "relay": "Relay the patient's reply",
+    "relayBody": "Enter what the patient said, or record that no reply came. The rules read the reply first, and it is stored encrypted.",
+    "outcome": "What happened",
+    "outcomes": {
+      "replied": "The patient replied",
+      "no_reply": "No reply came"
+    },
+    "replyText": "The patient's reply",
+    "send": "Relay",
+    "relayed": "The reply was relayed.",
+    "notWaiting": "This run is not waiting for a reply. Nothing was recorded.",
+    "replyNeedsText": "A reply needs text. Nothing was recorded.",
+    "noContent": "This kind of visit has no readiness content set up. Nothing was started.",
+    "notConfigured": "Visit readiness is not set up yet. Nothing was written."
+  },
+  "claims": {
+    "title": "Portal claims",
+    "note": "Pending requests from people who registered on the portal to be linked to a record. The list shows only a request id and a time. Decide from what the person told you in person, and approve onto the confirmed record.",
+    "empty": "There are no pending claims.",
+    "col": {
+      "request": "Request",
+      "received": "Received",
+      "action": "Action"
+    },
+    "approve": "Approve",
+    "reject": "Reject",
+    "approveTitle": "Approve this claim?",
+    "approveBody": "Links the person to the confirmed record you choose. It is recorded under your name.",
+    "rejectTitle": "Reject this claim?",
+    "rejectBody": "Rejects the request. Nobody is linked. It is recorded under your name.",
+    "needsPatient": "Choose the confirmed record to approve onto. Nothing was recorded.",
+    "result": {
+      "approved": "Approved. The person is linked to the record.",
+      "rejected": "Rejected.",
+      "already_resolved": "This claim was already resolved.",
+      "record_not_claimable": "That record cannot be claimed. Nothing was linked.",
+      "claimant_already_bound": "This person is already linked to a record. Nothing was changed.",
+      "consent_required": "The person has not given the required consent yet. Nothing was linked."
+    }
+  },
+  "access": {
+    "title": "Break-glass access",
+    "note": "Read one patient's messages for a limited time, with a reason code. Every read is recorded, and an administrator who did not open the access reviews it afterwards. There is no free text.",
+    "openTitle": "Open access",
+    "open": "Open access to a patient's messages",
+    "openConfirm": "Open access",
+    "openBody": "Opens a time-limited grant for ONE patient. Every read is recorded under your name and reviewed afterwards.",
+    "reasonCode": "Reason code",
+    "reasonHint": "A code from the clinic's list (lowercase letters, digits and underscores). The backend refuses a code that is not on the list.",
+    "reasonRefused": "That reason code is not on the clinic's list. Nothing was opened.",
+    "notConfigured": "Break-glass access is not set up yet (the window length is not configured). Nothing was opened.",
+    "patientNotFound": "The patient was not found. Nothing was opened.",
+    "opened": "Access is open until",
+    "read": "Read the messages",
+    "close": "Close",
+    "windowClosed": "The access window has closed, or this access is not yours.",
+    "keysMissing": "Encryption keys are not configured, so the messages cannot be read.",
+    "noMessages": "There are no messages.",
+    "messages": "Messages",
+    "erased": "Erased",
+    "unreadable": "Not readable",
+    "reviewTitle": "Review afterwards",
+    "reviewNote": "Grants that have not been reviewed. You cannot review an access you opened yourself.",
+    "noGrants": "There are no grants to review.",
+    "col": {
+      "grant": "Grant",
+      "openedBy": "Opened by",
+      "patient": "Patient",
+      "reason": "Reason",
+      "opened": "Opened",
+      "outcome": "Review",
+      "action": "Action"
+    },
+    "unreviewed": "Not reviewed",
+    "outcome": {
+      "appropriate": "Appropriate",
+      "inappropriate": "Inappropriate"
+    },
+    "appropriate": "Appropriate",
+    "inappropriate": "Inappropriate",
+    "reviewConfirmTitle": "Record this review?",
+    "reviewBody": "Records your review of this access, under your name. It cannot be changed afterwards.",
+    "reviewResult": {
+      "reviewed": "The review was recorded.",
+      "already_reviewed": "This access was already reviewed.",
+      "same_person": "You opened this access, so someone else must review it."
+    }
+  },
+  "notes": {
+    "title": "Notes",
+    "note": "Notes are never edited. A correction is an addendum: a new note that names the one it adds to.",
+    "open": "Show notes",
+    "empty": "There are no notes for this patient.",
+    "write": "Write a note",
+    "writeBody": "Writes a new note for this patient. It cannot be edited afterwards.",
+    "addend": "Add an addendum",
+    "addendBody": "Writes a new note that adds to the earlier one. The earlier note is not changed.",
+    "text": "Note",
+    "save": "Save",
+    "saved": "The note was saved.",
+    "by": "by",
+    "addendumTo": "addendum to",
+    "erased": "Erased",
+    "unreadable": "Not readable",
+    "keysMissing": "Encryption keys are not configured. Nothing was written.",
+    "notFound": "The patient or the note was not found. Nothing was written."
+  },
+  "admin": {
+    "tab": {
+      "recovery": "Staff recovery",
+      "grievances": "Grievances"
+    },
+    "recovery": {
+      "note": "Resets a staff member's second factor. You cannot ask for your own, and a second administrator, who is neither the requester nor the person being recovered, must approve it.",
+      "includeClosed": "Include completed and cancelled",
+      "empty": "There are no recovery requests.",
+      "col": {
+        "request": "Request",
+        "account": "Account",
+        "by": "Asked by",
+        "status": "Status",
+        "created": "Created",
+        "action": "Action"
+      },
+      "status": {
+        "requested": "Requested",
+        "approved": "Approved",
+        "completed": "Completed",
+        "cancelled": "Cancelled"
+      },
+      "request": "Request a recovery",
+      "requestConfirm": "Request",
+      "requestBody": "Asks for this account's second factor to be reset. Nothing is reset until a second administrator approves and it is completed.",
+      "requested": "The recovery was requested.",
+      "approve": "Approve",
+      "approveTitle": "Approve this recovery?",
+      "approveBody": "Approves the request as the second administrator. The second factor is not reset until it is completed.",
+      "complete": "Complete",
+      "completeTitle": "Complete this recovery?",
+      "completeBody": "Resets the account's second factor now. The person sets up a new one at their next sign-in.",
+      "cancel": "Cancel",
+      "cancelTitle": "Cancel this recovery?",
+      "cancelBody": "Cancels the request. Nothing is reset.",
+      "refused": "You cannot do this: you may be the requester or the person being recovered, or you are not an administrator of this clinic.",
+      "cannotRequest": "A recovery cannot be requested for this account: it is your own, it is not staff of this clinic, or one is already open.",
+      "notConfigured": "Recovery is not set up yet (no sign-in administration is configured). Nothing was reset.",
+      "result": {
+        "approved": "Approved. It still has to be completed.",
+        "completed": "Completed. The second factor was reset.",
+        "cancelled": "Cancelled. Nothing was reset."
+      }
+    },
+    "grievances": {
+      "note": "Grievances sent by patients. The text is shown as the patient wrote it while it can be read. A resolved grievance is final.",
+      "empty": "There are no grievances.",
+      "col": {
+        "grievance": "Grievance",
+        "category": "Category",
+        "status": "Status",
+        "received": "Received",
+        "text": "Text",
+        "action": "Action"
+      },
+      "status": {
+        "open": "Open",
+        "acknowledged": "Acknowledged",
+        "resolved": "Resolved"
+      },
+      "erased": "Erased",
+      "unreadable": "Not readable",
+      "acknowledge": "Acknowledge",
+      "acknowledgeTitle": "Acknowledge this grievance?",
+      "acknowledgeBody": "Records that you have seen it, under your name.",
+      "resolve": "Resolve",
+      "resolveTitle": "Resolve this grievance?",
+      "resolveBody": "Closes the grievance, under your name. A resolved grievance is final.",
+      "result": {
+        "recorded": "Recorded.",
+        "replay": "That was already recorded.",
+        "invalid_transition": "That change is not allowed from its current status. Nothing was changed."
+      }
+    }
+  }
+}

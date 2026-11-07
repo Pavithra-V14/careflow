@@ -180,6 +180,18 @@ the backend code), `CareGapRowOut.source` (it acts on `unresolved_barrier`, `aft
 `GET /v1/staff/console/autonomy/proposals` lists only PENDING proposals, so the console shows the mode and the pending list and no history.
 If a history is wanted, a route that lists resolved proposals is needed.
 
+### 13. A route to list the break-glass reason codes
+
+`POST /v1/staff/break-glass` takes a reason code that must be on the clinic's list (`iam.break_glass_reasons`), but no route returns the
+list, so the console can offer only a field limited to the code's shape (lowercase letters, digits, underscores) and the backend's 422
+if the code is not on the list. A route like `GET /v1/staff/console/reason-codes` for these codes would let the console show a picklist
+instead.
+
+### 14. A way to find a visit for visit readiness
+
+Visit readiness is keyed by a visit id, and no route lists visits, so the console asks for the id. A visit list (or the visit id on
+a booking row) would remove that.
+
 ## Decisions recorded here for later readers
 
 - **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;

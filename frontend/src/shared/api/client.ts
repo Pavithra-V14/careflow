@@ -15,6 +15,13 @@ export type DuplicateStatus = NonNullable<DuplicateQuery['status']>;
 type TaskQuery = NonNullable<paths['/v1/staff/review-tasks']['get']['parameters']['query']>;
 export type ReviewTaskStatus = TaskQuery['status'];
 export type TaskRole = NonNullable<TaskQuery['assigned_role']>;
+export type NoteIn = components['schemas']['NoteIn'];
+export type BreakGlassOpenIn = components['schemas']['BreakGlassOpenIn'];
+export type BreakGlassOutcome = components['schemas']['BreakGlassReviewIn']['outcome'];
+export type ClaimDecision = components['schemas']['ClaimResolveIn']['decision'];
+export type GrievanceStatus = components['schemas']['GrievanceStatusIn']['status'];
+export type ReadinessReplyIn = components['schemas']['ReadinessReplyIn'];
+export type RecoveryRequestIn = components['schemas']['RecoveryRequestIn'];
 export type BarrierIn = components['schemas']['BarrierIn'];
 export type BarrierKind = BarrierIn['barrier'];
 export type EpisodeIn = components['schemas']['EpisodeIn'];
@@ -100,6 +107,25 @@ export const OPERATIONS = {
   createCarePlan: { method: 'post', path: '/v1/staff/care-plans' },
   confirmCarePlan: { method: 'post', path: '/v1/staff/care-plans/{plan_id}/confirm' },
   recordResult: { method: 'post', path: '/v1/staff/results' },
+  // ---- visit readiness, portal claims, break-glass, recovery, notes, grievances ----
+  readinessView: { method: 'get', path: '/v1/staff/visits/{visit_id}/readiness' },
+  startReadiness: { method: 'post', path: '/v1/staff/visits/{visit_id}/readiness/start' },
+  replyReadiness: { method: 'post', path: '/v1/staff/visits/{visit_id}/readiness/reply' },
+  listPortalClaims: { method: 'get', path: '/v1/staff/portal-claims' },
+  resolvePortalClaim: { method: 'post', path: '/v1/staff/portal-claims/{request_id}/resolve' },
+  listBreakGlass: { method: 'get', path: '/v1/staff/break-glass' },
+  openBreakGlass: { method: 'post', path: '/v1/staff/break-glass' },
+  readBreakGlass: { method: 'get', path: '/v1/staff/break-glass/{grant_id}/messages' },
+  reviewBreakGlass: { method: 'post', path: '/v1/staff/break-glass/{grant_id}/review' },
+  listRecovery: { method: 'get', path: '/v1/staff/recovery' },
+  requestRecovery: { method: 'post', path: '/v1/staff/recovery' },
+  approveRecovery: { method: 'post', path: '/v1/staff/recovery/{request_id}/approve' },
+  cancelRecovery: { method: 'post', path: '/v1/staff/recovery/{request_id}/cancel' },
+  completeRecovery: { method: 'post', path: '/v1/staff/recovery/{request_id}/complete' },
+  listNotes: { method: 'get', path: '/v1/staff/notes' },
+  writeNote: { method: 'post', path: '/v1/staff/notes' },
+  listGrievances: { method: 'get', path: '/v1/staff/grievances' },
+  setGrievanceStatus: { method: 'post', path: '/v1/staff/grievances/{grievance_id}/status' },
   // ---- care-gap writes ----
   recordBarrier: { method: 'post', path: '/v1/staff/care-gaps/barriers' },
   resolveBarrier: { method: 'post', path: '/v1/staff/care-gaps/barriers/{barrier_id}/resolve' },
@@ -327,6 +353,36 @@ export function createApi(options: ApiOptions) {
     confirmCarePlan: (planId: string, action: CarePlanAction, o?: WriteOptions) =>
       client.POST('/v1/staff/care-plans/{plan_id}/confirm', { params: { path: { plan_id: planId }, header: { 'X-Idempotency-Key': key(o) } }, body: { action } }),
     recordResult: (body: ResultIn, o?: WriteOptions) => client.POST('/v1/staff/results', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+
+    // ---- visit readiness, portal claims, break-glass, recovery, notes, grievances ---------------------------------------------
+    readinessView: (visitId: string) => client.GET('/v1/staff/visits/{visit_id}/readiness', { params: { path: { visit_id: visitId } } }),
+    startReadiness: (visitId: string, o?: WriteOptions) =>
+      client.POST('/v1/staff/visits/{visit_id}/readiness/start', { params: { path: { visit_id: visitId }, header: { 'X-Idempotency-Key': key(o) } } }),
+    replyReadiness: (visitId: string, body: ReadinessReplyIn, o?: WriteOptions) =>
+      client.POST('/v1/staff/visits/{visit_id}/readiness/reply', { params: { path: { visit_id: visitId }, header: { 'X-Idempotency-Key': key(o) } }, body }),
+    listPortalClaims: (clinicId: string) => client.GET('/v1/staff/portal-claims', { params: { query: { clinic_id: clinicId } } }),
+    resolvePortalClaim: (requestId: string, decision: ClaimDecision, patientId: string | null, o?: WriteOptions) =>
+      client.POST('/v1/staff/portal-claims/{request_id}/resolve', { params: { path: { request_id: requestId }, header: { 'X-Idempotency-Key': key(o) } }, body: { decision, patient_id: patientId } }),
+    listBreakGlass: (clinicId: string, unreviewedOnly = true) =>
+      client.GET('/v1/staff/break-glass', { params: { query: { clinic_id: clinicId, unreviewed_only: unreviewedOnly } } }),
+    openBreakGlass: (body: BreakGlassOpenIn, o?: WriteOptions) => client.POST('/v1/staff/break-glass', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    // Each read is an audit row: only on a person's click, and the text is never cached.
+    readBreakGlass: (grantId: string) => client.GET('/v1/staff/break-glass/{grant_id}/messages', { params: { path: { grant_id: grantId } } }),
+    reviewBreakGlass: (grantId: string, outcome: BreakGlassOutcome, o?: WriteOptions) =>
+      client.POST('/v1/staff/break-glass/{grant_id}/review', { params: { path: { grant_id: grantId }, header: { 'X-Idempotency-Key': key(o) } }, body: { outcome } }),
+    listRecovery: (clinicId: string, openOnly = true) => client.GET('/v1/staff/recovery', { params: { query: { clinic_id: clinicId, open_only: openOnly } } }),
+    requestRecovery: (body: RecoveryRequestIn, o?: WriteOptions) => client.POST('/v1/staff/recovery', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    approveRecovery: (requestId: string, o?: WriteOptions) =>
+      client.POST('/v1/staff/recovery/{request_id}/approve', { params: { path: { request_id: requestId }, header: { 'X-Idempotency-Key': key(o) } } }),
+    cancelRecovery: (requestId: string, o?: WriteOptions) =>
+      client.POST('/v1/staff/recovery/{request_id}/cancel', { params: { path: { request_id: requestId }, header: { 'X-Idempotency-Key': key(o) } } }),
+    completeRecovery: (requestId: string, o?: WriteOptions) =>
+      client.POST('/v1/staff/recovery/{request_id}/complete', { params: { path: { request_id: requestId }, header: { 'X-Idempotency-Key': key(o) } } }),
+    listNotes: (clinicId: string, patientId: string) => client.GET('/v1/staff/notes', { params: { query: { clinic_id: clinicId, patient_id: patientId } } }),
+    writeNote: (body: NoteIn, o?: WriteOptions) => client.POST('/v1/staff/notes', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    listGrievances: (clinicId: string) => client.GET('/v1/staff/grievances', { params: { query: { clinic_id: clinicId } } }),
+    setGrievanceStatus: (grievanceId: string, status: GrievanceStatus, o?: WriteOptions) =>
+      client.POST('/v1/staff/grievances/{grievance_id}/status', { params: { path: { grievance_id: grievanceId }, header: { 'X-Idempotency-Key': key(o) } }, body: { status } }),
 
     // ---- care-gap writes (nurse and doctor) -----------------------------------------------------------------------------------
     recordBarrier: (body: BarrierIn, o?: WriteOptions) => client.POST('/v1/staff/care-gaps/barriers', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),

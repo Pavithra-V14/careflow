@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-818 of 818 strings are unreviewed.
+992 of 992 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -60,6 +60,46 @@ Terms standardised: proposal, resolve / resolved.
 
 | Key | English | Tamil | AI review |
 |---|---|---|---|
+| `access.appropriate` | Appropriate | பொருத்தமானது | ok |
+| `access.close` | Close | மூடு | ok |
+| `access.col.action` | Action | செயல் | ok |
+| `access.col.grant` | Grant | அனுமதி | ok |
+| `access.col.opened` | Opened | திறந்தது | ok |
+| `access.col.openedBy` | Opened by | திறந்தவர் | ok |
+| `access.col.outcome` | Review | மதிப்பாய்வு | ok |
+| `access.col.patient` | Patient | நோயாளி | ok |
+| `access.col.reason` | Reason | காரணம் | ok |
+| `access.erased` | Erased | அழிக்கப்பட்டது | ok |
+| `access.inappropriate` | Inappropriate | பொருத்தமற்றது | ok |
+| `access.keysMissing` | Encryption keys are not configured, so the messages cannot be read. | குறியாக்க விசைகள் அமைக்கப்படவில்லை; எனவே செய்திகளைப் படிக்க முடியாது. | ok |
+| `access.messages` | Messages | செய்திகள் | ok |
+| `access.noGrants` | There are no grants to review. | மதிப்பாய்வு செய்ய அனுமதிகள் இல்லை. | ok |
+| `access.noMessages` | There are no messages. | செய்திகள் இல்லை. | ok |
+| `access.notConfigured` | Break-glass access is not set up yet (the window length is not configured). Nothing was opened. | அவசரகால அணுகல் இன்னும் அமைக்கப்படவில்லை (சாளர நீளம் அமைக்கப்படவில்லை). எதுவும் திறக்கப்படவில்லை. | ok |
+| `access.note` | Read one patient's messages for a limited time, with a reason code. Every read is recorded, and an administrator who did not open the access reviews it afterwards. There is no free text. | ஒரு காரணக் குறியீட்டுடன், குறிப்பிட்ட நேரத்திற்கு ஒரு நோயாளியின் செய்திகளைப் படிக்கலாம். ஒவ்வொரு படிப்பும் பதிவாகும்; அணுகலைத் திறக்காத ஒரு நிர்வாகி பின்னர் அதை மதிப்பாய்வு செய்வார். இலவச உரை எதுவும் இல்லை. | ok |
+| `access.open` | Open access to a patient's messages | நோயாளியின் செய்திகளுக்கு அணுகலைத் திற | ok |
+| `access.openBody` | Opens a time-limited grant for ONE patient. Every read is recorded under your name and reviewed afterwards. | ஒரே ஒரு நோயாளிக்கான நேர வரம்புள்ள அனுமதியைத் திறக்கிறது. ஒவ்வொரு படிப்பும் உங்கள் பெயரில் பதிவாகி, பின்னர் மதிப்பாய்வு செய்யப்படும். | ok |
+| `access.openConfirm` | Open access | அணுகலைத் திற | ok |
+| `access.openTitle` | Open access | அணுகலைத் திற | ok |
+| `access.opened` | Access is open until | அணுகல் திறந்திருக்கும் நேரம்: | ok |
+| `access.outcome.appropriate` | Appropriate | பொருத்தமானது | ok |
+| `access.outcome.inappropriate` | Inappropriate | பொருத்தமற்றது | ok |
+| `access.patientNotFound` | The patient was not found. Nothing was opened. | நோயாளி கிடைக்கவில்லை. எதுவும் திறக்கப்படவில்லை. | ok |
+| `access.read` | Read the messages | செய்திகளைப் படி | ok |
+| `access.reasonCode` | Reason code | காரணக் குறியீடு | ok |
+| `access.reasonHint` | A code from the clinic's list (lowercase letters, digits and underscores). The backend refuses a code that is not on the list. | மருத்துவமனையின் பட்டியலிலிருந்து ஒரு குறியீடு (சிற்றெழுத்துகள், எண்கள், அடிக்கோடுகள்). பட்டியலில் இல்லாத குறியீட்டை பின்புலம் மறுக்கும். | ok |
+| `access.reasonRefused` | That reason code is not on the clinic's list. Nothing was opened. | அந்தக் காரணக் குறியீடு மருத்துவமனையின் பட்டியலில் இல்லை. எதுவும் திறக்கப்படவில்லை. | ok |
+| `access.reviewBody` | Records your review of this access, under your name. It cannot be changed afterwards. | இந்த அணுகலைப் பற்றிய உங்கள் மதிப்பாய்வை உங்கள் பெயரில் பதிவு செய்கிறது. பின்னர் மாற்ற முடியாது. | ok |
+| `access.reviewConfirmTitle` | Record this review? | இந்த மதிப்பாய்வைப் பதிவு செய்யவா? | ok |
+| `access.reviewNote` | Grants that have not been reviewed. You cannot review an access you opened yourself. | மதிப்பாய்வு செய்யப்படாத அனுமதிகள். நீங்களே திறந்த அணுகலை நீங்கள் மதிப்பாய்வு செய்ய முடியாது. | ok |
+| `access.reviewResult.already_reviewed` | This access was already reviewed. | இந்த அணுகல் ஏற்கனவே மதிப்பாய்வு செய்யப்பட்டது. | ok |
+| `access.reviewResult.reviewed` | The review was recorded. | மதிப்பாய்வு பதிவானது. | ok |
+| `access.reviewResult.same_person` | You opened this access, so someone else must review it. | இந்த அணுகலை நீங்களே திறந்தீர்கள்; எனவே வேறொருவர் மதிப்பாய்வு செய்ய வேண்டும். | ok |
+| `access.reviewTitle` | Review afterwards | பின்னர் மதிப்பாய்வு | ok |
+| `access.title` | Break-glass access | அவசரகால அணுகல் | ok |
+| `access.unreadable` | Not readable | படிக்க இயலவில்லை | ok |
+| `access.unreviewed` | Not reviewed | மதிப்பாய்வு செய்யப்படவில்லை | ok |
+| `access.windowClosed` | The access window has closed, or this access is not yours. | அணுகல் சாளரம் மூடப்பட்டது, அல்லது இந்த அணுகல் உங்களுடையது அல்ல. | ok |
 | `admin.accounts.cannotChange` | You cannot change this account: it is your own, or you are not an administrator of every clinic where it holds a role. | இந்தக் கணக்கை உங்களால் மாற்ற முடியாது: இது உங்களுடையது, அல்லது இது பங்கு வகிக்கும் ஒவ்வொரு மருத்துவமனையிலும் நீங்கள் நிர்வாகி அல்ல. | ok |
 | `admin.accounts.col.account` | Account | கணக்கு | ok |
 | `admin.accounts.col.action` | Action | செயல் | ok |
@@ -147,7 +187,61 @@ Terms standardised: proposal, resolve / resolved.
 | `admin.cost.term.total` | Total per month | மாதத்திற்கு மொத்தம் | ok |
 | `admin.cost.term.variable` | Variable cost per month | மாதத்திற்கு மாறுபடும் செலவு | ok |
 | `admin.cost.term.workflows` | Workflows per day | நாளொன்றுக்கு பணிப்பாய்வுகள் | ok |
+| `admin.grievances.acknowledge` | Acknowledge | ஏற்றுக்கொள் | ok |
+| `admin.grievances.acknowledgeBody` | Records that you have seen it, under your name. | நீங்கள் இதைப் பார்த்தீர்கள் என்று உங்கள் பெயரில் பதிவு செய்கிறது. | ok |
+| `admin.grievances.acknowledgeTitle` | Acknowledge this grievance? | இந்தக் குறையை ஏற்றுக்கொள்ளவா? | ok |
+| `admin.grievances.col.action` | Action | செயல் | ok |
+| `admin.grievances.col.category` | Category | வகை | ok |
+| `admin.grievances.col.grievance` | Grievance | குறை | ok |
+| `admin.grievances.col.received` | Received | பெறப்பட்டது | ok |
+| `admin.grievances.col.status` | Status | நிலை | ok |
+| `admin.grievances.col.text` | Text | உரை | ok |
+| `admin.grievances.empty` | There are no grievances. | குறைகள் இல்லை. | ok |
+| `admin.grievances.erased` | Erased | அழிக்கப்பட்டது | ok |
+| `admin.grievances.note` | Grievances sent by patients. The text is shown as the patient wrote it while it can be read. A resolved grievance is final. | நோயாளிகள் அனுப்பிய குறைகள். படிக்க முடியும் வரை, நோயாளி எழுதியபடியே உரை காட்டப்படும். தீர்க்கப்பட்ட குறை இறுதியானது. | ok |
+| `admin.grievances.resolve` | Resolve | தீர் | ok |
+| `admin.grievances.resolveBody` | Closes the grievance, under your name. A resolved grievance is final. | உங்கள் பெயரில் குறையை மூடுகிறது. தீர்க்கப்பட்ட குறை இறுதியானது. | ok |
+| `admin.grievances.resolveTitle` | Resolve this grievance? | இந்தக் குறையைத் தீர்க்கவா? | ok |
+| `admin.grievances.result.invalid_transition` | That change is not allowed from its current status. Nothing was changed. | தற்போதைய நிலையிலிருந்து அந்த மாற்றம் அனுமதிக்கப்படவில்லை. எதுவும் மாற்றப்படவில்லை. | ok |
+| `admin.grievances.result.recorded` | Recorded. | பதிவானது. | ok |
+| `admin.grievances.result.replay` | That was already recorded. | அது ஏற்கனவே பதிவாகியுள்ளது. | ok |
+| `admin.grievances.status.acknowledged` | Acknowledged | ஏற்கப்பட்டது | ok |
+| `admin.grievances.status.open` | Open | திறந்தது | ok |
+| `admin.grievances.status.resolved` | Resolved | தீர்க்கப்பட்டது | ok |
+| `admin.grievances.unreadable` | Not readable | படிக்க இயலவில்லை | ok |
 | `admin.notRecorded` | Not recorded | பதிவு செய்யப்படவில்லை | ok |
+| `admin.recovery.approve` | Approve | ஒப்புக்கொள் | ok |
+| `admin.recovery.approveBody` | Approves the request as the second administrator. The second factor is not reset until it is completed. | இரண்டாம் நிர்வாகியாக கோரிக்கையை ஒப்புக்கொள்கிறது. அது முடிக்கப்படும் வரை இரண்டாம் காரணி மீட்டமைக்கப்படாது. | ok |
+| `admin.recovery.approveTitle` | Approve this recovery? | இந்த மீட்பை ஒப்புக்கொள்ளவா? | ok |
+| `admin.recovery.cancel` | Cancel | ரத்து செய் | ok |
+| `admin.recovery.cancelBody` | Cancels the request. Nothing is reset. | கோரிக்கையை ரத்து செய்கிறது. எதுவும் மீட்டமைக்கப்படாது. | ok |
+| `admin.recovery.cancelTitle` | Cancel this recovery? | இந்த மீட்பை ரத்து செய்யவா? | ok |
+| `admin.recovery.cannotRequest` | A recovery cannot be requested for this account: it is your own, it is not staff of this clinic, or one is already open. | இந்தக் கணக்குக்கு மீட்பைக் கோர முடியாது: இது உங்களுடையது, இந்த மருத்துவமனையின் பணியாளர் அல்ல, அல்லது ஒன்று ஏற்கனவே திறந்துள்ளது. | ok |
+| `admin.recovery.col.account` | Account | கணக்கு | ok |
+| `admin.recovery.col.action` | Action | செயல் | ok |
+| `admin.recovery.col.by` | Asked by | கேட்டவர் | ok |
+| `admin.recovery.col.created` | Created | உருவாக்கப்பட்டது | ok |
+| `admin.recovery.col.request` | Request | கோரிக்கை | ok |
+| `admin.recovery.col.status` | Status | நிலை | ok |
+| `admin.recovery.complete` | Complete | முடி | ok |
+| `admin.recovery.completeBody` | Resets the account's second factor now. The person sets up a new one at their next sign-in. | கணக்கின் இரண்டாம் காரணியை இப்போது மீட்டமைக்கிறது. அடுத்த உள்நுழைவில் அந்த நபர் புதியதை அமைப்பார். | ok |
+| `admin.recovery.completeTitle` | Complete this recovery? | இந்த மீட்பை முடிக்கவா? | ok |
+| `admin.recovery.empty` | There are no recovery requests. | மீட்புக் கோரிக்கைகள் இல்லை. | ok |
+| `admin.recovery.includeClosed` | Include completed and cancelled | முடிந்தவை மற்றும் ரத்தானவற்றையும் சேர் | ok |
+| `admin.recovery.notConfigured` | Recovery is not set up yet (no sign-in administration is configured). Nothing was reset. | மீட்பு இன்னும் அமைக்கப்படவில்லை (உள்நுழைவு நிர்வாகம் அமைக்கப்படவில்லை). எதுவும் மீட்டமைக்கப்படவில்லை. | ok |
+| `admin.recovery.note` | Resets a staff member's second factor. You cannot ask for your own, and a second administrator, who is neither the requester nor the person being recovered, must approve it. | ஒரு பணியாளரின் இரண்டாம் காரணியை மீட்டமைக்கிறது. உங்களுக்காக நீங்களே கேட்க முடியாது; கோரியவரோ மீட்கப்படுபவரோ அல்லாத இரண்டாம் நிர்வாகி ஒப்புக்கொள்ள வேண்டும். | ok |
+| `admin.recovery.refused` | You cannot do this: you may be the requester or the person being recovered, or you are not an administrator of this clinic. | இதை உங்களால் செய்ய முடியாது: நீங்கள் கோரியவராகவோ மீட்கப்படுபவராகவோ இருக்கலாம், அல்லது இந்த மருத்துவமனையின் நிர்வாகி அல்ல. | ok |
+| `admin.recovery.request` | Request a recovery | மீட்பைக் கோரு | ok |
+| `admin.recovery.requestBody` | Asks for this account's second factor to be reset. Nothing is reset until a second administrator approves and it is completed. | இந்தக் கணக்கின் இரண்டாம் காரணியை மீட்டமைக்கக் கேட்கிறது. இரண்டாம் நிர்வாகி ஒப்புக்கொண்டு அது முடிக்கப்படும் வரை எதுவும் மீட்டமைக்கப்படாது. | ok |
+| `admin.recovery.requestConfirm` | Request | கோரு | ok |
+| `admin.recovery.requested` | The recovery was requested. | மீட்பு கோரப்பட்டது. | ok |
+| `admin.recovery.result.approved` | Approved. It still has to be completed. | ஒப்புக்கொள்ளப்பட்டது. இன்னும் முடிக்கப்பட வேண்டும். | ok |
+| `admin.recovery.result.cancelled` | Cancelled. Nothing was reset. | ரத்தானது. எதுவும் மீட்டமைக்கப்படவில்லை. | ok |
+| `admin.recovery.result.completed` | Completed. The second factor was reset. | முடிந்தது. இரண்டாம் காரணி மீட்டமைக்கப்பட்டது. | ok |
+| `admin.recovery.status.approved` | Approved | ஒப்புக்கொள்ளப்பட்டது | ok |
+| `admin.recovery.status.cancelled` | Cancelled | ரத்தானது | ok |
+| `admin.recovery.status.completed` | Completed | முடிந்தது | ok |
+| `admin.recovery.status.requested` | Requested | கோரப்பட்டது | ok |
 | `admin.reviewer.canaryCount` | {{approved}} of {{seen}} | {{seen}} இல் {{approved}} | ok |
 | `admin.reviewer.col.approvals` | Approvals | ஒப்புதல்கள் | ok |
 | `admin.reviewer.col.canaries` | Test cases approved | ஒப்புக்கொண்ட சோதனை நிகழ்வுகள் | ok |
@@ -166,6 +260,8 @@ Terms standardised: proposal, resolve / resolved.
 | `admin.tab.accounts` | Staff accounts | பணியாளர் கணக்குகள் | ok |
 | `admin.tab.autonomy` | Autonomy | தன்னாட்சி | ok |
 | `admin.tab.cost` | Cost canvas | செலவு வரைபடம் | ok |
+| `admin.tab.grievances` | Grievances | குறைகள் | ok |
+| `admin.tab.recovery` | Staff recovery | பணியாளர் மீட்பு | ok |
 | `admin.tab.reviewer` | Reviewer statistics | மதிப்பாய்வாளர் புள்ளிவிவரங்கள் | ok |
 | `admin.tab.voice` | Voice transcripts | குரல் பதிவுகள் | ok |
 | `admin.tabs` | Admin sections | நிர்வாகப் பிரிவுகள் | ok |
@@ -267,6 +363,7 @@ Terms standardised: proposal, resolve / resolved.
 | `care.gaps.summaries` | Summary by source | மூலம் வாரியான சுருக்கம் | ok |
 | `care.gaps.unknownLastDone` | Recurrence rules whose last-done date is unknown | கடைசியாகச் செய்த தேதி தெரியாத மீள்நிகழ்வு விதிகள் | ok |
 | `care.gaps.unreadable` | These sources could not be read: | இந்த மூலங்களைப் படிக்க இயலவில்லை: | ok |
+| `care.links.notes` | Notes | குறிப்புகள் | ok |
 | `care.links.title` | Care for this patient | இந்த நோயாளிக்கான பராமரிப்பு | ok |
 | `care.notReadable` | Not readable | படிக்க இயலவில்லை | ok |
 | `care.patientId` | Patient id | நோயாளி அடையாளம் | ok |
@@ -295,6 +392,11 @@ Terms standardised: proposal, resolve / resolved.
 | `care.plans.written` | The plan was submitted. It is now waiting for: {{waiting}}. | திட்டம் சமர்ப்பிக்கப்பட்டது. இப்போது இதற்காகக் காத்திருக்கிறது: {{waiting}}. | ok |
 | `care.results.addMeasure` | Add a measure | அளவீட்டைச் சேர் | ok |
 | `care.results.body` | This records a result for the patient. It cannot be edited afterwards. | இது நோயாளிக்கான ஒரு முடிவைப் பதிவு செய்கிறது. பின்னர் இதைத் திருத்த முடியாது. | ok |
+| `care.results.change` | What kind of change is this? | இது எந்த வகை மாற்றம்? | ok |
+| `care.results.changeHint` | Only when this result replaces another. An amendment is a new measurement; a correction means the earlier value was wrong and starts a review. | இந்த முடிவு மற்றொன்றை மாற்றும்போது மட்டும். மேம்படுத்தல் என்பது புதிய அளவீடு; திருத்தம் என்பது முந்தைய மதிப்பு தவறானது என்று பொருள்படும், மதிப்பாய்வைத் தொடங்கும். | ok |
+| `care.results.changeNone` | Not stated (the system works it out) | குறிப்பிடப்படவில்லை (அமைப்பு கண்டறியும்) | ok |
+| `care.results.changes.amendment` | Amendment | மேம்படுத்தல் | ok |
+| `care.results.changes.correction` | Correction | திருத்தம் | ok |
 | `care.results.code` | Result code | முடிவுக் குறியீடு | ok |
 | `care.results.done` | The result was recorded. | முடிவு பதிவானது. | ok |
 | `care.results.doneWake` | The result was recorded. A waiting care plan will be woken. | முடிவு பதிவானது. காத்திருக்கும் பராமரிப்புத் திட்டம் எழுப்பப்படும். | ok |
@@ -315,6 +417,25 @@ Terms standardised: proposal, resolve / resolved.
 | `care.tab.results` | Results | முடிவுகள் | ok |
 | `care.tabs` | Care sections | பராமரிப்புப் பிரிவுகள் | ok |
 | `care.title` | Care | பராமரிப்பு | ok |
+| `claims.approve` | Approve | ஒப்புக்கொள் | ok |
+| `claims.approveBody` | Links the person to the confirmed record you choose. It is recorded under your name. | நீங்கள் தேர்ந்தெடுக்கும் உறுதிசெய்யப்பட்ட பதிவுடன் அந்த நபரை இணைக்கிறது. இது உங்கள் பெயரில் பதிவாகும். | ok |
+| `claims.approveTitle` | Approve this claim? | இந்தக் கோரிக்கையை ஒப்புக்கொள்ளவா? | ok |
+| `claims.col.action` | Action | செயல் | ok |
+| `claims.col.received` | Received | பெறப்பட்டது | ok |
+| `claims.col.request` | Request | கோரிக்கை | ok |
+| `claims.empty` | There are no pending claims. | நிலுவையில் உள்ள கோரிக்கைகள் இல்லை. | ok |
+| `claims.needsPatient` | Choose the confirmed record to approve onto. Nothing was recorded. | ஒப்புக்கொள்ள உறுதிசெய்யப்பட்ட பதிவைத் தேர்ந்தெடுங்கள். எதுவும் பதிவாகவில்லை. | ok |
+| `claims.note` | Pending requests from people who registered on the portal to be linked to a record. The list shows only a request id and a time. Decide from what the person told you in person, and approve onto the confirmed record. | ஒரு பதிவுடன் இணைக்கக் கோரி வலைவாசலில் பதிவு செய்தவர்களின் நிலுவைக் கோரிக்கைகள். பட்டியல் கோரிக்கை அடையாளத்தையும் நேரத்தையும் மட்டும் காட்டும். அந்த நபர் நேரில் கூறியதை வைத்து முடிவு செய்து, உறுதிசெய்யப்பட்ட பதிவில் ஒப்புக்கொள்ளுங்கள். | ok |
+| `claims.reject` | Reject | நிராகரி | ok |
+| `claims.rejectBody` | Rejects the request. Nobody is linked. It is recorded under your name. | கோரிக்கையை நிராகரிக்கிறது. யாரும் இணைக்கப்படமாட்டார்கள். இது உங்கள் பெயரில் பதிவாகும். | ok |
+| `claims.rejectTitle` | Reject this claim? | இந்தக் கோரிக்கையை நிராகரிக்கவா? | ok |
+| `claims.result.already_resolved` | This claim was already resolved. | இந்தக் கோரிக்கை ஏற்கனவே தீர்க்கப்பட்டது. | ok |
+| `claims.result.approved` | Approved. The person is linked to the record. | ஒப்புக்கொள்ளப்பட்டது. அந்த நபர் பதிவுடன் இணைக்கப்பட்டார். | ok |
+| `claims.result.claimant_already_bound` | This person is already linked to a record. Nothing was changed. | இந்த நபர் ஏற்கனவே ஒரு பதிவுடன் இணைந்துள்ளார். எதுவும் மாற்றப்படவில்லை. | ok |
+| `claims.result.consent_required` | The person has not given the required consent yet. Nothing was linked. | தேவையான சம்மதத்தை அந்த நபர் இன்னும் வழங்கவில்லை. யாரும் இணைக்கப்படவில்லை. | ok |
+| `claims.result.record_not_claimable` | That record cannot be claimed. Nothing was linked. | அந்தப் பதிவைக் கோர முடியாது. யாரும் இணைக்கப்படவில்லை. | ok |
+| `claims.result.rejected` | Rejected. | நிராகரிக்கப்பட்டது. | ok |
+| `claims.title` | Portal claims | வலைவாசல் கோரிக்கைகள் | ok |
 | `common.cancel` | Cancel | ரத்து செய் | ok |
 | `common.comingSoon` | Coming soon | விரைவில் வரும் | ok |
 | `common.emergencyBanner` | In an emergency call 108 | அவசரநிலையில் 108 ஐ அழைக்கவும் | ok |
@@ -444,18 +565,39 @@ Terms standardised: proposal, resolve / resolved.
 | `landing.privacy.readNotice` | Read the privacy notice | தனியுரிமை அறிவிப்பைப் படிக்கவும் | ok |
 | `languages.en` | English | English | kept in English by design |
 | `languages.ta` | தமிழ் | தமிழ் | kept in English by design |
+| `nav.access` | Break-glass | அவசரகால அணுகல் | ok |
 | `nav.admin` | Admin | நிர்வாகம் | ok |
 | `nav.alerts` | Alerts | எச்சரிக்கைகள் | ok |
 | `nav.care` | Care | பராமரிப்பு | ok |
+| `nav.claims` | Portal claims | வலைவாசல் கோரிக்கைகள் | ok |
 | `nav.dashboard` | Dashboard | கட்டுப்பாட்டுப் பலகை | ok |
 | `nav.home` | Home | முகப்பு | ok |
 | `nav.identity` | Identity | அடையாளம் | ok |
 | `nav.label` | Sections | பிரிவுகள் | ok |
 | `nav.none` | No sections are available to your role. | உங்கள் பங்கிற்குக் கிடைக்கும் பிரிவுகள் எதுவும் இல்லை. | ok |
+| `nav.notes` | Notes | குறிப்புகள் | ok |
 | `nav.patients` | Patients | நோயாளர்கள் | ok |
+| `nav.readiness` | Visit readiness | வருகைத் தயார்நிலை | ok |
 | `nav.referrals` | Referrals | பரிந்துரைகள் | ok |
 | `nav.scheduling` | Scheduling | நேர அட்டவணை | minor drift; flag (ambiguous): Timetable reads as a schedule table; a main navigation label should be unambiguous. |
 | `nav.tasks` | Tasks | பணிகள் | ok |
+| `notes.addend` | Add an addendum | இணைப்புக் குறிப்பைச் சேர் | ok |
+| `notes.addendBody` | Writes a new note that adds to the earlier one. The earlier note is not changed. | முந்தைய குறிப்பில் சேர்க்கும் புதிய குறிப்பை எழுதுகிறது. முந்தைய குறிப்பு மாற்றப்படுவதில்லை. | ok |
+| `notes.addendumTo` | addendum to | இணைப்புக் குறிப்பு: | ok |
+| `notes.by` | by | எழுதியவர் | ok |
+| `notes.empty` | There are no notes for this patient. | இந்த நோயாளிக்குக் குறிப்புகள் இல்லை. | ok |
+| `notes.erased` | Erased | அழிக்கப்பட்டது | ok |
+| `notes.keysMissing` | Encryption keys are not configured. Nothing was written. | குறியாக்க விசைகள் அமைக்கப்படவில்லை. எதுவும் எழுதப்படவில்லை. | ok |
+| `notes.notFound` | The patient or the note was not found. Nothing was written. | நோயாளி அல்லது குறிப்பு கிடைக்கவில்லை. எதுவும் எழுதப்படவில்லை. | ok |
+| `notes.note` | Notes are never edited. A correction is an addendum: a new note that names the one it adds to. | குறிப்புகள் ஒருபோதும் திருத்தப்படுவதில்லை. திருத்தம் என்பது இணைப்புக் குறிப்பு: அது சேர்க்கும் குறிப்பைக் குறிப்பிடும் புதிய குறிப்பு. | ok |
+| `notes.open` | Show notes | குறிப்புகளைக் காட்டு | ok |
+| `notes.save` | Save | சேமி | ok |
+| `notes.saved` | The note was saved. | குறிப்பு சேமிக்கப்பட்டது. | ok |
+| `notes.text` | Note | குறிப்பு | ok |
+| `notes.title` | Notes | குறிப்புகள் | ok |
+| `notes.unreadable` | Not readable | படிக்க இயலவில்லை | ok |
+| `notes.write` | Write a note | குறிப்பு எழுது | ok |
+| `notes.writeBody` | Writes a new note for this patient. It cannot be edited afterwards. | இந்த நோயாளிக்கான புதிய குறிப்பை எழுதுகிறது. பின்னர் திருத்த முடியாது. | ok |
 | `offline.banner` | You are offline. Changes cannot be saved until the connection is back. | நீங்கள் இணைப்பில் இல்லை. இணைப்பு திரும்பும் வரை மாற்றங்களைச் சேமிக்க முடியாது. | ok |
 | `pages.backHome` | Back to the home page | முகப்புப் பக்கத்திற்குத் திரும்பு | ok |
 | `pages.notAvailableSignIn` | Patient sign-in is not available yet. | நோயாளர் உள்நுழைவு இன்னும் கிடைக்கவில்லை. | ok |
@@ -549,6 +691,37 @@ Terms standardised: proposal, resolve / resolved.
 | `problem.unknown` | Something went wrong. Try again. | ஏதோ தவறு ஏற்பட்டது. மீண்டும் முயற்சிக்கவும். | ok |
 | `profiles.clinical` | Clinical | மருத்துவப் பயன்பாடு | minor drift |
 | `profiles.demo` | Demo | டெமோ | ok |
+| `readiness.currentItem` | Current item | தற்போதைய உருப்படி | ok |
+| `readiness.escalation` | Review task | மதிப்பாய்வுப் பணி | ok |
+| `readiness.finished` | Finished | முடிந்தது | ok |
+| `readiness.noContent` | This kind of visit has no readiness content set up. Nothing was started. | இந்த வகை வருகைக்குத் தயார்நிலை உள்ளடக்கம் அமைக்கப்படவில்லை. எதுவும் தொடங்கப்படவில்லை. | ok |
+| `readiness.noEscalation` | None raised | எதுவும் எழுப்பப்படவில்லை | ok |
+| `readiness.noRun` | There is no readiness run for this visit yet. | இந்த வருகைக்கு இன்னும் தயார்நிலை ஓட்டம் இல்லை. | ok |
+| `readiness.notConfigured` | Visit readiness is not set up yet. Nothing was written. | வருகைத் தயார்நிலை இன்னும் அமைக்கப்படவில்லை. எதுவும் எழுதப்படவில்லை. | ok |
+| `readiness.notWaiting` | This run is not waiting for a reply. Nothing was recorded. | இந்த ஓட்டம் பதிலுக்காகக் காத்திருக்கவில்லை. எதுவும் பதிவாகவில்லை. | ok |
+| `readiness.note` | There is no list of visits here: enter the visit id. The questions and checklist belong to the clinic and are not shown, only where the run is. | இங்கு வருகைகளின் பட்டியல் இல்லை: வருகை அடையாளத்தை உள்ளிடுங்கள். கேள்விகளும் சரிபார்ப்புப் பட்டியலும் மருத்துவமனைக்குரியவை, காட்டப்படுவதில்லை; ஓட்டம் எங்குள்ளது என்பது மட்டுமே காட்டப்படும். | ok |
+| `readiness.open` | Show the run | ஓட்டத்தைக் காட்டு | ok |
+| `readiness.outcome` | What happened | என்ன நடந்தது | ok |
+| `readiness.outcomes.no_reply` | No reply came | பதில் வரவில்லை | ok |
+| `readiness.outcomes.replied` | The patient replied | நோயாளி பதிலளித்தார் | ok |
+| `readiness.relay` | Relay the patient's reply | நோயாளியின் பதிலை அனுப்பு | ok |
+| `readiness.relayBody` | Enter what the patient said, or record that no reply came. The rules read the reply first, and it is stored encrypted. | நோயாளி கூறியதை உள்ளிடுங்கள், அல்லது பதில் வரவில்லை என்று பதிவு செய்யுங்கள். விதிகள் முதலில் பதிலைப் படிக்கும்; அது குறியாக்கம் செய்து சேமிக்கப்படும். | ok |
+| `readiness.relayed` | The reply was relayed. | பதில் அனுப்பப்பட்டது. | ok |
+| `readiness.replyNeedsText` | A reply needs text. Nothing was recorded. | பதிலுக்கு உரை தேவை. எதுவும் பதிவாகவில்லை. | ok |
+| `readiness.replyText` | The patient's reply | நோயாளியின் பதில் | ok |
+| `readiness.run` | Run for visit | வருகைக்கான ஓட்டம் | ok |
+| `readiness.send` | Relay | அனுப்பு | ok |
+| `readiness.start` | Start readiness | தயார்நிலையைத் தொடங்கு | ok |
+| `readiness.startBody` | Starts the run for this visit, or shows the one already running. Starting twice returns the same run. | இந்த வருகைக்கான ஓட்டத்தைத் தொடங்குகிறது, அல்லது ஏற்கனவே ஓடுவதைக் காட்டுகிறது. இருமுறை தொடங்கினால் அதே ஓட்டம் திரும்பும். | ok |
+| `readiness.startTitle` | Start readiness for this visit? | இந்த வருகைக்கான தயார்நிலையைத் தொடங்கவா? | ok |
+| `readiness.started` | The run is started. | ஓட்டம் தொடங்கப்பட்டது. | ok |
+| `readiness.status` | Status | நிலை | ok |
+| `readiness.title` | Visit readiness | வருகைத் தயார்நிலை | ok |
+| `readiness.visitId` | Visit id | வருகை அடையாளம் | ok |
+| `readiness.visitIdBad` | That is not a visit id. | இது வருகை அடையாளம் அல்ல. | ok |
+| `readiness.waiting.none` | Nothing | எதுவுமில்லை | ok |
+| `readiness.waiting.reply` | The patient's reply | நோயாளியின் பதில் | ok |
+| `readiness.waitingFor` | Waiting for | காத்திருப்பது | ok |
 | `referrals.back` | Back to referrals | பரிந்துரைகளுக்குத் திரும்பு | ok |
 | `referrals.card` | Card | அட்டை | ok |
 | `referrals.col.decision` | Decision | முடிவு | ok |
@@ -829,6 +1002,7 @@ Terms standardised: proposal, resolve / resolved.
 | `tasks.kind.red_flag` | Red flag | Red flag | kept in English by design |
 | `tasks.kind.referral_dead_letter` | Referral failed | பரிந்துரை தோல்வியடைந்தது | ok |
 | `tasks.kind.referral_hold` | Referral hold | பரிந்துரை நிறுத்தம் | minor drift; flag (ambiguous): Same hold term issue. |
+| `tasks.kind.result_correction` | Result correction | முடிவுத் திருத்தம் | ok |
 | `tasks.kind.screening_unassessable` | Unassessable | Unassessable | kept in English by design |
 | `tasks.kind.triage_proposal` | Triage proposal | Triage proposal | kept in English by design |
 | `tasks.kind.unmerge_review` | Unmerge review | இணைப்பு நீக்க மதிப்பாய்வு | ok |

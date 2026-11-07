@@ -22,6 +22,10 @@ import { AlertsPage } from '../pages/AlertsPage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { CarePage } from '../pages/CarePage';
 import { AdminPage } from '../pages/AdminPage';
+import { ReadinessPage } from '../pages/ReadinessPage';
+import { ClaimsPage } from '../pages/ClaimsPage';
+import { AccessPage } from '../pages/AccessPage';
+import { NotesPage } from '../pages/NotesPage';
 
 /**
  * The signed-in console: a persistent session bar (role, clinic, LIVE / TEST badge) above every screen, a role-aware
@@ -101,6 +105,10 @@ export function Shell() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/care" element={<Navigate to="/care/gaps" replace />} />
           <Route path="/care/:tab" element={<CarePage />} />
+          <Route path="/readiness" element={<ReadinessPage />} />
+          <Route path="/notes" element={<NotesPage />} />
+          <Route path="/claims" element={<ClaimsPage />} />
+          <Route path="/access" element={<AccessPage />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/admin/:tab" element={<AdminPage />} />
           <Route path="*" element={<NotFoundPage />} />

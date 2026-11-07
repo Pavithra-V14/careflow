@@ -23,8 +23,9 @@ describe('source guards', () => {
     expect(offenders(/sb_secret_|SUPABASE_SECRET_KEY|service_role|SERVICE_ROLE|DATABASE_URL|CAREFLOW_ENC_SECRET/)).toEqual([]);
   });
 
-  it('has no staff sign-up, OTP or OAuth path (staff are invitation-only)', () => {
-    expect(offenders(/\.signUp\s*\(|signInWithOtp|signInWithOAuth|signInWithIdToken|resetPasswordForEmail|inviteUserByEmail/)).toEqual([]);
+  it('has no staff sign-up, OTP or OAuth path (staff are invitation-only); the one patient phone-code sign-in lives in patient/portal/auth.ts', () => {
+    expect(offenders(/\.signUp\s*\(|signInWithOAuth|signInWithIdToken|resetPasswordForEmail|inviteUserByEmail/)).toEqual([]);
+    expect(offenders(/signInWithOtp|verifyOtp/, (f) => f !== 'patient/portal/auth.ts')).toEqual([]);
     expect(offenders(/sign-?up/i, (f) => f.startsWith('staff/'))).toEqual([]);
   });
 
@@ -32,7 +33,7 @@ describe('source guards', () => {
     expect(offenders(/(?<!\w)localStorage\??[.[]/, (f) => f !== 'shared/i18n/index.ts')).toEqual([]);
     expect(offenders(/(?<!\w)sessionStorage\??[.[]/, (f) => f !== 'staff/activeRole.ts')).toEqual([]);
     // supabase-js keeps its own session in its default storage; nothing here reads or writes it by hand.
-    expect(offenders(/sb-.*-auth-token|getItem\(['"]sb-|access_token|refresh_token/, (f) => f !== 'staff/auth/supabasePort.ts')).toEqual([]);
+    expect(offenders(/sb-.*-auth-token|getItem\(['"]sb-|access_token|refresh_token/, (f) => f !== 'staff/auth/supabasePort.ts' && f !== 'patient/portal/auth.ts')).toEqual([]);
   });
 
   it('never logs', () => {

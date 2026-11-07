@@ -17,11 +17,12 @@ this side; what the frontend needs from them is in `docs/frontend-backend-reques
 | F7 (batch 1) | Scheduling: slots (hold, book), bookings (cancel with a marked-placeholder confirmation), waitlist (join), offers (list, copy text, mark delivered; nothing is sent), setup (add provider, location, visit type, slot); reviewer view of a triage proposal (unknown shown as "Not recorded") and the clinic's reason list on a decision | on `main`, mock-only until a live pass |
 | F7 (batch 2) | Alerts (acknowledge; the audience role is the escalation state), admin dashboard (unreadable never shown as zero), care gaps panel (read-only), care plans (list, doctor approve/reject, doctor writes a plan), record a result; Scheduling for admin; all times in the clinic time zone (labelled demo placeholder) | on `main`, mock-only until a live pass |
 | F7 (batch 3) | Care-gap writes (record barrier, start episode, resolve, mark rule done, re-check), staff accounts (list, invite with its 503 state, suspend, reinstate, grant, revoke), autonomy (mode, the two-person switch), reviewer statistics, cost canvas, voice transcripts (read, purge); the clinic's own time zone from /v1/iam/me; offer text by message_id; patient id handed over from the open record or referral | on `main`, mock-only until a live pass |
+| F7 (batch 4) | Visit readiness (start, relay a reply, escalation task), portal claims (approve onto a confirmed record, reject), break-glass (open with a reason code, read, admin review), staff recovery, notes (append-only, addenda), grievances (admin), result-correction tasks and the result `change` kind | on `main`, mock-only until a live pass |
 
 Working today in the console: 28 backend operations through one generated client. Every write carries an idempotency key, retried with
 the same key; a step-up challenge asks once and retries once. Messages shown for errors are fixed per problem kind, never backend text.
 
-Tests: 675 unit tests, 175 browser tests (against mocked hosts), typecheck, lint, API freshness check, Tamil list check, bundle secret check.
+Tests: 737 unit tests, 197 browser tests (against mocked hosts), typecheck, lint, API freshness check, Tamil list check, bundle secret check.
 
 ## 2. Mock-only versus checked against the real backend
 
@@ -122,3 +123,29 @@ The patient portal (no patient sign-in and no patient routes exist).
 
 F6.1 and F6.2 first (no backend dependency). F6.3 as soon as the backend returns the field. F6.4 and F6.5 when their backend gates clear.
 F6.6 when the clinic names what it wants. Each ends with a live read pass for the roles involved.
+
+## 6. For the privacy owner: what the console does with personal data it handles
+
+Owner-requested record (2026-11-09). These hold today and are pinned by tests:
+
+- **Invite e-mail addresses** are typed into the invite window, sent once, and never stored or shown again: the window clears on close, the account list shows only an id, a status and role words, and the address is not kept in the page, the query cache, or browser storage.
+- **Voice transcripts** are read only on a click, held only while their window is open, and dropped on close (never cached, never logged). Every read and purge is audited by the database.
+- **Message text** (the offer text) is read on a click, copied, and not left on the page.
+- **Patient search results** are not cached and are dropped on leaving the page; a result row shows a label or a short id.
+- The only thing kept in the browser is the Supabase session, the language choice, and (per tab) the chosen role.
+
+## 7. Role gates checked against the schema descriptions (2026-11-09)
+
+The console's menu and buttons are conveniences; the backend decides. Compared with the route descriptions in `openapi.snapshot.json`:
+
+| Gate in the console | Schema description | Result |
+|---|---|---|
+| Hold, book, cancel, join waitlist: front desk only | no role stated | **not verifiable**: front desk only is the owner's decision; backend should state the roles |
+| Mark an offer delivered, release a hold: front desk | "403 unless you are front desk" | matches |
+| Add a provider, location, visit type, slot: front desk, admin | "front desk or admin" | matches |
+| Care-gap barrier and episode writes: nurse, doctor | barrier: "nurse, doctor or admin"; episode: "nurse or doctor" | **differs for barriers**: the schema also allows admin; the console follows the owner (nurse and doctor only) |
+| Care plans list and results: nurse, doctor; write and decide a plan: doctor | list "a nurse or doctor"; write/confirm "a doctor" | matches |
+| Accounts, reviewer statistics, cost canvas, voice: admin | "admin" | matches |
+| Autonomy mode: read by all four, set by admin; proposals: admin or doctor | same | matches |
+| Reason codes: nurse, doctor | "nurse or doctor somewhere" | matches |
+| Alerts: front desk, nurse, doctor, admin | same | matches |

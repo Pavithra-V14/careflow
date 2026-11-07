@@ -6,7 +6,7 @@
 // backend disagree, the backend wins and this list is the thing to fix. Roles below follow the route docstrings in
 // openapi.snapshot.json and docs/design/review-task-routes.md.
 
-export type SectionId = 'referrals' | 'tasks' | 'patients' | 'identity' | 'scheduling' | 'alerts' | 'dashboard' | 'care' | 'admin';
+export type SectionId = 'referrals' | 'tasks' | 'patients' | 'identity' | 'scheduling' | 'alerts' | 'dashboard' | 'care' | 'admin' | 'readiness' | 'claims' | 'access' | 'notes';
 
 export interface Section {
   id: SectionId;
@@ -25,6 +25,10 @@ export const SECTIONS: readonly Section[] = [
   { id: 'alerts', path: '/alerts', labelKey: 'nav.alerts', roles: ['front_desk', 'nurse', 'doctor', 'admin'] },
   { id: 'dashboard', path: '/dashboard', labelKey: 'nav.dashboard', roles: ['admin'] },
   { id: 'care', path: '/care', labelKey: 'nav.care', roles: ['nurse', 'doctor', 'admin'] },
+  { id: 'readiness', path: '/readiness', labelKey: 'nav.readiness', roles: ['nurse', 'doctor'] },
+  { id: 'notes', path: '/notes', labelKey: 'nav.notes', roles: ['nurse', 'doctor'] },
+  { id: 'claims', path: '/claims', labelKey: 'nav.claims', roles: ['front_desk'] },
+  { id: 'access', path: '/access', labelKey: 'nav.access', roles: ['front_desk', 'nurse', 'doctor', 'admin'] },
   { id: 'admin', path: '/admin', labelKey: 'nav.admin', roles: ['admin', 'doctor'] },
 ];
 
@@ -38,6 +42,8 @@ export const ADMIN_TABS = [
   { id: 'reviewer', roles: ['admin'] },
   { id: 'cost', roles: ['admin'] },
   { id: 'voice', roles: ['admin'] },
+  { id: 'recovery', roles: ['admin'] },
+  { id: 'grievances', roles: ['admin'] },
 ] as const;
 export type AdminTab = (typeof ADMIN_TABS)[number]['id'];
 
@@ -63,7 +69,6 @@ export const CAN_REVOKE_IDENTITY = ['front_desk'] as const;
 export const CAN_SEE_DUPLICATES = ['front_desk'] as const;
 /** Approve and unmerge (behind the mergeActions flag, which is off). */
 export const CAN_MERGE_ACTIONS = ['front_desk'] as const;
-/** Kinds the backend's resolve route will close (careflow/review_tasks.py RESOLVABLE_KINDS). Others are a 409. */
-export const RESOLVABLE_TASK_KINDS = ['referral_hold', 'unmerge_review', 'referral_dead_letter', 'identity_confirmation_revoked'] as const;
+// Whether a task can be closed here comes from the API (`resolvable` on a task); the console keeps no list of kinds for it.
 /** Kinds that must never be treated as routine: shown first and visually distinct. */
 export const URGENT_TASK_KINDS = ['red_flag', 'screening_unassessable'] as const;

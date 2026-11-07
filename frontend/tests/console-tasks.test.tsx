@@ -15,12 +15,17 @@ const task = (over: Record<string, unknown> = {}) => ({
   created_at: '2026-10-30T05:00:00Z',
   kind: 'referral_hold',
   priority: 'standard',
+  resolvable: true, // what the API says per task; `detail` below sets it to false for the kinds the backend refuses to close here
   resolved_at: null,
   status: 'open',
   task_id: ID.task,
   ...over,
 });
-const detail = (over: Record<string, unknown> = {}) => ({ ...task(), provenance: { document_id: ID.doc, reason: 'needs_front_desk' }, source_message_id: ID.doc2, ...over });
+const NOT_CLOSABLE_HERE = ['red_flag', 'screening_unassessable', 'triage_proposal'];
+const detail = (over: Record<string, unknown> = {}) => {
+  const merged = { ...task(), provenance: { document_id: ID.doc, reason: 'needs_front_desk' }, source_message_id: ID.doc2, ...over };
+  return { ...merged, resolvable: 'resolvable' in over ? over.resolvable : !NOT_CLOSABLE_HERE.includes(String(merged.kind)) };
+};
 const detailRoute = (over: Record<string, unknown> = {}, id = ID.task): Routes[number] => ['get', `/v1/staff/review-tasks/${id}`, () => json(detail({ task_id: id, ...over }))];
 
 describe('urgentFirst', () => {
