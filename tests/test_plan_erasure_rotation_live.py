@@ -199,4 +199,4 @@ async def test_plan_text_rotates_to_a_new_key_with_a_ledger_row_skips_erased_pla
     assert (await db.execute(text("select plan_ct is null from ops.care_plans where id = :i"), {"i": gone})).scalar() is True
     assert await as_app(db, w["doctor"], "select count(*) from ops.plan_rotation_batches where true") == "42501"  # owner-only ledger
     assert await as_app(db, w["doctor"], "update ops.care_plans set plan_ct = '\\x09'::bytea, plan_key_version = 1") == "42501"
-    assert await owner(db, "update ops.care_plans set plan_key_version = 2, plan_ct = plan_ct where id = :i", i=a) == "23001"  # a key-version change with the same ciphertext is not a rotation
+    assert await owner(db, "update ops.care_plans set plan_key_version = 1, plan_ct = plan_ct where id = :i", i=a) == "23001"  # a key-version change with the same ciphertext is not a rotation
