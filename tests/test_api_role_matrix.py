@@ -254,6 +254,7 @@ async def _cleanup(ids, conn=None):
                     "and not exists (select 1 from ops.care_episodes ce where ce.patient_id = p.id) "
                     "and not exists (select 1 from clinical.results cr where cr.patient_id = p.id) "
                     "and not exists (select 1 from ops.care_plans cp where cp.patient_id = p.id) "
+                    "and not exists (select 1 from clinical.notes n where n.patient_id = p.id) "
                     "and not exists (select 1 from iam.break_glass_grants bg where bg.patient_id = p.id) "
                     "and not exists (select 1 from msg.threads th where th.patient_id = p.id) "
                     "and not exists (select 1 from sched.holds h where h.patient_id = p.id)", clinics  # (a hold left behind for an append-only delivery row keeps its patient)
@@ -3218,8 +3219,10 @@ def break_glass_open_cases(ids) -> list[tuple]:
 def break_glass_read_cases(ids) -> list[tuple]:
     mine = f"{BREAK_GLASS}/{ids.bg_grants[0]}/messages"
     unknown = f"{BREAK_GLASS}/{uuid.uuid4()}/messages"
-    unavailable = lambda b: b == {"detail": "patient view is unavailable: encryption keys are not configured"}
-    cases = [_case(ids, "the holder finds the grant (503: no keys in this world)", "nurse_a", 503, mine, key=None, body=unavailable), _case(ids, "an admin of the clinic sees the grant (503: no keys in this world)", "admin_a", 503, mine, key=None, body=unavailable)]
+    cases = [
+        _case(ids, "the holder reads (the seeded patient has no messages)", "nurse_a", 200, mine, key=None, body=lambda b: b == {"messages": []}),
+        _case(ids, "an admin of the clinic sees the grant but is not its holder", "admin_a", 403, mine, key=None, body=NOT_YOUR_ROLE),
+    ]
     others = [p for p in ids.people if p not in ("nurse_a", "admin_a")]
     cases += [_case(ids, f"{p} ({ids.people[p][2]}) cannot see the grant: the one not-found", p, 404, mine, key=None, body=_fixed(404)) for p in others]
     cases += [_case(ids, f"{p} asks for a grant that does not exist", p, 404, unknown, key=None, body=_fixed(404)) for p in ids.people]
@@ -3271,7 +3274,7 @@ GRIEVANCE_STATUS = STAFF_GRIEVANCES + "/{grievance_id}/status"
 
 def portal_grievance_file_cases(ids) -> list[tuple]:
     body = lambda **o: {"clinic_id": str(ids.clinic_a), "category": "demo_category", "text": "DEMO text", **o}
-    cases = [_case(ids, "an active patient account is told filing is unavailable (no keys here)", "patient", 503, PORTAL_GRIEVANCES, json=body(), body=lambda b: "unavailable" in b["detail"])]
+    cases = [_case(ids, "an active patient account bound to no record is refused (the matrix patient claims nothing)", "patient", 403, PORTAL_GRIEVANCES, json=body(), body=NOT_A_PATIENT)]
     cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, PORTAL_GRIEVANCES, json=body(), body=NOT_A_PATIENT) for p in _non_patients(ids)]
     cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, PORTAL_GRIEVANCES, json=body(), body=NOT_A_PATIENT))
     cases += [
@@ -3431,8 +3434,8 @@ NOTE_VISIBLE_REFUSED = ("front_desk_a", "admin_a", "business_owner_a", "auditor_
 
 def clinical_note_write_cases(ids) -> list[tuple]:
     body = lambda **o: {"clinic_id": str(ids.clinic_a), "patient_id": str(ids.patients_a[47]), "text": "DEMO note", **o}
-    unavailable = lambda b: "unavailable" in b["detail"]
-    cases = [_case(ids, f"{p} is told notes are unavailable (no keys in this world)", p, 503, NOTES, json=body(), body=unavailable) for p in ("nurse_a", "doctor_a", "multi")]
+    made = lambda b: set(b) == {"note_id", "created"} and b["created"] is True
+    cases = [_case(ids, f"{p} writes a note", p, 201, NOTES, json=body(), body=made) for p in ("nurse_a", "doctor_a", "multi")]
     cases += [_case(ids, f"{p} sees the clinic but is refused", p, 403, NOTES, json=body(), body=NOT_YOUR_ROLE) for p in NOTE_VISIBLE_REFUSED]
     others = [p for p in ids.people if p not in ("nurse_a", "doctor_a", "multi", *NOTE_VISIBLE_REFUSED)]
     cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused with the one not-found", p, 404, NOTES, json=body(), body=_fixed(404)) for p in others]

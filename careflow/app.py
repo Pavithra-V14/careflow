@@ -4242,7 +4242,7 @@ async def record_result(body: ResultIn, idempotency_key: IdempotencyKey, request
     if created:
         await write_audit(
             conn, clinic_id=body.clinic_id, origin=origin, actor_id=actor, actor_role=await _acting_role(conn, claims, body.clinic_id, RESULT_WRITERS), action="result.record", resource_type="result", resource_id=result_id,
-            details={"verified": body.verified, "supersedes": body.supersedes_id is not None, "declared": body.change}, idempotency_key=f"audit:result-record:{result_id}",
+            details={"verified": body.verified, "supersedes": body.supersedes_id is not None, "declared": body.change or "none"}, idempotency_key=f"audit:result-record:{result_id}",
         )
         if components is not None and components.durable:
             # the producer side of the outbox (decision 11): the event is written in THIS transaction, next to the result; the tick's relay turns it into a job and the worker identity wakes the plans
