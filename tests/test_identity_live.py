@@ -661,7 +661,7 @@ async def test_a_review_row_cannot_be_rewritten_or_reopened_by_front_desk(db, mg
     w = await world(db, pipeline)
     third = (await act(db, w.fd1, pipeline.ingest, clinic_id=w.a, origin="test", name="Third Person", dob="1999-09-09", phone=PHONE, idempotency_key=_key())).patient_id
     (cand,) = await rows(db, "select id from mpi.match_candidates where clinic_id = :c and status = 'pending' order by id limit 1", c=w.a)
-    for change in (f"candidate_patient_id = '{third}'", f"patient_id = '{third}'", "reason = case when reason = 'ambiguous' then 'near_match' else 'ambiguous' end", "matched_kinds = case when matched_kinds = array['name_dob'] then array['phone'] else array['name_dob'] end"):  # always a REAL change, whichever pending row comes back
+    for change in (f"candidate_patient_id = case when candidate_patient_id = '{third}' then patient_id else '{third}'::uuid end", f"patient_id = case when patient_id = '{third}' then candidate_patient_id else '{third}'::uuid end", "reason = case when reason = 'ambiguous' then 'near_match' else 'ambiguous' end", "matched_kinds = case when matched_kinds = array['name_dob'] then array['phone'] else array['name_dob'] end"):  # always a REAL change, whichever pending row comes back
         with pytest.raises(DBAPIError, match="permission denied"):  # since 0032 front desk may not even name these columns in an update (the grant is the first layer)
             async with db.begin_nested():
                 await _sql_as(db, w.fd1, f"update mpi.match_candidates set {change} where id = :i", i=cand[0])
