@@ -34,7 +34,12 @@ async def no_auto_approved_decisions(conn: AsyncConnection, clinic_id: uuid.UUID
 
 
 async def _clinics(conn: AsyncConnection, origin: str) -> list[uuid.UUID]:
-    return [r[0] for r in (await conn.execute(text("select id from iam.clinics where origin = :o and iam.has_clinic_role(id, array['queue_worker']) order by id"), {"o": origin})).all()]
+    """The clinics the signed-in worker serves, from its OWN role grants (a worker cannot read iam.clinics itself); the origin comes from the small definer helper ops.clinic_origin."""
+    rows = await conn.execute(
+        text("select distinct r.clinic_id from iam.staff_roles r where r.role = 'queue_worker' and ops.clinic_origin(r.clinic_id) = :o and iam.has_clinic_role(r.clinic_id, array['queue_worker']) order by r.clinic_id"),
+        {"o": origin},
+    )
+    return [r[0] for r in rows.all()]
 
 
 async def care_gap_overdue_sweep(conn: AsyncConnection, alert_after_days: int | None, *, origin: str = "live", now: Callable[[], datetime] = lambda: datetime.now(UTC)) -> int:

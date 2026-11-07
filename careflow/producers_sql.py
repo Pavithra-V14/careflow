@@ -114,8 +114,14 @@ async def record_done(conn: AsyncConnection, *, episode_rule_id: uuid.UUID, done
 
 
 async def recheck_sample(conn: AsyncConnection, *, sample_id: uuid.UUID, by: uuid.UUID) -> str:
-    """'rechecked' or 'not_found' (invisible, already re-checked, or not yours to change)."""
-    n = (await conn.execute(text("update ops.care_review_samples set rechecked_by = :b where id = :i"), {"b": by, "i": sample_id})).rowcount
+    """'rechecked', 'same_person' (you made the decision) or 'not_found' (invisible, already re-checked, or not yours to change)."""
+    try:
+        async with conn.begin_nested():
+            n = (await conn.execute(text("update ops.care_review_samples set rechecked_by = :b where id = :i"), {"b": by, "i": sample_id})).rowcount
+    except IntegrityError as exc:
+        if sqlstate(exc) == "23001":
+            return "same_person"  # the database refuses a re-check by the person who made the decision
+        raise
     return "rechecked" if n == 1 else "not_found"
 
 

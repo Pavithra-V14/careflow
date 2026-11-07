@@ -432,7 +432,7 @@ def build_visit_readiness_graph(deps: VisitReadinessDeps, checkpointer: Any, *, 
         async with deps.session() as conn:
             answer = await deps.readiness_classifier.classify(conn, message_id=message_id, item=state["current_item"])
             answer = answer if answer in READINESS_CLASSES else "unclear"
-            await deps.readiness_recorder.record(conn, visit_id=visit_id, item=state["current_item"], answer=answer, message_id=message_id, idempotency_key=f"vr:{visit_id}:ready:{state['current_item']}")
+            await deps.readiness_recorder.record(conn, visit_id=visit_id, item=state["current_item"], answer=answer, message_id=message_id, idempotency_key=f"vr:{visit_id}:ready:{state['current_item']}:{state.get('reasks', 0)}")
         answers = {**state.get("readiness_answers", {}), state["current_item"]: answer}
         index = state.get("index", 0) + 1
         verdict = readiness_outcome(state.get("readiness_items", []), answers)[0] if index >= len(state.get("readiness_items", [])) else "more"  # decided by code, here, so the router only reads the state

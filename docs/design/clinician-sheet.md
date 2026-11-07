@@ -65,5 +65,14 @@ These were drafted by the assistant to make the questions easier to answer. They
 
 **26. What a reviewer may edit in a triage proposal.** *AI-drafted options, not a decision.* One engineering rule holds whatever is chosen (it is not a clinical question): the original stays, and an edit is a new append-only event recording before and after, who, when and a reason code; nothing is overwritten. Options for which fields are editable: (a) priority only, (b) department only, (c) both. Safe default until answered: "edit" is refused with the fixed response.
 
+## F. Recurrence rules, plans and readiness content (added 2026-11-07; clinician-OWNED items, nothing here has a software default)
+
+| # | Question | What the software does until it is answered | Answer (clinician, name, date) |
+|---|---|---|---|
+| 27 | The care-gap recurrence rules: for each kind of care episode, which recurring checks apply, how often (every N days, or once a year in month M), and how many days of grace before it counts as overdue. | The rules come only from the required setting `CAREFLOW_CARE_GAP_RULES`. Unset means no episode can be created. The demo pack carries ONE labelled placeholder rule (`demo_rule`, 30 days, 5 days of grace) that is not a clinical decision. | |
+| 28 | The care-plan loop: what a doctor may ask the system to wait for (which result codes), the conditions on a result that count as met or not met, and what a met condition leads to. | The plan MODEL has no approved route, so every plan is held for a doctor; the closed plan schema is validated by code. The demo task settings (doctor, normal priority) are placeholders. | |
+| 29 | Visit Readiness content: the intake facts to ask for, the wording of each question (sent exactly as written), the readiness checklist per visit type, and the answers that count as "not done". | Required setting `CAREFLOW_VISIT_READINESS_CONTENT`. Unset means no readiness run starts. The demo pack carries clearly labelled placeholder questions. | |
+| 30 | Whether a sample drawn for after-the-fact review may ever be re-checked by the person who made the original decision. | Today the database refuses it (decided 2026-11-07). | |
+
 ## What happens with your answers
 Each answer goes in as a setting or as clinician-authored data, with your name and the date, and is reviewed before it goes live. Where two people must approve (red-flag rules), both names are recorded. If any answer is "not yet", the software keeps sending that case to a person.

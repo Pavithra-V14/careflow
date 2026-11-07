@@ -85,3 +85,15 @@ def policy_from(value: object, **opt_ins: bool) -> Policy:
     if set(opt_ins) - known:
         raise ValueError("unknown policy option")
     return Policy(effective_mode(value), **opt_ins)
+
+
+def tightened(configured: Policy, stored_mode: object | None) -> Policy:
+    """The policy to run with when a clinic's STORED autonomy mode (ops.autonomy_changes) exists: it can only make behaviour MORE human than the configured policy, never less. When they disagree the more
+    human one wins (shadow < assisted < autonomous); a stored mode that is equal or less human changes nothing, and no stored row (None) changes nothing. The opt-ins of the configured policy are kept: they
+    apply only in `autonomous`, which a lowered mode never is."""
+    if stored_mode is None:
+        return configured
+    stored = effective_mode(stored_mode)
+    if MODES.index(stored) < MODES.index(configured.mode):
+        return Policy(stored, configured.opt_in_records_release, configured.opt_in_triage_approval, configured.auto_approve_one_confident_low_risk_card)
+    return configured

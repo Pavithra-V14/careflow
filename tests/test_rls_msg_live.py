@@ -291,8 +291,8 @@ async def test_erasure_guard_and_trigger_functions_are_not_executable_by_the_app
     fns = await db.fetch("select oid::regprocedure::text as f from pg_proc where pronamespace = 'msg'::regnamespace")
     assert len(fns) >= 5
     for fn in fns:
-        if fn["f"].startswith("msg.record_screening("):
-            continue  # the ONE function the application role may call (0013); everything else here is internal
+        if fn["f"].startswith(("msg.record_screening(", "msg.voice_sessions_for_admin(", "msg.read_voice_transcript(", "msg.purge_expired_voice_chunks(")):
+            continue  # the functions the application role may call: record_screening (0013) and the admin-only audited voice transcript functions (0047, each checks admin + aal2 inside); everything else here is internal
         assert not await db.fetchval("select has_function_privilege('careflow_app', $1, 'EXECUTE')", fn["f"]), fn["f"]
     assert await db.fetchval("select has_function_privilege('careflow_app', 'msg.record_screening(uuid,text,text,integer,text,jsonb,text)', 'EXECUTE')")
 
@@ -444,7 +444,7 @@ async def test_unknown_topic_is_refused(db):
 async def test_the_readiness_topic_is_nurse_and_doctor_only(db):
     w = await seed(db)
     patient = await new_patient(db, w.a)
-    nurse, fd = w.people["nurse_a"], w.people["front_desk_a"]
+    nurse, fd = w.people["nurse_a"], w.people["fd_a"]
     assert (await attempts(db, nurse, [thread_sql(w.a, patient, "readiness", nurse)])) != [DENIED]  # a nurse may open a readiness thread
     assert (await attempts(db, fd, [thread_sql(w.a, patient, "readiness", fd)])) == [DENIED]  # front desk may not: its topic allowlist is appointments and safety
 

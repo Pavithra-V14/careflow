@@ -38,6 +38,9 @@ def http_steps() -> None:
     say("7b care-gap producers", "POST /v1/staff/care-gaps/episodes (nurse/doctor; the rules come only from CAREFLOW_CARE_GAP_RULES) then POST .../episode-rules/{id}/done; the worker tick raises the overdue alert through a narrow read; POST .../samples/{id}/recheck closes a review sample.")
     say("11 patient portal", "A patient signs in (phone OTP in Supabase Auth), then POST /v1/portal/register, GET /v1/portal/consents, POST /v1/portal/consents (against the CURRENT notice), POST /v1/portal/activate, POST /v1/portal/claims (verified phone + name + date of birth; pending_review goes to the front desk).")
     say("12 care plans and results", "POST /v1/staff/care-plans (doctor; 503 until a model route and the task settings are configured), POST .../{id}/confirm, POST /v1/staff/results (nurse/doctor) wakes the plan whose wait it matches.")
+    say("12b result wake-up", "POST /v1/staff/results writes an outbox event in the result's own transaction; the tick relays it and the WORKER identity resumes the plan (care_plan_result_handler).")
+    say("12c visit readiness", "POST /v1/staff/visits/{booking_id}/readiness/start then .../reply (a nurse or doctor relays the patient's reply); questions come only from CAREFLOW_VISIT_READINESS_CONTENT; 503 until the flag, the content and the task priority are set.")
+    say("11b portal claims", "GET /v1/staff/portal-claims and POST .../{request_id}/resolve (front desk): approve onto a CONFIRMED record or reject; audited.")
     say("13 admin", "POST /v1/staff/console/autonomy (shadow or assisted; no row means shadow), GET /v1/staff/console/dashboard, GET /v1/staff/voice/sessions and .../transcript (audited), POST /v1/staff/voice/purge (expired chunks only).")
 
 

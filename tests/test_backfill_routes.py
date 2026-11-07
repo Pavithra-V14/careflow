@@ -53,6 +53,8 @@ class Conn:
             return _R(("test",) if self.visible else None)
         if "from sched.slots where id" in sql:
             return _R(SimpleNamespace(clinic_id=CLINIC, origin="test") if self.visible else None)
+        if "from ops.autonomy_changes" in sql:
+            return _R(None)  # no stored autonomy mode
         if "iam.has_clinic_role(:c" in sql:
             return _R(any(r in self.roles for r in params["r"]))
         if "unnest(iam.effective_roles" in sql:

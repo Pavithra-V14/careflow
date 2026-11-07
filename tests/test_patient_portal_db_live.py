@@ -117,7 +117,7 @@ async def test_a_consent_event_names_the_current_notice_only_is_the_accounts_own
     assert await state_of(db, w["invited"], ins, a=w["active"], n=w["notice_new"], x="granted", k="k2") == "42501"  # not for another account
     assert await state_of(db, w["nurse"], ins, a=w["nurse"], n=w["notice_new"], x="granted", k="k3") == "42501"  # staff accounts do not consent here
     assert await state_of(db, w["invited"], "select count(*) from iam.consent_events where true") == [(1,)]
-    assert await state_of(db, w["active"], "select count(*) from iam.consent_events where true") == [(0,)]  # nobody reads another account's events
+    assert await state_of(db, w["active"], "select count(*) from iam.consent_events where account_id <> :me", me=w["active"]) == [(0,)]  # nobody reads another account's events (it sees only its own grant from the setup)
     assert await state_of(db, w["invited"], "update iam.consent_events set action = 'withdrawn'") == "42501"
     assert await state_of(db, w["invited"], "delete from iam.consent_events") == "42501"
     assert await state_of(db, w["invited"], ins, a=w["invited"], n=w["notice_new"], x="withdrawn", k="k4") == 1  # withdrawal is one more event
