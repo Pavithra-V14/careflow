@@ -412,7 +412,7 @@ export interface paths {
         put?: never;
         /**
          * Open Break Glass
-         * @description Open a time-limited grant to read ONE patient's messages, with a reason code from the clinic's list (kept by the owner, not the application). 404 if the clinic or patient is not visible to you, 403 unless you are front desk, nurse or doctor there (with a recent second factor), 422 for a reason code that is not on the list, 409 past the re-open cap, 503 while the window length or the cap is not configured.
+         * @description Open a time-limited grant to read ONE patient's messages, with a reason code from the clinic's list (kept by the owner, not the application). 404 if the clinic or patient is not visible to you, 403 unless you are front desk, nurse or doctor there (with a recent second factor), 422 for a reason code that is not on the list, 409 past the re-open cap, 503 while the clinic has no limits row.
          */
         post: operations["open_break_glass_v1_staff_break_glass_post"];
         delete?: never;
