@@ -1,6 +1,6 @@
 # Gap audit: BUILD-SPEC.md against the code (re-read in full 2026-11-08, after migration 0061)
 
-Every spec item that is **not built**, **built only to a fake or a port**, or **needs a decision**, with one line of reason. Status words: **FAKE** = a port with a fake/stand-in and no real adapter; **NOT BUILT**; **DECISION** = built or buildable but waits for an owner, clinician, provider or counsel answer; **UNMEASURED** = a mechanism exists, the real number does not. Companion documents: `docs/design/pre-launch-checklist.md` (rows 1 to 70, owners and closing evidence), `docs/design/remaining-work.md` (blocked list), `docs/design/phase*-*.md`.
+Every spec item that is **not built**, **built only to a fake or a port**, or **needs a decision**, with one line of reason. Status words: **FAKE** = a port with a fake/stand-in and no real adapter; **NOT BUILT**; **DECISION** = built or buildable but waits for an owner, clinician, provider or counsel answer; **UNMEASURED** = a mechanism exists, the real number does not. Companion documents: `docs/design/pre-launch-checklist.md` (rows 1 to 71, owners and closing evidence), `docs/design/remaining-work.md` (blocked list), `docs/design/phase*-*.md`.
 
 Everything not listed here is built and tested (against the real database, as pure code, or in process with fakes where a row says so). Only what is still fake, unbuilt, undecided or unmeasured is listed.
 

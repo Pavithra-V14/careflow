@@ -1,4 +1,5 @@
 -- 0067_erase_visit_readiness_rows (owner decision of 2026-11-08; BUILD-SPEC.md 20.1; CLAUDE.md rules 8, 10). Fix forward.
+-- NOTE: the first version of this file failed on a syntax error and was ROLLED BACK by the runner on the CI project (it was never recorded in any ledger); it was corrected in place before any database had it.
 --
 -- ops.visit_facts, ops.visit_readiness_answers and ops.visit_briefs (0052) hold closed words about a patient and a visit (a fact name such as has_pacemaker, a checklist answer, brief lines). They were append-only
 -- with no way out, so the audited erasure left them. Now the audited two-person erasure DELETES a patient's rows from the three tables in the same transaction (counts only in the audit row, key
@@ -26,15 +27,23 @@ begin
     if n = d then raise exception '0067: the declaration anchor was not found'; end if;
     d := n;
     n := replace(d, E'    update mpi.erasure_requests set status = ''erased''',
-                    E'    -- the visit-readiness rows of the patient (0067): the guard allows the delete now that the patient row is erased\n'
-                    E'    v_visit := 0;\n'
-                    E'    delete from ops.visit_facts where patient_id = v_req.patient_id and clinic_id = v_req.clinic_id;\n'
-                    E'    get diagnostics v_part = row_count; v_visit := v_visit + v_part;\n'
-                    E'    delete from ops.visit_readiness_answers where patient_id = v_req.patient_id and clinic_id = v_req.clinic_id;\n'
-                    E'    get diagnostics v_part = row_count; v_visit := v_visit + v_part;\n'
-                    E'    delete from ops.visit_briefs where patient_id = v_req.patient_id and clinic_id = v_req.clinic_id;\n'
-                    E'    get diagnostics v_part = row_count; v_visit := v_visit + v_part;\n'
-                    E'    update mpi.erasure_requests set status = ''erased''');
+                    E'    -- the visit-readiness rows of the patient (0067): the guard allows the delete now that the patient row is erased
+'
+                    || E'    v_visit := 0;
+'
+                    || E'    delete from ops.visit_facts where patient_id = v_req.patient_id and clinic_id = v_req.clinic_id;
+'
+                    || E'    get diagnostics v_part = row_count; v_visit := v_visit + v_part;
+'
+                    || E'    delete from ops.visit_readiness_answers where patient_id = v_req.patient_id and clinic_id = v_req.clinic_id;
+'
+                    || E'    get diagnostics v_part = row_count; v_visit := v_visit + v_part;
+'
+                    || E'    delete from ops.visit_briefs where patient_id = v_req.patient_id and clinic_id = v_req.clinic_id;
+'
+                    || E'    get diagnostics v_part = row_count; v_visit := v_visit + v_part;
+'
+                    || E'    update mpi.erasure_requests set status = ''erased''');
     if n = d then raise exception '0067: the request-update anchor was not found'; end if;
     d := n;
     n := replace(d, '''notes'', v_notes)', '''notes'', v_notes, ''visit_readiness'', v_visit)');

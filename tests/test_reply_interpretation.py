@@ -16,7 +16,7 @@ from fastapi import Depends
 from fastapi.testclient import TestClient
 
 from careflow import reply_interpretation as ri
-from careflow.app import Settings, create_app, db_conn, verified_claims
+from careflow.app import Settings, create_app, db_conn, key_scope, verified_claims
 from careflow.auth import JWKSClient
 from careflow.crypto import DemographicVault
 from careflow.decision import DecisionService, InMemoryDecisionRecorder
@@ -256,7 +256,7 @@ def test_a_successful_answer_has_ids_and_closed_words_only_and_writes_one_audit_
     assert PRIVATE_TEXT not in r.text
     (audit,) = audits
     assert (audit["action"], audit["actor_id"], audit["resource_id"], audit["details"]) == ("offer.interpret_reply", ACTOR, MESSAGE, {"outcome": "clear", "suggestion": "accept", "reason": "none"})
-    assert audit["idempotency_key"] == f"audit:interpret-reply:{MESSAGE}:k-1"
+    assert audit["idempotency_key"] == f"audit:interpret-reply:{MESSAGE}:{key_scope(str(ACTOR))}:k-1"
 
 
 def test_a_flagged_reply_through_the_route_is_no_suggestion_with_the_reason_and_the_model_is_never_asked(monkeypatch):

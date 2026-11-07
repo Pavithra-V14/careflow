@@ -12,7 +12,7 @@ from fastapi import Depends
 from fastapi.testclient import TestClient
 
 from careflow import app as app_module
-from careflow.app import Settings, create_app, db_conn, verified_claims
+from careflow.app import Settings, create_app, db_conn, key_scope, verified_claims
 from careflow.auth import JWKSClient
 from careflow.checkpointer import CheckpointerError
 from careflow.front_door import FrontDoorError
@@ -118,7 +118,7 @@ def test_run_enqueues_one_front_door_job_scoped_to_the_document_with_ids_only(wo
         r = c.post(RUN.format(DOC), headers=key("abc"))
     assert r.status_code == 200 and set(r.json()) == {"job_id", "replayed"} and r.json()["replayed"] is False
     ((clinic, origin, task, payload, k),) = world.enqueued
-    assert (clinic, origin, task, payload, k) == (CLINIC, "test", "front_door_run", {"document_id": str(DOC)}, f"front-door-run:{DOC}:abc")
+    assert (clinic, origin, task, payload, k) == (CLINIC, "test", "front_door_run", {"document_id": str(DOC)}, f"front-door-run:{DOC}:{key_scope(str(SUB))}:abc")
     assert world.roles_asked == ("front_desk", "nurse", "doctor")
 
 
@@ -171,7 +171,7 @@ def test_review_resumes_the_paused_run_with_the_reviewer_from_the_token_and_the_
     assert world.roles_asked == ("nurse", "doctor")
     (audit,) = world.audits  # one audit row, as the token's person, ids and a closed word only
     assert (audit["actor_id"], audit["action"], audit["resource_id"], audit["details"]) == (SUB, "referral.review_decision", DOC, {"decision": "approve"})
-    assert audit["idempotency_key"] == f"audit:referral-review:{DOC}:k-1"
+    assert audit["idempotency_key"] == f"audit:referral-review:{DOC}:{key_scope(str(SUB))}:k-1"
 
 
 def test_once_the_clinic_has_a_reason_code_list_a_reject_needs_a_word_from_it_and_the_word_travels_with_the_decision(world, monkeypatch):

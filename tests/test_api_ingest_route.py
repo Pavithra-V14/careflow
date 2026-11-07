@@ -157,7 +157,7 @@ def test_the_idempotency_key_reaches_the_pipeline_and_is_required():
         assert FakePipeline.calls == []
         assert post(c, key="abc-123").status_code == 200
     (_, kwargs) = FakePipeline.calls[-1]
-    assert kwargs["idempotency_key"] == "abc-123" and kwargs["clinic_id"] == CLINIC
+    assert kwargs["idempotency_key"].endswith(":abc-123") and len(kwargs["idempotency_key"]) == len("abc-123") + 13 and kwargs["clinic_id"] == CLINIC
     assert (kwargs["name"], kwargs["dob"], kwargs["phone"]) == (NAME, DOB, PHONE)
 
 

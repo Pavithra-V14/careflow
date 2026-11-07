@@ -9,7 +9,7 @@ import pytest
 from fastapi import Depends
 from fastapi.testclient import TestClient
 
-from careflow.app import Settings, create_app, db_conn, verified_claims
+from careflow.app import Settings, create_app, db_conn, key_scope, verified_claims
 
 CLINIC, ACTOR, HOLD = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
 PROJECT = "https://example-project.supabase.co"
@@ -111,7 +111,7 @@ def test_front_desk_marks_an_offer_delivered_by_hand_with_one_audit_row(monkeypa
     with c:
         r = c.post(URL, headers=HEADERS)
     assert r.status_code == 200 and r.json()["channel"] == "manual" and r.json()["replayed"] is False
-    assert fake.inserted[0]["u"] == ACTOR and fake.inserted[0]["k"] == f"offer-delivery:{HOLD}:k-1"
+    assert fake.inserted[0]["u"] == ACTOR and fake.inserted[0]["k"] == f"offer-delivery:{HOLD}:{key_scope(str(ACTOR))}:k-1"
     assert len(audits) == 1 and audits[0]["action"] == "offer.mark_delivered" and audits[0]["details"] == {"channel": "manual", "replayed": False}
 
 

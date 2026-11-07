@@ -13,7 +13,7 @@ from fastapi import Depends
 from fastapi.testclient import TestClient
 
 from careflow import app as app_module
-from careflow.app import Settings, create_app, db_conn, verified_claims
+from careflow.app import Settings, create_app, db_conn, key_scope, verified_claims
 from careflow.auth import JWKSClient
 from careflow.crypto import DemographicVault
 from careflow.messages import (
@@ -108,7 +108,7 @@ def test_the_idempotency_key_reaches_the_screening(monkeypatch):
     monkeypatch.setattr(app_module, "screen_stored_message", fake)
     with TestClient(make_client()) as c:
         assert c.post(PATH.format(uuid.uuid4()), headers=headers("abc-123")).status_code == 200
-    assert seen == {"key": "abc-123"}
+    assert seen == {"key": f"{key_scope(str(SUB))}:abc-123"}
 
 
 @pytest.mark.parametrize(
