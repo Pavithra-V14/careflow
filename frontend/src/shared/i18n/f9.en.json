@@ -123,7 +123,6 @@
       "proposed": "The proposal was made.",
       "alreadyPending": "A proposal is already pending.",
       "notEnabled": "Switching to autonomous is not enabled yet. Nothing was changed.",
-      "note": "There is no history list: only proposals that are still pending are shown.",
       "pending": "Pending proposals",
       "noPending": "There are no pending proposals.",
       "col": {

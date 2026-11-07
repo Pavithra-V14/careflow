@@ -291,7 +291,6 @@ function Autonomy() {
           </button>
         )}
       </div>
-      <p className="hint">{t('admin.autonomy.note')}</p>
       {note && <p role="status">{note}</p>}
       <h3>{t('admin.autonomy.pending')}</h3>
       <QueryView query={proposals} isEmpty={(d) => d.proposals.length === 0} empty={t('admin.autonomy.noPending')}>
@@ -339,6 +338,9 @@ function Autonomy() {
           </table>
         )}
       </QueryView>
+      <h3>{t('admin.autonomy.historyTitle')}</h3>
+      <p className="hint">{t('admin.autonomy.historyNote')}</p>
+      <History />
       {setting && (
         <SetModeDialog
           onClose={(done) => {
@@ -371,6 +373,60 @@ function Autonomy() {
         </ConfirmDialog>
       )}
     </>
+  );
+}
+
+function History() {
+  const { t } = useTranslation();
+  const { api } = useAuth();
+  const { active } = useSession();
+  const word = useWord();
+  const query = useApiQuery(['autonomy-history'], () => unwrap(api.autonomyHistory(active.clinicId)));
+  return (
+    <QueryView query={query} isEmpty={(d) => d.items.length === 0} empty={t('admin.autonomy.historyEmpty')}>
+      {(d) => (
+        <table>
+          <caption className="visually-hidden">{t('admin.autonomy.historyTitle')}</caption>
+          <thead>
+            <tr>
+              <th scope="col">{t('admin.autonomy.col.when')}</th>
+              <th scope="col">{t('admin.autonomy.col.what')}</th>
+              <th scope="col">{t('admin.autonomy.col.by')}</th>
+              <th scope="col">{t('admin.autonomy.col.mode')}</th>
+              <th scope="col">{t('admin.autonomy.col.outcome')}</th>
+              <th scope="col">{t('admin.autonomy.col.decidedBy')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {d.items.map((h, i) => (
+              <tr key={`${h.at}-${i}`}>
+                <th scope="row">
+                  <Time value={h.at} />
+                </th>
+                <td>
+                  {t(`admin.autonomy.kinds.${h.kind}`)}
+                  {h.proposer_role && <> ({word('roles', h.proposer_role)})</>}
+                </td>
+                <td>
+                  <ShortId id={h.by} />
+                </td>
+                <td>{h.mode ? word('admin.autonomy.modes', h.mode) : '–'}</td>
+                <td>{h.outcome ? t(`admin.autonomy.outcomes.${h.outcome}`) : '–'}</td>
+                <td>
+                  {h.decided_by ? <ShortId id={h.decided_by} /> : '–'}
+                  {h.decided_at && (
+                    <>
+                      {' '}
+                      <Time value={h.decided_at} />
+                    </>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </QueryView>
   );
 }
 

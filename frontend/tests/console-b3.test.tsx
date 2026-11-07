@@ -251,6 +251,27 @@ describe('admin: autonomy', () => {
     expect(await screen.findByText('Switching to autonomous is not enabled yet. Nothing was changed.')).toBeInTheDocument();
   });
 
+  it('shows the history of mode changes and proposals with their outcomes, a null as a dash, and an empty state', async () => {
+    const history = (items: unknown[]): Routes[number] => ['get', '/v1/staff/console/autonomy/history', () => json({ items })];
+    const a = await openConsole({
+      role: 'admin',
+      hash: '/admin/autonomy',
+      routes: [modeRoute(), proposalsRoute([]), history([
+        { at: '2026-11-08T05:00:00Z', by: ID.user, decided_at: '2026-11-09T05:00:00Z', decided_by: ID.user2, kind: 'proposal', mode: 'autonomous', outcome: 'approved', proposer_role: 'doctor' },
+        { at: '2026-11-01T05:00:00Z', by: ID.user, decided_at: null, decided_by: null, kind: 'mode_change', mode: 'assisted', outcome: null, proposer_role: null },
+      ])],
+    });
+    const table = (await screen.findAllByRole('table')).find((t) => t.querySelector('caption')?.textContent === 'History') as HTMLElement;
+    const rows = within(table).getAllByRole('row').slice(1);
+    expect(within(rows[0] as HTMLElement).getByText('Approved')).toBeInTheDocument();
+    expect(within(rows[0] as HTMLElement).getByText(/Proposal \(Doctor\)/)).toBeInTheDocument();
+    expect(within(rows[1] as HTMLElement).getByText('Mode change')).toBeInTheDocument();
+    expect(within(rows[1] as HTMLElement).getAllByText('–').length).toBeGreaterThan(0);
+    a.unmount();
+    await openConsole({ role: 'doctor', hash: '/admin/autonomy', routes: [modeRoute(), proposalsRoute([]), history([])] });
+    expect(await screen.findByText('There is no history yet.')).toBeInTheDocument();
+  });
+
   it('shows a doctor the Autonomy tab only', async () => {
     await openConsole({ role: 'doctor', hash: '/admin', routes: [modeRoute(), proposalsRoute([])] });
     const tabs = await screen.findByRole('navigation', { name: 'Admin sections' });

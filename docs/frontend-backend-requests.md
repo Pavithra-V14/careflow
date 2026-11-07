@@ -175,10 +175,9 @@ Tamil label for it. Please make these enums in the schema; the console will then
 the backend code), `CareGapRowOut.source` (it acts on `unresolved_barrier`, `after_the_fact_review` and `overdue_recurrence`),
 `DashboardMetricOut.metric_id`, `VoiceSessionRowOut.workflow` and `.status`, `ReviewerStatOut.verdict`, `CostCanvasOut.state` and `.reasons`.
 
-### 12. No autonomy history route
+### 12. Autonomy history: DONE (2026-11-10)
 
-`GET /v1/staff/console/autonomy/proposals` lists only PENDING proposals, so the console shows the mode and the pending list and no history.
-If a history is wanted, a route that lists resolved proposals is needed.
+The backend added `GET /v1/staff/console/autonomy/history`; the console shows it under the pending proposals.
 
 ### 13. A route to list the break-glass reason codes
 

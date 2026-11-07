@@ -151,6 +151,7 @@ const INVOCATIONS: Record<keyof typeof OPERATIONS, (api: Api, o?: WriteOptions) 
   getAutonomy: (api) => api.getAutonomy(ID),
   setAutonomy: (api, o) => api.setAutonomy(body<AutonomySetIn>('AutonomySetIn'), o),
   listAutonomyProposals: (api) => api.listAutonomyProposals(ID),
+  autonomyHistory: (api) => api.autonomyHistory(ID),
   proposeAutonomy: (api, o) => api.proposeAutonomy(ID, 'admin', o),
   resolveAutonomyProposal: (api, o) => api.resolveAutonomyProposal(ID, 'approve', o),
   reviewerStats: (api) => api.reviewerStats(ID),

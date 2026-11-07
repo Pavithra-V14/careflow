@@ -22,7 +22,7 @@ describe('alerts', () => {
       routes: [['get', '/v1/staff/console/alerts', (req) => list(req.query.get('include_acknowledged') ? [alert(), alert({ alert_id: ID.doc2, acknowledged: true })] : [alert()])]],
     });
     const row = (await screen.findAllByRole('row'))[1] as HTMLElement;
-    expect(within(row).getByText('task overdue')).toBeInTheDocument();
+    expect(within(row).getByText('Task overdue')).toBeInTheDocument();
     expect(within(row).getByText('Doctor')).toBeInTheDocument();
     expect(within(row).getByText('3')).toBeInTheDocument();
     expect(calls.find((c) => c.path === '/v1/staff/console/alerts')?.query.get('clinic_id')).toBe(CLINIC_A);
@@ -117,7 +117,7 @@ describe('care gaps (read-only)', () => {
 });
 
 describe('care plans', () => {
-  const plans = (status = 'confirmation_requested') => [{ created_at: '2026-11-09T05:00:00Z', patient_id: ID.patient, plan_id: PLAN, status }];
+  const plans = (status = 'awaiting_confirmation') => [{ created_at: '2026-11-09T05:00:00Z', patient_id: ID.patient, plan_id: PLAN, status }];
   const confirm = (body: unknown): Routes[number] => ['post', `/v1/staff/care-plans/${PLAN}/confirm`, () => body as Response];
 
   it('lists ids and status only; a doctor can approve a plan that waits for confirmation, after a confirmation, with a key', async () => {

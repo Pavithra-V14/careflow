@@ -46,7 +46,7 @@ export function DashboardPage() {
                   {d.metrics.map((m) => (
                     <tr key={m.metric_id}>
                       <th scope="row">
-                        <code>{m.metric_id}</code>
+                        {t(`dashboard.metric.${m.metric_id}`)} <code className="hint">{m.metric_id}</code>
                       </th>
                       <td>{m.state === 'measured' ? <Badge tone="ok">{t('dashboard.state.measured')}</Badge> : <Badge tone="warn">{t('dashboard.state.unreadable')}</Badge>}</td>
                       <td>{m.state === 'measured' && m.value !== null ? formatNumber(m.value, lang) : t('dashboard.notReadable')}</td>
@@ -62,7 +62,7 @@ export function DashboardPage() {
               <ul>
                 {d.not_measured.map((id) => (
                   <li key={id}>
-                    <code>{id}</code>
+                    {t(`dashboard.metric.${id}`)} <code className="hint">{id}</code>
                   </li>
                 ))}
               </ul>

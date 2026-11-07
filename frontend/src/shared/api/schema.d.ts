@@ -162,7 +162,7 @@ export interface paths {
         };
         /**
          * Download My Data
-         * @description Everything this build holds about you that you may see: your account state, your record, your consent history, your bookings, your appointment and safety messages, your grievances. The care topic is not included (it needs full access, which no step of this build grants). Each download is an audit row. 403 unless you are an active patient account.
+         * @description Everything this build holds about you that you may see: your account state, your record, your consent history, your bookings, your appointment and safety messages, your grievances. The care topic is included only at the `active` stage; clinical notes are never included. Each download is an audit row. 403 unless you are an active patient account.
          */
         get: operations["download_my_data_v1_portal_my_data_get"];
         put?: never;
@@ -412,7 +412,7 @@ export interface paths {
         put?: never;
         /**
          * Open Break Glass
-         * @description Open a time-limited grant to read ONE patient's messages, with a reason code from the clinic's list (kept by the owner, not the application). 404 if the clinic or patient is not visible to you, 403 unless you are front desk, nurse or doctor there (with a recent second factor), 422 for a reason code that is not on the list, 503 while the window length is not configured.
+         * @description Open a time-limited grant to read ONE patient's messages, with a reason code from the clinic's list (kept by the owner, not the application). 404 if the clinic or patient is not visible to you, 403 unless you are front desk, nurse or doctor there (with a recent second factor), 422 for a reason code that is not on the list, 409 past the re-open cap, 503 while the window length or the cap is not configured.
          */
         post: operations["open_break_glass_v1_staff_break_glass_post"];
         delete?: never;
@@ -683,6 +683,26 @@ export interface paths {
          * @description Set the clinic's autonomy mode to shadow or assisted, as an admin with a verified second factor (checked again by the database). Idempotent on the key. 404 if the clinic is not visible to you, 403 unless you are an admin there, 409 if the key belongs to another change.
          */
         post: operations["set_autonomy_v1_staff_console_autonomy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/console/autonomy/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Autonomy History
+         * @description The clinic's past autonomy-mode changes and switch-to-autonomous proposals with their outcomes, newest first: ids, words and times only. Read-only; each read is an audit row. 404 if the clinic is not visible to you, 403 unless you are an admin or doctor there (a verified second factor is required for every staff route and for the proposal rows by the database).
+         */
+        get: operations["autonomy_history_v1_staff_console_autonomy_history_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2293,8 +2313,11 @@ export interface components {
         AlertOut: {
             /** Acknowledged */
             acknowledged: boolean;
-            /** Alert Class */
-            alert_class: string;
+            /**
+             * Alert Class
+             * @enum {string}
+             */
+            alert_class: "red_flag_overdue" | "task_overdue" | "task_escalated" | "dead_letters" | "queue_age" | "canary_approved" | "spend_runaway" | "delivery_failed" | "fallback_spike" | "tracing_cap";
             /**
              * Alert Id
              * Format: uuid
@@ -2368,6 +2391,39 @@ export interface components {
             resource_id: string | null;
             /** Resource Type */
             resource_type: string | null;
+        };
+        /** AutonomyHistory */
+        AutonomyHistory: {
+            /** Items */
+            items: components["schemas"]["AutonomyHistoryItemOut"][];
+        };
+        /** AutonomyHistoryItemOut */
+        AutonomyHistoryItemOut: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /**
+             * By
+             * Format: uuid
+             */
+            by: string;
+            /** Decided At */
+            decided_at: string | null;
+            /** Decided By */
+            decided_by: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "mode_change" | "proposal";
+            /** Mode */
+            mode: ("shadow" | "assisted" | "autonomous") | null;
+            /** Outcome */
+            outcome: ("pending" | "approved" | "rejected" | "expired") | null;
+            /** Proposer Role */
+            proposer_role: ("admin" | "doctor") | null;
         };
         /** AutonomyOut */
         AutonomyOut: {
@@ -2912,8 +2968,11 @@ export interface components {
             flagged_overdue: boolean;
             /** Item Id */
             item_id: string;
-            /** Source */
-            source: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "overdue_recurrence" | "after_the_fact_review" | "unresolved_barrier";
         };
         /** CareGapSummaryOut */
         CareGapSummaryOut: {
@@ -2921,8 +2980,11 @@ export interface components {
             median_age_days: number | null;
             /** Open Count */
             open_count: number | null;
-            /** Source */
-            source: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "overdue_recurrence" | "after_the_fact_review" | "unresolved_barrier";
             /** Undated */
             undated: number;
         };
@@ -2963,8 +3025,11 @@ export interface components {
              * Format: uuid
              */
             plan_id: string;
-            /** Status */
-            status: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "started" | "proposed" | "screened" | "held_unassessable" | "red_flag_escalated" | "plan_invalid" | "confirmation_requested" | "active" | "rejected" | "waiting" | "result_in" | "claimed" | "claim_lost" | "overdue" | "condition_met" | "condition_not_met" | "referral_proposed" | "step_closed" | "needs_doctor" | "no_more_waits" | "completed";
             /** Task Id */
             task_id: string | null;
             /**
@@ -2990,8 +3055,11 @@ export interface components {
              * Format: uuid
              */
             plan_id: string;
-            /** Status */
-            status: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "screening" | "awaiting_confirmation" | "active" | "completed" | "rejected" | "held" | "erased";
         };
         /** ClaimIn */
         ClaimIn: {
@@ -3125,8 +3193,11 @@ export interface components {
         };
         /** DashboardMetricOut */
         DashboardMetricOut: {
-            /** Metric Id */
-            metric_id: string;
+            /**
+             * Metric Id
+             * @enum {string}
+             */
+            metric_id: "grounding_rate" | "context_recall" | "answer_relevancy" | "latency_p95_machine" | "latency_human_wait" | "latency_external_wait" | "cost_per_query" | "task_completion_rate" | "tool_call_accuracy" | "cost_per_completed_task" | "loop_failure_rate" | "escalation_rate_and_accuracy" | "golden_set_vs_variance_band" | "guardrail_trigger_accuracy" | "audit_log_completeness" | "red_flag_recall" | "urgent_case_recall" | "red_flag_task_overdue" | "safety_net_fail_closed_rate" | "canary_catch_rate" | "after_the_fact_review_error_rate" | "wrong_merge_rate" | "card_recall_at_3" | "correct_abstention_rate" | "priority_accuracy" | "false_routing_rate" | "index_freshness_lag" | "engine_agreement" | "uptime" | "error_rate" | "step_efficiency" | "tool_status_mix" | "queue_depth_and_oldest_age" | "review_queue_age" | "dead_letter_count" | "rollback_frequency" | "model_dependency_health" | "fallback_and_abstention_spike" | "cost_per_successful_workflow" | "first_pass_success_rate" | "cache_hit_rate" | "failure_multiplier" | "cost_tail_top_5_percent" | "evaluation_spend" | "referral_to_appointment_time" | "urgent_cases_seen_within_target" | "backfill_fill_rate" | "followups_closed_vs_lost" | "no_show_rate" | "intake_completion_rate" | "readiness_escalation_rate" | "barrier_resolution_rate" | "voice_safety_escalation_rate" | "voice_scope_adherence_rate" | "care_gap_open_count" | "care_gap_median_age" | "adoption_rate" | "automation_rate";
             /**
              * State
              * @enum {string}
@@ -3145,7 +3216,7 @@ export interface components {
             /** Metrics */
             metrics: components["schemas"]["DashboardMetricOut"][];
             /** Not Measured */
-            not_measured: string[];
+            not_measured: ("grounding_rate" | "context_recall" | "answer_relevancy" | "latency_p95_machine" | "latency_human_wait" | "latency_external_wait" | "cost_per_query" | "task_completion_rate" | "tool_call_accuracy" | "cost_per_completed_task" | "loop_failure_rate" | "escalation_rate_and_accuracy" | "golden_set_vs_variance_band" | "guardrail_trigger_accuracy" | "audit_log_completeness" | "red_flag_recall" | "urgent_case_recall" | "red_flag_task_overdue" | "safety_net_fail_closed_rate" | "canary_catch_rate" | "after_the_fact_review_error_rate" | "wrong_merge_rate" | "card_recall_at_3" | "correct_abstention_rate" | "priority_accuracy" | "false_routing_rate" | "index_freshness_lag" | "engine_agreement" | "uptime" | "error_rate" | "step_efficiency" | "tool_status_mix" | "queue_depth_and_oldest_age" | "review_queue_age" | "dead_letter_count" | "rollback_frequency" | "model_dependency_health" | "fallback_and_abstention_spike" | "cost_per_successful_workflow" | "first_pass_success_rate" | "cache_hit_rate" | "failure_multiplier" | "cost_tail_top_5_percent" | "evaluation_spend" | "referral_to_appointment_time" | "urgent_cases_seen_within_target" | "backfill_fill_rate" | "followups_closed_vs_lost" | "no_show_rate" | "intake_completion_rate" | "readiness_escalation_rate" | "barrier_resolution_rate" | "voice_safety_escalation_rate" | "voice_scope_adherence_rate" | "care_gap_open_count" | "care_gap_median_age" | "adoption_rate" | "automation_rate")[];
         };
         /** DuplicateList */
         DuplicateList: {
@@ -6757,6 +6828,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
             422: {
                 headers: {
@@ -7736,6 +7816,65 @@ export interface operations {
             };
             /** @description Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+        };
+    };
+    autonomy_history_v1_staff_console_autonomy_history_get: {
+        parameters: {
+            query: {
+                clinic_id: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutonomyHistory"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

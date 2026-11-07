@@ -181,7 +181,6 @@ function PlansPanel() {
   const { t } = useTranslation();
   const { api } = useAuth();
   const { active, hasRole } = useSession();
-  const word = useWord();
   const queryClient = useQueryClient();
   const [writing, setWriting] = useState(false);
   const [deciding, setDeciding] = useState<{ planId: string; action: CarePlanAction } | null>(null);
@@ -238,12 +237,12 @@ function PlansPanel() {
                   <td>
                     <ShortId id={p.patient_id} />
                   </td>
-                  <td>{word('care.plans.status', p.status)}</td>
+                  <td>{t(`care.plans.status.${p.status}`)}</td>
                   <td>
                     <Time value={p.created_at} />
                   </td>
                   <td>
-                    {canDecide && p.status === 'confirmation_requested' ? (
+                    {canDecide && p.status === 'awaiting_confirmation' ? (
                       <>
                         <button type="button" aria-label={`${t('care.plans.approve')} ${p.plan_id.slice(0, 8)}`} onClick={() => setDeciding({ planId: p.plan_id, action: 'approve' })}>
                           {t('care.plans.approve')}

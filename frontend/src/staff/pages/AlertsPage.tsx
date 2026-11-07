@@ -69,7 +69,7 @@ export function AlertsPage() {
               <tbody>
                 {d.items.map((a) => (
                   <tr key={a.alert_id}>
-                    <th scope="row">{word('alerts.class', a.alert_class)}</th>
+                    <th scope="row">{t(`alerts.class.${a.alert_class}`)}</th>
                     <td>{word('roles', a.audience_role)}</td>
                     <td>{formatNumber(a.count, lang)}</td>
                     <td>{a.ref ? <ShortId id={a.ref} /> : '–'}</td>

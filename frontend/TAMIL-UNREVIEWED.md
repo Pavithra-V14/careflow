@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-992 of 992 strings are unreviewed.
+1083 of 1083 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -142,11 +142,21 @@ Terms standardised: proposal, resolve / resolved.
 | `admin.autonomy.change` | Change the mode | முறையை மாற்று | ok |
 | `admin.autonomy.changeBody` | Sets the clinic to shadow or assisted. Switching to autonomous is only done through a proposal that a second person approves. | மருத்துவமனையை நிழல் அல்லது உதவியுடன் முறைக்கு அமைக்கிறது. தன்னாட்சிக்கு மாற்றுவது, இரண்டாம் நபர் ஒப்புக்கொள்ளும் முன்மொழிவு மூலம் மட்டுமே செய்யப்படும். | ok |
 | `admin.autonomy.col.action` | Action | செயல் | ok |
-| `admin.autonomy.col.by` | Proposed by | முன்மொழிந்தவர் | ok |
+| `admin.autonomy.col.by` | By | செய்தவர் | ok |
 | `admin.autonomy.col.created` | Created | உருவாக்கப்பட்டது | ok |
+| `admin.autonomy.col.decidedBy` | Decided by | முடிவு செய்தவர் | ok |
+| `admin.autonomy.col.mode` | Mode | முறை | ok |
+| `admin.autonomy.col.outcome` | Outcome | முடிவு | ok |
 | `admin.autonomy.col.proposal` | Proposal | முன்மொழிவு | ok |
 | `admin.autonomy.col.role` | As | பங்கு | ok |
+| `admin.autonomy.col.what` | What | என்ன | ok |
+| `admin.autonomy.col.when` | When | எப்போது | ok |
 | `admin.autonomy.decideBody` | Your decision is recorded under your name by the database. | உங்கள் முடிவு தரவுத்தளத்தால் உங்கள் பெயரில் பதிவு செய்யப்படும். | ok |
+| `admin.autonomy.historyEmpty` | There is no history yet. | இன்னும் வரலாறு இல்லை. | ok |
+| `admin.autonomy.historyNote` | Past mode changes and switch-to-autonomous proposals with their outcomes. Each read is recorded. | கடந்தகால முறை மாற்றங்களும் தன்னாட்சிக்கு மாற்றும் முன்மொழிவுகளும் அவற்றின் முடிவுகளுடன். ஒவ்வொரு படிப்பும் பதிவு செய்யப்படும். | ok |
+| `admin.autonomy.historyTitle` | History | வரலாறு | ok |
+| `admin.autonomy.kinds.mode_change` | Mode change | முறை மாற்றம் | ok |
+| `admin.autonomy.kinds.proposal` | Proposal | முன்மொழிவு | ok |
 | `admin.autonomy.mode` | Mode | முறை | ok |
 | `admin.autonomy.modeSet` | The mode was set. | முறை அமைக்கப்பட்டது. | ok |
 | `admin.autonomy.modes.assisted` | Assisted | உதவியுடன் | ok |
@@ -155,7 +165,10 @@ Terms standardised: proposal, resolve / resolved.
 | `admin.autonomy.neverSet` | (never set, so shadow) | (ஒருபோதும் அமைக்கப்படவில்லை; எனவே நிழல்) | ok |
 | `admin.autonomy.noPending` | There are no pending proposals. | நிலுவையில் உள்ள முன்மொழிவுகள் இல்லை. | ok |
 | `admin.autonomy.notEnabled` | Switching to autonomous is not enabled yet. Nothing was changed. | தன்னாட்சிக்கு மாற்றுவது இன்னும் இயக்கப்படவில்லை. எதுவும் மாற்றப்படவில்லை. | ok |
-| `admin.autonomy.note` | There is no history list: only proposals that are still pending are shown. | வரலாற்றுப் பட்டியல் இல்லை: இன்னும் நிலுவையில் உள்ள முன்மொழிவுகள் மட்டுமே காட்டப்படுகின்றன. | ok |
+| `admin.autonomy.outcomes.approved` | Approved | ஒப்புக்கொள்ளப்பட்டது | ok |
+| `admin.autonomy.outcomes.expired` | Expired | காலாவதியானது | ok |
+| `admin.autonomy.outcomes.pending` | Pending | நிலுவையில் | ok |
+| `admin.autonomy.outcomes.rejected` | Rejected | நிராகரிக்கப்பட்டது | ok |
 | `admin.autonomy.pending` | Pending proposals | நிலுவையில் உள்ள முன்மொழிவுகள் | ok |
 | `admin.autonomy.propose` | Propose switching to autonomous | தன்னாட்சிக்கு மாற்ற முன்மொழி | ok |
 | `admin.autonomy.proposeBody` | You propose as {{role}}. A different person who holds the other role must approve it within 7 days. Nothing changes until then. | நீங்கள் {{role}} ஆக முன்மொழிகிறீர்கள். மற்ற பங்கை வகிக்கும் வேறொருவர் 7 நாட்களுக்குள் ஒப்புக்கொள்ள வேண்டும். அதுவரை எதுவும் மாறாது. | ok |
@@ -290,6 +303,16 @@ Terms standardised: proposal, resolve / resolved.
 | `alerts.acknowledge` | Acknowledge | ஏற்றுக்கொள் | ok |
 | `alerts.acknowledged` | The alert was acknowledged. | எச்சரிக்கை ஏற்கப்பட்டது. | ok |
 | `alerts.already` | This alert was already acknowledged. The list will refresh. | இந்த எச்சரிக்கை ஏற்கனவே ஏற்கப்பட்டது. பட்டியல் புதுப்பிக்கப்படும். | ok |
+| `alerts.class.canary_approved` | A test case was approved | ஒரு சோதனை நிகழ்வு ஒப்புக்கொள்ளப்பட்டது | ok |
+| `alerts.class.dead_letters` | Failed jobs waiting | தோல்வியுற்ற பணிகள் காத்திருக்கின்றன | ok |
+| `alerts.class.delivery_failed` | Delivery failed | வழங்கல் தோல்வியடைந்தது | ok |
+| `alerts.class.fallback_spike` | Fallback spike | மாற்று வழி பயன்பாடு அதிகரிப்பு | ok |
+| `alerts.class.queue_age` | Queue is old | வரிசை பழையதாகிவிட்டது | ok |
+| `alerts.class.red_flag_overdue` | Red-flag task overdue | சிவப்புக் கொடிப் பணி தாமதமானது | ok |
+| `alerts.class.spend_runaway` | Spending is running away | செலவு கட்டுப்பாட்டை மீறுகிறது | ok |
+| `alerts.class.task_escalated` | Task escalated | பணி உயர்நிலைக்கு அனுப்பப்பட்டது | ok |
+| `alerts.class.task_overdue` | Task overdue | பணி தாமதமானது | ok |
+| `alerts.class.tracing_cap` | Tracing limit reached | தடமறிதல் வரம்பு எட்டப்பட்டது | ok |
 | `alerts.col.action` | Action | செயல் | ok |
 | `alerts.col.aimedAt` | Aimed at | யாருக்கு | ok |
 | `alerts.col.class` | Class | வகை | ok |
@@ -357,6 +380,9 @@ Terms standardised: proposal, resolve / resolved.
 | `care.gaps.resolved` | The barrier was resolved. | தடை தீர்க்கப்பட்டது. | ok |
 | `care.gaps.rows` | Items | உருப்படிகள் | ok |
 | `care.gaps.sameDecider` | You made the decision this sample was drawn from, so someone else must re-check it. Nothing was recorded. | இந்த மாதிரி எடுக்கப்பட்ட முடிவை நீங்களே எடுத்தீர்கள்; எனவே வேறொருவர் இதை மீண்டும் சரிபார்க்க வேண்டும். எதுவும் பதிவாகவில்லை. | ok |
+| `care.gaps.source.after_the_fact_review` | After-the-fact review | பின்னாய்வு மறுஆய்வு | ok |
+| `care.gaps.source.overdue_recurrence` | Overdue recurring item | தாமதமான மீள்நிகழ்வு உருப்படி | ok |
+| `care.gaps.source.unresolved_barrier` | Unresolved barrier | தீர்க்கப்படாத தடை | ok |
 | `care.gaps.start` | Start | தொடங்கு | ok |
 | `care.gaps.startEpisode` | Start an episode | நிகழ்வைத் தொடங்கு | ok |
 | `care.gaps.startedOn` | Started on | தொடங்கிய தேதி | ok |
@@ -383,6 +409,13 @@ Terms standardised: proposal, resolve / resolved.
 | `care.plans.reject` | Reject | நிராகரி | ok |
 | `care.plans.rejectTitle` | Reject this plan? | இந்தத் திட்டத்தை நிராகரிக்கவா? | ok |
 | `care.plans.send` | Submit plan | திட்டத்தைச் சமர்ப்பி | ok |
+| `care.plans.status.active` | Active | செயலில் | ok |
+| `care.plans.status.awaiting_confirmation` | Waiting for confirmation | உறுதிப்படுத்தலுக்குக் காத்திருக்கிறது | ok |
+| `care.plans.status.completed` | Completed | முடிந்தது | ok |
+| `care.plans.status.erased` | Erased | அழிக்கப்பட்டது | ok |
+| `care.plans.status.held` | Held for a person | ஒருவரின் பரிசீலனைக்காக நிறுத்தப்பட்டது | ok |
+| `care.plans.status.rejected` | Rejected | நிராகரிக்கப்பட்டது | ok |
+| `care.plans.status.screening` | Being screened | பரிசோதனையில் உள்ளது | ok |
 | `care.plans.text` | Plan text | திட்ட உரை | ok |
 | `care.plans.waiting.confirmation` | a confirmation | ஒரு உறுதிப்படுத்தல் | ok |
 | `care.plans.waiting.none` | nothing | எதுவுமில்லை | ok |
@@ -460,6 +493,64 @@ Terms standardised: proposal, resolve / resolved.
 | `dashboard.col.value` | Value | மதிப்பு | ok |
 | `dashboard.empty` | There is no metrics data to show. | காட்ட அளவீட்டுத் தரவு இல்லை. | ok |
 | `dashboard.measured` | Measured | அளக்கப்பட்டவை | ok |
+| `dashboard.metric.adoption_rate` | Adoption rate | ஏற்பு விகிதம் | ok |
+| `dashboard.metric.after_the_fact_review_error_rate` | After-the-fact review error rate | பின்னாய்வு மறுஆய்வுப் பிழை விகிதம் | ok |
+| `dashboard.metric.answer_relevancy` | Answer relevancy | பதிலின் பொருத்தம் | ok |
+| `dashboard.metric.audit_log_completeness` | Audit log completeness | தணிக்கைப் பதிவு முழுமை | ok |
+| `dashboard.metric.automation_rate` | Automation rate | தானியக்க விகிதம் | ok |
+| `dashboard.metric.backfill_fill_rate` | Backfill fill rate | காலி இடம் நிரப்பும் விகிதம் | ok |
+| `dashboard.metric.barrier_resolution_rate` | Barrier resolution rate | தடை தீர்வு விகிதம் | ok |
+| `dashboard.metric.cache_hit_rate` | Cache hit rate | தற்காலிகச் சேமிப்பு வெற்றி விகிதம் | ok |
+| `dashboard.metric.canary_catch_rate` | Test case catch rate | சோதனை நிகழ்வு பிடிப்பு விகிதம் | ok |
+| `dashboard.metric.card_recall_at_3` | Card recall at 3 | 3 இல் அட்டை மீட்பு | ok |
+| `dashboard.metric.care_gap_median_age` | Care gap median age | பராமரிப்பு இடைவெளி இடைநிலை வயது | ok |
+| `dashboard.metric.care_gap_open_count` | Open care gaps | திறந்த பராமரிப்பு இடைவெளிகள் | ok |
+| `dashboard.metric.context_recall` | Context recall | சூழல் மீட்பு | ok |
+| `dashboard.metric.correct_abstention_rate` | Correct abstention rate | சரியான விலகல் விகிதம் | ok |
+| `dashboard.metric.cost_per_completed_task` | Cost per completed task | முடிந்த பணிக்கான செலவு | ok |
+| `dashboard.metric.cost_per_query` | Cost per query | ஒரு வினவலுக்கான செலவு | ok |
+| `dashboard.metric.cost_per_successful_workflow` | Cost per successful workflow | வெற்றிகரமான பணிப்பாய்வுக்கான செலவு | ok |
+| `dashboard.metric.cost_tail_top_5_percent` | Cost tail, top 5 percent | செலவு வால், முதல் 5 சதவீதம் | ok |
+| `dashboard.metric.dead_letter_count` | Failed job count | தோல்வியுற்ற பணிகளின் எண்ணிக்கை | ok |
+| `dashboard.metric.engine_agreement` | Engine agreement | இயந்திர உடன்பாடு | ok |
+| `dashboard.metric.error_rate` | Error rate | பிழை விகிதம் | ok |
+| `dashboard.metric.escalation_rate_and_accuracy` | Escalation rate and accuracy | உயர்நிலை அனுப்புதல் விகிதமும் துல்லியமும் | ok |
+| `dashboard.metric.evaluation_spend` | Evaluation spend | மதிப்பீட்டுச் செலவு | ok |
+| `dashboard.metric.failure_multiplier` | Failure multiplier | தோல்விப் பெருக்கி | ok |
+| `dashboard.metric.fallback_and_abstention_spike` | Fallback and abstention spike | மாற்று வழி மற்றும் விலகல் அதிகரிப்பு | ok |
+| `dashboard.metric.false_routing_rate` | False routing rate | தவறான வழிப்படுத்தல் விகிதம் | ok |
+| `dashboard.metric.first_pass_success_rate` | First-pass success rate | முதல் முயற்சி வெற்றி விகிதம் | ok |
+| `dashboard.metric.followups_closed_vs_lost` | Follow-ups closed against lost | முடிந்த மற்றும் தவறவிட்ட தொடர்ச்சிகள் | ok |
+| `dashboard.metric.golden_set_vs_variance_band` | Golden set against the variance band | தங்கத் தொகுப்பு மற்றும் மாறுபாட்டு எல்லை | ok |
+| `dashboard.metric.grounding_rate` | Grounding rate | அடிப்படை ஆதார விகிதம் | ok |
+| `dashboard.metric.guardrail_trigger_accuracy` | Guardrail trigger accuracy | பாதுகாப்பு வரம்பு தூண்டல் துல்லியம் | ok |
+| `dashboard.metric.index_freshness_lag` | Index freshness lag | குறியீட்டுப் புதுமைத் தாமதம் | ok |
+| `dashboard.metric.intake_completion_rate` | Intake completion rate | உள்வாங்கல் முடிவு விகிதம் | ok |
+| `dashboard.metric.latency_external_wait` | Wait for an outside party | வெளியாருக்கான காத்திருப்பு | ok |
+| `dashboard.metric.latency_human_wait` | Wait for a person | ஒருவருக்கான காத்திருப்பு | ok |
+| `dashboard.metric.latency_p95_machine` | Machine latency, 95th percentile | இயந்திரத் தாமதம், 95வது சதவீதம் | ok |
+| `dashboard.metric.loop_failure_rate` | Loop failure rate | சுழற்சித் தோல்வி விகிதம் | ok |
+| `dashboard.metric.model_dependency_health` | Model dependency health | மாதிரி சார்புநிலை ஆரோக்கியம் | ok |
+| `dashboard.metric.no_show_rate` | No-show rate | வராதவர் விகிதம் | ok |
+| `dashboard.metric.priority_accuracy` | Priority accuracy | முன்னுரிமைத் துல்லியம் | ok |
+| `dashboard.metric.queue_depth_and_oldest_age` | Queue depth and oldest age | வரிசை ஆழமும் மிகப் பழைய வயதும் | ok |
+| `dashboard.metric.readiness_escalation_rate` | Readiness escalation rate | தயார்நிலை உயர்நிலை அனுப்புதல் விகிதம் | ok |
+| `dashboard.metric.red_flag_recall` | Red-flag recall | சிவப்புக் கொடி மீட்பு | ok |
+| `dashboard.metric.red_flag_task_overdue` | Red-flag tasks overdue | தாமதமான சிவப்புக் கொடிப் பணிகள் | ok |
+| `dashboard.metric.referral_to_appointment_time` | Time from referral to appointment | பரிந்துரையிலிருந்து சந்திப்பு வரையிலான நேரம் | ok |
+| `dashboard.metric.review_queue_age` | Review queue age | மதிப்பாய்வு வரிசை வயது | ok |
+| `dashboard.metric.rollback_frequency` | Rollback frequency | பின்னோக்கல் அதிர்வெண் | ok |
+| `dashboard.metric.safety_net_fail_closed_rate` | Safety net fail-closed rate | பாதுகாப்பு வலை மூடுதல் விகிதம் | ok |
+| `dashboard.metric.step_efficiency` | Step efficiency | படித் திறன் | ok |
+| `dashboard.metric.task_completion_rate` | Task completion rate | பணி முடிவு விகிதம் | ok |
+| `dashboard.metric.tool_call_accuracy` | Tool call accuracy | கருவி அழைப்புத் துல்லியம் | ok |
+| `dashboard.metric.tool_status_mix` | Tool status mix | கருவி நிலைக் கலவை | ok |
+| `dashboard.metric.uptime` | Uptime | இயங்கும் நேரம் | ok |
+| `dashboard.metric.urgent_case_recall` | Urgent case recall | அவசர நிகழ்வு மீட்பு | ok |
+| `dashboard.metric.urgent_cases_seen_within_target` | Urgent cases seen within target | இலக்கிற்குள் பார்க்கப்பட்ட அவசர நிகழ்வுகள் | ok |
+| `dashboard.metric.voice_safety_escalation_rate` | Voice safety escalation rate | குரல் பாதுகாப்பு உயர்நிலை அனுப்புதல் விகிதம் | ok |
+| `dashboard.metric.voice_scope_adherence_rate` | Voice scope adherence rate | குரல் வரம்பு பின்பற்றல் விகிதம் | ok |
+| `dashboard.metric.wrong_merge_rate` | Wrong merge rate | தவறான இணைப்பு விகிதம் | ok |
 | `dashboard.noneMeasured` | No metric is measured. | எந்த அளவீடும் அளக்கப்படவில்லை. | ok |
 | `dashboard.noneMissing` | Every metric has a query behind it. | ஒவ்வொரு அளவீட்டிற்கும் ஒரு வினவல் உள்ளது. | ok |
 | `dashboard.notMeasured` | Not measured | அளக்கப்படாதவை | ok |

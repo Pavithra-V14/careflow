@@ -142,6 +142,7 @@ export const OPERATIONS = {
   getAutonomy: { method: 'get', path: '/v1/staff/console/autonomy' },
   setAutonomy: { method: 'post', path: '/v1/staff/console/autonomy' },
   listAutonomyProposals: { method: 'get', path: '/v1/staff/console/autonomy/proposals' },
+  autonomyHistory: { method: 'get', path: '/v1/staff/console/autonomy/history' },
   proposeAutonomy: { method: 'post', path: '/v1/staff/console/autonomy/proposals' },
   resolveAutonomyProposal: { method: 'post', path: '/v1/staff/console/autonomy/proposals/{proposal_id}/resolve' },
   reviewerStats: { method: 'get', path: '/v1/staff/console/reviewer-stats' },
@@ -407,6 +408,7 @@ export function createApi(options: ApiOptions) {
       client.POST('/v1/staff/accounts/{account_id}/roles/revoke', { params: { path: { account_id: accountId }, header: { 'X-Idempotency-Key': key(o) } }, body }),
     getAutonomy: (clinicId: string) => client.GET('/v1/staff/console/autonomy', { params: { query: { clinic_id: clinicId } } }),
     setAutonomy: (body: AutonomySetIn, o?: WriteOptions) => client.POST('/v1/staff/console/autonomy', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    autonomyHistory: (clinicId: string) => client.GET('/v1/staff/console/autonomy/history', { params: { query: { clinic_id: clinicId } } }),
     listAutonomyProposals: (clinicId: string) => client.GET('/v1/staff/console/autonomy/proposals', { params: { query: { clinic_id: clinicId } } }),
     proposeAutonomy: (clinicId: string, proposerRole: 'admin' | 'doctor' | null, o?: WriteOptions) =>
       client.POST('/v1/staff/console/autonomy/proposals', { params: { header: { 'X-Idempotency-Key': key(o) } }, body: { clinic_id: clinicId, proposer_role: proposerRole } }),
