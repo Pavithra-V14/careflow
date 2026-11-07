@@ -195,15 +195,17 @@ async def test_the_audited_erasure_erases_the_grievance_text_and_counts_it(db):
 
 async def test_the_export_returns_only_the_callers_own_appointment_and_safety_messages_and_is_audited(db):
     w = await world(db)
-    h = await pg(db)
-    t_app = await h.fetchval("insert into msg.threads (clinic_id, patient_id, topic, created_by, origin, idempotency_key) values ($1, $2, 'appointments', $3, 'test', 'ta') returning id", w["clinic"], w["pat1"], w["nurse"])
-    t_care = await h.fetchval("insert into msg.threads (clinic_id, patient_id, topic, created_by, origin, idempotency_key) values ($1, $2, 'care', $3, 'test', 'tc') returning id", w["clinic"], w["pat1"], w["nurse"])
-    t_other = await h.fetchval("insert into msg.threads (clinic_id, patient_id, topic, created_by, origin, idempotency_key) values ($1, $2, 'appointments', $3, 'test', 'to') returning id", w["clinic"], w["pat2"], w["nurse"])
+    # threads and messages are written by the nurse under row-level security (the owner connection is subject to those policies too)
+    async def thread(patient, topic, key):
+        return (await as_app(db, w["nurse"], "insert into msg.threads (clinic_id, patient_id, topic, created_by, origin, idempotency_key) values (:c, :p, :t, :u, 'test', :k) returning id", c=w["clinic"], p=patient, t=topic, u=w["nurse"], k=key))[0][0]
+
+    t_app, t_care, t_other = await thread(w["pat1"], "appointments", "ta"), await thread(w["pat1"], "care", "tc"), await thread(w["pat2"], "appointments", "to")
     for t, topic, k in ((t_app, "appointments", "m1"), (t_care, "care", "m2"), (t_other, "appointments", "m3")):
-        await h.execute(
-            "insert into msg.messages (id, clinic_id, origin, topic, thread_id, sender_kind, recorded_by, body_ct, body_key_version, idempotency_key) values (gen_random_uuid(), $1, 'test', $2, $3, 'staff', $4, decode(repeat('01', 32), 'hex'), 1, $5)",
-            w["clinic"], topic, t, w["nurse"], f"{k}-{t}",
-        )
+        assert await as_app(
+            db, w["nurse"],
+            "insert into msg.messages (id, clinic_id, origin, topic, thread_id, sender_kind, recorded_by, body_ct, body_key_version, idempotency_key) values (gen_random_uuid(), :c, 'test', :tp, :t, 'staff', :u, decode(repeat('01', 32), 'hex'), 1, :k)",
+            c=w["clinic"], tp=topic, t=t, u=w["nurse"], k=f"{k}-{t}", aal2=True,
+        ) == 1
     rows = await as_app(db, w["p1"], "select topic from iam.export_my_messages()", aal2=False)
     assert rows == [("appointments",)]  # the care topic is not exported, nor another patient's message
     assert await as_app(db, w["unbound"], "select count(*) from iam.export_my_messages()", aal2=False) == [(0,)]
