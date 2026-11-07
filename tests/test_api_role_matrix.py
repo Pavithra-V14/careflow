@@ -3187,6 +3187,7 @@ def autonomy_resolve_cases(ids) -> list[tuple]:
 # a grant and an audit row that stay behind with the clinic (append-only).
 
 os.environ.setdefault("CAREFLOW_BREAK_GLASS_MINUTES", "30")
+os.environ.setdefault("CAREFLOW_BREAK_GLASS_MAX_REOPENS", "5")
 BREAK_GLASS = "/v1/staff/break-glass"
 BG_OPENERS = ("front_desk_a", "nurse_a", "doctor_a", "multi")
 BG_VISIBLE_REFUSED = ("admin_a", "business_owner_a", "auditor_a")

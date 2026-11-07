@@ -44,7 +44,9 @@ VARIABLES: Final = {
     "visit_readiness_task_priority": "CAREFLOW_VISIT_READINESS_TASK_PRIORITY",
     "voice_transcript_retention_days": "CAREFLOW_VOICE_TRANSCRIPT_RETENTION_DAYS",
     "clinic_time_zone": "CAREFLOW_CLINIC_TIME_ZONE",
+    "break_glass_reasons": "CAREFLOW_BREAK_GLASS_REASONS",
     "break_glass_minutes": "CAREFLOW_BREAK_GLASS_MINUTES",
+    "break_glass_max_reopens": "CAREFLOW_BREAK_GLASS_MAX_REOPENS",
     "grievance_categories": "CAREFLOW_GRIEVANCE_CATEGORIES",
 }
 

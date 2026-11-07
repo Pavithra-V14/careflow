@@ -28,8 +28,11 @@ from careflow.consent_settings import (
 
 
 async def run(env: dict, origin: str, dry_run: bool) -> int:
+    from careflow import demo_phase4
+
+    effective = demo_phase4.effective_environ(env, (env.get("CAREFLOW_PROFILE") or "").strip().lower())  # the labelled DEMO placeholder under the demo pack, the environment file otherwise
     try:
-        wanted = parse(env.get("CAREFLOW_CONSENT_NOTICES"))
+        wanted = parse(effective.get("CAREFLOW_CONSENT_NOTICES"))
     except ConsentSettingsError as exc:
         print(f"refusing: {exc}")
         return 2

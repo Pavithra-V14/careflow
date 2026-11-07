@@ -239,3 +239,27 @@ async def test_grievance_texts_rotate_to_a_new_key_with_a_ledger_row_and_erased_
     assert (await rotate_grievance_texts(db, VAULT, from_version=1, to_version=2, clinic_id=w["clinic"])).texts_rotated == 0
     assert (await db.execute(text("select texts_rotated from iam.grievance_rotation_batches where clinic_id = :c"), {"c": w["clinic"]})).scalars().all() == [2]
     assert await owner(db, "update iam.grievances set body_key_version = 1, body_ct = body_ct where id = :g", g=made[0]) == "23001"  # a version change without new ciphertext is not a rotation
+
+
+async def test_the_stage_is_derived_and_the_care_topic_is_exported_only_at_active(db):
+    w = await world(db)
+    h = await pg(db)
+    invited = uuid.uuid4()
+    await h.execute("insert into iam.accounts (id, account_type, status, origin) values ($1, 'patient', 'invited', 'test')", invited)
+    stage = lambda who: as_app(db, who, "select iam.patient_stage()", aal2=False)
+    assert await stage(invited) == [("registered",)]
+    assert await stage(w["unbound"]) == [("new_patient",)]
+    assert await stage(w["p1"]) == [("new_patient",)]  # bound (an automatic claim) but no front-desk approval
+    assert await as_app(db, w["nurse"], "select iam.patient_stage()") == "42501"  # staff have no stage
+    await h.execute("insert into mpi.claim_requests (clinic_id, origin, account_id, status) values ($1, 'test', $2, 'pending')", w["clinic"], w["p1"])
+    assert await stage(w["p1"]) == [("pending_activation",)]  # a pending claim
+    await h.execute("insert into mpi.claim_requests (clinic_id, origin, account_id, status) values ($1, 'test', $2, 'resolved')", w["clinic"], w["p2"])
+    assert await stage(w["p2"]) == [("active",)]  # a record bound through a claim the front desk approved
+    thread = (await as_app(db, w["nurse"], "insert into msg.threads (clinic_id, patient_id, topic, created_by, origin, idempotency_key) values (:c, :p, 'care', :u, 'test', :k) returning id", c=w["clinic"], p=w["pat2"], u=w["nurse"], k="st-care"))[0][0]
+    assert await as_app(
+        db, w["nurse"],
+        "insert into msg.messages (id, clinic_id, origin, topic, thread_id, sender_kind, recorded_by, body_ct, body_key_version, idempotency_key) values (gen_random_uuid(), :c, 'test', 'care', :t, 'staff', :u, decode(repeat('01', 32), 'hex'), 1, 'st-m')",
+        c=w["clinic"], t=thread, u=w["nurse"],
+    ) == 1
+    assert await as_app(db, w["p2"], "select topic from iam.export_my_messages()", aal2=False) == [("care",)]  # active: the care topic is in the download
+    assert await as_app(db, w["p1"], "select count(*) from iam.export_my_messages()", aal2=False) == [(0,)]  # another account's care messages never are
