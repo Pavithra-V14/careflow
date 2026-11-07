@@ -296,6 +296,130 @@
         "title": "AuditRowOut",
         "type": "object"
       },
+      "AutonomyHistory": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AutonomyHistoryItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "AutonomyHistory",
+        "type": "object"
+      },
+      "AutonomyHistoryItemOut": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "by": {
+            "format": "uuid",
+            "title": "By",
+            "type": "string"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By"
+          },
+          "kind": {
+            "enum": [
+              "mode_change",
+              "proposal"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "shadow",
+                  "assisted",
+                  "autonomous"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pending",
+                  "approved",
+                  "rejected",
+                  "expired"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "proposer_role": {
+            "anyOf": [
+              {
+                "enum": [
+                  "admin",
+                  "doctor"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposer Role"
+          }
+        },
+        "required": [
+          "kind",
+          "at",
+          "by",
+          "mode",
+          "proposer_role",
+          "outcome",
+          "decided_by",
+          "decided_at"
+        ],
+        "title": "AutonomyHistoryItemOut",
+        "type": "object"
+      },
       "AutonomyOut": {
         "additionalProperties": false,
         "properties": {
@@ -1444,6 +1568,11 @@
             "type": "string"
           },
           "source": {
+            "enum": [
+              "overdue_recurrence",
+              "after_the_fact_review",
+              "unresolved_barrier"
+            ],
             "title": "Source",
             "type": "string"
           }
@@ -1483,6 +1612,11 @@
             "title": "Open Count"
           },
           "source": {
+            "enum": [
+              "overdue_recurrence",
+              "after_the_fact_review",
+              "unresolved_barrier"
+            ],
             "title": "Source",
             "type": "string"
           },
@@ -10915,6 +11049,97 @@
           }
         ],
         "summary": "Set Autonomy",
+        "tags": [
+          "staff console"
+        ]
+      }
+    },
+    "/v1/staff/console/autonomy/history": {
+      "get": {
+        "description": "The clinic's past autonomy-mode changes and switch-to-autonomous proposals with their outcomes, newest first: ids, words and times only. Read-only; each read is an audit row. 404 if the clinic is not visible to you, 403 unless you are an admin or doctor there (a verified second factor is required for every staff route and for the proposal rows by the database).",
+        "operationId": "autonomy_history_v1_staff_console_autonomy_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Clinic Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutonomyHistory"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Autonomy History",
         "tags": [
           "staff console"
         ]

@@ -93,7 +93,13 @@ from careflow import (
 )
 from careflow import messages as messages_mod
 from careflow.adapters.storage import DOCUMENT_BUCKET, SupabaseUploadAdapter
-from careflow.api_enums import AlertClass, CarePlanProgress, CarePlanStatus, MetricId
+from careflow.api_enums import (
+    AlertClass,
+    CareGapSource,
+    CarePlanProgress,
+    CarePlanStatus,
+    MetricId,
+)
 from careflow.audit import write_audit
 from careflow.auth import (
     AuthError,
@@ -3447,14 +3453,14 @@ CARE_GAP_ROLES = ("nurse", "doctor", "admin")
 
 
 class CareGapRowOut(_Out):
-    source: str
+    source: CareGapSource
     item_id: str
     age_days: int | None
     flagged_overdue: bool  # older than the configured alert age (false whenever that setting is unset)
 
 
 class CareGapSummaryOut(_Out):
-    source: str
+    source: CareGapSource
     open_count: int | None  # null = the source could not be read (never 0)
     median_age_days: float | None
     undated: int
@@ -3680,6 +3686,45 @@ async def resolve_autonomy_proposal(proposal_id: uuid.UUID, body: AutonomyResolv
     except producers_sql.Refused:
         raise HTTPException(status_code=403, detail="your role may not do this") from None
     return AutonomyResolveOut(result=result)  # type: ignore[arg-type]
+
+
+class AutonomyHistoryItemOut(_Out):
+    kind: Literal["mode_change", "proposal"]
+    at: datetime  # when the mode changed, or when the proposal was made
+    by: uuid.UUID  # who changed the mode, or who proposed
+    mode: Literal["shadow", "assisted", "autonomous"] | None  # for a mode change
+    proposer_role: Literal["admin", "doctor"] | None  # for a proposal
+    outcome: Literal["pending", "approved", "rejected", "expired"] | None  # for a proposal
+    decided_by: uuid.UUID | None
+    decided_at: datetime | None
+
+
+class AutonomyHistory(_Out):
+    items: list[AutonomyHistoryItemOut]
+
+
+@staff_console.get("/autonomy/history", response_model=AutonomyHistory)
+async def autonomy_history(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 100) -> AutonomyHistory:
+    """The clinic's past autonomy-mode changes and switch-to-autonomous proposals with their outcomes, newest first: ids, words and times only. Read-only; each read is an audit row. 404 if the clinic is not visible to you, 403 unless you are an admin or doctor there (a verified second factor is required for every staff route and for the proposal rows by the database)."""
+    origin = await _console_clinic(conn, clinic_id, AUTONOMY_PROPOSERS)
+    changes = (await conn.execute(text("select mode, changed_by, changed_at from ops.autonomy_changes where clinic_id = :c order by changed_at desc, id desc limit :n"), {"c": clinic_id, "n": limit})).all()
+    proposals = (
+        await conn.execute(
+            text("select proposed_by, proposer_role, status, decided_by, decided_at, created_at from ops.autonomy_proposals where clinic_id = :c order by created_at desc, id desc limit :n"),
+            {"c": clinic_id, "n": limit},
+        )
+    ).all()
+    items = [AutonomyHistoryItemOut(kind="mode_change", at=r.changed_at, by=r.changed_by, mode=r.mode, proposer_role=None, outcome=None, decided_by=None, decided_at=None) for r in changes]
+    items += [
+        AutonomyHistoryItemOut(kind="proposal", at=r.created_at, by=r.proposed_by, mode=None, proposer_role=r.proposer_role, outcome=r.status, decided_by=r.decided_by, decided_at=r.decided_at) for r in proposals
+    ]
+    items.sort(key=lambda i: i.at, reverse=True)
+    actor = uuid.UUID(claims["sub"])
+    await write_audit(
+        conn, clinic_id=clinic_id, origin=origin, actor_id=actor, actor_role=await _acting_role(conn, claims, clinic_id, AUTONOMY_PROPOSERS), action="autonomy.history_read", resource_type="autonomy_history",
+        resource_id=clinic_id, details={"items": len(items[:limit])}, idempotency_key=f"audit:autonomy-history:{uuid.uuid4()}",
+    )
+    return AutonomyHistory(items=items[:limit])
 
 
 class EpisodeIn(_Body):

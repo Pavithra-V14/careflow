@@ -38,7 +38,9 @@ It prints how many migrations are pending and their file names, in order (for ex
 .\.venv\Scripts\python.exe -m careflow.migrate
 ```
 
-You should see `N migration(s) applied` and the same names. If you see an error mentioning *out of order*, *edited after it was applied* or *missing*, **stop** and paste me the whole message (it contains no secret).
+You should see `N migration(s) applied` and the same names. **About a gap you may have seen (0036, then 0038):** migration `0037_front_desk_scheduling_checkpoints.sql` is in the repository (it was added together with 0038). The runner applies pending files strictly in number order and refuses to run if a lower number is still pending after a higher one was applied, so a correct list never skips a number. If your list ever shows 0036 and 0038 but not 0037, paste me the whole list.
+
+If you see an error mentioning *out of order*, *edited after it was applied* or *missing*, **stop** and paste me the whole message (it contains no secret).
 
 ## 3. The `.env` file (names only)
 
