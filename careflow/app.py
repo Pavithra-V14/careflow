@@ -77,6 +77,7 @@ from careflow import (
     learning_labels,
     metrics_catalog,
     mpi,
+    notes_sql,
     offers,
     openapi_errors,
     patient_view,
@@ -4081,6 +4082,7 @@ class ResultIn(_Body):
     valid_from: datetime
     valid_to: datetime | None = None
     supersedes_id: uuid.UUID | None = None
+    change: Literal["amendment", "correction"] | None = Field(default=None, description="Only with supersedes_id: a new measurement (amendment) or a correction of a wrong value. Left out, the database infers it: same test code and same effective date is a correction.")
 
 
 class ResultOut(_Out):
@@ -4166,13 +4168,13 @@ async def confirm_care_plan(plan_id: uuid.UUID, body: CarePlanConfirmIn, idempot
 async def record_result(body: ResultIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> ResultOut:
     """Record a result for a patient of the clinic (append-only; a correction names the result it supersedes) and queue the wake-up of any care plan whose open wait it matches (through the outbox; the worker wakes the plan). Idempotent on the key. 404 if the clinic or patient is not visible, 403 unless you are a nurse or doctor there, 422 for a malformed measure."""
     origin = await _console_clinic(conn, body.clinic_id, RESULT_WRITERS)
-    if any(not _MEASURE_KEY.match(k) or (v is not None and not math.isfinite(v)) for k, v in body.measures.items()) or (body.valid_to is not None and body.valid_to <= body.valid_from):
+    if any(not _MEASURE_KEY.match(k) or (v is not None and not math.isfinite(v)) for k, v in body.measures.items()) or (body.valid_to is not None and body.valid_to <= body.valid_from) or (body.change is not None and body.supersedes_id is None):
         raise HTTPException(status_code=422, detail="request rejected")
     actor = uuid.UUID(claims["sub"])
     try:
         result_id, created = await care_journey_sql.record_result(
             conn, clinic_id=body.clinic_id, origin=origin, patient_id=body.patient_id, code=body.code, measures=body.measures, verified=body.verified, valid_from=body.valid_from,
-            valid_to=body.valid_to, supersedes_id=body.supersedes_id, recorded_by=actor, idempotency_key=f"result:{idempotency_key}",
+            valid_to=body.valid_to, supersedes_id=body.supersedes_id, recorded_by=actor, idempotency_key=f"result:{idempotency_key}", change_kind=body.change,
         )
     except care_journey_sql.Refused:
         raise HTTPException(status_code=404, detail="not found") from None
@@ -4185,7 +4187,7 @@ async def record_result(body: ResultIn, idempotency_key: IdempotencyKey, request
     if created:
         await write_audit(
             conn, clinic_id=body.clinic_id, origin=origin, actor_id=actor, actor_role=await _acting_role(conn, claims, body.clinic_id, RESULT_WRITERS), action="result.record", resource_type="result", resource_id=result_id,
-            details={"verified": body.verified}, idempotency_key=f"audit:result-record:{result_id}",
+            details={"verified": body.verified, "supersedes": body.supersedes_id is not None, "declared": body.change}, idempotency_key=f"audit:result-record:{result_id}",
         )
         if components is not None and components.durable:
             # the producer side of the outbox (decision 11): the event is written in THIS transaction, next to the result; the tick's relay turns it into a job and the worker identity wakes the plans
@@ -4809,7 +4811,7 @@ class RecoveryList(_Out):
 
 
 class RecoveryResolveOut(_Out):
-    result: Literal["approved", "completed", "cancelled", "not_requested", "not_approved", "not_open", "same_person"]
+    result: Literal["approved", "completed", "cancelled"]
 
 
 @staff_recovery.post("", response_model=RecoveryRequestOut, status_code=201, dependencies=[Depends(require_step_up)])
@@ -4840,9 +4842,14 @@ async def _recovery_resolve(conn: AsyncConnection, request_id: uuid.UUID, action
     if not await _clinic_role_held(conn, clinic_id, RECOVERY_ADMINS):
         raise HTTPException(status_code=403, detail="your role may not do this")
     try:
-        return await recovery_sql.resolve(conn, request_id=request_id, action=action)
+        raw = await recovery_sql.resolve(conn, request_id=request_id, action=action)
     except recovery_sql.Refused:
         raise HTTPException(status_code=403, detail="your role may not do this") from None
+    if raw == "same_person":
+        raise HTTPException(status_code=403, detail="your role may not do this")  # the requester or the account itself, not a second admin
+    if raw not in ("approved", "completed", "completed_now", "cancelled"):
+        raise HTTPException(status_code=409, detail="the request is not in a state that allows this")  # not_requested, not_approved, not_open, target_gone
+    return raw
 
 
 @staff_recovery.post("/{request_id}/approve", response_model=RecoveryResolveOut, dependencies=[Depends(require_step_up)])
@@ -4871,13 +4878,99 @@ async def complete_staff_recovery(request_id: uuid.UUID, idempotency_key: Idempo
         raise HTTPException(status_code=503, detail="recovery is unavailable: not configured")
     state = await recovery_sql.request_state(conn, request_id)
     if state is not None and state.target_account_id == uuid.UUID(claims["sub"]):
-        raise HTTPException(status_code=403, detail="your role may not do this")  # the account being recovered never completes its own recovery (checked BEFORE the port is called)
-    if state is not None and state.status == "approved":
+        raise HTTPException(status_code=403, detail="your role may not do this")  # the account being recovered never completes its own recovery
+    # the DATABASE decides first (under the request's row lock): only a fresh completion ("completed_now") resets the factors, in this same transaction; if the port fails the exception rolls the completion back
+    raw = await _recovery_resolve(conn, request_id, "complete")
+    if raw == "completed_now":
+        if state is None:
+            raise HTTPException(status_code=500, detail="internal error")  # never commit a completion without resetting the factors (the raise rolls it back)
         try:
             await port.reset_factors(state.target_account_id)
         except AuthAdminError:
-            raise HTTPException(status_code=503, detail="recovery is unavailable: not configured") from None  # (nothing about the exchange is kept)
-    return RecoveryResolveOut(result=await _recovery_resolve(conn, request_id, "complete"))  # type: ignore[arg-type]
+            raise HTTPException(status_code=503, detail="recovery is unavailable: the factor reset failed") from None  # (nothing about the exchange is kept)
+    return RecoveryResolveOut(result="completed")
+
+
+# ---- Clinical notes (migration 0061; BUILD-SPEC.md 9.6) ---------------------------------------------------------------------------------------------------------------------------------------------------
+#
+# Append-only notes by nurses and doctors; a correction is an ADDENDUM (a new note naming the one it adds to, same patient). The body is encrypted at rest. Reads and writes need a second factor in the database.
+
+staff_notes = APIRouter(prefix="/v1/staff/notes", tags=["staff notes"])
+NOTE_ROLES = ("nurse", "doctor")
+NOTE_TEXT_MAX = 8000
+
+
+class NoteIn(_Body):
+    clinic_id: uuid.UUID
+    patient_id: uuid.UUID
+    parent_id: uuid.UUID | None = None
+    text: str = Field(min_length=1, max_length=NOTE_TEXT_MAX)
+
+
+class NoteOut(_Out):
+    note_id: uuid.UUID
+    created: bool
+
+
+class NoteRowOut(_Out):
+    note_id: uuid.UUID
+    parent_id: uuid.UUID | None
+    author_id: uuid.UUID
+    created_at: datetime
+    erased: bool
+    text: str | None  # null when erased or unreadable (or while the encryption keys are not loaded)
+
+
+class NoteList(_Out):
+    notes: list[NoteRowOut]
+
+
+@staff_notes.post("", response_model=NoteOut, status_code=201)
+async def write_clinical_note(body: NoteIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> NoteOut:
+    """Write a clinical note for a patient of the clinic, or an addendum to an earlier note of the same patient (notes are never edited). 404 if the clinic, the patient or the note it adds to is not visible to you, 403 unless you are a nurse or doctor there (with a recent second factor), 503 while the encryption keys are not configured."""
+    origin = await _console_clinic(conn, body.clinic_id, NOTE_ROLES)
+    known = (await conn.execute(text("select 1 from mpi.patients where id = :p and clinic_id = :c and erased_at is null"), {"p": body.patient_id, "c": body.clinic_id})).first()
+    if known is None:
+        raise HTTPException(status_code=404, detail="not found")
+    vault: DemographicVault | None = request.app.state.vault
+    key_version = _active_key_version(request)
+    if vault is None or key_version is None:
+        raise HTTPException(status_code=503, detail="notes are unavailable: encryption keys are not configured")
+    author = uuid.UUID(claims["sub"])
+    note_id = uuid.uuid5(uuid.NAMESPACE_URL, f"careflow-note:{body.clinic_id}:{idempotency_key}")
+    ct = messages_mod.encrypt_note_text(vault, body.text, clinic_id=body.clinic_id, note_id=note_id, key_version=key_version)
+    try:
+        written, created = await notes_sql.write_note(
+            conn, note_id=note_id, clinic_id=body.clinic_id, origin=origin, patient_id=body.patient_id, author_id=author, parent_id=body.parent_id, body_ct=ct, key_version=key_version, idempotency_key=f"note:{idempotency_key}"
+        )
+    except notes_sql.Refused:
+        raise HTTPException(status_code=404, detail="not found") from None  # the note it adds to is not this patient's, or the key belongs to another note
+    if created:
+        await write_audit(
+            conn, clinic_id=body.clinic_id, origin=origin, actor_id=author, actor_role=await _acting_role(conn, claims, body.clinic_id, NOTE_ROLES), action="note.write", resource_type="note", resource_id=written,
+            details={"addendum": body.parent_id is not None}, idempotency_key=f"audit:note-write:{written}",
+        )
+    return NoteOut(note_id=written, created=created)
+
+
+@staff_notes.get("", response_model=NoteList)
+async def list_clinical_notes(clinic_id: uuid.UUID, patient_id: uuid.UUID, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 100) -> NoteList:
+    """A patient's notes, oldest first, with addenda naming the note they add to (the text is shown while the keys are loaded and the note is not erased). 404 if the clinic or patient is not visible to you, 403 unless you are a nurse or doctor there."""
+    await _console_clinic(conn, clinic_id, NOTE_ROLES)
+    known = (await conn.execute(text("select 1 from mpi.patients where id = :p and clinic_id = :c"), {"p": patient_id, "c": clinic_id})).first()
+    if known is None:
+        raise HTTPException(status_code=404, detail="not found")
+    vault: DemographicVault | None = request.app.state.vault
+    out: list[NoteRowOut] = []
+    for r in await notes_sql.list_notes(conn, clinic_id=clinic_id, patient_id=patient_id, limit=limit):
+        body: str | None = None
+        if vault is not None and r.body_ct is not None and r.body_key_version is not None:
+            try:
+                body = messages_mod.decrypt_note_text(vault, bytes(r.body_ct), clinic_id=clinic_id, note_id=r.id, key_version=r.body_key_version)
+            except CryptoError:
+                body = None
+        out.append(NoteRowOut(note_id=r.id, parent_id=r.parent_id, author_id=r.author_id, created_at=r.created_at, erased=r.erased_at is not None, text=body))
+    return NoteList(notes=out)
 
 
 def _positive_int(raw: str | None) -> int | None:
@@ -5081,8 +5174,9 @@ def create_app(
     app.include_router(portal_rights)
     app.include_router(staff_grievances)
     app.include_router(staff_recovery)
+    app.include_router(staff_notes)
     app.include_router(health)
-    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, portal, staff_voice, staff_care_plans, staff_results, staff_portal_claims, staff_visits])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
+    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, portal, staff_voice, staff_care_plans, staff_results, staff_portal_claims, staff_visits, staff_break_glass, portal_rights, staff_grievances, staff_recovery, staff_notes])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
     return app
 
 

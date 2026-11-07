@@ -354,15 +354,15 @@ async def create_plan(conn: AsyncConnection, vault: DemographicVault, *, clinic_
 
 async def record_result(
     conn: AsyncConnection, *, clinic_id: uuid.UUID, origin: str, patient_id: uuid.UUID, code: str, measures: dict[str, float | None], verified: bool, valid_from: Any, valid_to: Any,
-    supersedes_id: uuid.UUID | None, recorded_by: uuid.UUID, idempotency_key: str,
+    supersedes_id: uuid.UUID | None, recorded_by: uuid.UUID, idempotency_key: str, change_kind: str | None = None,
 ) -> tuple[uuid.UUID, bool]:
     import json
 
     return await _result_insert(
         conn,
-        "insert into clinical.results (clinic_id, origin, patient_id, code, measures, verified, valid_from, valid_to, supersedes_id, recorded_by, idempotency_key) "
-        "values (:c, :o, :p, :code, cast(:m as jsonb), :v, :vf, :vt, :s, :by, :k)",
-        {"c": clinic_id, "o": origin, "p": patient_id, "code": code, "m": json.dumps(measures, sort_keys=True), "v": verified, "vf": valid_from, "vt": valid_to, "s": supersedes_id, "by": recorded_by, "k": idempotency_key},
+        "insert into clinical.results (clinic_id, origin, patient_id, code, measures, verified, valid_from, valid_to, supersedes_id, recorded_by, idempotency_key, change_kind) "
+        "values (:c, :o, :p, :code, cast(:m as jsonb), :v, :vf, :vt, :s, :by, :k, :ck)",
+        {"c": clinic_id, "o": origin, "p": patient_id, "code": code, "m": json.dumps(measures, sort_keys=True), "v": verified, "vf": valid_from, "vt": valid_to, "s": supersedes_id, "by": recorded_by, "k": idempotency_key, "ck": change_kind},
         clinic_id, idempotency_key, patient_id,
     )
 

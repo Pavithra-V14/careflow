@@ -93,16 +93,24 @@ begin
         return query select v_prior.id, false;
         return;
     end if;
-    -- the account must be a STAFF account with a live role in this clinic (an admin of one clinic cannot reset the factors of staff elsewhere)
+    -- the account must be a STAFF account with a live role in this clinic, and in NO other clinic: its second factor belongs to the whole account, so one clinic's admins must not be able to weaken
+    -- another clinic's staff (an account with roles in several clinics is recovered by the operator, outside this path: an owner decision named in the gap audit)
     if not exists (select 1 from iam.accounts a join iam.staff_roles sr on sr.account_id = a.id
-                    where a.id = p_target_account_id and a.account_type = 'staff' and a.status = 'active' and sr.clinic_id = p_clinic_id and sr.revoked_at is null) then
+                    where a.id = p_target_account_id and a.account_type = 'staff' and a.status = 'active' and sr.clinic_id = p_clinic_id and sr.revoked_at is null)
+       or exists (select 1 from iam.staff_roles o where o.account_id = p_target_account_id and o.clinic_id <> p_clinic_id and o.revoked_at is null) then
         raise exception 'recovery refused' using errcode = '42501';
     end if;
     select c.origin into v_origin from iam.clinics c where c.id = p_clinic_id;
     insert into iam.recovery_requests (clinic_id, origin, target_account_id, requested_by, idempotency_key) values (p_clinic_id, v_origin, p_target_account_id, v_actor, p_idempotency_key)
     on conflict do nothing returning id into v_id;
     if v_id is null then
-        raise exception 'recovery refused' using errcode = '42501';  -- another recovery is already open for this account, or a concurrent call with the same key won
+        -- a concurrent call with the same key won (its replay is returned), or another recovery is already open for this account (refused)
+        select r.id, r.requested_by, r.target_account_id into v_prior from iam.recovery_requests r where r.clinic_id = p_clinic_id and r.idempotency_key = p_idempotency_key;
+        if found and v_prior.requested_by = v_actor and v_prior.target_account_id = p_target_account_id then
+            return query select v_prior.id, false;
+            return;
+        end if;
+        raise exception 'recovery refused' using errcode = '42501';
     end if;
     insert into audit.log (origin, clinic_id, actor_id, actor_role, action, resource_type, resource_id, details, idempotency_key)
     values (v_origin, p_clinic_id, v_actor, 'admin', 'staff.recovery_request', 'account', p_target_account_id::text, jsonb_build_object('request_id', v_id::text), 'sys:staff-recovery-request:' || v_id::text);
@@ -125,6 +133,12 @@ begin
     if not found or not iam.has_clinic_role(v_r.clinic_id, array['admin']) then
         raise exception 'recovery refused' using errcode = '42501';
     end if;
+    if p_action in ('approve', 'complete') and v_r.status in ('requested', 'approved')
+       and not exists (select 1 from iam.accounts a join iam.staff_roles sr on sr.account_id = a.id
+                        where a.id = v_r.target_account_id and a.account_type = 'staff' and a.status = 'active' and sr.clinic_id = v_r.clinic_id and sr.revoked_at is null)
+       or exists (select 1 from iam.staff_roles o where o.account_id = v_r.target_account_id and o.clinic_id <> v_r.clinic_id and o.revoked_at is null) then  -- the account-wide factor: a role gained elsewhere since the request stops it too
+        return 'target_gone';  -- the account was suspended or lost its role since the request
+    end if;
     if p_action = 'approve' then
         if v_r.status = 'approved' and v_r.approved_by = v_actor then return 'approved'; end if;  -- a replay by the approver
         if v_r.status <> 'requested' then return 'not_requested'; end if;
@@ -138,9 +152,10 @@ begin
         if v_r.status <> 'approved' then return 'not_approved'; end if;
         if v_actor = v_r.target_account_id then return 'same_person'; end if;
         update iam.recovery_requests set status = 'completed' where id = p_request_id;
+        -- the caller resets the factors through the Auth admin port ONLY on this answer, in this same transaction: if the port fails the request is rolled back to approved
         insert into audit.log (origin, clinic_id, actor_id, actor_role, action, resource_type, resource_id, details, idempotency_key)
         values (v_r.origin, v_r.clinic_id, v_actor, 'admin', 'staff.recovery_complete', 'account', v_r.target_account_id::text, jsonb_build_object('request_id', p_request_id::text), 'sys:staff-recovery-complete:' || p_request_id::text);
-        return 'completed';
+        return 'completed_now';
     else
         if v_r.status = 'cancelled' then return 'cancelled'; end if;
         if v_r.status not in ('requested', 'approved') then return 'not_open'; end if;

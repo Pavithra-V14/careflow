@@ -117,8 +117,9 @@ async def test_two_admins_request_approve_and_complete_and_every_step_is_audited
     assert await as_app(db, w["admin2"], RESOLVE, r=rid, a="complete") == [("not_approved",)]
     assert await as_app(db, w["admin2"], RESOLVE, r=rid, a="approve") == [("approved",)]
     assert await as_app(db, w["admin2"], RESOLVE, r=rid, a="approve") == [("approved",)]  # a replay by the approver
-    assert await as_app(db, w["admin2"], RESOLVE, r=rid, a="complete") == [("completed",)]
-    assert await as_app(db, w["admin2"], RESOLVE, r=rid, a="complete") == [("completed",)]
+    assert await as_app(db, w["nurse"], RESOLVE, r=rid, a="complete") == "42501"  # the account being recovered is no admin
+    assert await as_app(db, w["admin2"], RESOLVE, r=rid, a="complete") == [("completed_now",)]  # the caller resets the factors only on THIS answer
+    assert await as_app(db, w["admin2"], RESOLVE, r=rid, a="complete") == [("completed",)]  # a replay: no second reset
     assert await as_app(db, w["admin2"], RESOLVE, r=rid, a="cancel") == [("not_open",)]
     actions = [a for (a,) in (await db.execute(text("select action from audit.log where details ->> 'request_id' = :r order by id"), {"r": str(rid)})).all()]
     assert actions == ["staff.recovery_request", "staff.recovery_approve", "staff.recovery_complete"]
@@ -135,6 +136,10 @@ async def test_who_may_ask_and_what_the_database_refuses(db):
     assert await as_app(db, w["admin1"], REQUEST, c=w["clinic"], t=w["patient_acct"], k="p") == "42501"  # a patient account is not staff
     assert await as_app(db, w["admin1"], REQUEST, aal2=False, c=w["clinic"], t=w["nurse"], k="x") == "42501"
     assert await as_app(db, w["admin1"], REQUEST, c=w["clinic"], t=uuid.uuid4(), k="y") == "42501"
+    # a staff account with a live role in ANOTHER clinic too: its factor is account-wide, so this clinic's admins cannot reset it
+    h = await pg(db)
+    await h.execute("insert into iam.staff_roles (account_id, clinic_id, role, origin) values ($1, $2, 'nurse', 'test')", w["nurse2"], w["other_clinic"])
+    assert await ask(db, w, target="nurse2") == "42501"
 
 
 @DB_SKIP
@@ -147,6 +152,19 @@ async def test_cancel_before_completion_and_the_account_being_recovered_cannot_a
     rid2 = (await ask(db, w, key="c2"))[0][0]
     assert await as_app(db, w["admin2"], RESOLVE, r=rid2, a="approve") == [("approved",)]
     assert await as_app(db, w["admin1"], RESOLVE, r=rid2, a="cancel") == [("cancelled",)]  # an approved request can still be cancelled
+
+
+@DB_SKIP
+async def test_a_target_that_lost_its_role_or_was_suspended_cannot_be_approved_or_completed(db):
+    w = await world(db)
+    h = await pg(db)
+    rid = (await ask(db, w, key="g1"))[0][0]
+    await h.execute("update iam.accounts set status = 'suspended' where id = $1", w["nurse"])
+    assert await as_app(db, w["admin2"], RESOLVE, r=rid, a="approve") == [("target_gone",)]
+    assert await as_app(db, w["admin2"], RESOLVE, r=rid, a="cancel") == [("cancelled",)]
+    rid2 = (await ask(db, w, key="g2", target="nurse2"))[0][0]
+    await h.execute("insert into iam.staff_roles (account_id, clinic_id, role, origin) values ($1, $2, 'nurse', 'test')", w["nurse2"], w["other_clinic"])  # a role gained elsewhere since the request
+    assert await as_app(db, w["admin2"], RESOLVE, r=rid2, a="approve") == [("target_gone",)]
 
 
 @DB_SKIP

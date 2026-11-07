@@ -3390,7 +3390,7 @@ def staff_recovery_approve_cases(ids) -> list[tuple]:
     approver = new_staff_account(ids, roles=("admin",))
     path = f"{RECOVERY}/{rid}/approve"
     seeded = [
-        _case(ids, "the requester cannot approve their own request", _admin_stepped(ids), 200, path, body=lambda b: b == {"result": "same_person"}),
+        _case(ids, "the requester cannot approve their own request", _admin_stepped(ids), 403, path, body=NOT_YOUR_ROLE),
         _case(ids, "a nurse cannot see the request", stepped(ids.people["nurse_a"][0]), 404, path, body=_fixed(404)),
         _case(ids, "a second admin approves", stepped(approver), 200, path, body=lambda b: b == {"result": "approved"}),
         _case(ids, "the approver again is a replay", stepped(approver), 200, path, body=lambda b: b == {"result": "approved"}),
@@ -3418,6 +3418,41 @@ def staff_recovery_complete_cases(ids) -> list[tuple]:
         _case(ids, "a nurse cannot see the request", stepped(ids.people["nurse_a"][0]), 404, path, body=_fixed(404)),
     ]
     return _recovery_action_cases(ids, "complete", seeded)
+
+
+# ---- clinical notes (migration 0061; BUILD-SPEC.md 9.6) ---------------------------------------------------------------------------------------------------------------------------------------------------
+# Nurses and doctors write and read; this world has no encryption keys, so a write answers 503 after the clinic and patient are found (the encrypted flow, addenda and the database behaviour are in
+# tests/test_clinical_record_db_live.py); a read answers 200 with the text withheld.
+
+NOTES = "/v1/staff/notes"
+NOTE_VISIBLE_REFUSED = ("front_desk_a", "admin_a", "business_owner_a", "auditor_a")
+
+
+def clinical_note_write_cases(ids) -> list[tuple]:
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "patient_id": str(ids.patients_a[47]), "text": "DEMO note", **o}
+    unavailable = lambda b: "unavailable" in b["detail"]
+    cases = [_case(ids, f"{p} is told notes are unavailable (no keys in this world)", p, 503, NOTES, json=body(), body=unavailable) for p in ("nurse_a", "doctor_a", "multi")]
+    cases += [_case(ids, f"{p} sees the clinic but is refused", p, 403, NOTES, json=body(), body=NOT_YOUR_ROLE) for p in NOTE_VISIBLE_REFUSED]
+    others = [p for p in ids.people if p not in ("nurse_a", "doctor_a", "multi", *NOTE_VISIBLE_REFUSED)]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused with the one not-found", p, 404, NOTES, json=body(), body=_fixed(404)) for p in others]
+    cases += [
+        _case(ids, "a patient that is not in this clinic is not found", "nurse_a", 404, NOTES, json=body(patient_id=str(uuid.uuid4())), body=_fixed(404)),
+        _case(ids, "an empty text is rejected", "nurse_a", 422, NOTES, json=body(text=""), body=_fixed(422)),
+        _case(ids, "an extra field is rejected", "nurse_a", 422, NOTES, json=body(extra=1), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "nurse_a", 422, NOTES, json=body(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, NOTES, body())
+
+
+def clinical_note_list_cases(ids) -> list[tuple]:
+    path = lambda **o: NOTES + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, "patient_id": ids.patients_a[47], **o}.items())
+    cases = _console_clinic_cases(ids, path, allowed=("nurse_a", "doctor_a", "multi"), ok_status=200, ok_body=lambda b: b == {"notes": []}, visible_refused=NOTE_VISIBLE_REFUSED)
+    cases += [
+        _case(ids, "an unknown clinic is not found", "nurse_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "a patient that is not in this clinic is not found", "nurse_a", 404, path(patient_id=uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "limit=0 is rejected", "nurse_a", 422, path(limit=0), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)[:4]
 
 
 MATRIX: dict[tuple[str, str], Callable] = {
@@ -3479,6 +3514,8 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", CARE_PLANS): care_plan_list_cases,
     ("POST", CARE_PLAN_CONFIRM): care_plan_confirm_cases,
     ("POST", RESULTS): result_record_cases,
+    ("POST", NOTES): clinical_note_write_cases,
+    ("GET", NOTES): clinical_note_list_cases,
     ("POST", RECOVERY): staff_recovery_request_cases,
     ("GET", RECOVERY): staff_recovery_list_cases,
     ("POST", RECOVERY + "/{request_id}/approve"): staff_recovery_approve_cases,
