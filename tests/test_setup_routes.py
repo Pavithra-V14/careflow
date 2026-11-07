@@ -9,7 +9,7 @@ from fastapi import Depends
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import DBAPIError
 
-from careflow.app import Settings, create_app, db_conn, verified_claims
+from careflow.app import Settings, create_app, db_conn, key_scope, verified_claims
 
 CLINIC, ACTOR = uuid.uuid4(), uuid.uuid4()
 PROJECT = "https://example-project.supabase.co"
@@ -169,4 +169,4 @@ def test_the_key_is_required_and_the_row_key_names_the_table_the_clinic_and_the_
     with c:
         assert c.post(f"{BASE}/locations", json=LOCATION).status_code == 422  # no X-Idempotency-Key
         assert c.post(f"{BASE}/locations", json=LOCATION, headers=HEADERS).status_code == 200
-    assert fake.inserted[0]["k"] == f"setup:locations:{CLINIC}:k-1"
+    assert fake.inserted[0]["k"] == f"setup:locations:{CLINIC}:{key_scope(str(ACTOR))}:k-1"

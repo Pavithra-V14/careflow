@@ -15,7 +15,7 @@ from fastapi import Depends
 from fastapi.testclient import TestClient
 
 from careflow import identity
-from careflow.app import Settings, create_app, db_conn, verified_claims
+from careflow.app import Settings, create_app, db_conn, key_scope, verified_claims
 from careflow.auth import JWKSClient
 
 PROJECT = "https://example-project.supabase.co"
@@ -185,10 +185,10 @@ def test_propose_returns_ids_and_a_status_only_and_reads_origin_from_the_clinic(
         "subordinate_patient_id": str(SUB), "replayed": False,
     }
     ((name, args),) = FakeManager.calls
-    assert name == "propose" and args[2] == "canary" and args[5] == USER and args[6] == "k-1"
+    assert name == "propose" and args[2] == "canary" and args[5] == USER and args[6] == f"{key_scope(str(USER))}:k-1"
     (audit,) = FakeManager.audits
     assert (audit["actor_id"], audit["action"], audit["origin"], audit["resource_id"]) == (USER, "merge.propose", "canary", MERGE)
-    assert audit["idempotency_key"] == f"audit:merge-propose:{MERGE}:k-1" and set(audit["details"]) == {"master_patient_id", "subordinate_patient_id", "replayed"}
+    assert audit["idempotency_key"] == f"audit:merge-propose:{MERGE}:{key_scope(str(USER))}:k-1" and set(audit["details"]) == {"master_patient_id", "subordinate_patient_id", "replayed"}
 
 
 def test_a_client_supplied_origin_is_an_unknown_field():

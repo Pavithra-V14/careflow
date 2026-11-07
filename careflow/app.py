@@ -28,6 +28,7 @@ missing.
 import asyncio
 import contextlib
 import dataclasses
+import hashlib
 import json
 import logging
 import math
@@ -454,9 +455,24 @@ async def me(request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = D
 scheduling = APIRouter(prefix="/v1/staff/scheduling", tags=["staff scheduling"])
 _slots = SlotManager()
 
-IdempotencyKey = Annotated[
-    str, Header(alias="X-Idempotency-Key", min_length=1, max_length=200, pattern=r"\S", description="Required on every write.")
-]
+IDEMPOTENCY_KEY_MAX = 173  # the caller's part; the scope prefix makes the stored key at most 186, so even a 14-character route prefix (claim-resolve:) stays within the 200 the database functions accept
+
+
+def key_scope(sub: str) -> str:
+    """A fixed-length, non-reversible prefix naming the CALLER's account. Several tables keep their idempotency key unique across ALL clinics, so a key one clinic's caller chose could collide with another clinic's and
+    the refusal would tell the first caller that the key exists elsewhere. Every client-chosen key is therefore stored behind its caller's own prefix: two accounts never collide, so nobody can tell whether
+    another clinic's key exists. A replay by the SAME account still finds its own earlier request."""
+    return hashlib.sha256(b"careflow-key-scope:" + sub.encode("utf8")).hexdigest()[:12]
+
+
+async def _scoped_idempotency_key(
+    x_idempotency_key: Annotated[str, Header(alias="X-Idempotency-Key", min_length=1, max_length=IDEMPOTENCY_KEY_MAX, pattern=r"\S", description="Required on every write.")],
+    claims: dict[str, Any] = Depends(verified_claims),
+) -> str:
+    return f"{key_scope(str(claims['sub']))}:{x_idempotency_key}"
+
+
+IdempotencyKey = Annotated[str, Depends(_scoped_idempotency_key)]
 
 
 class _Body(BaseModel):
