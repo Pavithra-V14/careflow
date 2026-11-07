@@ -28,3 +28,8 @@ The two-person `autonomous` switch; medications and notes; the database `aal2` c
 11. A recorded result wakes its plan through the outbox: the result route writes the event in its own transaction, the tick relays it, and the worker identity resumes the plan (`care_plan_result_handler`).
 
 Reviewer findings applied before merge: worker update policies narrowed to what the handler needs; approval re-checks consent; a retry of the same decision returns the stored outcome; the consent publish is serialised; the claim-request resolution columns carry a clinic-pinned key.
+
+## Third batch (2026-11-08)
+- **Consent notices:** `iam.publish_consent_notice` is dropped (0053). Publishing is by migration or the owner-run `scripts/seed_consent_notices.py`, which connects as the migrator, publishes only the NEXT version, never overwrites, and audits.
+- **Worker reads of results:** narrowed to results an outbox event names or a waiting plan's open or claimed wait points to. Residual: the step guard's "not superseded" test runs as the caller and cannot see a superseding result the worker may not read.
+- **Two-person switch to autonomous:** two DIFFERENT admins (the spec says an admin AND a doctor; the owner chose two admins). Off unless `CAREFLOW_AUTONOMOUS_MODE_ENABLED` is set; ignored in the clinical profile until `CAREFLOW_CLINICAL_AUTONOMY_SIGNOFF` is set. Inherent limit: one person who controls two admin accounts of the same clinic can satisfy it.

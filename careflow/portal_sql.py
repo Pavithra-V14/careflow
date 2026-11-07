@@ -131,7 +131,3 @@ async def pending_claims(conn: AsyncConnection, clinic_id: uuid.UUID, limit: int
 
 async def resolve_claim(conn: AsyncConnection, *, request_id: uuid.UUID, decision: str, patient_id: uuid.UUID | None, idempotency_key: str) -> str:
     return str(await _call(conn, "select mpi.resolve_claim_request(:r, :d, :p, :k)", {"r": request_id, "d": decision, "p": patient_id, "k": idempotency_key}))
-
-
-async def publish_notice(conn: AsyncConnection, *, purpose: str, version: int, body: str) -> str:
-    return str(await _call(conn, "select iam.publish_consent_notice(:p, :v, :b)", {"p": purpose, "v": version, "b": body}))

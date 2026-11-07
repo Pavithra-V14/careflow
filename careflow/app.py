@@ -69,7 +69,6 @@ from careflow import (
     care_gap_sql,
     care_gaps,
     care_journey_sql,
-    consent_settings,
     demo_front_door,
     demo_phase3,
     demo_phase4,
@@ -99,7 +98,7 @@ from careflow.auth import (
     verify_token,
 )
 from careflow.auth_admin import AuthAdminError, AuthAdminPort
-from careflow.autonomy import tightened
+from careflow.autonomy import effective_policy
 from careflow.canary import CanaryError
 from careflow.canary import on_decision as canary_on_decision
 from careflow.canary import rate_from as canary_rate_from
@@ -2677,13 +2676,23 @@ def _backfill_out(v: Any) -> BackfillOut:
     )
 
 
+def _switched_on(raw: str | None) -> bool:
+    return (raw or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+async def _policy_for(request: Request, conn: AsyncConnection, clinic_id: uuid.UUID, configured):
+    """The policy a run uses: the configured one, tightened by the clinic's stored mode, or (only with the enabling setting, and the clinician sign-off in the clinical profile) set to autonomous by a stored two-person approval."""
+    stored, has_row = await producers_sql.read_mode(conn, clinic_id)
+    state = request.app.state
+    return effective_policy(configured, stored if has_row else None, autonomous_enabled=state.autonomous_enabled, profile=resolve_profile(), clinical_signoff=state.clinical_autonomy_signoff)
+
+
 async def _backfill_runner(request: Request, conn: AsyncConnection, clinic_id: uuid.UUID, origin: str) -> SchedulingRunner:
     components: SchedulingComponents | None = request.app.state.scheduling
     if components is None:
         log.error("backfill runs are unavailable: no components are configured (nothing is run; nothing is lost)")
         raise HTTPException(status_code=503, detail="backfill runs are unavailable: not configured")
-    stored, configured_row = await producers_sql.read_mode(conn, clinic_id)
-    components = dataclasses.replace(components, policy=tightened(components.policy, stored if configured_row else None))  # the stored mode can only make the run MORE human (decision 9)
+    components = dataclasses.replace(components, policy=await _policy_for(request, conn, clinic_id, components.policy))
     return components.runner(request_session(conn), clinic_id=clinic_id, origin=origin)
 
 
@@ -3566,6 +3575,89 @@ async def set_autonomy(body: AutonomySetIn, idempotency_key: IdempotencyKey, con
     return AutonomySetOut(mode=body.mode, created=created)
 
 
+# ---- The two-person switch to AUTONOMOUS (migration 0053; BUILD-SPEC.md 12.5) ----------------------------------------------------------------------------------------------------------------------------------------
+#
+# One admin PROPOSES; a DIFFERENT admin of the clinic APPROVES (or any admin rejects); only the approval writes `autonomous` into the history. The enabling setting CAREFLOW_AUTONOMOUS_MODE_ENABLED is unset by
+# default (503 until it is on). Even then a stored `autonomous` changes nothing in the `clinical` profile until CAREFLOW_CLINICAL_AUTONOMY_SIGNOFF is present. The locked rows of the approval matrix are code and
+# are untouched. Lowering the mode (shadow / assisted, `POST /autonomy`) stays a one-admin act.
+
+class AutonomyProposeIn(_Body):
+    clinic_id: uuid.UUID
+
+
+class AutonomyProposalOut(_Out):
+    proposal_id: uuid.UUID
+    created: bool
+
+
+class AutonomyProposalRowOut(_Out):
+    proposal_id: uuid.UUID
+    proposed_by: uuid.UUID
+    created_at: datetime
+
+
+class AutonomyProposalList(_Out):
+    proposals: list[AutonomyProposalRowOut]
+
+
+class AutonomyResolveIn(_Body):
+    decision: Literal["approve", "reject"]
+
+
+class AutonomyResolveOut(_Out):
+    result: Literal["approved", "rejected", "same_person", "expired", "not_pending"]
+
+
+def _autonomous_enabled(request: Request) -> None:
+    if not request.app.state.autonomous_enabled:
+        raise HTTPException(status_code=503, detail="the switch to autonomous is unavailable: not enabled")
+
+
+@staff_console.post("/autonomy/proposals", response_model=AutonomyProposalOut, status_code=201)
+async def propose_autonomous_mode(body: AutonomyProposeIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> AutonomyProposalOut:
+    """Propose switching the clinic to autonomous; a DIFFERENT admin must approve it. Idempotent on the key. 404 if the clinic is not visible to you, 403 unless you are an admin there, 409 if a proposal is already pending, 503 until CAREFLOW_AUTONOMOUS_MODE_ENABLED is on."""
+    origin = await _console_clinic(conn, body.clinic_id, AUTONOMY_SETTERS)
+    _autonomous_enabled(request)
+    actor = uuid.UUID(claims["sub"])
+    try:
+        proposal_id, created = await producers_sql.propose_autonomous(conn, clinic_id=body.clinic_id, origin=origin, proposed_by=actor, idempotency_key=f"autonomy-proposal:{idempotency_key}")
+    except producers_sql.Refused:
+        raise HTTPException(status_code=409, detail="a proposal is already pending") from None
+    except DBAPIError as exc:
+        if care_gap_sql.sqlstate(exc) == "42501":
+            raise HTTPException(status_code=403, detail="your role may not do this") from None
+        raise
+    if created:
+        await write_audit(
+            conn, clinic_id=body.clinic_id, origin=origin, actor_id=actor, actor_role=await _acting_role(conn, claims, body.clinic_id, AUTONOMY_SETTERS), action="autonomy.propose",
+            resource_type="autonomy_proposal", resource_id=proposal_id, details={}, idempotency_key=f"audit:autonomy-propose:{proposal_id}",
+        )
+    return AutonomyProposalOut(proposal_id=proposal_id, created=created)
+
+
+@staff_console.get("/autonomy/proposals", response_model=AutonomyProposalList)
+async def list_autonomy_proposals(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> AutonomyProposalList:
+    """Pending proposals of the clinic. 404 if the clinic is not visible to you, 403 unless you are an admin there."""
+    await _console_clinic(conn, clinic_id, AUTONOMY_SETTERS)
+    return AutonomyProposalList(proposals=[AutonomyProposalRowOut(proposal_id=r.id, proposed_by=r.proposed_by, created_at=r.created_at) for r in await producers_sql.pending_proposals(conn, clinic_id)])
+
+
+@staff_console.post("/autonomy/proposals/{proposal_id}/resolve", response_model=AutonomyResolveOut)
+async def resolve_autonomy_proposal(proposal_id: uuid.UUID, body: AutonomyResolveIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> AutonomyResolveOut:
+    """Approve (as a DIFFERENT admin than the proposer, within 7 days) or reject a pending proposal; audited by the database. 404 if you cannot see it, 403 unless you are an admin of its clinic, 503 until the switch is enabled."""
+    row = (await conn.execute(text("select clinic_id from ops.autonomy_proposals where id = :i"), {"i": proposal_id})).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _clinic_role_held(conn, row.clinic_id, AUTONOMY_SETTERS):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    _autonomous_enabled(request)
+    try:
+        result = await producers_sql.resolve_proposal(conn, proposal_id=proposal_id, decision=body.decision)
+    except producers_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return AutonomyResolveOut(result=result)  # type: ignore[arg-type]
+
+
 class EpisodeIn(_Body):
     clinic_id: uuid.UUID
     patient_id: uuid.UUID
@@ -4082,8 +4174,8 @@ async def record_result(body: ResultIn, idempotency_key: IdempotencyKey, request
 # ---- Portal claim resolution and consent notice publication (migration 0051; BUILD-SPEC.md 17.2, 20.1) --------------------------------------------------------------------------------------------------------
 #
 # A claim that found no single confirmed record becomes a pending request; a FRONT-DESK person of the clinic resolves it (audited by the database): approve binds the claimant's account to a CONFIRMED, unbound
-# record they name, reject closes it. A record with no identity event cannot be approved until the existing confirm-identity route has confirmed it. The consent notice texts come ONLY from the required setting
-# CAREFLOW_CONSENT_NOTICES (counsel owns the real wording); unset means 503 and nothing can be consented to.
+# record they name, reject closes it. A record with no identity event cannot be approved until the existing confirm-identity route has confirmed it. Consent notice texts are published ONLY by migration or by the
+# owner-run seed script (scripts/seed_consent_notices.py, from the required setting CAREFLOW_CONSENT_NOTICES; counsel owns the real wording): there is no route and no application function for it (migration 0053).
 
 staff_portal_claims = APIRouter(prefix="/v1/staff/portal-claims", tags=["staff portal claims"])
 CLAIM_RESOLVERS = ("front_desk",)
@@ -4105,14 +4197,6 @@ class ClaimResolveIn(_Body):
 
 class ClaimResolveOut(_Out):
     result: Literal["approved", "rejected", "already_resolved", "record_not_claimable", "claimant_already_bound", "consent_required"]
-
-
-class NoticePublishIn(_Body):
-    purpose: Literal["care_delivery", "ai_processing", "service_improvement"]
-
-
-class NoticePublishOut(_Out):
-    result: Literal["published", "exists", "conflict", "version_gap"]
 
 
 @staff_portal_claims.get("", response_model=PendingClaimList)
@@ -4137,22 +4221,6 @@ async def resolve_portal_claim(request_id: uuid.UUID, body: ClaimResolveIn, idem
     except portal_sql.PortalRefused:
         raise HTTPException(status_code=403, detail="your role may not do this") from None
     return ClaimResolveOut(result=result)  # type: ignore[arg-type]
-
-
-@staff_console.post("/consent-notices/publish", response_model=NoticePublishOut)
-async def publish_consent_notice(body: NoticePublishIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> NoticePublishOut:
-    """Publish the notice for a purpose exactly as the required setting states it (version and text come from the setting, never from the caller). Admin with a verified second factor. 403 unless you are an admin, 503 while the setting is not configured or has no entry for the purpose."""
-    if not await _any_role_held(conn, ("admin",)):
-        raise HTTPException(status_code=403, detail="your role may not do this")
-    notices = request.app.state.consent_notices
-    notice = (notices or {}).get(body.purpose)
-    if notice is None:
-        raise HTTPException(status_code=503, detail="consent notices are unavailable: not configured")
-    try:
-        result = await portal_sql.publish_notice(conn, purpose=notice.purpose, version=notice.version, body=notice.body)
-    except portal_sql.PortalRefused:
-        raise HTTPException(status_code=403, detail="your role may not do this") from None
-    return NoticePublishOut(result=result)  # type: ignore[arg-type]
 
 
 # ---- Visit Readiness (migration 0052; BUILD-SPEC.md 22) ------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -4197,8 +4265,7 @@ async def _readiness_runner(request: Request, conn: AsyncConnection, visit_id: u
         raise HTTPException(status_code=503, detail="visit readiness is unavailable: not configured")
     if components.content.for_visit_type(visit.visit_type) is None:
         raise HTTPException(status_code=409, detail="there is no readiness content for this visit type")
-    stored, has_row = await producers_sql.read_mode(conn, visit.clinic_id)
-    policy = tightened(components.policy, stored if has_row else None)
+    policy = await _policy_for(request, conn, visit.clinic_id, components.policy)
     try:
         return components.runner(conn, visit=visit, actor=uuid.UUID(claims["sub"]), key_version=key_version, policy=policy), visit
     except visit_readiness_sql.Unavailable:
@@ -4404,11 +4471,8 @@ def create_app(
             except Exception:  # noqa: BLE001 - a fault in the demo configuration leaves the routes unwired, never a startup crash
                 log.error("the demo Scheduling components could not be built: the backfill routes stay unavailable")
                 scheduling = None
-        try:
-            app.state.consent_notices = consent_settings.parse(p4env.get("CAREFLOW_CONSENT_NOTICES"))
-        except consent_settings.ConsentSettingsError:
-            log.error("CAREFLOW_CONSENT_NOTICES is invalid: no consent notice can be published")
-            app.state.consent_notices = None
+        app.state.autonomous_enabled = _switched_on(p4env.get("CAREFLOW_AUTONOMOUS_MODE_ENABLED"))  # the enabling setting for the two-person switch: unset means off
+        app.state.clinical_autonomy_signoff = _switched_on(p4env.get("CAREFLOW_CLINICAL_AUTONOMY_SIGNOFF"))  # in the clinical profile a stored `autonomous` is ignored until this is present
         care_components = care_journey_components
         if care_components is None and app.state.vault is not None and care_journey_enabled(dict(os.environ)):  # the flag, the vault and BOTH required task settings must be present
             priority, role = (p4env.get("CAREFLOW_CARE_PLAN_TASK_PRIORITY") or "").strip(), (p4env.get("CAREFLOW_CARE_PLAN_TASK_ROLE") or "").strip()

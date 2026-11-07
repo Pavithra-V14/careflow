@@ -40,3 +40,22 @@ def parse(raw: str | None) -> dict[str, NoticeDef] | None:
             raise ConsentSettingsError("a notice version or body is out of range")
         out[purpose] = NoticeDef(purpose, version, text_)
     return out
+
+
+def plan_publication(existing: dict[str, list[tuple[int, str]]], wanted: dict[str, NoticeDef]) -> list[tuple[str, str, int]]:
+    """What the owner-run seed script would do, as [(action, purpose, version)]. `existing` maps a purpose to its published (version, body) pairs. Notices are append-only and versions run 1, 2, 3 in order:
+    the same version with the same text is `exists`; the same version with DIFFERENT text is `conflict` (never overwritten, the script stops); a version that skips ahead is `version_gap` (the script stops);
+    the next version is `publish`."""
+    out: list[tuple[str, str, int]] = []
+    for purpose in PURPOSES:
+        notice = wanted.get(purpose)
+        if notice is None:
+            continue
+        have = dict(existing.get(purpose, []))
+        if notice.version in have:
+            out.append(("exists" if have[notice.version] == notice.body else "conflict", purpose, notice.version))
+        elif notice.version != max(have, default=0) + 1:
+            out.append(("version_gap", purpose, notice.version))
+        else:
+            out.append(("publish", purpose, notice.version))
+    return out

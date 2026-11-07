@@ -41,6 +41,7 @@ def http_steps() -> None:
     say("12b result wake-up", "POST /v1/staff/results writes an outbox event in the result's own transaction; the tick relays it and the WORKER identity resumes the plan (care_plan_result_handler).")
     say("12c visit readiness", "POST /v1/staff/visits/{booking_id}/readiness/start then .../reply (a nurse or doctor relays the patient's reply); questions come only from CAREFLOW_VISIT_READINESS_CONTENT; 503 until the flag, the content and the task priority are set.")
     say("11b portal claims", "GET /v1/staff/portal-claims and POST .../{request_id}/resolve (front desk): approve onto a CONFIRMED record or reject; audited.")
+    say("13b autonomous switch", "POST /v1/staff/console/autonomy/proposals (admin A; 503 until CAREFLOW_AUTONOMOUS_MODE_ENABLED is on) then POST .../{id}/resolve as a DIFFERENT admin B. Only the approval writes autonomous; the clinical profile ignores it until CAREFLOW_CLINICAL_AUTONOMY_SIGNOFF is present.")
     say("13 admin", "POST /v1/staff/console/autonomy (shadow or assisted; no row means shadow), GET /v1/staff/console/dashboard, GET /v1/staff/voice/sessions and .../transcript (audited), POST /v1/staff/voice/purge (expired chunks only).")
 
 

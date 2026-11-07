@@ -3001,11 +3001,10 @@ def result_record_cases(ids) -> list[tuple]:
 
 # ---- portal claim resolution and consent notice publication (migration 0051) --------------------------------------------------------------------------------------------------------------------------------
 # Front desk of the clinic resolves pending claims (no request exists in the matrix world, so the resolve cases are the refusals; the approve and reject flows are in tests/test_patient_portal_db_live.py). The
-# publish route answers 503 here (no consent notice setting in the matrix app), so who may call it is what the cases pin.
+# (Consent notices are no longer published by any route: migration 0053.)
 
 PORTAL_CLAIM_LIST = "/v1/staff/portal-claims"
 PORTAL_CLAIM_RESOLVE = PORTAL_CLAIM_LIST + "/{request_id}/resolve"
-NOTICE_PUBLISH = "/v1/staff/console/consent-notices/publish"
 CLAIM_VISIBLE_REFUSED = ("nurse_a", "doctor_a", "admin_a", "business_owner_a", "auditor_a", "multi")
 
 
@@ -3032,17 +3031,6 @@ def portal_claim_resolve_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(), body())
 
 
-def notice_publish_cases(ids) -> list[tuple]:
-    body = lambda **o: {"purpose": "care_delivery", **o}
-    cases = [_case(ids, "admin_a is told the notice setting is not configured", "admin_a", 503, NOTICE_PUBLISH, json=body(), body=lambda b: b == {"detail": "consent notices are unavailable: not configured"})]
-    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, NOTICE_PUBLISH, json=body(), body=NOT_YOUR_ROLE) for p in ids.people if p != "admin_a"]
-    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, NOTICE_PUBLISH, json=body(), body=NOT_YOUR_ROLE))
-    cases += [
-        _case(ids, "an unknown purpose is rejected", "admin_a", 422, NOTICE_PUBLISH, json=body(purpose="marketing"), body=_fixed(422)),
-        _case(ids, "an extra field is rejected", "admin_a", 422, NOTICE_PUBLISH, json=body(extra=1), body=_fixed(422)),
-        _case(ids, "missing X-Idempotency-Key is rejected", "admin_a", 422, NOTICE_PUBLISH, json=body(), key=None, body=_fixed(422)),
-    ]
-    return cases + _unauthenticated(ids, NOTICE_PUBLISH, body())
 
 
 # ---- Visit Readiness (migration 0052) --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -3100,6 +3088,46 @@ def visit_readiness_reply_cases(ids) -> list[tuple]:
         _case(ids, "missing X-Idempotency-Key is rejected", "nurse_a", 422, path, json=body, key=None, body=_fixed(422)),
     ]
     return cases + _unauthenticated(ids, path, body)
+
+
+# ---- the two-person switch to autonomous (migration 0053) ---------------------------------------------------------------------------------------------------------------------------------------------------
+# The enabling setting is unset in the matrix app, so a proposal answers the visible 503 after the role check (nothing is written). The approve / reject flows with two real admins are in
+# tests/test_phase12_db_live.py.
+
+AUTONOMY_PROPOSALS = "/v1/staff/console/autonomy/proposals"
+AUTONOMY_RESOLVE = AUTONOMY_PROPOSALS + "/{proposal_id}/resolve"
+
+
+def autonomy_propose_cases(ids) -> list[tuple]:
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), **o}
+    cases = [_case(ids, "admin_a is told the switch is not enabled", "admin_a", 503, AUTONOMY_PROPOSALS, json=body(), body=lambda b: b == {"detail": "the switch to autonomous is unavailable: not enabled"})]
+    cases += [_case(ids, f"{p} sees the clinic but is refused", p, 403, AUTONOMY_PROPOSALS, json=body(), body=NOT_YOUR_ROLE) for p in ADMIN_ONLY_VISIBLE_REFUSED]
+    others = [p for p in ids.people if p != "admin_a" and p not in ADMIN_ONLY_VISIBLE_REFUSED]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused with the one not-found", p, 404, AUTONOMY_PROPOSALS, json=body(), body=_fixed(404)) for p in others]
+    cases += [
+        _case(ids, "an unknown clinic is not found", "admin_a", 404, AUTONOMY_PROPOSALS, json=body(clinic_id=str(uuid.uuid4())), body=_fixed(404)),
+        _case(ids, "an extra field is rejected", "admin_a", 422, AUTONOMY_PROPOSALS, json=body(extra=1), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "admin_a", 422, AUTONOMY_PROPOSALS, json=body(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, AUTONOMY_PROPOSALS, body())
+
+
+def autonomy_proposals_list_cases(ids) -> list[tuple]:
+    path = lambda **o: AUTONOMY_PROPOSALS + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
+    cases = _console_clinic_cases(ids, path, allowed=("admin_a",), ok_status=200, ok_body=lambda b: b == {"proposals": []}, visible_refused=ADMIN_ONLY_VISIBLE_REFUSED)
+    cases += [_case(ids, "an unknown clinic is not found", "admin_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404))]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
+def autonomy_resolve_cases(ids) -> list[tuple]:
+    path = lambda: AUTONOMY_RESOLVE.format(proposal_id=uuid.uuid4())
+    cases = [_case(ids, f"{p} cannot resolve a proposal that does not exist", p, 404, path(), json={"decision": "approve"}, body=_fixed(404)) for p in ids.people]
+    cases += [
+        _case(ids, "an unknown decision is rejected", "admin_a", 422, path(), json={"decision": "maybe"}, body=_fixed(422)),
+        _case(ids, "an extra field is rejected", "admin_a", 422, path(), json={"decision": "approve", "extra": 1}, body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "admin_a", 422, path(), json={"decision": "approve"}, key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), {"decision": "approve"})
 
 
 MATRIX: dict[tuple[str, str], Callable] = {
@@ -3163,10 +3191,12 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", RESULTS): result_record_cases,
     ("GET", PORTAL_CLAIM_LIST): portal_claim_list_cases,
     ("POST", PORTAL_CLAIM_RESOLVE): portal_claim_resolve_cases,
-    ("POST", NOTICE_PUBLISH): notice_publish_cases,
     ("POST", VISITS + "/{visit_id}/readiness/start"): visit_readiness_start_cases,
     ("GET", VISITS + "/{visit_id}/readiness"): visit_readiness_get_cases,
     ("POST", VISITS + "/{visit_id}/readiness/reply"): visit_readiness_reply_cases,
+    ("POST", AUTONOMY_PROPOSALS): autonomy_propose_cases,
+    ("GET", AUTONOMY_PROPOSALS): autonomy_proposals_list_cases,
+    ("POST", AUTONOMY_RESOLVE): autonomy_resolve_cases,
     ("GET", AUTONOMY): autonomy_get_cases,
     ("POST", AUTONOMY): autonomy_set_cases,
     ("GET", DASHBOARD): dashboard_cases,
