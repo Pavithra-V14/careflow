@@ -99,12 +99,14 @@ async def world(db):
             ids[k], ids["clinic"], f"bg-{ids[k]}",
         )
     await h.execute("insert into iam.break_glass_reasons (clinic_id, code) values ($1, 'demo_reason')", ids["clinic"])
-    thread = await h.fetchval("insert into msg.threads (clinic_id, patient_id, topic, created_by, origin, idempotency_key) values ($1, $2, 'care', $3, 'test', $4) returning id", ids["clinic"], ids["patient"], ids["doctor"], f"th-{ids['patient']}")
+    # threads and messages are written by the doctor under row-level security (the owner connection is subject to those policies too)
+    thread = (await as_app(db, ids["doctor"], "insert into msg.threads (clinic_id, patient_id, topic, created_by, origin, idempotency_key) values (:c, :p, 'care', :u, 'test', :k) returning id", c=ids["clinic"], p=ids["patient"], u=ids["doctor"], k=f"th-{ids['patient']}"))[0][0]
     for k in ("m1", "m2"):
-        await h.execute(
-            "insert into msg.messages (id, clinic_id, origin, topic, thread_id, sender_kind, recorded_by, body_ct, body_key_version, idempotency_key) values (gen_random_uuid(), $1, 'test', 'care', $2, 'staff', $3, decode(repeat('01', 32), 'hex'), 1, $4)",
-            ids["clinic"], thread, ids["doctor"], f"{k}-{thread}",
-        )
+        assert await as_app(
+            db, ids["doctor"],
+            "insert into msg.messages (id, clinic_id, origin, topic, thread_id, sender_kind, recorded_by, body_ct, body_key_version, idempotency_key) values (gen_random_uuid(), :c, 'test', 'care', :t, 'staff', :u, decode(repeat('01', 32), 'hex'), 1, :k)",
+            c=ids["clinic"], t=thread, u=ids["doctor"], k=f"{k}-{thread}",
+        ) == 1
     return ids
 
 

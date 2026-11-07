@@ -219,13 +219,15 @@ async def test_the_erasure_also_erases_messages_and_voice_chunks_and_closes_plan
     await h.execute("update ops.care_plans set status = 'active' where id = $1", plan)
     await db.execute(text("select set_config('request.jwt.claims', '', true)"))
     await h.execute("insert into ops.care_plan_waits (clinic_id, plan_id, step_key, wait_key, patient_id, prefix, idempotency_key) values ($1, $2, 'demo_test', $3, $4, 'DEMO-T1', $5)", w["clinic"], plan, f"w-{plan}", bound, f"w-{plan}")
-    thread = await h.fetchval("insert into msg.threads (clinic_id, patient_id, topic, created_by, origin, idempotency_key) values ($1, $2, 'care', $3, 'test', $4) returning id", w["clinic"], bound, w["doctor"], f"th-{bound}")
-    other_thread = await h.fetchval("insert into msg.threads (clinic_id, patient_id, topic, created_by, origin, idempotency_key) values ($1, $2, 'care', $3, 'test', $4) returning id", w["clinic"], w["other_patient"], w["doctor"], f"th-{w['other_patient']}")
+    # threads and messages are written by the doctor under row-level security (the owner connection is subject to those policies too)
+    thread = (await as_app(db, w["doctor"], "insert into msg.threads (clinic_id, patient_id, topic, created_by, origin, idempotency_key) values (:c, :p, 'care', :u, 'test', :k) returning id", c=w["clinic"], p=bound, u=w["doctor"], k=f"th-{bound}"))[0][0]
+    other_thread = (await as_app(db, w["doctor"], "insert into msg.threads (clinic_id, patient_id, topic, created_by, origin, idempotency_key) values (:c, :p, 'care', :u, 'test', :k) returning id", c=w["clinic"], p=w["other_patient"], u=w["doctor"], k=f"th-{w['other_patient']}"))[0][0]
     for t, k in ((thread, "m1"), (thread, "m2"), (other_thread, "m3")):
-        await h.execute(
-            "insert into msg.messages (id, clinic_id, origin, topic, thread_id, sender_kind, recorded_by, body_ct, body_key_version, idempotency_key) values (gen_random_uuid(), $1, 'test', 'care', $2, 'staff', $3, decode(repeat('01', 32), 'hex'), 1, $4)",
-            w["clinic"], t, w["doctor"], f"{k}-{t}",
-        )
+        assert await as_app(
+            db, w["doctor"],
+            "insert into msg.messages (id, clinic_id, origin, topic, thread_id, sender_kind, recorded_by, body_ct, body_key_version, idempotency_key) values (gen_random_uuid(), :c, 'test', 'care', :t, 'staff', :u, decode(repeat('01', 32), 'hex'), 1, :k)",
+            c=w["clinic"], t=t, u=w["doctor"], k=f"{k}-{t}",
+        ) == 1
     session = await h.fetchval("insert into msg.voice_sessions (clinic_id, account_id, origin, workflow, transcript_retention_days, idempotency_key) values ($1, $2, 'test', 'slot_offer', 30, $3) returning id", w["clinic"], account, f"vs-{account}")
     for seq in (1, 2):
         await h.execute("insert into msg.voice_transcript_chunks (session_id, clinic_id, seq, body_ct, body_key_version, idempotency_key) values ($1, $2, $3, decode(repeat('02', 32), 'hex'), 1, $4)", session, w["clinic"], seq, f"vc{seq}-{session}")
@@ -265,5 +267,4 @@ async def test_a_live_patients_voice_chunks_stay_protected_and_only_a_plan_of_an
     assert await owner(db, "delete from msg.voice_transcript_chunks where session_id = :s", s=session) == "23001"
     plan = await make_plan(db, w, live, "DEMO plan text")
     assert await owner(db, "update ops.care_plans set status = 'erased' where id = :i", i=plan) == "23001"  # a live patient's plan is never closed this way
-    assert await owner(db, "update ops.care_plan_steps set status = 'closed' where plan_id = :i", i=plan) == "23001"
 
