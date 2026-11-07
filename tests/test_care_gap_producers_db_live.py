@@ -156,7 +156,7 @@ async def test_the_worker_inserts_a_sample_for_a_decision_of_its_clinic_and_a_nu
         assert await state_of(db, p[who], ins, c=w.a, d=decision, k=f"s-{who}") == "42501", who
     sample = (await state_of(db, p["nurse_a"], "select id from ops.care_review_samples where decision_id = :d", d=decision))[0][0]
     recheck = "update ops.care_review_samples set rechecked_by = :by where id = :i"
-    assert await state_of(db, p["doctor_a"], recheck, by=p["nurse_a"], i=sample) == "42501"  # only as yourself (the new row fails the policy check)
+    assert await state_of(db, p["doctor_a"], recheck, by=p["admin_a"], i=sample) == "42501"  # only as yourself (the new row fails the policy check)
     assert await state_of(db, p["doctor_a"], recheck, by=p["doctor_a"], i=sample, claims={"aal": "aal1", "amr": []}) == 0
     assert await state_of(db, p["front_desk_a"], recheck, by=p["front_desk_a"], i=sample) == 0
     assert await state_of(db, p["nurse_a"], recheck, by=p["nurse_a"], i=sample) == "23001"  # the nurse made the decision: someone else must re-check it (decision 7)
