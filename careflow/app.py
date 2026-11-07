@@ -2366,7 +2366,7 @@ async def release_hold_route(hold_id: uuid.UUID, idempotency_key: IdempotencyKey
 # (`POST /v1/staff/erasure-requests/{id}/approve`), and only then are the encrypted name, date of birth and phone cleared, in the same transaction as the audit row. Anyone of the clinic's front desk can
 # cancel an open request. All three need a recent second factor (step-up) and an idempotency key. The work is done by the database functions mpi.request_patient_erasure / approve_patient_erasure /
 # cancel_patient_erasure (the application role can no longer update the identity columns). The allowed reasons are a REQUIRED setting with no default (CAREFLOW_ERASE_REASONS, comma separated closed words):
-# which reasons a clinic may erase for is a privacy and legal decision, so while it is unset the request route answers 503. Messages are not erased by this path. A patient in a live merge link cannot be erased.
+# which reasons a clinic may erase for is a privacy and legal decision, so while it is unset the request route answers 503. The same approval also erases the patient's message bodies and stored voice transcript, and erases and closes their care plans and result measures (migrations 0056, 0057). A patient in a live merge link cannot be erased.
 
 staff_erasure = APIRouter(prefix="/v1/staff/erasure-requests", tags=["staff erasure"])
 
@@ -4119,14 +4119,14 @@ async def create_care_plan(body: CarePlanIn, idempotency_key: IdempotencyKey, re
 async def list_care_plans(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 100) -> CarePlanList:
     """Care plans of the clinic, newest first: ids and status only, never the plan text. 404 if the clinic is not visible to you, 403 unless you are a nurse or doctor there."""
     await _console_clinic(conn, clinic_id, CARE_PLAN_READERS)
-    rows = (await conn.execute(text("select id, patient_id, status, created_at from ops.care_plans where clinic_id = :c order by created_at desc, id limit :n"), {"c": clinic_id, "n": limit})).all()
+    rows = (await conn.execute(text("select id, patient_id, status, created_at from ops.care_plans where clinic_id = :c and status <> 'erased' order by created_at desc, id limit :n"), {"c": clinic_id, "n": limit})).all()
     return CarePlanList(plans=[CarePlanRowOut(plan_id=r.id, patient_id=r.patient_id, status=r.status, created_at=r.created_at) for r in rows])
 
 
 @staff_care_plans.post("/{plan_id}/confirm", response_model=CarePlanOut)
 async def confirm_care_plan(plan_id: uuid.UUID, body: CarePlanConfirmIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> CarePlanOut:
     """A doctor approves or rejects the proposed plan; nothing runs before this. 404 if you cannot see the plan, 403 unless you are a doctor there, 409 if the plan is not waiting for a confirmation, 503 while care plans are not configured."""
-    row = (await conn.execute(text("select clinic_id, origin from ops.care_plans where id = :p"), {"p": plan_id})).first()
+    row = (await conn.execute(text("select clinic_id, origin from ops.care_plans where id = :p and status <> 'erased'"), {"p": plan_id})).first()
     if row is None:
         raise HTTPException(status_code=404, detail="not found")
     if not await _clinic_role_held(conn, row.clinic_id, CARE_PLAN_AUTHORS):
@@ -4134,7 +4134,7 @@ async def confirm_care_plan(plan_id: uuid.UUID, body: CarePlanConfirmIn, idempot
     components = _care_journey(request)
     try:
         view = await _cj_runner(components, conn, row.clinic_id, row.origin).confirm(plan_id, body.action)
-    except (care_journey_sql.WrongStep, care_journey_sql.NoSuchPlan):
+    except (care_journey_sql.WrongStep, care_journey_sql.NoSuchPlan, care_journey_sql.Refused):
         raise HTTPException(status_code=409, detail="the plan is not waiting for a confirmation") from None
     await write_audit(
         conn, clinic_id=row.clinic_id, origin=row.origin, actor_id=uuid.UUID(claims["sub"]), actor_role="doctor", action="care_plan.confirm", resource_type="care_plan", resource_id=plan_id, details={"action": body.action},
