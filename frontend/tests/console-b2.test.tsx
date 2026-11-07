@@ -171,6 +171,32 @@ describe('care plans', () => {
   });
 });
 
+describe('the clinic time zone from /v1/iam/me', () => {
+  it('uses the own zone of the clinic when the backend sends one, with no placeholder label', async () => {
+    const user = userEvent.setup();
+    const record: Routes[number] = ['post', '/v1/staff/results', () => json({ created: true, result_id: ID.doc2, wake_queued: false })];
+    const { calls } = await openConsole({ role: 'nurse', hash: '/care/results', routes: [record], me: { clinic_time_zone: 'UTC' } });
+    await user.click(await screen.findByRole('button', { name: 'Record a result' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('Times are in the clinic time zone: UTC.')).toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText('Patient id'), ID.patient);
+    await user.type(within(dialog).getByLabelText('Result code'), 'c1');
+    await user.type(within(dialog).getByLabelText('Measure 1 name'), 'm1');
+    await user.type(within(dialog).getByLabelText('Valid from'), '2026-11-10T09:30');
+    await user.click(within(dialog).getByRole('radio', { name: 'Yes' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Save result' }));
+    await screen.findByText('The result was recorded.');
+    expect((writes(calls)[0]?.body as { valid_from: string }).valid_from).toBe('2026-11-10T09:30:00.000Z');
+  });
+
+  it('keeps the labelled demo placeholder when the setting is null', async () => {
+    const user = userEvent.setup();
+    await openConsole({ role: 'nurse', hash: '/care/results', me: { clinic_time_zone: null } });
+    await user.click(await screen.findByRole('button', { name: 'Record a result' }));
+    expect(within(screen.getByRole('dialog')).getByText(/Asia\/Calcutta \(demo placeholder/)).toBeInTheDocument();
+  });
+});
+
 describe('results', () => {
   it('records nothing until every field is valid and confirmed; an empty measure is sent as unknown; times are the clinic zone', async () => {
     const user = userEvent.setup();

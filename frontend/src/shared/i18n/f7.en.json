@@ -131,5 +131,9 @@
     "reasonChoose": "Choose a reason",
     "reasonsNotConfigured": "The clinic has not set a list of reasons yet.",
     "viewMissing": "There is no proposal to show for this referral."
+  },
+  "time": {
+    "zoneNote": "Times are in the clinic time zone: {{zone}}.",
+    "zoneNotePlaceholder": "Times are in the clinic time zone: {{zone}} (demo placeholder: the clinic has not set one)."
   }
 }

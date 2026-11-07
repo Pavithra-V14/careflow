@@ -167,6 +167,19 @@ Please expose the zone (an IANA name) on `GET /v1/iam/me` per grant, or on a cli
 `OfferRowOut` has no message id, so "Copy offer text" finds the message created with the offer by time (within a minute). When the
 snapshot has `message_id`, the console switches to it and deletes the guess (owner decision 2026-11-07).
 
+### 11. Closed words as schema enums
+
+Several fields reach the console as bare strings, so it humanises the word it is sent (for example "task overdue") and has no English or
+Tamil label for it. Please make these enums in the schema; the console will then add labels for every value:
+`AlertOut.alert_class`, `CarePlanRowOut.status` (the console offers approve and reject on `confirmation_requested`, a word it took from
+the backend code), `CareGapRowOut.source` (it acts on `unresolved_barrier`, `after_the_fact_review` and `overdue_recurrence`),
+`DashboardMetricOut.metric_id`, `VoiceSessionRowOut.workflow` and `.status`, `ReviewerStatOut.verdict`, `CostCanvasOut.state` and `.reasons`.
+
+### 12. No autonomy history route
+
+`GET /v1/staff/console/autonomy/proposals` lists only PENDING proposals, so the console shows the mode and the pending list and no history.
+If a history is wanted, a route that lists resolved proposals is needed.
+
 ## Decisions recorded here for later readers
 
 - **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;

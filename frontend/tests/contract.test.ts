@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { OPERATIONS, createApi, type Api, type WriteOptions, type ProposeMergeIn, type BeginUploadIn, type RegisterIn, type PatientSearchIn, type SlotIn, type HoldIn, type WaitlistJoinIn, type LocationIn, type ProviderIn, type VisitTypeIn, type CarePlanIn, type ResultIn } from '../src/shared/api/client';
+import { OPERATIONS, createApi, type Api, type WriteOptions, type ProposeMergeIn, type BeginUploadIn, type RegisterIn, type PatientSearchIn, type SlotIn, type HoldIn, type WaitlistJoinIn, type LocationIn, type ProviderIn, type VisitTypeIn, type CarePlanIn, type ResultIn, type BarrierIn, type EpisodeIn, type InviteIn, type RoleChangeIn, type AutonomySetIn, type VoicePurgeIn } from '../src/shared/api/client';
 
 // Contract test (BUILD-SPEC 21): the client is driven for real; only the network transport is captured.
 // It asserts every method targets an endpoint that exists in the backend's schema, with its required
@@ -110,8 +110,6 @@ const INVOCATIONS: Record<keyof typeof OPERATIONS, (api: Api, o?: WriteOptions) 
   createLocation: (api, o) => api.createLocation(body<LocationIn>('LocationIn'), o),
   createProvider: (api, o) => api.createProvider(body<ProviderIn>('ProviderIn'), o),
   createVisitType: (api, o) => api.createVisitType(body<VisitTypeIn>('VisitTypeIn'), o),
-  listThreads: (api) => api.listThreads(ID, 'appointments'),
-  listThreadMessages: (api) => api.listThreadMessages(ID),
   readMessage: (api) => api.readMessage(ID),
   listAlerts: (api) => api.listAlerts(ID),
   acknowledgeAlert: (api, o) => api.acknowledgeAlert(ID, o),
@@ -121,6 +119,27 @@ const INVOCATIONS: Record<keyof typeof OPERATIONS, (api: Api, o?: WriteOptions) 
   createCarePlan: (api, o) => api.createCarePlan(body<CarePlanIn>('CarePlanIn'), o),
   confirmCarePlan: (api, o) => api.confirmCarePlan(ID, 'approve', o),
   recordResult: (api, o) => api.recordResult(body<ResultIn>('ResultIn'), o),
+  recordBarrier: (api, o) => api.recordBarrier(body<BarrierIn>('BarrierIn'), o),
+  resolveBarrier: (api, o) => api.resolveBarrier(ID, o),
+  startEpisode: (api, o) => api.startEpisode(body<EpisodeIn>('EpisodeIn'), o),
+  markRuleDone: (api, o) => api.markRuleDone(ID, '2026-11-01', o),
+  recheckSample: (api, o) => api.recheckSample(ID, o),
+  listAccounts: (api) => api.listAccounts(ID),
+  inviteAccount: (api, o) => api.inviteAccount(body<InviteIn>('InviteIn'), o),
+  suspendAccount: (api, o) => api.suspendAccount(ID, o),
+  reinstateAccount: (api, o) => api.reinstateAccount(ID, o),
+  grantRole: (api, o) => api.grantRole(ID, body<RoleChangeIn>('RoleChangeIn'), o),
+  revokeRole: (api, o) => api.revokeRole(ID, body<RoleChangeIn>('RoleChangeIn'), o),
+  getAutonomy: (api) => api.getAutonomy(ID),
+  setAutonomy: (api, o) => api.setAutonomy(body<AutonomySetIn>('AutonomySetIn'), o),
+  listAutonomyProposals: (api) => api.listAutonomyProposals(ID),
+  proposeAutonomy: (api, o) => api.proposeAutonomy(ID, 'admin', o),
+  resolveAutonomyProposal: (api, o) => api.resolveAutonomyProposal(ID, 'approve', o),
+  reviewerStats: (api) => api.reviewerStats(ID),
+  costCanvas: (api) => api.costCanvas(ID),
+  listVoiceSessions: (api) => api.listVoiceSessions(ID),
+  readTranscript: (api) => api.readTranscript(ID, ID),
+  purgeVoice: (api, o) => api.purgeVoice(body<VoicePurgeIn>('VoicePurgeIn'), o),
   reviewView: (api) => api.reviewView(ID),
   reasonCodes: (api) => api.reasonCodes(),
 };

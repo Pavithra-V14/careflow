@@ -11,9 +11,11 @@ import { useSession } from '../session/SessionContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Badge, PageHeading, ShortId, Time, UUID, useLang, useWord } from '../ui/bits';
 import { NotAvailableToRole, ProblemText, QueryView } from '../ui/states';
-import { clinicLocalToIso, getClinicTimeZone } from '../../shared/clinicTime';
+import { clinicLocalToIso } from '../../shared/clinicTime';
+import { ZoneNote } from '../components/ZoneNote';
 import { formatNumber } from '../../shared/i18n/format';
 import { NotFoundPage } from './NotFoundPage';
+import { GapToolbarActions, RowAction, usePatientHint } from './CareGapActions';
 
 const TABS = ['gaps', 'plans', 'results'] as const;
 type Tab = (typeof TABS)[number];
@@ -54,13 +56,16 @@ function GapsPanel() {
   const word = useWord();
   const lang = useLang();
   const query = useApiQuery(['care-gaps'], () => unwrap(api.careGaps(active.clinicId)));
+  const [note, setNote] = useState<string | null>(null);
   return (
     <>
       <div className="toolbar">
         <button type="button" onClick={() => void query.refetch()} disabled={query.isFetching}>
           {t('common.refresh')}
         </button>
+        <GapToolbarActions onDone={setNote} />
       </div>
+      {note && <p role="status">{note}</p>}
       <QueryView query={query}>
         {(d) => (
           <>
@@ -115,6 +120,7 @@ function GapsPanel() {
                     <th scope="col">{t('care.gaps.col.item')}</th>
                     <th scope="col">{t('care.gaps.col.age')}</th>
                     <th scope="col">{t('care.gaps.col.flag')}</th>
+                    <th scope="col">{t('care.gaps.col.action')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -126,6 +132,9 @@ function GapsPanel() {
                       </td>
                       <td>{r.age_days === null ? <span className="not-recorded">{t('care.gaps.ageUnknown')}</span> : formatNumber(r.age_days, lang)}</td>
                       <td>{r.flagged_overdue ? <Badge tone="warn">{t('care.gaps.overdue')}</Badge> : '–'}</td>
+                      <td>
+                        <RowAction source={r.source} itemId={r.item_id} onDone={setNote} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -288,7 +297,7 @@ function WritePlanDialog({ onClose }: { onClose: (waiting: 'confirmation' | 'res
   const { t } = useTranslation();
   const { api } = useAuth();
   const { active } = useSession();
-  const [patient, setPatient] = useState('');
+  const [patient, setPatient] = useState(usePatientHint());
   const [text, setText] = useState('');
   const valid = UUID.test(patient.trim()) && text.trim() !== '';
   const write = useIdempotentWrite(
@@ -377,7 +386,7 @@ function RecordResultDialog({ onClose }: { onClose: (r: { wake: boolean } | null
   const { t } = useTranslation();
   const { api } = useAuth();
   const { active } = useSession();
-  const [patient, setPatient] = useState('');
+  const [patient, setPatient] = useState(usePatientHint());
   const [code, setCode] = useState('');
   const [rows, setRows] = useState<MeasureRow[]>([{ id: 1, name: '', value: '' }]);
   const [validFrom, setValidFrom] = useState('');
@@ -482,7 +491,7 @@ function RecordResultDialog({ onClose }: { onClose: (r: { wake: boolean } | null
           {t('care.results.addMeasure')}
         </button>
       </fieldset>
-      <p className="hint">{t('care.results.zoneNote', { zone: getClinicTimeZone() })}</p>
+      <ZoneNote />
       <label htmlFor="res-from">{t('care.results.validFrom')}</label>
       <input id="res-from" type="datetime-local" value={validFrom} onChange={(e) => touch(setValidFrom)(e.target.value)} />
       <label htmlFor="res-to">{t('care.results.validTo')}</label>

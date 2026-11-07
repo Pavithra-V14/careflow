@@ -7,6 +7,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { useApiQuery, useIdempotentWrite } from '../hooks';
 import { CAN_CONFIRM_IDENTITY, CAN_REVOKE_IDENTITY } from '../sections';
 import { useSession } from '../session/SessionContext';
+import { CareLinks } from '../components/CareLinks';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Badge, PageHeading, PlaceholderNote, Time, UUID, useWord } from '../ui/bits';
 import { NotAvailableToRole, ProblemText, QueryView } from '../ui/states';
@@ -100,6 +101,8 @@ function RecordView({ patientId }: { patientId: string }) {
                 )}
               </div>
             )}
+
+            <CareLinks patientId={patientId} />
 
             {/* Front desk only, and only for a record that is currently verified. The backend decides. */}
             {hasRole(CAN_REVOKE_IDENTITY) && p.verified && !p.merged_into && <IdentityRevoke patientId={patientId} onDone={setRevoked} />}

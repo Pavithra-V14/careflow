@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-648 of 648 strings are unreviewed.
+818 of 818 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -60,6 +60,137 @@ Terms standardised: proposal, resolve / resolved.
 
 | Key | English | Tamil | AI review |
 |---|---|---|---|
+| `admin.accounts.cannotChange` | You cannot change this account: it is your own, or you are not an administrator of every clinic where it holds a role. | இந்தக் கணக்கை உங்களால் மாற்ற முடியாது: இது உங்களுடையது, அல்லது இது பங்கு வகிக்கும் ஒவ்வொரு மருத்துவமனையிலும் நீங்கள் நிர்வாகி அல்ல. | ok |
+| `admin.accounts.col.account` | Account | கணக்கு | ok |
+| `admin.accounts.col.action` | Action | செயல் | ok |
+| `admin.accounts.col.roles` | Roles | பங்குகள் | ok |
+| `admin.accounts.col.status` | Status | நிலை | ok |
+| `admin.accounts.done.grant` | The role was granted. | பங்கு வழங்கப்பட்டது. | ok |
+| `admin.accounts.done.invite` | The invitation was created. | அழைப்பு உருவாக்கப்பட்டது. | ok |
+| `admin.accounts.done.reinstate` | The account was reinstated. | கணக்கு மீண்டும் செயல்படுத்தப்பட்டது. | ok |
+| `admin.accounts.done.revoke` | The role was revoked. | பங்கு திரும்பப் பெறப்பட்டது. | ok |
+| `admin.accounts.done.suspend` | The account was suspended. | கணக்கு இடைநிறுத்தப்பட்டது. | ok |
+| `admin.accounts.email` | E-mail address | மின்னஞ்சல் முகவரி | ok |
+| `admin.accounts.empty` | There are no staff accounts to show. | காட்ட பணியாளர் கணக்குகள் இல்லை. | ok |
+| `admin.accounts.exists` | An account with that e-mail already exists. Grant it a role instead. | அந்த மின்னஞ்சலுடன் ஒரு கணக்கு ஏற்கனவே உள்ளது. அதற்குப் பதிலாக ஒரு பங்கை வழங்குங்கள். | ok |
+| `admin.accounts.grant` | Grant a role | பங்கை வழங்கு | ok |
+| `admin.accounts.grantBody` | Gives this account the role you choose at this clinic. | இந்த மருத்துவமனையில் நீங்கள் தேர்ந்தெடுக்கும் பங்கை இந்தக் கணக்கிற்கு வழங்குகிறது. | ok |
+| `admin.accounts.grantTitle` | Grant a role? | பங்கை வழங்கவா? | ok |
+| `admin.accounts.invite` | Invite a staff member | பணியாளரை அழை | ok |
+| `admin.accounts.inviteBody` | Creates an account with the one role you choose. They activate it themselves. | நீங்கள் தேர்ந்தெடுக்கும் ஒரே பங்குடன் ஒரு கணக்கை உருவாக்குகிறது. அவர்களே அதைச் செயல்படுத்துவார்கள். | ok |
+| `admin.accounts.inviteTitle` | Invite a staff member? | பணியாளரை அழைக்கவா? | ok |
+| `admin.accounts.lastAdmin` | That would leave the clinic without an active administrator. Nothing was changed. | அது மருத்துவமனையை செயலில் உள்ள நிர்வாகி இல்லாமல் விட்டுவிடும். எதுவும் மாற்றப்படவில்லை. | ok |
+| `admin.accounts.notConfigured` | Inviting is not set up yet (no sign-in administration is configured). Nothing was sent. | அழைப்பு இன்னும் அமைக்கப்படவில்லை (உள்நுழைவு நிர்வாகம் அமைக்கப்படவில்லை). எதுவும் அனுப்பப்படவில்லை. | ok |
+| `admin.accounts.note` | Accounts that hold or held a role at this clinic. Only ids, a status and role words are shown; no e-mail is stored here. | இந்த மருத்துவமனையில் பங்கு வகிக்கும் அல்லது வகித்த கணக்குகள். அடையாளங்கள், நிலை மற்றும் பங்குச் சொற்கள் மட்டுமே காட்டப்படுகின்றன; மின்னஞ்சல் இங்கு சேமிக்கப்படுவதில்லை. | ok |
+| `admin.accounts.reinstate` | Reinstate | மீண்டும் செயல்படுத்து | ok |
+| `admin.accounts.reinstateBody` | The suspended account can sign in again. | இடைநிறுத்தப்பட்ட கணக்கு மீண்டும் உள்நுழையலாம். | ok |
+| `admin.accounts.reinstateTitle` | Reinstate this account? | இந்தக் கணக்கை மீண்டும் செயல்படுத்தவா? | ok |
+| `admin.accounts.revoke` | Revoke a role | பங்கைத் திரும்பப் பெறு | ok |
+| `admin.accounts.revokeBody` | Removes the role you choose from this account at this clinic. | இந்த மருத்துவமனையில் நீங்கள் தேர்ந்தெடுக்கும் பங்கை இந்தக் கணக்கிலிருந்து நீக்குகிறது. | ok |
+| `admin.accounts.revokeTitle` | Revoke a role? | பங்கைத் திரும்பப் பெறவா? | ok |
+| `admin.accounts.role` | Role | பங்கு | ok |
+| `admin.accounts.status.active` | Active | செயலில் | ok |
+| `admin.accounts.status.closed` | Closed | மூடப்பட்டது | ok |
+| `admin.accounts.status.invited` | Invited | அழைக்கப்பட்டது | ok |
+| `admin.accounts.status.suspended` | Suspended | இடைநிறுத்தப்பட்டது | ok |
+| `admin.accounts.suspend` | Suspend | இடைநிறுத்து | ok |
+| `admin.accounts.suspendBody` | The account can no longer sign in to this system until it is reinstated. | மீண்டும் செயல்படுத்தப்படும் வரை இந்தக் கணக்கு இந்த அமைப்பில் உள்நுழைய முடியாது. | ok |
+| `admin.accounts.suspendTitle` | Suspend this account? | இந்தக் கணக்கை இடைநிறுத்தவா? | ok |
+| `admin.autonomy.alreadyPending` | A proposal is already pending. | ஒரு முன்மொழிவு ஏற்கனவே நிலுவையில் உள்ளது. | ok |
+| `admin.autonomy.approve` | Approve | ஒப்புக்கொள் | ok |
+| `admin.autonomy.approveTitle` | Approve this proposal? | இந்த முன்மொழிவை ஒப்புக்கொள்ளவா? | ok |
+| `admin.autonomy.change` | Change the mode | முறையை மாற்று | ok |
+| `admin.autonomy.changeBody` | Sets the clinic to shadow or assisted. Switching to autonomous is only done through a proposal that a second person approves. | மருத்துவமனையை நிழல் அல்லது உதவியுடன் முறைக்கு அமைக்கிறது. தன்னாட்சிக்கு மாற்றுவது, இரண்டாம் நபர் ஒப்புக்கொள்ளும் முன்மொழிவு மூலம் மட்டுமே செய்யப்படும். | ok |
+| `admin.autonomy.col.action` | Action | செயல் | ok |
+| `admin.autonomy.col.by` | Proposed by | முன்மொழிந்தவர் | ok |
+| `admin.autonomy.col.created` | Created | உருவாக்கப்பட்டது | ok |
+| `admin.autonomy.col.proposal` | Proposal | முன்மொழிவு | ok |
+| `admin.autonomy.col.role` | As | பங்கு | ok |
+| `admin.autonomy.decideBody` | Your decision is recorded under your name by the database. | உங்கள் முடிவு தரவுத்தளத்தால் உங்கள் பெயரில் பதிவு செய்யப்படும். | ok |
+| `admin.autonomy.mode` | Mode | முறை | ok |
+| `admin.autonomy.modeSet` | The mode was set. | முறை அமைக்கப்பட்டது. | ok |
+| `admin.autonomy.modes.assisted` | Assisted | உதவியுடன் | ok |
+| `admin.autonomy.modes.autonomous` | Autonomous | தன்னாட்சி | ok |
+| `admin.autonomy.modes.shadow` | Shadow | நிழல் | ok |
+| `admin.autonomy.neverSet` | (never set, so shadow) | (ஒருபோதும் அமைக்கப்படவில்லை; எனவே நிழல்) | ok |
+| `admin.autonomy.noPending` | There are no pending proposals. | நிலுவையில் உள்ள முன்மொழிவுகள் இல்லை. | ok |
+| `admin.autonomy.notEnabled` | Switching to autonomous is not enabled yet. Nothing was changed. | தன்னாட்சிக்கு மாற்றுவது இன்னும் இயக்கப்படவில்லை. எதுவும் மாற்றப்படவில்லை. | ok |
+| `admin.autonomy.note` | There is no history list: only proposals that are still pending are shown. | வரலாற்றுப் பட்டியல் இல்லை: இன்னும் நிலுவையில் உள்ள முன்மொழிவுகள் மட்டுமே காட்டப்படுகின்றன. | ok |
+| `admin.autonomy.pending` | Pending proposals | நிலுவையில் உள்ள முன்மொழிவுகள் | ok |
+| `admin.autonomy.propose` | Propose switching to autonomous | தன்னாட்சிக்கு மாற்ற முன்மொழி | ok |
+| `admin.autonomy.proposeBody` | You propose as {{role}}. A different person who holds the other role must approve it within 7 days. Nothing changes until then. | நீங்கள் {{role}} ஆக முன்மொழிகிறீர்கள். மற்ற பங்கை வகிக்கும் வேறொருவர் 7 நாட்களுக்குள் ஒப்புக்கொள்ள வேண்டும். அதுவரை எதுவும் மாறாது. | ok |
+| `admin.autonomy.proposeConfirm` | Propose | முன்மொழி | ok |
+| `admin.autonomy.proposed` | The proposal was made. | முன்மொழிவு செய்யப்பட்டது. | ok |
+| `admin.autonomy.reject` | Reject | நிராகரி | ok |
+| `admin.autonomy.rejectTitle` | Reject this proposal? | இந்த முன்மொழிவை நிராகரிக்கவா? | ok |
+| `admin.autonomy.result.approved` | Approved. The proposal is resolved. | ஒப்புக்கொள்ளப்பட்டது. முன்மொழிவு தீர்க்கப்பட்டது. | ok |
+| `admin.autonomy.result.expired` | This proposal has expired. | இந்த முன்மொழிவு காலாவதியாகிவிட்டது. | ok |
+| `admin.autonomy.result.not_pending` | This proposal is no longer pending. | இந்த முன்மொழிவு இனி நிலுவையில் இல்லை. | ok |
+| `admin.autonomy.result.rejected` | Rejected. The proposal is closed. | நிராகரிக்கப்பட்டது. முன்மொழிவு மூடப்பட்டது. | ok |
+| `admin.autonomy.result.same_person` | The person who proposed it cannot approve it. | முன்மொழிந்தவரே அதை ஒப்புக்கொள்ள முடியாது. | ok |
+| `admin.autonomy.result.wrong_role` | Approval has to come from the other role. | ஒப்புதல் மற்ற பங்கிலிருந்து வர வேண்டும். | ok |
+| `admin.autonomy.set` | Set mode | முறையை அமை | ok |
+| `admin.autonomy.you` | You | நீங்கள் | ok |
+| `admin.cost.amplification` | Amplification over the ceiling | உச்ச வரம்பிற்கு மேல் பெருக்கம் | ok |
+| `admin.cost.col.actual` | Actual | உண்மையானது | ok |
+| `admin.cost.col.shadow` | At scale | அளவில் | ok |
+| `admin.cost.col.term` | Term | உறுப்பு | ok |
+| `admin.cost.noColumn` | No column | பத்தி இல்லை | ok |
+| `admin.cost.notMeasured` | Not measured | அளக்கப்படவில்லை | ok |
+| `admin.cost.note` | Monthly cost from the spend ledger and completed jobs, in two columns: actual, and at the scale you plan for. A term that is not configured or not measured stays empty. | செலவுப் பேரேடு மற்றும் முடிந்த பணிகளிலிருந்து மாதாந்திரச் செலவு, இரண்டு பத்திகளில்: உண்மையானது, மற்றும் நீங்கள் திட்டமிடும் அளவில். அமைக்கப்படாத அல்லது அளக்கப்படாத உறுப்பு காலியாகவே இருக்கும். | ok |
+| `admin.cost.reasons` | Reasons | காரணங்கள் | ok |
+| `admin.cost.state` | State | நிலை | ok |
+| `admin.cost.term.calls` | Calls per workflow | பணிப்பாய்வுக்கு அழைப்புகள் | ok |
+| `admin.cost.term.failure` | Failure tax per month | மாதத்திற்கு தோல்வி வரி | ok |
+| `admin.cost.term.floor` | Platform floor per month | மாதத்திற்கு தள அடிப்படைச் செலவு | ok |
+| `admin.cost.term.perCall` | Cost per call | அழைப்புக்கான செலவு | ok |
+| `admin.cost.term.total` | Total per month | மாதத்திற்கு மொத்தம் | ok |
+| `admin.cost.term.variable` | Variable cost per month | மாதத்திற்கு மாறுபடும் செலவு | ok |
+| `admin.cost.term.workflows` | Workflows per day | நாளொன்றுக்கு பணிப்பாய்வுகள் | ok |
+| `admin.notRecorded` | Not recorded | பதிவு செய்யப்படவில்லை | ok |
+| `admin.reviewer.canaryCount` | {{approved}} of {{seen}} | {{seen}} இல் {{approved}} | ok |
+| `admin.reviewer.col.approvals` | Approvals | ஒப்புதல்கள் | ok |
+| `admin.reviewer.col.canaries` | Test cases approved | ஒப்புக்கொண்ட சோதனை நிகழ்வுகள் | ok |
+| `admin.reviewer.col.decisions` | Decisions | முடிவுகள் | ok |
+| `admin.reviewer.col.edits` | Edits | திருத்தங்கள் | ok |
+| `admin.reviewer.col.median` | Median seconds to decide | முடிவெடுக்க இடைநிலை நொடிகள் | ok |
+| `admin.reviewer.col.rate` | Approval rate | ஒப்புதல் விகிதம் | ok |
+| `admin.reviewer.col.reasons` | Reasons | காரணங்கள் | ok |
+| `admin.reviewer.col.rejections` | Rejections | நிராகரிப்புகள் | ok |
+| `admin.reviewer.col.reviewer` | Reviewer | மதிப்பாய்வாளர் | ok |
+| `admin.reviewer.col.verdict` | Verdict | தீர்ப்பு | ok |
+| `admin.reviewer.empty` | There are no reviewer decisions in this period. | இந்தக் காலத்தில் மதிப்பாய்வாளர் முடிவுகள் இல்லை. | ok |
+| `admin.reviewer.noPolicy` | The policy that judges rubber-stamping is not set, so no verdict is given. | கண்மூடித்தனமான ஒப்புதலை மதிப்பிடும் கொள்கை அமைக்கப்படவில்லை; எனவே தீர்ப்பு வழங்கப்படவில்லை. | ok |
+| `admin.reviewer.window` | The last {{days}} days. | கடந்த {{days}} நாட்கள். | ok |
+| `admin.stepUp` | This needs a fresh authenticator code. You will be asked for it. | இதற்குப் புதிய அங்கீகார குறியீடு தேவை. அது உங்களிடம் கேட்கப்படும். | ok |
+| `admin.tab.accounts` | Staff accounts | பணியாளர் கணக்குகள் | ok |
+| `admin.tab.autonomy` | Autonomy | தன்னாட்சி | ok |
+| `admin.tab.cost` | Cost canvas | செலவு வரைபடம் | ok |
+| `admin.tab.reviewer` | Reviewer statistics | மதிப்பாய்வாளர் புள்ளிவிவரங்கள் | ok |
+| `admin.tab.voice` | Voice transcripts | குரல் பதிவுகள் | ok |
+| `admin.tabs` | Admin sections | நிர்வாகப் பிரிவுகள் | ok |
+| `admin.title` | Admin | நிர்வாகம் | ok |
+| `admin.voice.col.action` | Action | செயல் | ok |
+| `admin.voice.col.chunks` | Chunks | துண்டுகள் | ok |
+| `admin.voice.col.expired` | Expired chunks | காலாவதியான துண்டுகள் | ok |
+| `admin.voice.col.retention` | Retention (days) | தக்கவைப்பு (நாட்கள்) | ok |
+| `admin.voice.col.session` | Session | அமர்வு | ok |
+| `admin.voice.col.started` | Started | தொடங்கியது | ok |
+| `admin.voice.col.status` | Status | நிலை | ok |
+| `admin.voice.col.workflow` | Workflow | பணிப்பாய்வு | ok |
+| `admin.voice.empty` | There are no voice sessions. | குரல் அமர்வுகள் இல்லை. | ok |
+| `admin.voice.keysMissing` | Encryption keys are not configured, so the transcript cannot be read. | குறியாக்க விசைகள் அமைக்கப்படவில்லை; எனவே பதிவைப் படிக்க முடியாது. | ok |
+| `admin.voice.noChunks` | There is no unexpired text in this session. | இந்த அமர்வில் காலாவதியாகாத உரை இல்லை. | ok |
+| `admin.voice.note` | Transcripts are read and purged only by an administrator with a fresh second factor. Every read and purge is audited by the database. | புதிய இரண்டாம் காரணியுடன் ஒரு நிர்வாகி மட்டுமே பதிவுகளைப் படிக்கவும் அழிக்கவும் முடியும். ஒவ்வொரு படிப்பும் அழிப்பும் தரவுத்தளத்தால் தணிக்கை செய்யப்படுகிறது. | ok |
+| `admin.voice.purge` | Purge expired transcripts | காலாவதியான பதிவுகளை அழி | ok |
+| `admin.voice.purgeBody` | Deletes expired transcript chunks of this clinic. An unexpired chunk is never deleted. This cannot be undone. | இந்த மருத்துவமனையின் காலாவதியான பதிவுத் துண்டுகளை நீக்குகிறது. காலாவதியாகாத துண்டு ஒருபோதும் நீக்கப்படாது. இதைத் திரும்பப் பெற முடியாது. | ok |
+| `admin.voice.purgeConfirm` | Purge | அழி | ok |
+| `admin.voice.purgeLimit` | Most chunks to delete (optional) | நீக்க வேண்டிய அதிகபட்சத் துண்டுகள் (விருப்பம்) | ok |
+| `admin.voice.purged` | Deleted {{count}} expired chunks. | {{count}} காலாவதியான துண்டுகள் நீக்கப்பட்டன. | ok |
+| `admin.voice.read` | Read transcript | பதிவைப் படி | ok |
+| `admin.voice.readBody` | The text is shown only while this window is open, and the read is audited. | இந்த சாளரம் திறந்திருக்கும் வரை மட்டுமே உரை காட்டப்படும்; படிப்பு தணிக்கை செய்யப்படும். | ok |
+| `admin.voice.readTitle` | Read this transcript? | இந்தப் பதிவைப் படிக்கவா? | ok |
+| `admin.voice.transcript` | Transcript | பதிவு | ok |
 | `alerts.acknowledge` | Acknowledge | ஏற்றுக்கொள் | ok |
 | `alerts.acknowledged` | The alert was acknowledged. | எச்சரிக்கை ஏற்கப்பட்டது. | ok |
 | `alerts.already` | This alert was already acknowledged. The list will refresh. | இந்த எச்சரிக்கை ஏற்கனவே ஏற்கப்பட்டது. பட்டியல் புதுப்பிக்கப்படும். | ok |
@@ -84,6 +215,17 @@ Terms standardised: proposal, resolve / resolved.
 | `care.changed` | That changed in the meantime. Refresh and look again. | இடைப்பட்ட நேரத்தில் இது மாறிவிட்டது. புதுப்பித்து மீண்டும் பாருங்கள். | ok |
 | `care.gaps.ageNotSet` | The age at which an item is flagged overdue is not set, so nothing is flagged. | ஒரு உருப்படி தாமதமானது எனக் குறிக்கும் வயது அமைக்கப்படவில்லை; எனவே எதுவும் குறிக்கப்படாது. | ok |
 | `care.gaps.ageUnknown` | Unknown | தெரியாது | ok |
+| `care.gaps.alreadyResolved` | This barrier was already resolved. The list will refresh. | இந்தத் தடை ஏற்கனவே தீர்க்கப்பட்டது. பட்டியல் புதுப்பிக்கப்படும். | ok |
+| `care.gaps.barrier.childcare` | Childcare | குழந்தைப் பராமரிப்பு | ok |
+| `care.gaps.barrier.cost` | Cost | செலவு | ok |
+| `care.gaps.barrier.forgot` | Forgot | மறந்துவிட்டார் | ok |
+| `care.gaps.barrier.other` | Other | மற்றவை | ok |
+| `care.gaps.barrier.scheduling_conflict` | Scheduling conflict | நேர முரண்பாடு | ok |
+| `care.gaps.barrier.transport` | Transport | போக்குவரத்து | ok |
+| `care.gaps.barrierBody` | Records a barrier that stops this patient from attending. The type is chosen from a fixed list. | இந்த நோயாளி வருவதைத் தடுக்கும் ஒரு தடையைப் பதிவு செய்கிறது. வகை நிலையான பட்டியலிலிருந்து தேர்ந்தெடுக்கப்படும். | ok |
+| `care.gaps.barrierDone` | The barrier was recorded. | தடை பதிவானது. | ok |
+| `care.gaps.barrierKind` | Barrier | தடை | ok |
+| `care.gaps.col.action` | Action | செயல் | ok |
 | `care.gaps.col.age` | Age (days) | வயது (நாட்கள்) | ok |
 | `care.gaps.col.flag` | Flag | குறி | ok |
 | `care.gaps.col.item` | Item | உருப்படி | ok |
@@ -91,15 +233,41 @@ Terms standardised: proposal, resolve / resolved.
 | `care.gaps.col.open` | Open items | திறந்த உருப்படிகள் | ok |
 | `care.gaps.col.source` | Source | மூலம் | ok |
 | `care.gaps.col.undated` | Without a date | தேதி இல்லாதவை | ok |
+| `care.gaps.dateRefused` | That date is refused: it would move backwards or fall in the future. Nothing was recorded. | அந்தத் தேதி மறுக்கப்பட்டது: அது பின்னோக்கி நகரும் அல்லது எதிர்காலத்தில் விழும். எதுவும் பதிவாகவில்லை. | ok |
+| `care.gaps.doneBody` | Records the date this rule was last done. It can only move forward and never into the future. | இந்த விதி கடைசியாகச் செய்த தேதியைப் பதிவு செய்கிறது. இது முன்னோக்கி மட்டுமே நகரும்; எதிர்காலத்திற்கு ஒருபோதும் நகராது. | ok |
+| `care.gaps.doneOn` | Done on | செய்த தேதி | ok |
+| `care.gaps.doneRecorded` | The date was recorded. | தேதி பதிவானது. | ok |
+| `care.gaps.episodeBody` | Starts a care episode for the patient and attaches the rules the clinic has set for that kind of episode. | நோயாளிக்கான ஒரு பராமரிப்பு நிகழ்வைத் தொடங்கி, அந்த வகை நிகழ்வுக்கு மருத்துவமனை அமைத்த விதிகளை இணைக்கிறது. | ok |
+| `care.gaps.episodeCode` | Episode code | நிகழ்வுக் குறியீடு | ok |
+| `care.gaps.episodeDone` | The episode was started. | நிகழ்வு தொடங்கப்பட்டது. | ok |
+| `care.gaps.episodeNotConfigured` | Episode rules are not set up yet. Nothing was started. | நிகழ்வு விதிகள் இன்னும் அமைக்கப்படவில்லை. எதுவும் தொடங்கப்படவில்லை. | ok |
+| `care.gaps.episodeNotFound` | The clinic, the patient or the episode code was not found. Nothing was started. | மருத்துவமனை, நோயாளி அல்லது நிகழ்வுக் குறியீடு கிடைக்கவில்லை. எதுவும் தொடங்கப்படவில்லை. | ok |
 | `care.gaps.errorRate` | After-the-fact review error rate | பின்னாய்வு மறுஆய்வுப் பிழை விகிதம் | ok |
+| `care.gaps.itemGone` | That item could not be found, or it has already been dealt with. The list will refresh. | அந்த உருப்படி கிடைக்கவில்லை, அல்லது ஏற்கனவே கையாளப்பட்டது. பட்டியல் புதுப்பிக்கப்படும். | ok |
+| `care.gaps.markDone` | Mark done | செய்து முடிந்ததாகக் குறி | ok |
 | `care.gaps.noRows` | There are no items. | உருப்படிகள் இல்லை. | ok |
 | `care.gaps.noSummaries` | There are no summaries. | சுருக்கங்கள் இல்லை. | ok |
 | `care.gaps.notMeasured` | Not measured | அளக்கப்படவில்லை | ok |
 | `care.gaps.overdue` | Overdue | தாமதமானது | ok |
+| `care.gaps.recheck` | Re-check | மீண்டும் சரிபார் | ok |
+| `care.gaps.recheckBody` | This records that you re-checked the sample, under your name. It can be done once. | நீங்கள் மாதிரியை மீண்டும் சரிபார்த்தீர்கள் என்று உங்கள் பெயரில் பதிவாகும். இதை ஒரு முறை மட்டுமே செய்ய முடியும். | ok |
+| `care.gaps.recheckTitle` | Mark this sample re-checked? | இந்த மாதிரியை மீண்டும் சரிபார்க்கப்பட்டதாகக் குறிக்கவா? | ok |
+| `care.gaps.rechecked` | The sample was marked re-checked. | மாதிரி மீண்டும் சரிபார்க்கப்பட்டதாகக் குறிக்கப்பட்டது. | ok |
+| `care.gaps.record` | Record | பதிவு செய் | ok |
+| `care.gaps.recordBarrier` | Record a barrier | தடையைப் பதிவு செய் | ok |
+| `care.gaps.resolve` | Resolve | தீர் | ok |
+| `care.gaps.resolveBody` | This closes the barrier, under your name. It can be done once. | இது உங்கள் பெயரில் தடையை மூடுகிறது. இதை ஒரு முறை மட்டுமே செய்ய முடியும். | ok |
+| `care.gaps.resolveTitle` | Resolve this barrier? | இந்தத் தடையைத் தீர்க்கவா? | ok |
+| `care.gaps.resolved` | The barrier was resolved. | தடை தீர்க்கப்பட்டது. | ok |
 | `care.gaps.rows` | Items | உருப்படிகள் | ok |
+| `care.gaps.sameDecider` | You made the decision this sample was drawn from, so someone else must re-check it. Nothing was recorded. | இந்த மாதிரி எடுக்கப்பட்ட முடிவை நீங்களே எடுத்தீர்கள்; எனவே வேறொருவர் இதை மீண்டும் சரிபார்க்க வேண்டும். எதுவும் பதிவாகவில்லை. | ok |
+| `care.gaps.start` | Start | தொடங்கு | ok |
+| `care.gaps.startEpisode` | Start an episode | நிகழ்வைத் தொடங்கு | ok |
+| `care.gaps.startedOn` | Started on | தொடங்கிய தேதி | ok |
 | `care.gaps.summaries` | Summary by source | மூலம் வாரியான சுருக்கம் | ok |
 | `care.gaps.unknownLastDone` | Recurrence rules whose last-done date is unknown | கடைசியாகச் செய்த தேதி தெரியாத மீள்நிகழ்வு விதிகள் | ok |
 | `care.gaps.unreadable` | These sources could not be read: | இந்த மூலங்களைப் படிக்க இயலவில்லை: | ok |
+| `care.links.title` | Care for this patient | இந்த நோயாளிக்கான பராமரிப்பு | ok |
 | `care.notReadable` | Not readable | படிக்க இயலவில்லை | ok |
 | `care.patientId` | Patient id | நோயாளி அடையாளம் | ok |
 | `care.patientIdBad` | That is not a patient id. | இது நோயாளி அடையாளம் அல்ல. | ok |
@@ -142,7 +310,6 @@ Terms standardised: proposal, resolve / resolved.
 | `care.results.validFrom` | Valid from | செல்லுபடியாகத் தொடங்குவது | ok |
 | `care.results.validTo` | Valid until (optional) | செல்லுபடியாகும் வரை (விருப்பம்) | ok |
 | `care.results.verified` | Verified | சரிபார்க்கப்பட்டது | ok |
-| `care.results.zoneNote` | Times are in the clinic time zone: {{zone}} (demo placeholder). | நேரங்கள் மருத்துவமனையின் நேர மண்டலத்தில் உள்ளன: {{zone}} (டெமோ இடஒதுக்கீடு). | ok |
 | `care.tab.gaps` | Care gaps | பராமரிப்பு இடைவெளிகள் | ok |
 | `care.tab.plans` | Care plans | பராமரிப்புத் திட்டங்கள் | ok |
 | `care.tab.results` | Results | முடிவுகள் | ok |
@@ -277,6 +444,7 @@ Terms standardised: proposal, resolve / resolved.
 | `landing.privacy.readNotice` | Read the privacy notice | தனியுரிமை அறிவிப்பைப் படிக்கவும் | ok |
 | `languages.en` | English | English | kept in English by design |
 | `languages.ta` | தமிழ் | தமிழ் | kept in English by design |
+| `nav.admin` | Admin | நிர்வாகம் | ok |
 | `nav.alerts` | Alerts | எச்சரிக்கைகள் | ok |
 | `nav.care` | Care | பராமரிப்பு | ok |
 | `nav.dashboard` | Dashboard | கட்டுப்பாட்டுப் பலகை | ok |
@@ -683,6 +851,8 @@ Terms standardised: proposal, resolve / resolved.
 | `tasks.urgent` | Urgent | அவசரம் | ok |
 | `tasks.urgentNote` | Shown first because of its kind or priority. | வகை அல்லது முன்னுரிமை காரணமாக முதலில் காட்டப்படுகிறது. | ok |
 | `tasks.you` | You | நீங்கள் | ok |
+| `time.zoneNote` | Times are in the clinic time zone: {{zone}}. | நேரங்கள் மருத்துவமனையின் நேர மண்டலத்தில் உள்ளன: {{zone}}. | ok |
+| `time.zoneNotePlaceholder` | Times are in the clinic time zone: {{zone}} (demo placeholder: the clinic has not set one). | நேரங்கள் மருத்துவமனையின் நேர மண்டலத்தில் உள்ளன: {{zone}} (டெமோ இடஒதுக்கீடு: மருத்துவமனை ஒன்றை அமைக்கவில்லை). | ok |
 | `upload.another` | Upload another | மற்றொன்றைப் பதிவேற்று | ok |
 | `upload.conflict` | That upload conflicts with an earlier one. Start again. | அந்தப் பதிவேற்றம் முந்தையதுடன் முரண்படுகிறது. மீண்டும் தொடங்கவும். | ok |
 | `upload.done` | Uploaded | பதிவேற்றப்பட்டது | ok |
