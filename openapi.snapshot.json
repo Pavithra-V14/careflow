@@ -2424,6 +2424,364 @@
         "title": "ErrorBody",
         "type": "object"
       },
+      "ExportBookingOut": {
+        "additionalProperties": false,
+        "properties": {
+          "booking_id": {
+            "format": "uuid",
+            "title": "Booking Id",
+            "type": "string"
+          },
+          "cancelled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancelled At"
+          },
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "ends_at": {
+            "format": "date-time",
+            "title": "Ends At",
+            "type": "string"
+          },
+          "starts_at": {
+            "format": "date-time",
+            "title": "Starts At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "booking_id",
+          "status",
+          "starts_at",
+          "ends_at",
+          "created_at",
+          "cancelled_at"
+        ],
+        "title": "ExportBookingOut",
+        "type": "object"
+      },
+      "ExportConsentOut": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "notice_version": {
+            "title": "Notice Version",
+            "type": "integer"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "purpose": {
+            "title": "Purpose",
+            "type": "string"
+          }
+        },
+        "required": [
+          "purpose",
+          "action",
+          "notice_version",
+          "occurred_at"
+        ],
+        "title": "ExportConsentOut",
+        "type": "object"
+      },
+      "ExportMessageOut": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "erased": {
+            "title": "Erased",
+            "type": "boolean"
+          },
+          "message_id": {
+            "format": "uuid",
+            "title": "Message Id",
+            "type": "string"
+          },
+          "sender_kind": {
+            "title": "Sender Kind",
+            "type": "string"
+          },
+          "topic": {
+            "title": "Topic",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "message_id",
+          "topic",
+          "sender_kind",
+          "created_at",
+          "erased",
+          "body"
+        ],
+        "title": "ExportMessageOut",
+        "type": "object"
+      },
+      "ExportRecordOut": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "date_of_birth": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Of Birth"
+          },
+          "erased": {
+            "title": "Erased",
+            "type": "boolean"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "erased",
+          "name",
+          "date_of_birth",
+          "phone"
+        ],
+        "title": "ExportRecordOut",
+        "type": "object"
+      },
+      "GrievanceFiledOut": {
+        "additionalProperties": false,
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "grievance_id": {
+            "format": "uuid",
+            "title": "Grievance Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "grievance_id",
+          "created"
+        ],
+        "title": "GrievanceFiledOut",
+        "type": "object"
+      },
+      "GrievanceIn": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "pattern": "^[a-z][a-z0-9_]{0,39}$",
+            "title": "Category",
+            "type": "string"
+          },
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "category",
+          "text"
+        ],
+        "title": "GrievanceIn",
+        "type": "object"
+      },
+      "GrievanceList": {
+        "additionalProperties": false,
+        "properties": {
+          "grievances": {
+            "items": {
+              "$ref": "#/components/schemas/GrievanceOut"
+            },
+            "title": "Grievances",
+            "type": "array"
+          }
+        },
+        "required": [
+          "grievances"
+        ],
+        "title": "GrievanceList",
+        "type": "object"
+      },
+      "GrievanceOut": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "erased": {
+            "title": "Erased",
+            "type": "boolean"
+          },
+          "grievance_id": {
+            "format": "uuid",
+            "title": "Grievance Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "acknowledged",
+              "resolved"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "required": [
+          "grievance_id",
+          "clinic_id",
+          "category",
+          "status",
+          "created_at",
+          "erased",
+          "text"
+        ],
+        "title": "GrievanceOut",
+        "type": "object"
+      },
+      "GrievanceStatusIn": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "enum": [
+              "acknowledged",
+              "resolved"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "GrievanceStatusIn",
+        "type": "object"
+      },
+      "GrievanceStatusOut": {
+        "additionalProperties": false,
+        "properties": {
+          "result": {
+            "enum": [
+              "recorded",
+              "replay",
+              "invalid_transition"
+            ],
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "GrievanceStatusOut",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -3393,6 +3751,71 @@
         "title": "MessageReadOut",
         "type": "object"
       },
+      "MyDataOut": {
+        "additionalProperties": false,
+        "properties": {
+          "account_status": {
+            "title": "Account Status",
+            "type": "string"
+          },
+          "bookings": {
+            "items": {
+              "$ref": "#/components/schemas/ExportBookingOut"
+            },
+            "title": "Bookings",
+            "type": "array"
+          },
+          "consents": {
+            "items": {
+              "$ref": "#/components/schemas/ExportConsentOut"
+            },
+            "title": "Consents",
+            "type": "array"
+          },
+          "grievances": {
+            "items": {
+              "$ref": "#/components/schemas/GrievanceOut"
+            },
+            "title": "Grievances",
+            "type": "array"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ExportMessageOut"
+            },
+            "title": "Messages",
+            "type": "array"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/ExportRecordOut"
+            },
+            "title": "Records",
+            "type": "array"
+          },
+          "stage": {
+            "enum": [
+              "registered",
+              "new_patient",
+              "pending_activation",
+              "active"
+            ],
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_status",
+          "stage",
+          "records",
+          "consents",
+          "bookings",
+          "messages",
+          "grievances"
+        ],
+        "title": "MyDataOut",
+        "type": "object"
+      },
       "NoticeList": {
         "additionalProperties": false,
         "properties": {
@@ -3937,6 +4360,16 @@
             "title": "Consents",
             "type": "object"
           },
+          "stage": {
+            "enum": [
+              "registered",
+              "new_patient",
+              "pending_activation",
+              "active"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -3945,7 +4378,8 @@
         "required": [
           "status",
           "bound_to_a_patient_record",
-          "consents"
+          "consents",
+          "stage"
         ],
         "title": "PortalMeOut",
         "type": "object"
@@ -7042,6 +7476,118 @@
         ]
       }
     },
+    "/v1/portal/grievances": {
+      "get": {
+        "description": "Your own grievances with their status, newest first. 403 unless you are an active patient account.",
+        "operationId": "list_my_grievances_v1_portal_grievances_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GrievanceList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List My Grievances",
+        "tags": [
+          "patient rights"
+        ]
+      },
+      "post": {
+        "description": "File a grievance (access, correction, erasure, nominee or any other request) with a category from the clinic's list; the text is stored encrypted. 403 unless you are an active patient account bound to a record of that clinic, 422 for a category not on the list, 503 while the category list or the encryption keys are not configured.",
+        "operationId": "file_grievance_v1_portal_grievances_post",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrievanceIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GrievanceFiledOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "File Grievance",
+        "tags": [
+          "patient rights"
+        ]
+      }
+    },
     "/v1/portal/me": {
       "get": {
         "description": "Your account state and consent decisions. 403 unless you are a patient account (invited or active).",
@@ -7086,6 +7632,33 @@
         "summary": "Portal Me",
         "tags": [
           "patient portal"
+        ]
+      }
+    },
+    "/v1/portal/my-data": {
+      "get": {
+        "description": "Everything this build holds about you that you may see: your account state, your record, your consent history, your bookings, your appointment and safety messages, your grievances. The care topic is not included (it needs full access, which no step of this build grants). Each download is an audit row. 403 unless you are an active patient account.",
+        "operationId": "download_my_data_v1_portal_my_data_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyDataOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Download My Data",
+        "tags": [
+          "patient rights"
         ]
       }
     },
@@ -10787,6 +11360,140 @@
         "summary": "Cancel Patient Erasure Route",
         "tags": [
           "staff erasure"
+        ]
+      }
+    },
+    "/v1/staff/grievances": {
+      "get": {
+        "description": "The clinic's grievances with their status, newest first (the text is shown only while the encryption keys are loaded and it has not been erased). 404 if the clinic is not visible to you, 403 unless you are an admin there.",
+        "operationId": "list_clinic_grievances_v1_staff_grievances_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Clinic Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GrievanceList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Clinic Grievances",
+        "tags": [
+          "staff grievances"
+        ]
+      }
+    },
+    "/v1/staff/grievances/{grievance_id}/status": {
+      "post": {
+        "description": "Acknowledge or resolve a grievance as an admin of its clinic (a resolved grievance is final; a repeat is a replay); audited by the database. 404 if you cannot see it, 403 unless you are an admin there.",
+        "operationId": "set_grievance_status_v1_staff_grievances__grievance_id__status_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "grievance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Grievance Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrievanceStatusIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GrievanceStatusOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Grievance Status",
+        "tags": [
+          "staff grievances"
         ]
       }
     },

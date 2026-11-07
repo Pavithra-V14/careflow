@@ -79,3 +79,6 @@ settings:
   break_glass_minutes:
     value: "30"
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  grievance_categories:
+    value: "demo_category"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"

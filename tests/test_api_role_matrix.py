@@ -2091,7 +2091,7 @@ def test_a_completed_erasure_clears_the_identity_columns_and_leaves_exactly_the_
     assert _run(_fetch("select status from ops.care_plans where id = $1", plan_id))[0]["status"] == "erased"
     assert str(plan_id) not in {p["plan_id"] for p in client.get(f"{CARE_PLANS}?clinic_id={ids.clinic_a}&limit=200", headers=stepped(doctor)).json()["plans"]}  # hidden from the staff list
     care = _run(_fetch("select details::text as d from audit.log where action = 'care_record.erased' and idempotency_key = $1", f"sys:erase-care-record:{request_id}"))
-    assert len(care) == 1 and json.loads(care[0]["d"]) == {"care_plans": 1, "results": 1, "messages": 0, "voice_chunks": 0}  # counts only, in a row of its own
+    assert len(care) == 1 and json.loads(care[0]["d"]) == {"care_plans": 1, "results": 1, "messages": 0, "voice_chunks": 0, "grievances": 0}  # counts only, in a row of its own
     request = _run(_fetch("select status, requested_by, approved_by from mpi.erasure_requests where id = $1::uuid", request_id))[0]
     assert (request["status"], request["requested_by"], request["approved_by"]) == ("erased", fd1, fd2)
 
@@ -2917,7 +2917,7 @@ def portal_register_cases(ids) -> list[tuple]:
 
 
 def portal_me_cases(ids) -> list[tuple]:
-    ok = lambda b: set(b) == {"status", "bound_to_a_patient_record", "consents"} and b["status"] == "active" and b["bound_to_a_patient_record"] is False and set(b["consents"]) == {"care_delivery", "ai_processing", "service_improvement"}
+    ok = lambda b: set(b) == {"status", "bound_to_a_patient_record", "consents", "stage"} and b["stage"] == "new_patient" and b["status"] == "active" and b["bound_to_a_patient_record"] is False and set(b["consents"]) == {"care_delivery", "ai_processing", "service_improvement"}
     cases = [_case(ids, "an active patient account reads its state", "patient", 200, PORTAL_ME, key=None, body=ok)]
     cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, PORTAL_ME, key=None, body=NOT_A_PATIENT) for p in _non_patients(ids)]
     cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, PORTAL_ME, key=None, body=NOT_A_PATIENT))
@@ -3258,6 +3258,68 @@ def break_glass_review_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(), body)
 
 
+# ---- patient rights: grievances and the download of one's own data (migration 0059) -------------------------------------------------------------------------------------------------------------------------
+# The matrix patient is an ACTIVE account bound to no record and this world has no encryption keys, so filing answers 503 (the refusals and the whole flow are in tests/test_patient_rights_db_live.py).
+
+os.environ.setdefault("CAREFLOW_GRIEVANCE_CATEGORIES", "demo_category")
+PORTAL_GRIEVANCES = PORTAL + "/grievances"
+PORTAL_MY_DATA = PORTAL + "/my-data"
+STAFF_GRIEVANCES = "/v1/staff/grievances"
+GRIEVANCE_STATUS = STAFF_GRIEVANCES + "/{grievance_id}/status"
+
+
+def portal_grievance_file_cases(ids) -> list[tuple]:
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "category": "demo_category", "text": "DEMO text", **o}
+    cases = [_case(ids, "an active patient account is told filing is unavailable (no keys here)", "patient", 503, PORTAL_GRIEVANCES, json=body(), body=lambda b: "unavailable" in b["detail"])]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, PORTAL_GRIEVANCES, json=body(), body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, PORTAL_GRIEVANCES, json=body(), body=NOT_A_PATIENT))
+    cases += [
+        _case(ids, "a category with a bad shape is rejected", "patient", 422, PORTAL_GRIEVANCES, json=body(category="Free text"), body=_fixed(422)),
+        _case(ids, "an empty text is rejected", "patient", 422, PORTAL_GRIEVANCES, json=body(text=""), body=_fixed(422)),
+        _case(ids, "an extra field is rejected", "patient", 422, PORTAL_GRIEVANCES, json=body(extra=1), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "patient", 422, PORTAL_GRIEVANCES, json=body(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, PORTAL_GRIEVANCES, body())
+
+
+def portal_grievance_list_cases(ids) -> list[tuple]:
+    cases = [_case(ids, "an active patient account lists its own (none)", "patient", 200, PORTAL_GRIEVANCES, key=None, body=lambda b: b == {"grievances": []})]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, PORTAL_GRIEVANCES, key=None, body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, PORTAL_GRIEVANCES, key=None, body=NOT_A_PATIENT))
+    return cases + _unauthenticated(ids, PORTAL_GRIEVANCES, None)[:4]
+
+
+def portal_my_data_cases(ids) -> list[tuple]:
+    ok = lambda b: set(b) == {"account_status", "stage", "records", "consents", "bookings", "messages", "grievances"} and b["stage"] == "new_patient" and b["records"] == [] and b["messages"] == [] and b["bookings"] == []
+    cases = [_case(ids, "an active patient account downloads its own data", "patient", 200, PORTAL_MY_DATA, key=None, body=ok)]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, PORTAL_MY_DATA, key=None, body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, PORTAL_MY_DATA, key=None, body=NOT_A_PATIENT))
+    return cases + _unauthenticated(ids, PORTAL_MY_DATA, None)[:4]
+
+
+def staff_grievance_list_cases(ids) -> list[tuple]:
+    path = lambda **o: STAFF_GRIEVANCES + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
+    visible = ("front_desk_a", "nurse_a", "doctor_a", "business_owner_a", "auditor_a", "multi")
+    cases = _console_clinic_cases(ids, path, allowed=("admin_a",), ok_status=200, ok_body=lambda b: set(b) == {"grievances"} and isinstance(b["grievances"], list), visible_refused=visible)
+    cases += [
+        _case(ids, "an unknown clinic is not found", "admin_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "limit=0 is rejected", "admin_a", 422, path(limit=0), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
+def staff_grievance_status_cases(ids) -> list[tuple]:
+    path = lambda: f"{STAFF_GRIEVANCES}/{uuid.uuid4()}/status"
+    body = {"status": "acknowledged"}
+    cases = [_case(ids, f"{p} cannot update a grievance that does not exist", p, 404, path(), json=body, body=_fixed(404)) for p in ids.people]
+    cases += [
+        _case(ids, "a status that is not one of the two is rejected", "admin_a", 422, path(), json={"status": "closed"}, body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "admin_a", 422, path(), json=body, key=None, body=_fixed(422)),
+        _case(ids, "a grievance id that is not a uuid is rejected", "admin_a", 422, f"{STAFF_GRIEVANCES}/nope/status", json=body, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), body)
+
+
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
     ("POST", HOLD): lambda ids: slot_write_cases(ids, "hold"),
@@ -3317,6 +3379,11 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", CARE_PLANS): care_plan_list_cases,
     ("POST", CARE_PLAN_CONFIRM): care_plan_confirm_cases,
     ("POST", RESULTS): result_record_cases,
+    ("POST", PORTAL_GRIEVANCES): portal_grievance_file_cases,
+    ("GET", PORTAL_GRIEVANCES): portal_grievance_list_cases,
+    ("GET", PORTAL_MY_DATA): portal_my_data_cases,
+    ("GET", STAFF_GRIEVANCES): staff_grievance_list_cases,
+    ("POST", GRIEVANCE_STATUS): staff_grievance_status_cases,
     ("POST", BREAK_GLASS): break_glass_open_cases,
     ("GET", BREAK_GLASS + "/{grant_id}/messages"): break_glass_read_cases,
     ("GET", BREAK_GLASS): break_glass_list_cases,

@@ -108,6 +108,16 @@ def decrypt_break_glass_message(vault: DemographicVault, body_ct: bytes, *, clin
     return decrypt_body(vault, body_ct, clinic_id=clinic_id, thread_id=thread_id, message_id=message_id, key_version=key_version)
 
 
+def encrypt_grievance_text(vault: DemographicVault, text_: str, *, clinic_id: uuid.UUID, grievance_id: uuid.UUID, key_version: int) -> bytes:
+    """A patient's grievance text, encrypted before it is stored (migration 0059): bound to the clinic and the grievance, so a ciphertext moved to another grievance does not decrypt."""
+    return encrypt_body(vault, text_, clinic_id=clinic_id, thread_id=grievance_id, key_version=key_version, message_id=uuid.uuid5(grievance_id, "grievance-text")).body_ct
+
+
+def decrypt_grievance_text(vault: DemographicVault, body_ct: bytes, *, clinic_id: uuid.UUID, grievance_id: uuid.UUID, key_version: int) -> str:
+    """The one place a stored grievance text is decrypted; the caller owns the text and must not log it."""
+    return decrypt_body(vault, body_ct, clinic_id=clinic_id, thread_id=grievance_id, message_id=uuid.uuid5(grievance_id, "grievance-text"), key_version=key_version)
+
+
 def encrypt_plan_text(vault: DemographicVault, text_: str, *, clinic_id: uuid.UUID, plan_id: uuid.UUID, key_version: int) -> bytes:
     """A care plan's free text, encrypted before it is stored (migration 0050): bound to the clinic and the plan so a ciphertext moved to another plan does not decrypt."""
     return encrypt_body(vault, text_, clinic_id=clinic_id, thread_id=plan_id, key_version=key_version, message_id=uuid.uuid5(plan_id, "care-plan-text")).body_ct

@@ -631,3 +631,138 @@ async def plan_version_usage(conn: AsyncConnection, *, clinic_id: uuid.UUID | No
     scope = "" if clinic_id is None else " and clinic_id = :clinic"
     rows = await conn.execute(text(f"select plan_key_version, count(*) from ops.care_plans where erased_at is null{scope} group by 1 order by 1"), {} if clinic_id is None else {"clinic": clinic_id})
     return {v: n for v, n in rows.all()}
+
+
+# ---- grievance texts (migration 0059) ------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#
+# iam.grievances.body_ct is encrypted with the clinic and the GRIEVANCE id bound in (careflow.messages.encrypt_grievance_text), so it rotates exactly like a message body. The guard of that table has ONE transition for it
+# (body_ct and body_key_version change, the version MUST change, nothing else), reachable only on the migrator connection; each batch writes one iam.grievance_rotation_batches row. An ERASED grievance (body_ct null) is
+# never selected: erasure is final.
+
+
+@dataclass
+class GrievanceRotationReport:
+    from_version: int
+    to_version: int
+    batches: int = 0
+    texts_rotated: int = 0
+    batch_keys: list[str] = field(default_factory=list)
+
+
+@dataclass
+class GrievanceVerifyReport:
+    to_version: int
+    texts_checked: int = 0
+    unreadable: list[uuid.UUID] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        return not self.unreadable
+
+
+def _grievance_ids(clinic_id: uuid.UUID, grievance_id: uuid.UUID) -> dict:
+    return {"clinic_id": clinic_id, "thread_id": grievance_id, "message_id": uuid.uuid5(grievance_id, "grievance-text")}
+
+
+def _grievance_batch_key(from_v: int, to_v: int, clinic_id: uuid.UUID, origin: str, first: uuid.UUID, last: uuid.UUID) -> str:
+    return f"rotate-grievances:v{from_v}->v{to_v}:{clinic_id}:{origin}:{first}:{last}"
+
+
+async def grievances_table_exists(conn: AsyncConnection) -> bool:
+    """False before migration 0059 is applied (no erased_at column yet), so the CLI can say so instead of failing."""
+    return bool((await conn.execute(text("select exists (select 1 from information_schema.columns where table_schema = 'iam' and table_name = 'grievances' and column_name = 'erased_at')"))).scalar_one())
+
+
+async def rotate_grievance_texts(
+    conn: AsyncConnection,
+    vault: DemographicVault,
+    *,
+    from_version: int,
+    to_version: int,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+    clinic_id: uuid.UUID | None = None,
+    commit_each_batch: bool = False,
+) -> GrievanceRotationReport:
+    check_versions(vault, from_version, to_version)
+    if not isinstance(batch_size, int) or isinstance(batch_size, bool) or not 1 <= batch_size <= MAX_BATCH_SIZE:
+        raise RotationError(f"batch_size must be between 1 and {MAX_BATCH_SIZE}")
+    await require_rls_bypass(conn)
+    report = GrievanceRotationReport(from_version, to_version)
+    scope = "" if clinic_id is None else " and clinic_id = :clinic"
+    groups = (
+        await conn.execute(
+            text(f"select distinct clinic_id, origin from iam.grievances where erased_at is null and body_key_version = :f{scope} order by clinic_id, origin"),
+            {"f": from_version, **({} if clinic_id is None else {"clinic": clinic_id})},
+        )
+    ).all()
+    if commit_each_batch:
+        await conn.commit()
+    for group_clinic, origin in groups:
+        while True:
+            async with conn.begin_nested():
+                rows = (
+                    await conn.execute(
+                        text("select id, body_ct from iam.grievances where clinic_id = :c and origin = :o and erased_at is null and body_key_version = :f order by id limit :n for update"),
+                        {"c": group_clinic, "o": origin, "f": from_version, "n": batch_size},
+                    )
+                ).all()
+                if not rows:
+                    break
+                for row in rows:
+                    ids = _grievance_ids(group_clinic, row.id)
+                    try:
+                        plain = vault.decrypt_message_body(bytes(row.body_ct), key_version=from_version, **ids)
+                        fresh = vault.encrypt_message_body(plain, key_version=to_version, **ids)
+                        if vault.decrypt_message_body(fresh, key_version=to_version, **ids) != plain:
+                            raise RotationError("re-encrypted plan text did not read back identically")
+                    except (CryptoError, RotationError) as exc:
+                        raise RotationError(f"grievance {row.id}: {type(exc).__name__}: {exc}") from exc  # the id only, never the text
+                    await conn.execute(text("update iam.grievances set body_ct = :ct, body_key_version = :t where id = :i"), {"ct": fresh, "t": to_version, "i": row.id})
+                key = _grievance_batch_key(from_version, to_version, group_clinic, origin, rows[0].id, rows[-1].id)
+                ledgered = await conn.execute(
+                    text(
+                        "insert into iam.grievance_rotation_batches (clinic_id, origin, from_version, to_version, texts_rotated, first_id, last_id, idempotency_key) "
+                        "values (:c, :o, :f, :t, :n, :first, :last, :k) on conflict (idempotency_key) do nothing"
+                    ),
+                    {"c": group_clinic, "o": origin, "f": from_version, "t": to_version, "n": len(rows), "first": rows[0].id, "last": rows[-1].id, "k": key},
+                )
+            report.batches += 1
+            report.texts_rotated += len(rows)
+            if ledgered.rowcount:
+                report.batch_keys.append(key)
+            if commit_each_batch:
+                await conn.commit()
+    return report
+
+
+async def verify_grievance_texts(conn: AsyncConnection, vault: DemographicVault, *, to_version: int, clinic_id: uuid.UUID | None = None, batch_size: int = DEFAULT_BATCH_SIZE) -> GrievanceVerifyReport:
+    if to_version not in vault.key_versions:
+        raise UnknownKeyVersionError(f"no key loaded for key_version {to_version!r}")
+    await require_rls_bypass(conn)
+    report = GrievanceVerifyReport(to_version)
+    after = uuid.UUID(int=0)
+    scope = "" if clinic_id is None else " and clinic_id = :clinic"
+    while True:
+        rows = (
+            await conn.execute(
+                text(f"select id, clinic_id, body_ct from iam.grievances where erased_at is null and body_key_version = :t and id > :after{scope} order by id limit :n"),
+                {"t": to_version, "after": after, "n": batch_size, **({} if clinic_id is None else {"clinic": clinic_id})},
+            )
+        ).all()
+        if not rows:
+            return report
+        for row in rows:
+            report.texts_checked += 1
+            try:
+                vault.decrypt_message_body(bytes(row.body_ct), key_version=to_version, **_grievance_ids(row.clinic_id, row.id))
+            except DecryptionError:
+                report.unreadable.append(row.id)
+        after = rows[-1].id
+
+
+async def grievance_version_usage(conn: AsyncConnection, *, clinic_id: uuid.UUID | None = None) -> dict[int, int]:
+    """Non-erased care-plan texts on each key_version: the third half of the retirement checklist (patients, messages, plans). Refuses over a connection that does not bypass RLS."""
+    await require_rls_bypass(conn)
+    scope = "" if clinic_id is None else " and clinic_id = :clinic"
+    rows = await conn.execute(text(f"select body_key_version, count(*) from iam.grievances where erased_at is null{scope} group by 1 order by 1"), {} if clinic_id is None else {"clinic": clinic_id})
+    return {v: n for v, n in rows.all()}

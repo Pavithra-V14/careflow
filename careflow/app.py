@@ -84,6 +84,7 @@ from careflow import (
     producers_sql,
     reply_interpretation,
     review_tasks,
+    rights_sql,
     visit_readiness_content,
     visit_readiness_sql,
     voice_sql,
@@ -3918,6 +3919,7 @@ class PortalMeOut(_Out):
     status: str
     bound_to_a_patient_record: bool
     consents: dict[str, bool | None]  # purpose -> granted / withdrawn / never decided (or decided against an older notice text)
+    stage: Literal["registered", "new_patient", "pending_activation", "active"]  # spec 17.5, as far as this build can know it (see portal_stage)
 
 
 class NoticeOut(_Out):
@@ -3972,7 +3974,7 @@ async def portal_me(conn: TxConnAllGrants, claims: dict[str, Any] = Depends(veri
     """Your account state and consent decisions. 403 unless you are a patient account (invited or active)."""
     account_id, _ = await _patient_account(conn, claims, ("invited", "active"))
     state = await portal_sql.account_state(conn, account_id)
-    return PortalMeOut(status=state["status"], bound_to_a_patient_record=state["bound"], consents=state["consents"])
+    return PortalMeOut(status=state["status"], bound_to_a_patient_record=state["bound"], consents=state["consents"], stage=portal_stage(state["status"]))
 
 
 @portal.get("/consents", response_model=NoticeList)
@@ -4562,6 +4564,211 @@ def _minutes_in_range(raw: str | None, upper: int) -> int | None:
     return n if n is not None and n <= upper else None
 
 
+# ---- Patient rights: grievances and "download my data" (migration 0059; BUILD-SPEC.md 19.3, 20.1, 17.5) ------------------------------------------------------------------------------------------------
+#
+# Consent withdrawal already exists (POST /v1/portal/consents with `withdrawn`). A patient account that is bound to a record files a grievance (a CATEGORY from the required setting
+# CAREFLOW_GRIEVANCE_CATEGORIES plus a text, stored encrypted); an admin of the clinic acknowledges and resolves it. The patient can download their own data. Account stage (spec 17.5): `registered`
+# (invited) and `new_patient` (active) are derived from the account; `pending_activation` and `active` need a clinic step that does not exist in this build, so no account reaches them and the care topic is
+# never exported. Features: consents need `registered`; grievances, the export and voice need `new_patient`.
+
+portal_rights = APIRouter(prefix="/v1/portal", tags=["patient rights"])
+staff_grievances = APIRouter(prefix="/v1/staff/grievances", tags=["staff grievances"])
+GRIEVANCE_ADMINS = ("admin",)
+GRIEVANCE_TEXT_MAX = 4000
+
+
+class GrievanceIn(_Body):
+    clinic_id: uuid.UUID
+    category: str = Field(pattern=r"^[a-z][a-z0-9_]{0,39}$")
+    text: str = Field(min_length=1, max_length=GRIEVANCE_TEXT_MAX)
+
+
+class GrievanceFiledOut(_Out):
+    grievance_id: uuid.UUID
+    created: bool
+
+
+class GrievanceOut(_Out):
+    grievance_id: uuid.UUID
+    clinic_id: uuid.UUID
+    category: str
+    status: Literal["open", "acknowledged", "resolved"]
+    created_at: datetime
+    erased: bool
+    text: str | None  # null when the text was erased or cannot be read
+
+
+class GrievanceList(_Out):
+    grievances: list[GrievanceOut]
+
+
+class GrievanceStatusIn(_Body):
+    status: Literal["acknowledged", "resolved"]
+
+
+class GrievanceStatusOut(_Out):
+    result: Literal["recorded", "replay", "invalid_transition"]
+
+
+class ExportRecordOut(_Out):
+    clinic_id: uuid.UUID
+    erased: bool
+    name: str | None
+    date_of_birth: str | None
+    phone: str | None
+
+
+class ExportConsentOut(_Out):
+    purpose: str
+    action: str
+    notice_version: int
+    occurred_at: datetime
+
+
+class ExportBookingOut(_Out):
+    clinic_id: uuid.UUID
+    booking_id: uuid.UUID
+    status: str
+    starts_at: datetime
+    ends_at: datetime
+    created_at: datetime
+    cancelled_at: datetime | None
+
+
+class ExportMessageOut(_Out):
+    clinic_id: uuid.UUID
+    message_id: uuid.UUID
+    topic: str
+    sender_kind: str
+    created_at: datetime
+    erased: bool
+    body: str | None
+
+
+class MyDataOut(_Out):
+    account_status: str
+    stage: Literal["registered", "new_patient", "pending_activation", "active"]
+    records: list[ExportRecordOut]
+    consents: list[ExportConsentOut]
+    bookings: list[ExportBookingOut]
+    messages: list[ExportMessageOut]
+    grievances: list[GrievanceOut]
+
+
+def _grievance_out(r: Any, vault: DemographicVault | None) -> GrievanceOut:
+    body: str | None = None
+    if vault is not None and r.body_ct is not None and r.body_key_version is not None:
+        try:
+            body = messages_mod.decrypt_grievance_text(vault, bytes(r.body_ct), clinic_id=r.clinic_id, grievance_id=r.id, key_version=r.body_key_version)
+        except CryptoError:
+            body = None
+    return GrievanceOut(grievance_id=r.id, clinic_id=r.clinic_id, category=r.category, status=r.status, created_at=r.created_at, erased=r.erased_at is not None, text=body)
+
+
+def portal_stage(status: str) -> Literal["registered", "new_patient", "pending_activation", "active"]:
+    """The account stage of spec 17.5 that THIS build can know: an invited account is `registered`, an activated one `new_patient`. The later two need a clinic step (first visit, full-access grant) that has no table yet."""
+    return "registered" if status == "invited" else "new_patient"
+
+
+@portal_rights.post("/grievances", response_model=GrievanceFiledOut, status_code=201)
+async def file_grievance(body: GrievanceIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> GrievanceFiledOut:
+    """File a grievance (access, correction, erasure, nominee or any other request) with a category from the clinic's list; the text is stored encrypted. 403 unless you are an active patient account bound to a record of that clinic, 422 for a category not on the list, 503 while the category list or the encryption keys are not configured."""
+    account_id, _ = await _patient_account(conn, claims)
+    categories = request.app.state.grievance_categories
+    vault: DemographicVault | None = request.app.state.vault
+    key_version = _active_key_version(request)
+    if categories is None or vault is None or key_version is None:
+        raise HTTPException(status_code=503, detail="grievances are unavailable: the category list or the encryption keys are not configured")
+    if body.category not in categories:
+        raise HTTPException(status_code=422, detail="request rejected")
+    grievance_id = uuid.uuid5(uuid.NAMESPACE_URL, f"careflow-grievance:{account_id}:{idempotency_key}")
+    ct = messages_mod.encrypt_grievance_text(vault, body.text, clinic_id=body.clinic_id, grievance_id=grievance_id, key_version=key_version)
+    try:
+        filed_id, created = await rights_sql.file_grievance(conn, clinic_id=body.clinic_id, category=body.category, body_ct=ct, key_version=key_version, grievance_id=grievance_id, idempotency_key=f"grievance:{idempotency_key}")
+    except rights_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return GrievanceFiledOut(grievance_id=filed_id, created=created)
+
+
+@portal_rights.get("/grievances", response_model=GrievanceList)
+async def list_my_grievances(request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 100) -> GrievanceList:
+    """Your own grievances with their status, newest first. 403 unless you are an active patient account."""
+    account_id, _ = await _patient_account(conn, claims)
+    vault: DemographicVault | None = request.app.state.vault
+    return GrievanceList(grievances=[_grievance_out(r, vault) for r in await rights_sql.list_own(conn, account_id=account_id, limit=limit)])
+
+
+@portal_rights.get("/my-data", response_model=MyDataOut)
+async def download_my_data(request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> MyDataOut:
+    """Everything this build holds about you that you may see: your account state, your record, your consent history, your bookings, your appointment and safety messages, your grievances. The care topic is not included (it needs full access, which no step of this build grants). Each download is an audit row. 403 unless you are an active patient account."""
+    account_id, _ = await _patient_account(conn, claims)
+    vault: DemographicVault | None = request.app.state.vault
+    status = (await conn.execute(text("select status from iam.accounts where id = :a"), {"a": account_id})).scalar()
+    records: list[ExportRecordOut] = []
+    for r in await rights_sql.own_records(conn, account_id):
+        name = dob = phone = None
+        if r.erased_at is None and vault is not None and r.name_ct is not None:
+            try:
+                name = vault.decrypt(bytes(r.name_ct), field="name", key_version=r.name_key_version)
+                dob = vault.decrypt(bytes(r.dob_ct), field="dob", key_version=r.dob_key_version)
+                phone = vault.decrypt(bytes(r.phone_ct), field="phone", key_version=r.phone_key_version) if r.phone_ct is not None else None
+            except CryptoError:
+                name = dob = phone = None
+        records.append(ExportRecordOut(clinic_id=r.clinic_id, erased=r.erased_at is not None, name=name, date_of_birth=dob, phone=phone))
+    messages_out: list[ExportMessageOut] = []
+    for m in await rights_sql.export_messages(conn):
+        text_: str | None = None
+        if vault is not None and m.body_ct is not None and m.body_key_version is not None:
+            try:
+                text_ = messages_mod.decrypt_break_glass_message(vault, bytes(m.body_ct), clinic_id=m.clinic_id, thread_id=m.thread_id, message_id=m.message_id, key_version=m.body_key_version)
+            except CryptoError:
+                text_ = None
+        messages_out.append(ExportMessageOut(clinic_id=m.clinic_id, message_id=m.message_id, topic=m.topic, sender_kind=m.sender_kind, created_at=m.created_at, erased=m.erased_at is not None, body=text_))
+    return MyDataOut(
+        account_status=str(status),
+        stage=portal_stage(str(status)),
+        records=records,
+        consents=[ExportConsentOut(purpose=c.purpose, action=c.action, notice_version=c.version, occurred_at=c.occurred_at) for c in await rights_sql.consent_history(conn, account_id)],
+        bookings=[
+            ExportBookingOut(clinic_id=b.clinic_id, booking_id=b.booking_id, status=b.status, starts_at=b.starts_at, ends_at=b.ends_at, created_at=b.created_at, cancelled_at=b.cancelled_at)
+            for b in await rights_sql.export_bookings(conn)
+        ],
+        messages=messages_out,
+        grievances=[_grievance_out(r, vault) for r in await rights_sql.list_own(conn, account_id=account_id, limit=500)],
+    )
+
+
+@staff_grievances.get("", response_model=GrievanceList)
+async def list_clinic_grievances(clinic_id: uuid.UUID, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 100) -> GrievanceList:
+    """The clinic's grievances with their status, newest first (the text is shown only while the encryption keys are loaded and it has not been erased). 404 if the clinic is not visible to you, 403 unless you are an admin there."""
+    await _console_clinic(conn, clinic_id, GRIEVANCE_ADMINS)
+    vault: DemographicVault | None = request.app.state.vault
+    return GrievanceList(grievances=[_grievance_out(r, vault) for r in await rights_sql.list_clinic(conn, clinic_id=clinic_id, limit=limit)])
+
+
+@staff_grievances.post("/{grievance_id}/status", response_model=GrievanceStatusOut)
+async def set_grievance_status(grievance_id: uuid.UUID, body: GrievanceStatusIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> GrievanceStatusOut:
+    """Acknowledge or resolve a grievance as an admin of its clinic (a resolved grievance is final; a repeat is a replay); audited by the database. 404 if you cannot see it, 403 unless you are an admin there."""
+    clinic_id = await rights_sql.grievance_clinic(conn, grievance_id)
+    if clinic_id is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _clinic_role_held(conn, clinic_id, GRIEVANCE_ADMINS):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    try:
+        result = await rights_sql.update_status(conn, grievance_id=grievance_id, status=body.status)
+    except rights_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return GrievanceStatusOut(result=result)  # type: ignore[arg-type]
+
+
+def _word_list(raw: str | None) -> frozenset[str] | None:
+    """A required closed list of lowercase words (comma separated); unset, blank or any malformed entry is None (unset), never a default."""
+    words = [w.strip() for w in (raw or "").split(",") if w.strip()]
+    if not words or any(not re.fullmatch(r"[a-z][a-z0-9_]{0,39}", w) for w in words):
+        return None
+    return frozenset(words)
+
+
 def _positive_int(raw: str | None) -> int | None:
     """A required numeric setting: unset, blank, non-numeric or below 1 is None (unset), never a default."""
     try:
@@ -4602,6 +4809,7 @@ def create_app(
         app.state.voice_feature_on = voice_feature_on(os.environ)
         app.state.voice_engine = None  # no real voice engine exists (owner decision 2026-11-06): the session route answers 503
         app.state.voice_retention_days = _positive_int(p4env.get('CAREFLOW_VOICE_TRANSCRIPT_RETENTION_DAYS'))
+        app.state.grievance_categories = _word_list(p4env.get("CAREFLOW_GRIEVANCE_CATEGORIES"))
         app.state.break_glass_minutes = _minutes_in_range(p4env.get("CAREFLOW_BREAK_GLASS_MINUTES"), 240)
         app.state.clinic_time_zone = clinic_time_zone(p4env.get("CAREFLOW_CLINIC_TIME_ZONE"))
         app.state.care_gap_alert_days = _positive_int(p4env.get('CAREFLOW_CARE_GAP_ALERT_DAYS'))
@@ -4759,6 +4967,8 @@ def create_app(
     app.include_router(staff_care_plans)
     app.include_router(staff_results)
     app.include_router(staff_break_glass)
+    app.include_router(portal_rights)
+    app.include_router(staff_grievances)
     app.include_router(health)
     openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, portal, staff_voice, staff_care_plans, staff_results, staff_portal_claims, staff_visits])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
     return app
