@@ -3206,6 +3206,8 @@ export interface components {
             account_id: string;
             /** Account Type */
             account_type: string;
+            /** Clinic Time Zone */
+            clinic_time_zone: string | null;
             /** Operating Profile */
             operating_profile: ("demo" | "clinical") | null;
             /** Roles */
@@ -3421,6 +3423,8 @@ export interface components {
              * Format: uuid
              */
             hold_id: string;
+            /** Message Id */
+            message_id: string | null;
             /** Patient Id */
             patient_id: string | null;
             /**
