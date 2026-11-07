@@ -3326,7 +3326,7 @@ def staff_grievance_status_cases(ids) -> list[tuple]:
 
 # ---- staff recovery through two admins (migration 0060; BUILD-SPEC.md 18.1) ----------------------------------------------------------------------------------------------------------------------------------
 # admin_a requests (a fresh nurse account is the target); the approve, cancel and complete cases run against requests the owner seeded (a second fresh admin approves). The Auth admin port is not configured
-# in this world, so complete answers 503 after the request is found.
+# in this world; the matrix wires the FAKE Auth admin port, so complete answers 200 (the 503 for no port is in tests/test_staff_routes.py style unit coverage).
 
 RECOVERY = "/v1/staff/recovery"
 
@@ -3418,7 +3418,7 @@ def staff_recovery_complete_cases(ids) -> list[tuple]:
     rid = _seed_recovery(ids, status="approved", approver=approver)
     path = f"{RECOVERY}/{rid}/complete"
     seeded = [
-        _case(ids, "an admin completes: no Auth admin adapter is configured here", _admin_stepped(ids), 503, path, body=lambda b: "unavailable" in b["detail"]),
+        _case(ids, "an admin completes (the matrix wires the FAKE Auth admin port)", _admin_stepped(ids), 200, path, body=lambda b: b == {"result": "completed"}),
         _case(ids, "a nurse cannot see the request", stepped(ids.people["nurse_a"][0]), 404, path, body=_fixed(404)),
     ]
     return _recovery_action_cases(ids, "complete", seeded)
