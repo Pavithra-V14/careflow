@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { ReviewDecision } from '../../shared/api/client';
 import { unwrap } from '../apiState';
 import { useAuth } from '../auth/AuthProvider';
-import { useIdempotentWrite } from '../hooks';
+import { useApiQuery, useIdempotentWrite } from '../hooks';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { ComingSoon, PlaceholderNote } from '../ui/bits';
 import { NotAvailableToRole, ProblemText } from '../ui/states';
@@ -34,9 +34,14 @@ export function ReferralReview({ documentId, onDone }: { documentId: string; onD
   const id = useId();
   const [choice, setChoice] = useState<ReviewDecision | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [reason, setReason] = useState('');
+  // The clinic's picklist of reasons (a setting). While it is not set, or the read fails, no reason is asked for or sent.
+  const reasons = useApiQuery(['reason-codes'], () => unwrap(api.reasonCodes()));
+  const codes = reasons.data?.configured === true ? reasons.data.codes : [];
+  const needsReason = codes.length > 0 && choice === 'reject';
 
   const record = useIdempotentWrite(
-    (decision: ReviewDecision, key) => unwrap(api.reviewReferral(documentId, decision, { idempotencyKey: key })),
+    (decision: ReviewDecision, key) => unwrap(api.reviewReferral(documentId, decision, { idempotencyKey: key }, codes.length > 0 && reason ? reason : null)),
     () => {
       setConfirming(false);
       onDone();
@@ -80,8 +85,31 @@ export function ReferralReview({ documentId, onDone }: { documentId: string; onD
           })}
         </fieldset>
         <h3>{t('referrals.review.reasons')}</h3>
-        <PlaceholderNote>{t('placeholder.reviewReasons')}</PlaceholderNote>
-        <button type="submit" className="primary" disabled={choice === null}>
+        {codes.length > 0 ? (
+          <>
+            <label htmlFor={`${id}-reason`}>{choice === 'reject' ? t('review.reasonLabel') : t('review.reasonOptional')}</label>
+            {/* Nothing is pre-selected: the person chooses a reason from the clinic's list. */}
+            <select
+              id={`${id}-reason`}
+              value={reason}
+              onChange={(e) => {
+                setReason(e.target.value);
+                record.reset();
+              }}
+            >
+              <option value="">{t('review.reasonChoose')}</option>
+              {codes.map((c) => (
+                <option key={c} value={c}>
+                  {c.replaceAll('_', ' ')}
+                </option>
+              ))}
+            </select>
+            {needsReason && reason === '' && <p className="hint">{t('review.reasonRequired')}</p>}
+          </>
+        ) : (
+          <PlaceholderNote>{t('placeholder.reviewReasons')}</PlaceholderNote>
+        )}
+        <button type="submit" className="primary" disabled={choice === null || (needsReason && reason === '')}>
           {t('referrals.review.record')}
         </button>
       </form>

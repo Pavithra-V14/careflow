@@ -14,11 +14,12 @@ this side; what the frontend needs from them is in `docs/frontend-backend-reques
 | F4 | Referral decisions (approve, reject), identity revoke, merge and duplicate lists, merge actions behind a flag that is OFF | merged (PR #15) |
 | F5 | Live integration pass tooling (`npm run e2e:live`), schema checker, per-role reports, Tamil AI-review corrections, requests doc | merged (PR #17) |
 | F6 (part 1) | Error boundary (fixed message, no error text), offline banner and held-back writes, session-expiry tests, active-role plumbing behind the OFF flag (single-role users never send it; the fixed 403 falls back to the role picker without signing out), accessibility additions (200% zoom, focus order, picker and banner at every width) | this branch, PR pending |
+| F7 (batch 1) | Scheduling: slots (hold, book), bookings (cancel with a marked-placeholder confirmation), waitlist (join), offers (list, copy text, mark delivered; nothing is sent), setup (add provider, location, visit type, slot); reviewer view of a triage proposal (unknown shown as "Not recorded") and the clinic's reason list on a decision | on `main`, mock-only until a live pass |
 
 Working today in the console: 28 backend operations through one generated client. Every write carries an idempotency key, retried with
 the same key; a step-up challenge asks once and retries once. Messages shown for errors are fixed per problem kind, never backend text.
 
-Tests: 449 unit tests, 100 browser tests (against mocked hosts), typecheck, lint, API freshness check, Tamil list check, bundle secret check.
+Tests: 533 unit tests, 135 browser tests (against mocked hosts), typecheck, lint, API freshness check, Tamil list check, bundle secret check.
 
 ## 2. Mock-only versus checked against the real backend
 

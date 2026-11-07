@@ -11,9 +11,9 @@ const provider = (over: Record<string, unknown> = {}) => ({ active: true, clinic
 const hold = (over: Record<string, unknown> = {}) => ({ clinic_id: CLINIC_A, created_at: '2026-10-30T05:00:00Z', expires_at: '2026-10-30T06:00:00Z', hold_id: ID.hold, patient_id: null, slot_id: ID.slot, status: 'active', ...over });
 
 describe('reference lists (read-only)', () => {
-  it('opens on providers, shows the list, and asks for inactive ones only when toggled', async () => {
+  it('shows the providers list, and asks for inactive ones only when toggled', async () => {
     const user = userEvent.setup();
-    const { calls } = await openConsole({ hash: '/scheduling', routes: [['get', '/v1/staff/scheduling/providers', (req) => list([provider(), ...(req.query.get('include_inactive') ? [provider({ display_name: 'Retired Provider', active: false, provider_id: ID.doc2 })] : [])])]] });
+    const { calls } = await openConsole({ hash: '/scheduling/providers', routes: [['get', '/v1/staff/scheduling/providers', (req) => list([provider(), ...(req.query.get('include_inactive') ? [provider({ display_name: 'Retired Provider', active: false, provider_id: ID.doc2 })] : [])])]] });
     expect(await screen.findByText('Placeholder Provider')).toBeInTheDocument();
     expect(screen.queryByText('Retired Provider')).toBeNull();
     await user.click(screen.getByRole('checkbox', { name: 'Show inactive' }));
@@ -38,7 +38,8 @@ describe('reference lists (read-only)', () => {
   it('has loading-empty, error and not-available-to-your-role states, and no write controls', async () => {
     const a = await openConsole({ hash: '/scheduling/providers', routes: [['get', '/v1/staff/scheduling/providers', () => list([])]] });
     expect(await screen.findByText('Nothing to show.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /release|add|edit|delete/i })).toBeNull();
+    // Front desk may add a provider (behind a confirmation); there is nothing to edit or delete.
+    expect(screen.queryByRole('button', { name: /release|edit|delete/i })).toBeNull();
     a.unmount();
     const b = await openConsole({ hash: '/scheduling/providers', routes: [['get', '/v1/staff/scheduling/providers', () => fail(502)]] });
     expect(await screen.findByRole('alert')).toHaveTextContent('This is not available right now.');
@@ -52,7 +53,7 @@ describe('reference lists (read-only)', () => {
     const user = userEvent.setup();
     await openConsole({ hash: '/scheduling', routes: [['get', /.*/, () => list([])]] });
     const sub = await screen.findByRole('navigation', { name: 'Scheduling lists' });
-    expect(within(sub).getByRole('link', { name: 'Providers' })).toHaveAttribute('aria-current', 'page');
+    expect(within(sub).getByRole('link', { name: 'Slots' })).toHaveAttribute('aria-current', 'page');
     within(sub).getByRole('link', { name: 'Holds' }).focus();
     await user.keyboard('{Enter}');
     expect(await screen.findByRole('heading', { level: 2, name: 'Holds' })).toBeInTheDocument();

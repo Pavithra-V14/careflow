@@ -91,7 +91,7 @@ export function Shell() {
           <Route path="/identity/merges/:mergeId" element={<MergeDetailPage />} />
           <Route path="/identity/:list" element={<IdentityPage />} />
           {/* The bare section opens its first list, so the sub-navigation always shows where you are. */}
-          <Route path="/scheduling" element={<Navigate to="/scheduling/providers" replace />} />
+          <Route path="/scheduling" element={<Navigate to="/scheduling/slots" replace />} />
           <Route path="/scheduling/:list" element={<SchedulingPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>

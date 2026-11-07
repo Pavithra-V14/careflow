@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { OPERATIONS, createApi, type Api, type WriteOptions, type ProposeMergeIn, type BeginUploadIn, type RegisterIn, type PatientSearchIn } from '../src/shared/api/client';
+import { OPERATIONS, createApi, type Api, type WriteOptions, type ProposeMergeIn, type BeginUploadIn, type RegisterIn, type PatientSearchIn, type SlotIn, type HoldIn, type WaitlistJoinIn, type LocationIn, type ProviderIn, type VisitTypeIn } from '../src/shared/api/client';
 
 // Contract test (BUILD-SPEC 21): the client is driven for real; only the network transport is captured.
 // It asserts every method targets an endpoint that exists in the backend's schema, with its required
@@ -97,6 +97,24 @@ const INVOCATIONS: Record<keyof typeof OPERATIONS, (api: Api, o?: WriteOptions) 
   listMerges: (api) => api.listMerges(),
   openMerge: (api) => api.openMerge(ID),
   listDuplicates: (api) => api.listDuplicates(),
+  listSlots: (api) => api.listSlots(),
+  createSlot: (api, o) => api.createSlot(body<SlotIn>('SlotIn'), o),
+  holdSlot: (api, o) => api.holdSlot(ID, body<HoldIn>('HoldIn'), o),
+  bookSlot: (api, o) => api.bookSlot(ID, ID, o),
+  listBookings: (api) => api.listBookings(),
+  cancelBooking: (api, o) => api.cancelBooking(ID, o),
+  listWaitlist: (api) => api.listWaitlist(),
+  joinWaitlist: (api, o) => api.joinWaitlist(body<WaitlistJoinIn>('WaitlistJoinIn'), o),
+  listOffers: (api) => api.listOffers(),
+  markOfferDelivered: (api, o) => api.markOfferDelivered(ID, o),
+  createLocation: (api, o) => api.createLocation(body<LocationIn>('LocationIn'), o),
+  createProvider: (api, o) => api.createProvider(body<ProviderIn>('ProviderIn'), o),
+  createVisitType: (api, o) => api.createVisitType(body<VisitTypeIn>('VisitTypeIn'), o),
+  listThreads: (api) => api.listThreads(ID, 'appointments'),
+  listThreadMessages: (api) => api.listThreadMessages(ID),
+  readMessage: (api) => api.readMessage(ID),
+  reviewView: (api) => api.reviewView(ID),
+  reasonCodes: (api) => api.reasonCodes(),
 };
 
 const requiredParams = (op: Json) => ((op.parameters ?? []) as Json[]).filter((p) => p.required);

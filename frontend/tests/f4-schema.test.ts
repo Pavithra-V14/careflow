@@ -34,7 +34,8 @@ describe('word lists mirrored from the schema', () => {
     expect([...DUPLICATE_STATUSES]).toEqual(queryEnum('/v1/staff/identity/possible-duplicates', 'status'));
   });
   it('the review and revoke routes take exactly one body field each, so no reason or free text can be sent by mistake', () => {
-    expect(Object.keys(schemas.ReviewIn?.properties ?? {})).toEqual(['decision']);
+    // The review route takes the decision and an optional reason CODE from the clinic's picklist (a closed word, never free text).
+    expect(Object.keys(schemas.ReviewIn?.properties ?? {})).toEqual(['decision', 'reason_code']);
     expect(Object.keys(schemas.RevokeIdentityIn?.properties ?? {})).toEqual(['reason']);
   });
 });
