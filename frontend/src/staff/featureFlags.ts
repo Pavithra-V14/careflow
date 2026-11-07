@@ -2,9 +2,9 @@
 // pins each default.
 
 /**
- * Send the active-role header (X-CareFlow-Active-Role) on staff API calls. OFF: the backend does not read it yet
- * (docs/design/active-role.md is a proposal), and an unknown request header needs production CORS to allow it.
- * Turn on only after both are done.
+ * Send the active-role header (X-CareFlow-Active-Role: <clinic_id>:<role>) on staff API calls, for users with more than one
+ * role only. OFF by default: it is switched on only when the owner says the dev backend has migration 0028 and a live check
+ * works (the backend merged the header; production CORS already allows it). A deliberate, reviewed edit with its test.
  */
 export const SEND_ACTIVE_ROLE_HEADER = false;
 

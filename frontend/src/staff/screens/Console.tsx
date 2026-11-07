@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { formatActiveRole } from '../../shared/api/client';
 import { useAuth } from '../auth/AuthProvider';
@@ -14,18 +14,28 @@ import { RolePicker } from './RolePicker';
 class AccountUnavailable extends Error {}
 
 /** Keeps the API client's "active role" cell in step with the chosen grant. The header it feeds is off by default. */
-function ActiveRoleSync({ grant }: { grant: Grant }) {
+function ActiveRoleSync({ grant, narrow }: { grant: Grant; narrow: boolean }) {
   const { setActiveRole } = useAuth();
   useEffect(() => {
-    setActiveRole(formatActiveRole(grant.clinicId, grant.role));
+    // A person with ONE grant has nothing to narrow, so no header is ever sent for them.
+    setActiveRole(narrow ? formatActiveRole(grant.clinicId, grant.role) : null);
     return () => setActiveRole(null);
-  }, [grant, setActiveRole]);
+  }, [grant, narrow, setActiveRole]);
   return null;
 }
 
 export function Console() {
   const { t } = useTranslation();
-  const { api, signOut } = useAuth();
+  const { api, signOut, activeRoleRefused, acknowledgeRoleRefusal } = useAuth();
+  const queryClient = useQueryClient();
+
+  // The backend refused the header (the role was revoked, or is not held here): forget the remembered choice and re-read the
+  // grants so the picker offers what is true now. The person stays signed in.
+  useEffect(() => {
+    if (!activeRoleRefused) return;
+    storeGrant(null);
+    void queryClient.invalidateQueries({ queryKey: ['me'] });
+  }, [activeRoleRefused, queryClient]);
 
   const me = useQuery({
     queryKey: ['me'],
@@ -73,15 +83,18 @@ export function Console() {
   const account = me.data;
   // One grant is active automatically; several require an explicit pick (remembered for this tab only).
   const only = account.grants.length === 1 ? account.grants[0] : undefined;
-  const active = only ?? (picked === undefined ? readStoredGrant(account.grants) : picked);
+  const refused = activeRoleRefused && account.grants.length > 1;
+  const active = refused ? null : (only ?? (picked === undefined ? readStoredGrant(account.grants) : picked));
 
   if (!active) {
     return (
       <RolePicker
         grants={account.grants}
+        notice={refused ? t('shell.activeRoleUnavailable') : null}
         onPick={(g) => {
           storeGrant(g);
           setPicked(g);
+          acknowledgeRoleRefusal();
         }}
       />
     );
@@ -101,7 +114,7 @@ export function Console() {
           : null
       }
     >
-      <ActiveRoleSync grant={active} />
+      <ActiveRoleSync grant={active} narrow={account.grants.length > 1} />
       <Shell />
     </SessionProvider>
   );

@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-419 of 419 strings are unreviewed.
+547 of 547 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -91,6 +91,10 @@ Terms standardised: proposal, resolve / resolved.
 | `env.live` | LIVE | LIVE | kept in English by design |
 | `env.test` | TEST | TEST | kept in English by design |
 | `env.unknown` | Environment unknown | சூழல் தெரியவில்லை | ok |
+| `errorBoundary.body` | Reload the page, or go to the home screen. | பக்கத்தை மீண்டும் ஏற்றவும், அல்லது முகப்புத் திரைக்குச் செல்லவும். | ok |
+| `errorBoundary.home` | Go to the home screen | முகப்புத் திரைக்குச் செல் | ok |
+| `errorBoundary.reload` | Reload the page | பக்கத்தை மீண்டும் ஏற்று | ok |
+| `errorBoundary.title` | This screen could not be shown | இந்தத் திரையைக் காட்ட முடியவில்லை | ok |
 | `identity.actions` | Actions | செயல்கள் | ok |
 | `identity.actionsSoon` | Approve and unmerge | ஒப்புதல் மற்றும் இணைப்பு நீக்கம் | minor drift |
 | `identity.all` | All | அனைத்தும் | ok |
@@ -184,6 +188,7 @@ Terms standardised: proposal, resolve / resolved.
 | `nav.referrals` | Referrals | பரிந்துரைகள் | ok |
 | `nav.scheduling` | Scheduling | நேர அட்டவணை | minor drift; flag (ambiguous): Timetable reads as a schedule table; a main navigation label should be unambiguous. |
 | `nav.tasks` | Tasks | பணிகள் | ok |
+| `offline.banner` | You are offline. Changes cannot be saved until the connection is back. | நீங்கள் இணைப்பில் இல்லை. இணைப்பு திரும்பும் வரை மாற்றங்களைச் சேமிக்க முடியாது. | ok |
 | `pages.backHome` | Back to the home page | முகப்புப் பக்கத்திற்குத் திரும்பு | ok |
 | `pages.notAvailableSignIn` | Patient sign-in is not available yet. | நோயாளர் உள்நுழைவு இன்னும் கிடைக்கவில்லை. | ok |
 | `pages.notAvailableSignUp` | Patient sign-up is not available yet. | நோயாளர் பதிவு இன்னும் கிடைக்கவில்லை. | ok |
@@ -267,6 +272,7 @@ Terms standardised: proposal, resolve / resolved.
 | `problem.invalid` | Check what you entered and try again. | நீங்கள் உள்ளிட்டதைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும். | ok |
 | `problem.network` | The connection failed. Check it and try again. | இணைப்பு தோல்வியடைந்தது. இணைப்பைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும். | ok |
 | `problem.not_found` | That could not be found. | அது கிடைக்கவில்லை. | ok |
+| `problem.offline` | You are offline. Nothing was saved. What you typed is still here; send it again when the connection is back. | நீங்கள் இணைப்பில் இல்லை. எதுவும் சேமிக்கப்படவில்லை. நீங்கள் உள்ளிட்டவை இங்கேயே உள்ளன; இணைப்பு திரும்பியதும் மீண்டும் அனுப்புங்கள். | ok |
 | `problem.rate_limited` | Too many requests. Wait a moment and try again. | அதிக கோரிக்கைகள். சற்று காத்திருந்து மீண்டும் முயற்சிக்கவும். | minor drift |
 | `problem.retry` | Try again | மீண்டும் முயற்சிக்கவும் | ok |
 | `problem.step_up` | A fresh authenticator code is needed to do this. Nothing was changed. | இதைச் செய்ய புதிய அங்கீகாரக் குறியீடு தேவை. எதுவும் மாற்றப்படவில்லை. | ok |
@@ -312,6 +318,35 @@ Terms standardised: proposal, resolve / resolved.
 | `referrals.title` | Referrals | பரிந்துரைகள் | ok |
 | `referrals.upload` | Upload a document | ஆவணத்தைப் பதிவேற்று | ok |
 | `referrals.version` | version | பதிப்பு | ok |
+| `review.abstained` | Abstained | முன்மொழிவு அளிக்கவில்லை | ok |
+| `review.altLabel` | Alternative | மாற்று | ok |
+| `review.altProbability` | Probability | நிகழ்தகவு | ok |
+| `review.alternatives` | Alternatives considered | பரிசீலிக்கப்பட்ட மாற்றுகள் | ok |
+| `review.candidateCount` | Candidates | வேட்பாளர்கள் | ok |
+| `review.confidence` | Confidence | நம்பிக்கை | ok |
+| `review.engine` | Engine | இயந்திரம் | ok |
+| `review.evidence` | Evidence | சான்று | ok |
+| `review.evidenceCrop` | Source image reference | மூலப் படக் குறிப்பு | ok |
+| `review.evidenceField` | Field | புலம் | ok |
+| `review.evidenceSource` | Source | மூலம் | ok |
+| `review.kind` | Task kind | பணி வகை | ok |
+| `review.mode` | Mode | முறை | ok |
+| `review.noAlternatives` | No alternatives were recorded. | மாற்றுகள் எதுவும் பதிவாகவில்லை. | ok |
+| `review.noEvidence` | No evidence was recorded. | சான்று எதுவும் பதிவாகவில்லை. | ok |
+| `review.none` | None | எதுவுமில்லை | ok |
+| `review.notRecorded` | Not recorded | பதிவு செய்யப்படவில்லை | ok |
+| `review.onApprove` | If you approve | நீங்கள் ஒப்புக்கொண்டால் | ok |
+| `review.onEdit` | If you edit | நீங்கள் திருத்தினால் | ok |
+| `review.onReject` | If you reject | நீங்கள் நிராகரித்தால் | ok |
+| `review.proposal` | Proposal | முன்மொழிவு | ok |
+| `review.reasonChoose` | Choose a reason | ஒரு காரணத்தைத் தேர்ந்தெடுங்கள் | ok |
+| `review.reasonLabel` | Reason | காரணம் | ok |
+| `review.reasonOptional` | Reason (optional for approve) | காரணம் (ஒப்புக்கொள்ள விருப்பம்) | ok |
+| `review.reasonRequired` | Choose a reason. A reject needs one. | ஒரு காரணத்தைத் தேர்ந்தெடுங்கள். நிராகரிக்க ஒன்று தேவை. | ok |
+| `review.reasonsNotConfigured` | The clinic has not set a list of reasons yet. | மருத்துவமனை இன்னும் காரணங்களின் பட்டியலை அமைக்கவில்லை. | ok |
+| `review.rule` | Rule that triggered review | மதிப்பாய்வைத் தூண்டிய விதி | ok |
+| `review.viewMissing` | There is no proposal to show for this referral. | இந்தப் பரிந்துரைக்குக் காட்ட முன்மொழிவு இல்லை. | ok |
+| `review.viewTitle` | Reviewer view | மதிப்பாய்வாளர் பார்வை | ok |
 | `roles.admin` | Admin | நிர்வாகி | ok |
 | `roles.auditor` | Auditor | தணிக்கையாளர் | ok |
 | `roles.business_owner` | Business owner | வணிக உரிமையாளர் | ok |
@@ -321,38 +356,123 @@ Terms standardised: proposal, resolve / resolved.
 | `roles.nurse` | Nurse | செவிலியர் | ok |
 | `roles.patient` | Patient | நோயாளர் | ok |
 | `scheduling.active` | Active | செயலில் | ok |
+| `scheduling.add` | Add | சேர் | ok |
+| `scheduling.addLocation` | Add a location | இடத்தைச் சேர் | ok |
+| `scheduling.addLocationBody` | Creates a location with the name you enter. | நீங்கள் உள்ளிடும் பெயருடன் ஒரு இடத்தை உருவாக்குகிறது. | ok |
+| `scheduling.addProvider` | Add a provider | வழங்குநரைச் சேர் | ok |
+| `scheduling.addProviderBody` | Creates a provider with the name you enter. No sign-in is linked. | நீங்கள் உள்ளிடும் பெயருடன் ஒரு வழங்குநரை உருவாக்குகிறது. உள்நுழைவு இணைக்கப்படவில்லை. | ok |
+| `scheduling.addSlot` | Add a slot | நேர இடத்தைச் சேர் | ok |
+| `scheduling.addSlotBody` | Creates one open slot with the provider, location, visit type and times you choose. | நீங்கள் தேர்ந்தெடுக்கும் வழங்குநர், இடம், வருகை வகை மற்றும் நேரங்களுடன் ஒரு திறந்த நேர இடத்தை உருவாக்குகிறது. | ok |
+| `scheduling.addVisitType` | Add a visit type | வருகை வகையைச் சேர் | ok |
+| `scheduling.addVisitTypeBody` | Creates a visit type with the length you enter. Nothing here guesses a length. | நீங்கள் உள்ளிடும் நீளத்துடன் ஒரு வருகை வகையை உருவாக்குகிறது. இங்கு எந்த நீளமும் ஊகிக்கப்படுவதில்லை. | ok |
+| `scheduling.all` | All | அனைத்தும் | ok |
+| `scheduling.book` | Book | முன்பதிவு செய் | ok |
+| `scheduling.bookBody` | The slot is booked for the patient you choose. Nothing is sent to anyone. | நீங்கள் தேர்ந்தெடுக்கும் நோயாளிக்கு இந்த இடம் முன்பதிவாகும். யாருக்கும் எதுவும் அனுப்பப்படாது. | ok |
+| `scheduling.bookDone` | The slot is booked. | இடம் முன்பதிவானது. | ok |
+| `scheduling.bookPatient` | Patient | நோயாளி | ok |
+| `scheduling.bookTitle` | Book this slot? | இந்த நேர இடத்தை முன்பதிவு செய்யவா? | ok |
+| `scheduling.bookings` | Bookings | முன்பதிவுகள் | ok |
+| `scheduling.cancelBody` | This cancels the booking and frees its slot. The waitlist is ranked for you to look at. Nobody is contacted and nobody is booked. | இது முன்பதிவை ரத்து செய்து அதன் இடத்தை விடுவிக்கும். நீங்கள் பார்க்க காத்திருப்புப் பட்டியல் வரிசைப்படுத்தப்படும். யாரும் தொடர்பு கொள்ளப்படமாட்டார்கள்; யாரும் முன்பதிவு செய்யப்படமாட்டார்கள். | ok |
+| `scheduling.cancelBooking` | Cancel booking | முன்பதிவை ரத்து செய் | ok |
+| `scheduling.cancelCandidates` | Ranked waitlist for the freed slot | காலியான இடத்திற்கான வரிசைப்படுத்தப்பட்ட காத்திருப்புப் பட்டியல் | ok |
+| `scheduling.cancelDone` | The booking was cancelled and the slot is free. | முன்பதிவு ரத்தானது; இடம் காலியானது. | ok |
+| `scheduling.cancelTitle` | Cancel this booking? | இந்த முன்பதிவை ரத்து செய்யவா? | ok |
 | `scheduling.choose` | Choose a visit type | ஒரு வருகை வகையைத் தேர்ந்தெடுக்கவும் | ok |
 | `scheduling.col.action` | Action | செயல் | ok |
+| `scheduling.col.booking` | Booking | முன்பதிவு | ok |
+| `scheduling.col.channel` | Channel | வழி | ok |
 | `scheduling.col.code` | Code | குறியீடு | ok |
+| `scheduling.col.delivered` | Delivered | வழங்கப்பட்டது | ok |
 | `scheduling.col.duration` | Length | நீளம் | minor drift; flag (unnatural): Word means physical length rather than time duration. |
+| `scheduling.col.ends` | Ends | முடிவு | ok |
 | `scheduling.col.expires` | Expires | காலாவதி | ok |
+| `scheduling.col.heldUntil` | Held until | வரை நிறுத்தம் | ok |
 | `scheduling.col.hold` | Hold | ஒதுக்கீடு | minor drift; flag (ambiguous): Same allocation-for-hold term issue. |
+| `scheduling.col.joined` | Joined | சேர்ந்த நேரம் | ok |
 | `scheduling.col.label` | Label | குறிப்பு | minor drift; flag (ambiguous): Same label/note term issue. |
+| `scheduling.col.location` | Location | இடம் | ok |
 | `scheduling.col.name` | Name | பெயர் | ok |
-| `scheduling.col.patient` | Patient | நோயாளர் | ok |
+| `scheduling.col.offer` | Offer | வாய்ப்பு | ok |
+| `scheduling.col.patient` | Patient | நோயாளி | ok |
+| `scheduling.col.priority` | Priority | முன்னுரிமை | ok |
+| `scheduling.col.provider` | Provider | வழங்குநர் | ok |
 | `scheduling.col.rank` | Rank | தரவரிசை | corrected after AI review (meaning problem); blind re-check: match |
 | `scheduling.col.slot` | Slot | நேரம் | minor drift |
+| `scheduling.col.starts` | Starts | தொடக்கம் | ok |
+| `scheduling.col.state` | State | நிலை | ok |
 | `scheduling.col.status` | Status | நிலை | ok |
 | `scheduling.col.visitType` | Visit type | வருகை வகை | ok |
+| `scheduling.conflict` | That changed in the meantime. Refresh and look again. | இடைப்பட்ட நேரத்தில் இது மாறிவிட்டது. புதுப்பித்து மீண்டும் பாருங்கள். | ok |
+| `scheduling.copied` | The offer text was copied. Send it yourself, then mark it delivered. | வாய்ப்பு உரை நகலெடுக்கப்பட்டது. நீங்களே அனுப்பி, பிறகு வழங்கப்பட்டதாகக் குறிக்கவும். | ok |
+| `scheduling.copyManual` | Copying was blocked by the browser. Select the text below and copy it yourself. | உலாவி நகலெடுப்பைத் தடுத்தது. கீழே உள்ள உரையைத் தேர்ந்தெடுத்து நீங்களே நகலெடுக்கவும். | ok |
+| `scheduling.copyNotFound` | The offer text could not be found. | வாய்ப்பு உரையைக் கண்டுபிடிக்க முடியவில்லை. | ok |
+| `scheduling.copyText` | Copy offer text | வாய்ப்பு உரையை நகலெடு | ok |
+| `scheduling.createConflict` | That overlaps another slot of the same provider, or was already used for a different request. | இது அதே வழங்குநரின் மற்றொரு நேர இடத்துடன் மேலோங்குகிறது, அல்லது வேறொரு கோரிக்கைக்கு ஏற்கனவே பயன்படுத்தப்பட்டது. | ok |
+| `scheduling.createInvalid` | Check what you entered. The times must be a real range. | நீங்கள் உள்ளிட்டதைச் சரிபார்க்கவும். நேரங்கள் சரியான வரம்பாக இருக்க வேண்டும். | ok |
+| `scheduling.created` | Created. | உருவாக்கப்பட்டது. | ok |
+| `scheduling.draftTitle` | Offer draft | வாய்ப்பு வரைவு | ok |
+| `scheduling.durationMinutes` | Length in minutes | நீளம் (நிமிடங்களில்) | ok |
 | `scheduling.empty` | Nothing to show. | காட்டுவதற்கு எதுவும் இல்லை. | ok |
+| `scheduling.endsAt` | Ends | முடிவு | ok |
+| `scheduling.filterLocation` | Location | இடம் | ok |
+| `scheduling.filterProvider` | Provider | வழங்குநர் | ok |
+| `scheduling.hold` | Hold | நிறுத்து | ok |
+| `scheduling.holdBody` | The slot is kept for the time you enter. Nothing is sent to anyone. | நீங்கள் உள்ளிடும் நேரம் வரை இந்த இடம் வைக்கப்படும். யாருக்கும் எதுவும் அனுப்பப்படாது. | ok |
+| `scheduling.holdDone` | The slot is held. | இடம் நிறுத்தி வைக்கப்பட்டது. | ok |
 | `scheduling.holdFilter` | Show holds that are | இந்த நிலையிலுள்ள ஒதுக்கீடுகளைக் காட்டு | minor drift |
+| `scheduling.holdMinutes` | Minutes to hold | நிறுத்தும் நிமிடங்கள் | ok |
+| `scheduling.holdPatient` | Hold for a patient (optional) | ஒரு நோயாளிக்காக நிறுத்து (விருப்பம்) | ok |
 | `scheduling.holdStatus.active` | Active | செயலில் | ok |
 | `scheduling.holdStatus.converted` | Booked | முன்பதிவானது | minor drift |
 | `scheduling.holdStatus.expired` | Expired | காலாவதியானது | ok |
 | `scheduling.holdStatus.released` | Released | விடுவிக்கப்பட்டது | ok |
+| `scheduling.holdTitle` | Hold this slot? | இந்த நேர இடத்தை நிறுத்தி வைக்கவா? | ok |
 | `scheduling.holds` | Holds | ஒதுக்கீடுகள் | minor drift; flag (ambiguous): Allocation/quota does not convey a held slot. |
 | `scheduling.inactive` | Inactive | செயலற்றது | ok |
+| `scheduling.join` | Add to waitlist | காத்திருப்புப் பட்டியலில் சேர் | ok |
+| `scheduling.joinBody` | The patient is added to the queue for the visit type and priority you choose. Nobody is contacted. | நீங்கள் தேர்ந்தெடுக்கும் வருகை வகை மற்றும் முன்னுரிமைக்கான வரிசையில் நோயாளி சேர்க்கப்படுவார். யாரும் தொடர்பு கொள்ளப்படமாட்டார்கள். | ok |
+| `scheduling.joinConflict` | This patient is already waiting for that visit type. | இந்த நோயாளி அந்த வருகை வகைக்கு ஏற்கனவே காத்திருக்கிறார். | ok |
+| `scheduling.joinDone` | Added to the waitlist. | காத்திருப்புப் பட்டியலில் சேர்க்கப்பட்டது. | ok |
+| `scheduling.joinPriority` | Priority | முன்னுரிமை | ok |
+| `scheduling.joinTitle` | Add to the waitlist? | காத்திருப்புப் பட்டியலில் சேர்க்கவா? | ok |
+| `scheduling.joinVisitType` | Visit type | வருகை வகை | ok |
 | `scheduling.lists` | Scheduling lists | அட்டவணைப் பட்டியல்கள் | minor drift |
 | `scheduling.locations` | Locations | இடங்கள் | minor drift |
+| `scheduling.markBody` | Record that you delivered this offer yourself. The system sent nothing to the patient. This cannot be undone. | இந்த வாய்ப்பை நீங்களே வழங்கினீர்கள் என்று பதிவு செய்கிறது. கணினி நோயாளிக்கு எதுவும் அனுப்பவில்லை. இதைத் திரும்பப் பெற முடியாது. | ok |
+| `scheduling.markConflict` | This offer is no longer live (it expired, was released or was booked). | இந்த வாய்ப்பு இனி செயலில் இல்லை (காலாவதியானது, விடுவிக்கப்பட்டது அல்லது முன்பதிவானது). | ok |
+| `scheduling.markDelivered` | Mark delivered | வழங்கப்பட்டதாகக் குறி | ok |
+| `scheduling.markDone` | The offer is marked delivered. | வாய்ப்பு வழங்கப்பட்டதாகக் குறிக்கப்பட்டது. | ok |
+| `scheduling.markTitle` | Mark this offer delivered? | இந்த வாய்ப்பை வழங்கப்பட்டதாகக் குறிக்கவா? | ok |
 | `scheduling.minutes` | min | நிமி | ok |
+| `scheduling.name` | Name | பெயர் | ok |
+| `scheduling.noBookings` | There are no confirmed bookings. | உறுதிசெய்யப்பட்ட முன்பதிவுகள் இல்லை. | ok |
+| `scheduling.noCandidates` | Nobody on the waitlist matches this slot. | இந்த இடத்திற்குப் பொருந்தும் யாரும் காத்திருப்புப் பட்டியலில் இல்லை. | ok |
 | `scheduling.noHolds` | There are no holds to show. | காட்டுவதற்கு ஒதுக்கீடுகள் இல்லை. | minor drift |
+| `scheduling.noOffers` | There are no offers. | வாய்ப்புகள் இல்லை. | ok |
+| `scheduling.noSlots` | There are no open or held slots. | திறந்த அல்லது நிறுத்தி வைக்கப்பட்ட நேர இடங்கள் இல்லை. | ok |
+| `scheduling.noWaitlist` | Nobody is waiting. | யாரும் காத்திருக்கவில்லை. | ok |
 | `scheduling.offerCandidates` | Candidate details | பொருத்தமானவற்றின் விவரங்கள் | corrected after AI review (meaning problem); blind re-check: minor-drift |
+| `scheduling.offerFilter` | Filter offers by state | நிலை வாரியாக வாய்ப்புகளை வடிகட்டு | ok |
+| `scheduling.offerState.awaiting_delivery` | Awaiting delivery | வழங்கக் காத்திருக்கிறது | ok |
+| `scheduling.offerState.booked` | Booked | முன்பதிவானது | ok |
+| `scheduling.offerState.delivered` | Delivered | வழங்கப்பட்டது | ok |
+| `scheduling.offerState.expired` | Expired | காலாவதியானது | ok |
+| `scheduling.offerState.released` | Released | விடுவிக்கப்பட்டது | ok |
 | `scheduling.offerStatus.degraded` | Partly available | ஓரளவு கிடைக்கிறது | ok |
 | `scheduling.offerStatus.empty` | No candidates | பொருத்தமானவை இல்லை | corrected after AI review (meaning problem); blind re-check: minor-drift |
 | `scheduling.offerStatus.ok` | A draft is ready | வரைவு தயாராக உள்ளது | ok |
 | `scheduling.offerStatus.unavailable` | Not set up yet | இன்னும் அமைக்கப்படவில்லை | ok |
 | `scheduling.offers` | Offers | வாய்ப்புகள் | minor drift; flag (ambiguous): Means opportunities rather than offers. |
+| `scheduling.offersListTitle` | Offers | வாய்ப்புகள் | ok |
 | `scheduling.offersNote` | A read-only view of the draft offer. It is computed when you ask and stored nowhere. | வரைவு வாய்ப்பின் படிக்க-மட்டும் பார்வை. நீங்கள் கேட்கும்போது கணக்கிடப்படுகிறது, எங்கும் சேமிக்கப்படுவதில்லை. | ok |
+| `scheduling.patientChosen` | Patient chosen | நோயாளி தேர்ந்தெடுக்கப்பட்டார் | ok |
+| `scheduling.patientDob` | Date of birth | பிறந்த தேதி | ok |
+| `scheduling.patientFind` | Find | தேடு | ok |
+| `scheduling.patientName` | Full name | முழுப் பெயர் | ok |
+| `scheduling.patientNone` | No patient matched. | எந்த நோயாளியும் பொருந்தவில்லை. | ok |
+| `scheduling.patientPick` | Choose the patient | நோயாளியைத் தேர்ந்தெடுங்கள் | ok |
+| `scheduling.patientSearch` | Find the patient | நோயாளியைக் கண்டறி | ok |
+| `scheduling.placeholderConfirm` | [PLACEHOLDER: confirmation wording to be approved by the clinic] | [இடஒதுக்கீடு: உறுதிப்படுத்தும் சொற்களை மருத்துவமனை அங்கீகரிக்க வேண்டும்] | ok |
 | `scheduling.priorityLevels` | Priority levels | முன்னுரிமை நிலைகள் | ok |
 | `scheduling.providers` | Providers | வழங்குநர்கள் | minor drift; flag (ambiguous): May read as general suppliers rather than clinicians. |
 | `scheduling.release` | Release | விடுவி | ok |
@@ -362,9 +482,17 @@ Terms standardised: proposal, resolve / resolved.
 | `scheduling.sendOffer` | Send offer | வாய்ப்பை அனுப்பு | ok |
 | `scheduling.showDraft` | Show draft | வரைவைக் காட்டு | ok |
 | `scheduling.showInactive` | Show inactive | செயலற்றவற்றையும் காட்டு | minor drift |
+| `scheduling.slotStatus.booked` | Booked | முன்பதிவானது | ok |
+| `scheduling.slotStatus.cancelled` | Cancelled | ரத்தானது | ok |
+| `scheduling.slotStatus.held` | Held | நிறுத்தி வைக்கப்பட்டது | ok |
+| `scheduling.slotStatus.open` | Open | திறந்தது | ok |
+| `scheduling.slots` | Slots | நேர இடங்கள் | ok |
+| `scheduling.startsAt` | Starts | தொடக்கம் | ok |
 | `scheduling.title` | Scheduling | நேர அட்டவணை | minor drift |
 | `scheduling.visitTypes` | Visit types | வருகை வகைகள் | ok |
+| `scheduling.waitlist` | Waitlist | காத்திருப்புப் பட்டியல் | ok |
 | `shell.activeRole` | Active role | தற்போதைய பங்கு | minor drift; flag (ambiguous): Role is a key concept used on many screens; the word chosen literally means share/part. |
+| `shell.activeRoleUnavailable` | That role is not available right now. Choose a role to continue. You are still signed in. | அந்தப் பங்கு இப்போது கிடைக்கவில்லை. தொடர ஒரு பங்கைத் தேர்ந்தெடுங்கள். நீங்கள் இன்னும் உள்நுழைந்துள்ளீர்கள். | ok |
 | `shell.changeRole` | Change role | பங்கை மாற்று | ok |
 | `shell.clinic` | Clinic | கிளினிக் | flag (mixed-language): Loanword while other strings use the Tamil word for hospital/clinic; inconsistent. |
 | `shell.continue` | Continue | தொடரவும் | ok |

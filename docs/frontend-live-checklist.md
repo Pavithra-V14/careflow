@@ -44,6 +44,20 @@ no workflow can start it.
 | Scheduling lists | `GET /v1/staff/scheduling/providers`, `/locations`, `/visit-types`, `/priority-levels` | `include_inactive` only when ticked | 200; 403 | fields present; inactive filter |
 | Holds | `GET /v1/staff/scheduling/holds?status=` | `status` (default active) | 200; 403 | status words |
 | Release a hold | `POST /v1/staff/scheduling/holds/{hold_id}/release` | key, no body | 200; 409 (booked or expired, shown calmly); 403 | 409 wording |
+| Slots | `GET /v1/staff/scheduling/slots` | optional `provider_id`, `location_id` | 200; 403/5xx fixed messages | `status` words (open, held, ...); `hold_expires_at` null when open |
+| Hold a slot | `POST /v1/staff/scheduling/slots/{slot_id}/hold` | key, `duration_minutes`, optional `patient_id` | 200; 409 "changed in the meantime" | not run live yet: a write |
+| Book a slot | `POST /v1/staff/scheduling/slots/{slot_id}/book` | key, `patient_id` | 200; 409 | not run live yet: a write |
+| Add a slot | `POST /v1/staff/scheduling/slots` | key, ids, ISO times | 200; 409 overlap; 422 bad range | not run live yet: a write |
+| Bookings | `GET /v1/staff/scheduling/bookings` | no query | 200 | rows, `has_more` |
+| Cancel a booking | `POST /v1/staff/scheduling/bookings/{booking_id}/cancel` | key | 200 shows the ranked waitlist; nobody is contacted | not run live yet: a write |
+| Waitlist | `GET /v1/staff/scheduling/waitlist` | optional `visit_type_id` | 200 | `clinical_priority` words, `rank` order |
+| Join the waitlist | `POST /v1/staff/scheduling/waitlist/join` | key, patient, visit type, priority code | 200; 409 already waiting | not run live yet: a write |
+| Offers | `GET /v1/staff/scheduling/offers` | optional `state` | 200 | the five `state` words |
+| Mark an offer delivered | `POST /v1/staff/scheduling/offers/{hold_id}/mark-delivered` | key | 200; 409 no longer live | not run live yet: a write |
+| Add a location, provider or visit type | `POST /v1/staff/scheduling/locations`, `/providers`, `/visit-types` | key, clinic id, name (and length) | 200; 409 | not run live yet: a write |
+| Copy an offer's text | `GET /v1/staff/messages/threads`, `GET /v1/staff/messages/threads/{thread_id}/messages`, `GET /v1/staff/messages/{message_id}` | patient, topic `appointments` | the message nearest the offer in time (within a minute); the read is audited | that the offer's message is found; 410 erased; the text is never stored in the page |
+| Reviewer view | `GET /v1/staff/referrals/{document_id}/review-view` | no query | 200; 404 no proposal; 403 | `proposal`, `evidence`, `alternatives` key names; null `confidence` and `probability` |
+| Reason codes | `GET /v1/staff/console/reason-codes` | no query | 200 `configured` + `codes` | whether the clinic has set the list |
 | Offer draft | `GET /v1/staff/scheduling/offers/draft` | `clinic_id`, `visit_type_id` | 200 shows only `status`; 403; 5xx | `status` words; `reason` and `data` shapes (requests item 6) |
 | Possible duplicates | `GET /v1/staff/identity/possible-duplicates?status=` | `status` (default pending) | 200; 403 (non front desk) | `reason`, `matched_kinds` words |
 | Merges | `GET /v1/staff/identity/merges?status=` | `status` only when filtered | 200; 403 | status words |

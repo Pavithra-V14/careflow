@@ -25,7 +25,7 @@ production-build check fails if a secret-looking marker appears in `dist`. The S
 | `npm run build` | production build of both entries into `dist/` |
 | `npm run check:bundle` | fails if `sb_secret_`, `SUPABASE_SECRET_KEY`, `DATABASE_URL` or `CAREFLOW_ENC_SECRET` is in `dist/` |
 | `npm run gen:api` / `check:api` | regenerate `src/shared/api/schema.d.ts`; check that the committed file is not stale |
-| `npm run e2e` | Playwright against the production build: axe (WCAG 2.2 AA), keyboard-only, overflow, screenshots |
+| `npm run e2e` | Playwright against the production build: axe (WCAG 2.2 AA is the goal we test toward, not a claim of conformance), keyboard-only, overflow, screenshots |
 | `npm run audit:prod` | `npm audit` on production dependencies, failing on high or critical |
 
 Run one heavy tool at a time (build, then Playwright), not in parallel.

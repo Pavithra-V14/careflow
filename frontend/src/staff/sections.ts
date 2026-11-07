@@ -31,6 +31,10 @@ export const CAN_UPLOAD = ['front_desk', 'nurse'] as const;
 export const CAN_SEARCH_PATIENTS = ['front_desk'] as const;
 export const CAN_CONFIRM_IDENTITY = ['front_desk'] as const;
 export const CAN_RELEASE_HOLD = ['front_desk'] as const;
+/** Hold, book, cancel and join the waitlist, and mark an offer delivered (the routes say front desk; the backend decides). */
+export const CAN_SCHEDULE = ['front_desk'] as const;
+/** Add a provider, location, visit type or slot (front desk or admin, per the route docs). */
+export const CAN_SET_UP = ['front_desk', 'admin'] as const;
 export const CAN_REVIEW_REFERRAL = ['nurse', 'doctor'] as const;
 export const CAN_REVOKE_IDENTITY = ['front_desk'] as const;
 export const CAN_SEE_DUPLICATES = ['front_desk'] as const;

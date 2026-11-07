@@ -28,6 +28,8 @@ export interface ConsoleOptions {
   uploadsOff?: boolean;
   /** Start with the patient record already verified (so identity revoke is offered). */
   patientVerified?: boolean;
+  /** The clinic has set its list of review reasons (default: not set). */
+  reasonCodes?: boolean;
   /** Who proposed the merge: someone else (default), or the signed-in account. */
   mergeProposedByMe?: boolean;
 }
@@ -156,6 +158,27 @@ export function createConsoleApi(role: string, options: ConsoleOptions = {}, ses
       return ok({ decisions_flagged: wasActive ? 1 : 0, merge_id: ID.merge, replayed: false, review_task_id: null, status: 'unmerged' });
     }
 
+    // ---- F7: slots, bookings, waitlist, offers; the reviewer view and reason codes (MOCK ONLY) ----
+    if (method === 'GET' && path === '/v1/staff/scheduling/slots') return READERS.includes(role) ? page([{ clinic_id: ID.clinic, slot_id: ID.slot, provider_id: ID.doc, location_id: ID.slot, visit_type_id: ID.visitType, starts_at: '2026-11-10T04:00:00Z', ends_at: '2026-11-10T04:30:00Z', status: 'open', hold_expires_at: null }]) : no(403);
+    if (method === 'GET' && path === '/v1/staff/scheduling/bookings') return READERS.includes(role) ? page([{ booking_id: ID.merge, clinic_id: ID.clinic, created_at: '2026-11-09T04:00:00Z', ends_at: '2026-11-10T04:30:00Z', location_id: ID.slot, patient_id: ID.patient, provider_id: ID.doc, slot_id: ID.slot, starts_at: '2026-11-10T04:00:00Z', visit_type_id: ID.visitType }]) : no(403);
+    if (method === 'GET' && path === '/v1/staff/scheduling/waitlist') return READERS.includes(role) ? page([{ clinic_id: ID.clinic, clinical_priority: 'P1', joined_at: '2026-11-01T00:00:00Z', patient_id: ID.patient, rank: 1, visit_type_id: ID.visitType, waitlist_id: ID.task }]) : no(403);
+    if (method === 'GET' && path === '/v1/staff/scheduling/offers') return READERS.includes(role) ? page([{ channel: null, clinic_id: ID.clinic, created_at: '2026-11-09T05:00:00Z', delivered_at: null, expires_at: '2026-11-10T05:00:00Z', hold_id: ID.hold, patient_id: ID.patient, slot_id: ID.slot, state: 'awaiting_delivery' }]) : no(403);
+    if (method === 'POST' && path.startsWith('/v1/staff/scheduling/')) {
+      if (role !== 'front_desk' && !(role === 'admin' && /\/(providers|locations|visit-types|slots)$/.test(path))) return no(403);
+      if (/\/slots\/[^/]+\/hold$/.test(path)) return ok({ expires_at: '2026-11-10T05:00:00Z', hold_id: ID.hold, replayed: false, slot_id: ID.slot });
+      if (/\/slots\/[^/]+\/book$/.test(path)) return ok({ booking_id: ID.merge, patient_id: ID.patient, replayed: false, slot_id: ID.slot, status: 'confirmed' });
+      if (/\/bookings\/[^/]+\/cancel$/.test(path)) return ok({ booking_id: ID.merge, candidates: [{ joined_at: '2026-11-01T00:00:00Z', patient_id: ID.patient2, priority_code: 'P1', rank: 1, waitlist_id: ID.task }], replayed: false, slot_id: ID.slot });
+      if (/\/waitlist\/join$/.test(path)) return ok({ clinical_priority: 'P1', patient_id: ID.patient, replayed: false, visit_type_id: ID.visitType, waitlist_id: ID.task });
+      if (/\/offers\/[^/]+\/mark-delivered$/.test(path)) return ok({ channel: 'manual', delivered_at: '2026-11-09T06:00:00Z', hold_id: ID.hold, replayed: false });
+      if (/\/(providers|locations|visit-types|slots)$/.test(path)) return ok({ clinic_id: ID.clinic, id: ID.candidate, replayed: false });
+    }
+    if (method === 'POST' && path === '/v1/staff/patients/search' && READERS.includes(role)) return ok({ items: [{ patient_id: ID.patient, verified: true, registered_via: 'staff', matched_kinds: ['name'] }], labels_withheld: false, truncated: false });
+    if (method === 'GET' && path === '/v1/staff/console/reason-codes') return REVIEWERS.includes(role) ? ok({ configured: options.reasonCodes === true, codes: options.reasonCodes === true ? ['reason_a', 'reason_b'] : [] }) : no(403);
+    const reviewView = m(/^\/v1\/staff\/referrals\/([^/]+)\/review-view$/);
+    if (method === 'GET' && reviewView) {
+      if (!REVIEWERS.includes(role)) return no(403);
+      return ok({ alternatives: [{ label: 'card-placeholder@1', probability: null }, { label: 'card-other@2', probability: 0.25 }], confidence: null, engine: null, evidence: [{ field: 'reason', source: 'letter', crop_ref: null }], kind: 'triage_proposal', on_approve: 'Approve text from the API', on_edit: 'Edit text from the API', on_reject: 'Reject text from the API', proposal: { abstained: false, mode: 'shadow', candidate_count: 1 }, reason_codes: ['reason_a', 'reason_b'], task_id: ID.task, triggering_rule: null });
+    }
     if (method === 'GET' && path.startsWith('/v1/staff/scheduling/')) {
       if (!READERS.includes(role)) return no(403);
       const inactive = query.get('include_inactive') === 'true';
