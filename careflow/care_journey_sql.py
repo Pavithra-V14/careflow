@@ -127,6 +127,8 @@ class SqlPlanActivator:
     async def activate(self, conn: AsyncConnection, *, plan_id: uuid.UUID, patient_id: uuid.UUID, idempotency_key: str) -> None:
         clinic_id, _, _ = await _clinic_of(conn, plan_id)
         await conn.execute(text("update ops.care_plans set status = 'active' where id = :p and status in ('awaiting_confirmation', 'held')"), {"p": plan_id})
+        if (await conn.execute(text("select status from ops.care_plans where id = :p"), {"p": plan_id})).scalar() == "erased":
+            raise Refused("the care plan was erased")  # no waits are opened for an erased plan
         for r in (await conn.execute(text("select step_key, result_prefix from ops.care_plan_steps where plan_id = :p and kind = 'wait_result' order by position"), {"p": plan_id})).all():
             await _insert_or_existing(
                 conn,
@@ -173,7 +175,7 @@ class SqlResultReader:
 
 class SqlWaitClaims:
     async def claim(self, conn: AsyncConnection, *, wait_key: str, result_id: uuid.UUID, idempotency_key: str) -> bool:
-        n = (await conn.execute(text("update ops.care_plan_waits set claimed_result_id = :r where wait_key = :w and claimed_result_id is null"), {"r": result_id, "w": wait_key})).rowcount
+        n = (await conn.execute(text("update ops.care_plan_waits set claimed_result_id = :r where wait_key = :w and claimed_result_id is null and open"), {"r": result_id, "w": wait_key})).rowcount
         if n == 1:
             return True
         held = (await conn.execute(text("select claimed_result_id from ops.care_plan_waits where wait_key = :w"), {"w": wait_key})).scalar()

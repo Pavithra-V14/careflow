@@ -34,3 +34,4 @@ For a launch, each row below is either **closed** (an approved route exists unde
 3. Fill in the breach runbook's contacts with counsel.
 4. Fill in the sign-off sheet above, row by row.
 5. Decide the owner-delete rule for append-only ledgers before the restore drill (checklist item 40).
+6. **Assign the admin and doctor roles of every clinic to different people before the autonomous switch is ever used.** The switch to `autonomous` needs an admin AND a doctor, two different accounts (BUILD-SPEC.md 12.5). The database cannot tell that two accounts belong to the same human: one person who holds both an admin account and a doctor account can satisfy it alone. The clinic must assign the two roles to different people and the owner confirms it per clinic (and `CAREFLOW_CLINICAL_AUTONOMY_SIGNOFF` stays unset until then). Decided 2026-11-08.
