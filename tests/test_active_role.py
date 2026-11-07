@@ -168,6 +168,8 @@ ALLOWED = {
     "db/migrations/0028_active_role.sql": "the helpers that implement the active role",
     "careflow/canary_injection.py": "lists the clinics where the signed-in WORKER holds queue_worker; it also checks iam.has_clinic_role (active-role aware) on every row, because the worker cannot read iam.clinics",
     "careflow/producer_sweeps.py": "the same worker clinic list for the care-gap and sampler sweeps, also filtered through iam.has_clinic_role",
+    "db/migrations/0053_notice_lockdown_worker_results_two_person_autonomy.sql": "the approval function checks the PROPOSER (another account) still holds the role they proposed as; the caller is checked through iam.has_clinic_role",
+    "db/migrations/0054_autonomy_switch_admin_and_doctor.sql": "the same proposer check, for the corrected admin-and-doctor rule; the caller and the approver role go through iam.has_clinic_role (active-role aware)",
     "db/migrations/0034_staff_account_management.sql": "the five staff-management functions: they change OTHER accounts' grants, and check the CALLER through iam.has_clinic_role (which honours the active role)",
 }
 

@@ -101,12 +101,12 @@ async def _async(value):
 
 async def world(db):
     handle = (await db.get_raw_connection()).driver_connection
-    ids = {k: uuid.uuid4() for k in ("clinic", "other", "doctor", "nurse", "front_desk", "admin", "worker", "claimant", "patient", "unconfirmed", "other_patient")}
+    ids = {k: uuid.uuid4() for k in ("clinic", "other", "doctor", "nurse", "front_desk", "admin", "admin2", "worker", "claimant", "patient", "unconfirmed", "other_patient")}
     await handle.execute("insert into iam.clinics (id, name, origin) values ($1, 'P12 A', 'test'), ($2, 'P12 B', 'test')", ids["clinic"], ids["other"])
-    for k in ("doctor", "nurse", "front_desk", "admin", "worker"):
+    for k in ("doctor", "nurse", "front_desk", "admin", "admin2", "worker"):
         await handle.execute("insert into iam.accounts (id, account_type, status, origin) values ($1, 'staff', 'active', 'test')", ids[k])
     await handle.execute("insert into iam.accounts (id, account_type, status, origin) values ($1, 'patient', 'active', 'test')", ids["claimant"])
-    for k, role in (("doctor", "doctor"), ("nurse", "nurse"), ("front_desk", "front_desk"), ("admin", "admin"), ("worker", "queue_worker")):
+    for k, role in (("doctor", "doctor"), ("nurse", "nurse"), ("front_desk", "front_desk"), ("admin", "admin"), ("admin2", "admin"), ("worker", "queue_worker")):
         await handle.execute("insert into iam.staff_roles (account_id, clinic_id, role, origin) values ($1, $2, $3, 'test')", ids[k], ids["clinic"], role)
     for k in ("patient", "unconfirmed", "other_patient"):
         await handle.execute("insert into mpi.patients (id, clinic_id, name_ct, name_key_version, dob_ct, dob_key_version, origin, idempotency_key) values ($1, $2, '\\x01'::bytea, 1, '\\x01'::bytea, 1, 'test', $3)", ids[k], ids["clinic"], f"p12-{ids[k]}")
@@ -151,21 +151,15 @@ async def test_a_rejection_closes_the_request_and_audits_it(db):
     assert (await db.execute(text("select count(*) from mpi.patients where account_id = :a"), {"a": w["claimant"]})).scalar() == 0
 
 
-# ---- consent notice publication (decision 6) ----------------------------------------------------------------------------------------------------------------------------------------------------------------
+# ---- consent notices are published only by migration or the owner script (decision 3 of 2026-11-08) -------------------------------------------------------------------------------------------------------
 
 
-async def test_a_notice_is_published_by_an_admin_with_aal2_in_order_and_never_changed(db):
+async def test_no_application_role_can_publish_a_consent_notice(db):
     w = await world(db)
-    pub = "select iam.publish_consent_notice('care_delivery', :v, :b)"
-    assert await state_of(db, w["admin"], pub, v=901, b="DEMO ONLY notice v1") == [("published",)]
-    assert await state_of(db, w["admin"], pub, v=901, b="DEMO ONLY notice v1") == [("exists",)]
-    assert await state_of(db, w["admin"], pub, v=901, b="a different text") == [("conflict",)]
-    assert await state_of(db, w["admin"], pub, v=903, b="DEMO ONLY notice v3") == [("version_gap",)]
-    assert await state_of(db, w["admin"], pub, v=902, b="DEMO ONLY notice v2") == [("published",)]
-    for who in ("nurse", "doctor", "front_desk", "worker"):
-        assert await state_of(db, w[who], pub, v=903, b="x") == "42501", who
-    assert await state_of(db, w["admin"], pub, claims=AAL1, v=903, b="x") == "42501"
-    assert (await db.execute(text("select count(*) from audit.log where action = 'consent.notice_publish' and idempotency_key like 'sys:consent-notice:care_delivery:%'"))).scalar() >= 2
+    assert (await db.execute(text("select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'iam' and p.proname = 'publish_consent_notice'"))).scalar() == 0
+    ins = "insert into iam.consent_notices (purpose, version, body) values ('care_delivery', 950, 'x')"
+    for who in ("admin", "admin2", "doctor", "nurse", "front_desk", "worker"):
+        assert await state_of(db, w[who], ins) == "42501", who
 
 
 # ---- reads need a verified second factor; the worker is exempt (decisions 8 and 11) ---------------------------------------------------------------------------------------------------------------------
@@ -186,7 +180,19 @@ async def test_clinical_reads_need_aal2_for_staff_and_the_worker_reads_but_never
         assert await state_of(db, w[who], q, c=w["clinic"]) == [(1,)]
         assert await state_of(db, w[who], q, claims=AAL1, c=w["clinic"]) == [(0,)], who  # no verified second factor: nothing is visible
         assert await state_of(db, w[who], qp, claims=AAL1, c=w["clinic"]) == [(0,)], who
-    assert await state_of(db, w["worker"], q, claims={}, c=w["clinic"]) == [(1,)]  # the worker has no second factor by nature and reads for the Care Journey wake-up
+    assert await state_of(db, w["worker"], q, claims={}, c=w["clinic"]) == [(0,)]  # nothing points to the result: the worker cannot read it (decision 4 of 2026-11-08)
+    await handle.execute("insert into ops.outbox (clinic_id, origin, event_type, payload, idempotency_key) values ($1, 'test', 'care_plan_result', jsonb_build_object('result_id', $2::text), 'ob-1')", w["clinic"], str(rid))
+    assert await state_of(db, w["worker"], q, claims={}, c=w["clinic"]) == [(0,)]  # the permanent outbox event alone is NOT enough
+    await handle.execute(
+        "insert into ops.queue (clinic_id, origin, task_type, payload, state, attempt_count, claimed_at, claimed_by, idempotency_key) values ($1, 'test', 'care_plan_result', jsonb_build_object('result_id', $2::text), 'claimed', 1, now(), 'w', 'q-1')",
+        w["clinic"], str(rid),
+    )
+    other = await handle.fetchval(
+        "insert into clinical.results (clinic_id, origin, patient_id, code, measures, verified, valid_from, recorded_by, idempotency_key) values ($1, 'test', $2, 'DEMO-T9.z', '{}'::jsonb, true, now(), $3, 'r2') returning id",
+        w["clinic"], w["patient"], w["nurse"],
+    )
+    assert await state_of(db, w["worker"], q, claims={}, c=w["clinic"]) == [(1,)]  # the CLAIMED job names ONE result: only that one is readable
+    assert await state_of(db, w["worker"], "select id from clinical.results where id = :i", claims={}, i=other) == []
     assert await state_of(db, w["worker"], qp, claims={}, c=w["clinic"]) == [(1,)]
     assert await state_of(db, w["front_desk"], q, c=w["clinic"]) == [(0,)] and await state_of(db, w["admin"], qp, c=w["clinic"]) == [(0,)]
     ins = "insert into clinical.results (clinic_id, origin, patient_id, code, measures, verified, valid_from, recorded_by, idempotency_key) values (:c, 'test', :p, 'X-1', '{}'::jsonb, true, now(), :by, 'w1')"
@@ -268,3 +274,90 @@ async def test_a_recorded_result_wakes_its_plan_through_the_outbox_job_as_the_wo
     bad = SimpleNamespace(job=SimpleNamespace(clinic_id=w["other"], origin="test", payload={"result_id": str(rid)}), engine=None, worker_account_id=w["worker"])
     with pytest.raises(Exception, match="not in the job"):
         await handler(bad)  # a job addressed to another clinic is refused, not run
+
+
+# ---- the two-person switch to autonomous (decision 7 of 2026-11-08) -----------------------------------------------------------------------------------------------------------------------------------------
+
+
+async def test_autonomous_needs_an_admin_and_a_doctor_different_people_and_only_the_approval_function_can_write_it(db):
+    w = await world(db)
+    propose = "insert into ops.autonomy_proposals (clinic_id, origin, proposed_by, proposer_role, idempotency_key) values (:c, 'test', :by, :role, :k)"
+    direct = "insert into ops.autonomy_changes (clinic_id, origin, mode, changed_by, idempotency_key) values (:c, 'test', 'autonomous', :by, :k)"
+    for who in ("admin", "doctor"):
+        assert await state_of(db, w[who], direct, c=w["clinic"], by=w[who], k=f"d-{who}") == "42501", who  # nobody writes it directly
+    assert await state_of(db, w["admin"], propose, claims=AAL1, c=w["clinic"], by=w["admin"], role="admin", k="p0") == "42501"  # a verified second factor
+    for who in ("nurse", "front_desk", "worker"):
+        assert await state_of(db, w[who], propose, c=w["clinic"], by=w[who], role="admin", k=f"p-{who}") == "42501", who
+    assert await state_of(db, w["admin"], propose, c=w["clinic"], by=w["doctor"], role="doctor", k="pz") == "42501"  # only as yourself
+    assert await state_of(db, w["admin"], propose, c=w["clinic"], by=w["admin"], role="doctor", k="py") == "42501"  # only as a role you hold
+    assert await state_of(db, w["admin"], propose, c=w["clinic"], by=w["admin"], role="admin", k="p1") == 1
+    assert await state_of(db, w["doctor"], propose, c=w["clinic"], by=w["doctor"], role="doctor", k="p2") == "23505"  # one pending proposal per clinic
+    prop = (await state_of(db, w["admin"], "select id from ops.autonomy_proposals where clinic_id = :c", c=w["clinic"]))[0][0]
+    resolve = "select ops.resolve_autonomy_proposal(:i, :d)"
+    assert await state_of(db, w["admin"], resolve, i=prop, d="approve") == [("same_person",)]  # the proposer cannot approve their own
+    assert await state_of(db, w["admin2"], resolve, i=prop, d="approve") == [("wrong_role",)]  # a second ADMIN is not the doctor the spec asks for
+    for who in ("nurse", "front_desk", "worker"):
+        assert await state_of(db, w[who], resolve, i=prop, d="approve") == "42501", who
+    assert await state_of(db, w["doctor"], resolve, claims=AAL1, i=prop, d="approve") == "42501"
+    assert (await db.execute(text("select count(*) from ops.autonomy_changes where clinic_id = :c and mode = 'autonomous'"), {"c": w["clinic"]})).scalar() == 0
+    assert await state_of(db, w["doctor"], resolve, i=prop, d="approve") == [("approved",)]
+    assert (await db.execute(text("select changed_by from ops.autonomy_changes where clinic_id = :c and mode = 'autonomous'"), {"c": w["clinic"]})).scalar() == w["doctor"]
+    assert await state_of(db, w["doctor"], resolve, i=prop, d="approve") == [("approved",)]  # a retry gets the stored outcome and writes nothing more
+    assert await state_of(db, w["admin"], resolve, i=prop, d="reject") == [("not_pending",)]
+    assert (await db.execute(text("select count(*) from audit.log where action = 'autonomy.proposal_approve' and idempotency_key = :k"), {"k": f"sys:autonomy-proposal:{prop}"})).scalar() == 1
+    assert await state_of(db, w["admin"], "insert into ops.autonomy_changes (clinic_id, origin, mode, changed_by, idempotency_key) values (:c, 'test', 'assisted', :by, 'low')", c=w["clinic"], by=w["admin"]) == 1  # lowering is one admin
+    assert await state_of(db, w["doctor"], "insert into ops.autonomy_changes (clinic_id, origin, mode, changed_by, idempotency_key) values (:c, 'test', 'shadow', :by, 'low2')", c=w["clinic"], by=w["doctor"]) == "42501"  # and only an admin
+    assert await state_of(db, w["admin"], "update ops.autonomy_proposals set status = 'pending'") == "42501"  # no application update
+
+
+async def test_a_doctor_may_propose_and_only_an_admin_may_approve_it(db):
+    w = await world(db)
+    propose = "insert into ops.autonomy_proposals (clinic_id, origin, proposed_by, proposer_role, idempotency_key) values (:c, 'test', :by, 'doctor', :k)"
+    assert await state_of(db, w["doctor"], propose, c=w["clinic"], by=w["doctor"], k="dp") == 1
+    prop = (await state_of(db, w["doctor"], "select id from ops.autonomy_proposals where clinic_id = :c", c=w["clinic"]))[0][0]
+    resolve = "select ops.resolve_autonomy_proposal(:i, 'approve')"
+    assert await state_of(db, w["doctor"], resolve, i=prop) == [("same_person",)]
+    assert await state_of(db, w["nurse"], resolve, i=prop) == "42501"
+    assert await state_of(db, w["admin"], resolve, i=prop) == [("approved",)]
+    assert (await db.execute(text("select changed_by from ops.autonomy_changes where clinic_id = :c and mode = 'autonomous'"), {"c": w["clinic"]})).scalar() == w["admin"]
+
+
+async def test_a_proposal_can_be_rejected_by_an_admin_or_a_doctor_expires_after_seven_days_and_a_removed_proposer_cannot_be_approved(db):
+    w = await world(db)
+    h = (await db.get_raw_connection()).driver_connection
+    await h.execute("insert into ops.autonomy_proposals (clinic_id, origin, proposed_by, proposer_role, idempotency_key) values ($1, 'test', $2, 'admin', 'e1')", w["clinic"], w["admin"])
+    prop = await h.fetchval("select id from ops.autonomy_proposals where clinic_id = $1", w["clinic"])
+    assert await state_of(db, w["doctor"], "select ops.resolve_autonomy_proposal(:i, 'reject')", i=prop) == [("rejected",)]  # a doctor may reject an admin's proposal
+    assert (await db.execute(text("select status from ops.autonomy_proposals where id = :i"), {"i": prop})).scalar() == "rejected"
+    await h.execute("insert into ops.autonomy_proposals (clinic_id, origin, proposed_by, proposer_role, idempotency_key, created_at) values ($1, 'test', $2, 'admin', 'e2', now() - interval '8 days')", w["clinic"], w["admin"])
+    old = await h.fetchval("select id from ops.autonomy_proposals where idempotency_key = 'e2'")
+    assert await state_of(db, w["doctor"], "select ops.resolve_autonomy_proposal(:i, 'approve')", i=old) == [("expired",)]
+    assert (await db.execute(text("select count(*) from audit.log where action = 'autonomy.proposal_expire' and idempotency_key = :k"), {"k": f"sys:autonomy-proposal:{old}"})).scalar() == 1
+    await h.execute("insert into ops.autonomy_proposals (clinic_id, origin, proposed_by, proposer_role, idempotency_key) values ($1, 'test', $2, 'admin', 'e3')", w["clinic"], w["admin"])
+    fresh = await h.fetchval("select id from ops.autonomy_proposals where idempotency_key = 'e3'")
+    await h.execute("update iam.staff_roles set revoked_at = now() where account_id = $1 and role = 'admin'", w["admin"])  # the proposer is no longer an admin
+    assert await state_of(db, w["doctor"], "select ops.resolve_autonomy_proposal(:i, 'approve')", i=fresh) == [("expired",)]
+    assert (await db.execute(text("select count(*) from ops.autonomy_changes where clinic_id = :c and mode = 'autonomous'"), {"c": w["clinic"]})).scalar() == 0
+
+
+async def test_an_account_holding_both_roles_is_one_person_and_cannot_be_both_halves(db):
+    w = await world(db)
+    h = (await db.get_raw_connection()).driver_connection
+    both = uuid.uuid4()
+    await h.execute("insert into iam.accounts (id, account_type, status, origin) values ($1, 'staff', 'active', 'test')", both)
+    await h.execute("insert into iam.staff_roles (account_id, clinic_id, role, origin) values ($1, $2, 'admin', 'test'), ($1, $2, 'doctor', 'test')", both, w["clinic"])
+    propose = "insert into ops.autonomy_proposals (clinic_id, origin, proposed_by, proposer_role, idempotency_key) values (:c, 'test', :by, :role, :k)"
+    assert await state_of(db, both, propose, c=w["clinic"], by=both, role="doctor", k="b1") == 1  # may propose as either role it holds
+    prop = (await state_of(db, both, "select id from ops.autonomy_proposals where clinic_id = :c", c=w["clinic"]))[0][0]
+    assert await state_of(db, both, "select ops.resolve_autonomy_proposal(:i, 'approve')", i=prop) == [("same_person",)]  # but cannot approve its own proposal as the other role
+    assert await state_of(db, w["admin"], "select ops.resolve_autonomy_proposal(:i, 'approve')", i=prop) == [("approved",)]  # a different admin approves a doctor's proposal
+
+
+async def test_a_pending_proposal_whose_proposer_lost_the_role_is_closed_not_left_blocking(db):
+    w = await world(db)
+    h = (await db.get_raw_connection()).driver_connection
+    await h.execute("insert into ops.autonomy_proposals (clinic_id, origin, proposed_by, proposer_role, idempotency_key) values ($1, 'test', $2, 'admin', 'g1')", w["clinic"], w["admin"])
+    prop = await h.fetchval("select id from ops.autonomy_proposals where idempotency_key = 'g1'")
+    await h.execute("update iam.staff_roles set revoked_at = now() where account_id = $1 and role = 'admin'", w["admin"])
+    assert await state_of(db, w["doctor"], "select ops.resolve_autonomy_proposal(:i, 'approve')", i=prop) == [("expired",)]
+    assert (await db.execute(text("select status from ops.autonomy_proposals where id = :i"), {"i": prop})).scalar() == "expired"

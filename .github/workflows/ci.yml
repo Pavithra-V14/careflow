@@ -175,6 +175,8 @@ jobs:
       cancel-in-progress: false
     strategy:
       fail-fast: false
+      # AT MOST SIX shards at once: they share ONE hosted CI database behind a session-mode pooler that allows 15 clients (run 42336238364: eight at once gave EMAXCONNSESSION). The other two queue and start as soon as a slot frees.
+      max-parallel: 6
       matrix:
         include:
           # Four shards since 2026-10-30 (PR #9's run measured 47:00, 46:56 and 38:32 with the role matrix at 30 minutes in shard 1, and the matrix grows with every route). The role matrix is the

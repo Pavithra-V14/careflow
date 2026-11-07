@@ -68,6 +68,12 @@ class Policy:
         return self.decider(action_class) in {"automatic", "automatic_ack"}
 
 
+def switch_pair_allowed(proposer_role: str, proposer: object | None, approver_role: str, approver: object | None) -> bool:
+    """The pure mirror of ops.resolve_autonomy_proposal (migration 0054): the switch to `autonomous` needs two DIFFERENT people of the clinic, one an active ADMIN and the other an active DOCTOR (12.5). Either may
+    propose; the approver holds the OTHER role. Missing anything is False."""
+    return proposer is not None and approver is not None and proposer != approver and {proposer_role, approver_role} == {"admin", "doctor"}
+
+
 @dataclass(frozen=True)
 class AutonomyChange:
     """Switching a clinic to `autonomous` needs an admin AND a doctor, two different people (12.5). Pure: the caller supplies who signed."""
@@ -97,3 +103,17 @@ def tightened(configured: Policy, stored_mode: object | None) -> Policy:
     if MODES.index(stored) < MODES.index(configured.mode):
         return Policy(stored, configured.opt_in_records_release, configured.opt_in_triage_approval, configured.auto_approve_one_confident_low_risk_card)
     return configured
+
+
+def effective_policy(configured: Policy, stored_mode: object | None, *, autonomous_enabled: bool, profile: str, clinical_signoff: bool) -> Policy:
+    """The policy a run uses, from the configured policy and the clinic's STORED autonomy mode (ops.autonomy_changes).
+
+    * A stored `shadow` or `assisted` can only make the run MORE human than configured (`tightened`); it never loosens.
+    * A stored `autonomous` (written only by the two-different-admins approval, 12.5) takes effect ONLY when the enabling setting is on AND, in the `clinical` profile, the clinician sign-off setting is present.
+      Otherwise it is IGNORED: the configured policy stands. Unset settings mean off (unknown is not a value).
+    * The approval matrix is untouched: its rows locked toward a human or toward automatic are decided by `Policy.decider` whatever the mode, and the clinic opt-ins carry over from the configured policy."""
+    if stored_mode == "autonomous":
+        if autonomous_enabled and (profile != "clinical" or clinical_signoff):
+            return Policy("autonomous", configured.opt_in_records_release, configured.opt_in_triage_approval, configured.auto_approve_one_confident_low_risk_card)
+        return configured
+    return tightened(configured, stored_mode)

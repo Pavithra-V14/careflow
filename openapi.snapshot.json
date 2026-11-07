@@ -314,6 +314,149 @@
         "title": "AutonomyOut",
         "type": "object"
       },
+      "AutonomyProposalList": {
+        "additionalProperties": false,
+        "properties": {
+          "proposals": {
+            "items": {
+              "$ref": "#/components/schemas/AutonomyProposalRowOut"
+            },
+            "title": "Proposals",
+            "type": "array"
+          }
+        },
+        "required": [
+          "proposals"
+        ],
+        "title": "AutonomyProposalList",
+        "type": "object"
+      },
+      "AutonomyProposalOut": {
+        "additionalProperties": false,
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "proposal_id": {
+            "format": "uuid",
+            "title": "Proposal Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "created"
+        ],
+        "title": "AutonomyProposalOut",
+        "type": "object"
+      },
+      "AutonomyProposalRowOut": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "proposal_id": {
+            "format": "uuid",
+            "title": "Proposal Id",
+            "type": "string"
+          },
+          "proposed_by": {
+            "format": "uuid",
+            "title": "Proposed By",
+            "type": "string"
+          },
+          "proposer_role": {
+            "enum": [
+              "admin",
+              "doctor"
+            ],
+            "title": "Proposer Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "proposed_by",
+          "proposer_role",
+          "created_at"
+        ],
+        "title": "AutonomyProposalRowOut",
+        "type": "object"
+      },
+      "AutonomyProposeIn": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "proposer_role": {
+            "anyOf": [
+              {
+                "enum": [
+                  "admin",
+                  "doctor"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposer Role"
+          }
+        },
+        "required": [
+          "clinic_id"
+        ],
+        "title": "AutonomyProposeIn",
+        "type": "object"
+      },
+      "AutonomyResolveIn": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "AutonomyResolveIn",
+        "type": "object"
+      },
+      "AutonomyResolveOut": {
+        "additionalProperties": false,
+        "properties": {
+          "result": {
+            "enum": [
+              "approved",
+              "rejected",
+              "same_person",
+              "wrong_role",
+              "expired",
+              "not_pending"
+            ],
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "AutonomyResolveOut",
+        "type": "object"
+      },
       "AutonomySetIn": {
         "additionalProperties": false,
         "properties": {
@@ -3013,45 +3156,6 @@
           "decision"
         ],
         "title": "NoticeOut",
-        "type": "object"
-      },
-      "NoticePublishIn": {
-        "additionalProperties": false,
-        "properties": {
-          "purpose": {
-            "enum": [
-              "care_delivery",
-              "ai_processing",
-              "service_improvement"
-            ],
-            "title": "Purpose",
-            "type": "string"
-          }
-        },
-        "required": [
-          "purpose"
-        ],
-        "title": "NoticePublishIn",
-        "type": "object"
-      },
-      "NoticePublishOut": {
-        "additionalProperties": false,
-        "properties": {
-          "result": {
-            "enum": [
-              "published",
-              "exists",
-              "conflict",
-              "version_gap"
-            ],
-            "title": "Result",
-            "type": "string"
-          }
-        },
-        "required": [
-          "result"
-        ],
-        "title": "NoticePublishOut",
         "type": "object"
       },
       "OfferRowList": {
@@ -9009,42 +9113,28 @@
         ]
       }
     },
-    "/v1/staff/console/consent-notices/publish": {
-      "post": {
-        "description": "Publish the notice for a purpose exactly as the required setting states it (version and text come from the setting, never from the caller). Admin with a verified second factor. 403 unless you are an admin, 503 while the setting is not configured or has no entry for the purpose.",
-        "operationId": "publish_consent_notice_v1_staff_console_consent_notices_publish_post",
+    "/v1/staff/console/autonomy/proposals": {
+      "get": {
+        "description": "Pending proposals of the clinic. 404 if the clinic is not visible to you, 403 unless you are an admin or doctor there.",
+        "operationId": "list_autonomy_proposals_v1_staff_console_autonomy_proposals_get",
         "parameters": [
           {
-            "description": "Required on every write.",
-            "in": "header",
-            "name": "X-Idempotency-Key",
+            "in": "query",
+            "name": "clinic_id",
             "required": true,
             "schema": {
-              "description": "Required on every write.",
-              "maxLength": 200,
-              "minLength": 1,
-              "pattern": "\\S",
-              "title": "X-Idempotency-Key",
+              "format": "uuid",
+              "title": "Clinic Id",
               "type": "string"
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/NoticePublishIn"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NoticePublishOut"
+                  "$ref": "#/components/schemas/AutonomyProposalList"
                 }
               }
             },
@@ -9069,6 +9159,117 @@
               }
             },
             "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Autonomy Proposals",
+        "tags": [
+          "staff console"
+        ]
+      },
+      "post": {
+        "description": "Propose switching the clinic to autonomous as an admin or a doctor; a DIFFERENT person holding the OTHER role (doctor or admin) must approve it. Idempotent on the key. 404 if the clinic is not visible to you, 403 unless you are an admin or doctor there, 409 if a proposal is already pending, 503 until CAREFLOW_AUTONOMOUS_MODE_ENABLED is on.",
+        "operationId": "propose_autonomous_mode_v1_staff_console_autonomy_proposals_post",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutonomyProposeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutonomyProposalOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body."
           },
           "422": {
             "content": {
@@ -9096,7 +9297,120 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Publish Consent Notice",
+        "summary": "Propose Autonomous Mode",
+        "tags": [
+          "staff console"
+        ]
+      }
+    },
+    "/v1/staff/console/autonomy/proposals/{proposal_id}/resolve": {
+      "post": {
+        "description": "Approve (as a DIFFERENT person holding the OTHER role than the proposer: admin for a doctor's proposal, doctor for an admin's; within 7 days) or reject a pending proposal; audited by the database. 404 if you cannot see it, 403 unless you are an admin or doctor of its clinic, 503 until the switch is enabled.",
+        "operationId": "resolve_autonomy_proposal_v1_staff_console_autonomy_proposals__proposal_id__resolve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutonomyResolveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutonomyResolveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Resolve Autonomy Proposal",
         "tags": [
           "staff console"
         ]

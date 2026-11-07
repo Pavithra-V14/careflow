@@ -656,7 +656,7 @@ async def test_append_only_trigger_blocks_edits_even_for_the_owner(db):
     assert await fails(db, "truncate msg.messages") == "0A000"
     # Naming the referencing table too gets past the foreign-key check and reaches the append-only triggers, which refuse it with
     # restrict_violation (both msg.messages and msg.screenings raise it). This keeps the trigger itself under test.
-    assert await fails(db, "truncate msg.messages, msg.screenings") == "23001"
+    assert await fails(db, "truncate msg.messages, msg.screenings, ops.visit_facts, ops.visit_readiness_answers") == "23001"  # (the visit readiness tables of 0052 reference msg.messages too, so they are named as well)
 
 
 async def test_erasure_transition_is_the_only_edit_and_changes_nothing_else(db):

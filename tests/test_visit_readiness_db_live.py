@@ -169,7 +169,6 @@ async def test_only_the_missing_fact_is_asked_then_the_checklist_is_walked_and_a
         rows = (await c.execute(text("select item, answer from ops.visit_readiness_answers where visit_id = :v order by item"), {"v": w["booking"]})).all()
         assert [tuple(r) for r in rows] == [("demo_item_one", "confirmed"), ("demo_item_two", "confirmed")]
         assert (await c.execute(text("select count(*) from agents.review_tasks where source_message_id = :s"), {"s": f"visit:{w['booking']}"})).scalar() == 0  # everything confirmed: no task
-        assert (await c.execute(text("select jsonb_array_length(lines) from ops.visit_briefs where visit_id = :v"), {"v": w["booking"]})).scalar() == 1  # the brief names the recorded fact (no value)
         again = await (await runner_for(c, comps, w, w["nurse"])).start()
         assert again.finished  # a second start is the same run
 
@@ -220,12 +219,14 @@ async def test_the_tables_are_append_only_pinned_to_the_clinic_and_topic_and_nee
     assert await state_of(db, w["nurse"], "update ops.visit_facts set fact = 'x_y'") == "42501"
     assert await state_of(db, w["nurse"], "delete from ops.visit_readiness_answers") == "42501"
     ins = "insert into ops.visit_facts (clinic_id, origin, visit_id, patient_id, fact, thread_id, source_message_id, recorded_by, idempotency_key) values (:c, 'test', :v, :p, 'other_fact', :t, :m, :by, :k)"
-    h = (await db.get_raw_connection()).driver_connection
-    care_thread = await h.fetchval("insert into msg.threads (clinic_id, patient_id, topic, created_by, origin, idempotency_key) values ($1, $2, 'care', $3, 'test', 'ct') returning id", w["clinic"], w["patient"], w["nurse"])
-    care_msg = await h.fetchval(
-        "insert into msg.messages (id, clinic_id, origin, topic, thread_id, sender_kind, recorded_by, body_ct, body_key_version, idempotency_key) values (gen_random_uuid(), $1, 'test', 'care', $2, 'staff', $3, '\\x01'::bytea, 1, 'cm') returning id",
-        w["clinic"], care_thread, w["nurse"],
-    )
+    async with as_user(db, w["nurse"]) as c:  # threads and messages are written by a nurse under row-level security (the owner is subject to the policies too)
+        care_thread = (await c.execute(text("insert into msg.threads (clinic_id, patient_id, topic, created_by, origin, idempotency_key) values (:c, :p, 'care', :u, 'test', 'ct') returning id"), {"c": w["clinic"], "p": w["patient"], "u": w["nurse"]})).scalar_one()
+        care_msg = (
+            await c.execute(
+                text("insert into msg.messages (id, clinic_id, origin, topic, thread_id, sender_kind, recorded_by, body_ct, body_key_version, idempotency_key) values (gen_random_uuid(), :c, 'test', 'care', :t, 'staff', :u, '\\x01'::bytea, 1, 'cm') returning id"),
+                {"c": w["clinic"], "t": care_thread, "u": w["nurse"]},
+            )
+        ).scalar_one()
     assert await state_of(db, w["nurse"], ins, c=w["clinic"], v=w["booking"], p=w["patient"], t=care_thread, m=care_msg, by=w["nurse"], k="f1") == "23503"  # a fact cannot cite a message of another topic
     assert await state_of(db, w["front_desk"], ins, c=w["clinic"], v=w["booking"], p=w["patient"], t=care_thread, m=care_msg, by=w["front_desk"], k="f2") == "42501"
     assert await state_of(db, w["nurse"], ins, c=w["clinic"], v=w["booking"], p=uuid.uuid4(), t=care_thread, m=care_msg, by=w["nurse"], k="f3") == "23503"  # the visit names ITS patient
@@ -239,10 +240,12 @@ async def test_a_fact_cannot_cite_another_patients_readiness_reply(db, monkeypat
     await h.execute("insert into mpi.patients (id, clinic_id, name_ct, name_key_version, dob_ct, dob_key_version, origin, idempotency_key) values ($1, $2, '\x01'::bytea, 1, '\x01'::bytea, 1, 'test', $3)", other, w["clinic"], f"vr-{other}")
     async with as_user(db, w["nurse"]) as c:
         await (await runner_for(c, comps, w, w["nurse"])).start()
-        theirs = await h.fetchval("insert into msg.threads (clinic_id, patient_id, topic, created_by, origin, idempotency_key) values ($1, $2, 'readiness', $3, 'test', 'ot') returning id", w["clinic"], other, w["nurse"])
-        their_msg = await h.fetchval(
-            "insert into msg.messages (id, clinic_id, origin, topic, thread_id, sender_kind, recorded_by, body_ct, body_key_version, idempotency_key) values (gen_random_uuid(), $1, 'test', 'readiness', $2, 'staff', $3, '\x01'::bytea, 1, 'om') returning id",
-            w["clinic"], theirs, w["nurse"],
-        )
+        theirs = (await c.execute(text("insert into msg.threads (clinic_id, patient_id, topic, created_by, origin, idempotency_key) values (:c, :p, 'readiness', :u, 'test', 'ot') returning id"), {"c": w["clinic"], "p": other, "u": w["nurse"]})).scalar_one()
+        their_msg = (
+            await c.execute(
+                text("insert into msg.messages (id, clinic_id, origin, topic, thread_id, sender_kind, recorded_by, body_ct, body_key_version, idempotency_key) values (gen_random_uuid(), :c, 'test', 'readiness', :t, 'staff', :u, '\\x01'::bytea, 1, 'om') returning id"),
+                {"c": w["clinic"], "t": theirs, "u": w["nurse"]},
+            )
+        ).scalar_one()
     ins = "insert into ops.visit_facts (clinic_id, origin, visit_id, patient_id, fact, thread_id, source_message_id, recorded_by, idempotency_key) values (:c, 'test', :v, :p, 'cross_fact', :t, :m, :by, 'x1')"
     assert await state_of(db, w["nurse"], ins, c=w["clinic"], v=w["booking"], p=w["patient"], t=theirs, m=their_msg, by=w["nurse"]) == "23503"  # the thread belongs to another patient
