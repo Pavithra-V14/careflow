@@ -24,16 +24,16 @@ export interface Call {
 }
 
 /**
- * Fields the console reads that are NOT in the schema (docs/frontend-backend-requests.md items 2 and 5). The console handles their
- * absence; the live run says whether the backend has started sending them.
+ * Fields the console depends on that the schema marks OPTIONAL or NULLABLE (clinic name and origin, the operating profile and time zone, an
+ * offer's message id, a patient label). The console handles their absence; the live run says whether the backend really sends them.
  */
 export const CONSOLE_READS_BEYOND_SCHEMA: { template: string; path: string }[] = [
   { template: '/v1/iam/me', path: '$.roles[].clinic_name' },
   { template: '/v1/iam/me', path: '$.roles[].clinic_origin' },
   { template: '/v1/iam/me', path: '$.operating_profile' },
+  { template: '/v1/iam/me', path: '$.clinic_time_zone' },
+  { template: '/v1/staff/scheduling/offers', path: '$.items[].message_id' },
   { template: '/v1/staff/patients/search', path: '$.items[].label' },
-  { template: '/v1/staff/patients/search', path: '$.labels_withheld' },
-  { template: '/v1/staff/patients/search', path: '$.truncated' },
 ];
 
 /** Lists that came back with no rows: their item shape was NOT checked, so a clean result for them proves nothing about rows. */

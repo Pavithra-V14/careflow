@@ -20,7 +20,7 @@ import { Grievances, Recovery } from './AdminMore';
 type Account = components['schemas']['StaffAccountOut'];
 
 /** The roles an admin can invite or grant (the schema's list; queue_worker cannot be granted). None is pre-selected. */
-export const STAFF_ROLES: readonly StaffRole[] = ['front_desk', 'nurse', 'doctor', 'admin', 'auditor', 'business_owner'];
+const STAFF_ROLES: readonly StaffRole[] = ['front_desk', 'nurse', 'doctor', 'admin', 'auditor', 'business_owner'];
 const isStaffRole = (v: string): v is StaffRole => (STAFF_ROLES as readonly string[]).includes(v);
 
 export function AdminPage() {

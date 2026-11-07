@@ -22,8 +22,8 @@ describe('live checklist', () => {
     expect(named, `docs/frontend-live-checklist.md does not mention ${path}`).toBe(true);
   });
 
-  it('says it has not been run, and what it needs to start', () => {
-    expect(doc).toMatch(/Not started/);
+  it('says what has not been run live, and what it needs to start', () => {
+    expect(doc).toMatch(/NOT been run against a live\s+backend/); // it says plainly what has and has not been run
     expect(doc).toMatch(/What I need to start/);
   });
 

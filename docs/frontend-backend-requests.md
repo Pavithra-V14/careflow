@@ -191,6 +191,14 @@ instead.
 Visit readiness is keyed by a visit id, and no route lists visits, so the console asks for the id. A visit list (or the visit id on
 a booking row) would remove that.
 
+### 15. The clinic id for the patient forms, and the grievance categories
+
+The patient portal's claim and grievance requests need a `clinic_id`, but a patient has no way to know one and no route gives it. The
+console asks the patient to type a "clinic code" (a uuid the hospital tells them), which is poor. A way to learn it would remove that:
+either the hospital's id on a public configuration route, or the clinic implied by the invitation. Likewise the grievance `category` must
+be on the clinic's list but no route returns the list, so the form takes a code limited to its shape and the backend answers 422 if it is
+not on the list. A route that lists the categories (with labels) would let the form show a picklist.
+
 ## Decisions recorded here for later readers
 
 - **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;

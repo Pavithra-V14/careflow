@@ -6,7 +6,7 @@
 // backend disagree, the backend wins and this list is the thing to fix. Roles below follow the route docstrings in
 // openapi.snapshot.json and docs/design/review-task-routes.md.
 
-export type SectionId = 'referrals' | 'tasks' | 'patients' | 'identity' | 'scheduling' | 'alerts' | 'dashboard' | 'care' | 'admin' | 'readiness' | 'claims' | 'access' | 'notes';
+type SectionId = 'referrals' | 'tasks' | 'patients' | 'identity' | 'scheduling' | 'alerts' | 'dashboard' | 'care' | 'admin' | 'readiness' | 'claims' | 'access' | 'notes';
 
 export interface Section {
   id: SectionId;
@@ -16,7 +16,7 @@ export interface Section {
   roles: readonly string[];
 }
 
-export const SECTIONS: readonly Section[] = [
+const SECTIONS: readonly Section[] = [
   { id: 'referrals', path: '/referrals', labelKey: 'nav.referrals', roles: ['front_desk', 'nurse', 'doctor'] },
   { id: 'tasks', path: '/tasks', labelKey: 'nav.tasks', roles: ['front_desk', 'nurse', 'doctor', 'admin'] },
   { id: 'patients', path: '/patients', labelKey: 'nav.patients', roles: ['front_desk', 'nurse', 'doctor'] },
@@ -45,7 +45,6 @@ export const ADMIN_TABS = [
   { id: 'recovery', roles: ['admin'] },
   { id: 'grievances', roles: ['admin'] },
 ] as const;
-export type AdminTab = (typeof ADMIN_TABS)[number]['id'];
 
 export const sectionsFor = (role: string): Section[] => SECTIONS.filter((s) => s.roles.includes(role));
 

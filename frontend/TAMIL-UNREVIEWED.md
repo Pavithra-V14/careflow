@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-1083 of 1083 strings are unreviewed.
+1166 of 1166 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -329,7 +329,6 @@ Terms standardised: proposal, resolve / resolved.
 | `alerts.stateOpen` | Open | திறந்தது | ok |
 | `alerts.title` | Alerts | எச்சரிக்கைகள் | ok |
 | `app.hospitalName` | [PLACEHOLDER: hospital name] | [PLACEHOLDER: மருத்துவமனையின் பெயர்] | ok |
-| `app.patientTitle` | Patient portal | நோயாளர் தளம் | ok |
 | `app.staffTitle` | Staff console | பணியாளர் தளம் | ok |
 | `care.changed` | That changed in the meantime. Refresh and look again. | இடைப்பட்ட நேரத்தில் இது மாறிவிட்டது. புதுப்பித்து மீண்டும் பாருங்கள். | ok |
 | `care.gaps.ageNotSet` | The age at which an item is flagged overdue is not set, so nothing is flagged. | ஒரு உருப்படி தாமதமானது எனக் குறிக்கும் வயது அமைக்கப்படவில்லை; எனவே எதுவும் குறிக்கப்படாது. | ok |
@@ -472,7 +471,6 @@ Terms standardised: proposal, resolve / resolved.
 | `common.cancel` | Cancel | ரத்து செய் | ok |
 | `common.comingSoon` | Coming soon | விரைவில் வரும் | ok |
 | `common.emergencyBanner` | In an emergency call 108 | அவசரநிலையில் 108 ஐ அழைக்கவும் | ok |
-| `common.genericError` | Something went wrong. | ஏதோ தவறு ஏற்பட்டது. | ok |
 | `common.language` | Language | மொழி | ok |
 | `common.loading` | Loading… | ஏற்றுகிறது… | ok |
 | `common.moreExist` | More results exist than are shown. | காட்டப்பட்டதை விட அதிக முடிவுகள் உள்ளன. | ok |
@@ -624,7 +622,7 @@ Terms standardised: proposal, resolve / resolved.
 | `landing.account` | Account | கணக்கு | ok |
 | `landing.departments.heading` | Departments and doctors | துறைகள் மற்றும் மருத்துவர்கள் | ok |
 | `landing.emergencyLabel` | Emergency information | அவசரகாலத் தகவல் | ok |
-| `landing.faq.a1` | Patient sign-up is not available yet. When it opens, you will enter your mobile number and we will send a one-time code to confirm it. | நோயாளர் பதிவு இன்னும் கிடைக்கவில்லை. அது தொடங்கும்போது, உங்கள் கைபேசி எண்ணை உள்ளிடுவீர்கள்; அதை உறுதிப்படுத்த ஒருமுறைக் குறியீடு அனுப்புவோம். | ok |
+| `landing.faq.a1` | Choose Sign up, enter your mobile number, and we will send a one-time code to confirm it. | பதிவு செய்க என்பதைத் தேர்ந்தெடுத்து உங்கள் கைபேசி எண்ணை உள்ளிடுங்கள்; அதை உறுதிப்படுத்த ஒருமுறைக் குறியீடு அனுப்புவோம். | ok |
 | `landing.faq.a2` | Yes. Use the language menu at the top of any page to switch between English and Tamil. | ஆம். எந்தப் பக்கத்தின் மேலேயும் உள்ள மொழி தேர்வைப் பயன்படுத்தி ஆங்கிலம், தமிழ் இடையே மாறலாம். | ok |
 | `landing.faq.heading` | Frequently asked questions | அடிக்கடி கேட்கப்படும் கேள்விகள் | ok |
 | `landing.faq.q1` | How do I create an account? | கணக்கை எவ்வாறு உருவாக்குவது? | ok |
@@ -691,8 +689,6 @@ Terms standardised: proposal, resolve / resolved.
 | `notes.writeBody` | Writes a new note for this patient. It cannot be edited afterwards. | இந்த நோயாளிக்கான புதிய குறிப்பை எழுதுகிறது. பின்னர் திருத்த முடியாது. | ok |
 | `offline.banner` | You are offline. Changes cannot be saved until the connection is back. | நீங்கள் இணைப்பில் இல்லை. இணைப்பு திரும்பும் வரை மாற்றங்களைச் சேமிக்க முடியாது. | ok |
 | `pages.backHome` | Back to the home page | முகப்புப் பக்கத்திற்குத் திரும்பு | ok |
-| `pages.notAvailableSignIn` | Patient sign-in is not available yet. | நோயாளர் உள்நுழைவு இன்னும் கிடைக்கவில்லை. | ok |
-| `pages.notAvailableSignUp` | Patient sign-up is not available yet. | நோயாளர் பதிவு இன்னும் கிடைக்கவில்லை. | ok |
 | `pages.privacyTitle` | Privacy notice | தனியுரிமை அறிவிப்பு | ok |
 | `pages.signInTitle` | Sign in | உள்நுழைக | ok |
 | `pages.signUpTitle` | Sign up | பதிவு செய்க | ok |
@@ -768,6 +764,96 @@ Terms standardised: proposal, resolve / resolved.
 | `placeholder.reviewReasons` | PLACEHOLDER - clinician to define | PLACEHOLDER - clinician to define | kept in English by design |
 | `placeholder.revokeReasons` | [PLACEHOLDER: the wording of these reasons is not final. To be confirmed by the clinic.] | [PLACEHOLDER: the wording of these reasons is not final. To be confirmed by the clinic.] | kept in English by design |
 | `placeholder.taskClose` | PLACEHOLDER - clinician to define how this kind of task is closed. It cannot be closed here. | PLACEHOLDER - clinician to define how this kind of task is closed. It cannot be closed here. | kept in English by design |
+| `portal.activate.activated` | Your account is active. | உங்கள் கணக்கு செயலில் உள்ளது. | ok |
+| `portal.activate.already_active` | Your account was already active. | உங்கள் கணக்கு ஏற்கனவே செயலில் இருந்தது. | ok |
+| `portal.activate.body` | You can activate your account once you have granted the care-delivery notice. | பராமரிப்பு வழங்கல் அறிவிப்பை வழங்கிய பிறகு உங்கள் கணக்கைச் செயல்படுத்தலாம். | ok |
+| `portal.activate.button` | Activate my account | என் கணக்கைச் செயல்படுத்து | ok |
+| `portal.activate.confirmBody` | Activates your account if the required decision has been recorded. | தேவையான முடிவு பதிவாகியிருந்தால் உங்கள் கணக்கைச் செயல்படுத்துகிறது. | ok |
+| `portal.activate.consent_required` | The care-delivery notice has not been granted yet, so the account was not activated. | பராமரிப்பு வழங்கல் அறிவிப்பு இன்னும் வழங்கப்படவில்லை; எனவே கணக்கு செயல்படுத்தப்படவில்லை. | ok |
+| `portal.activate.title` | Activate your account | உங்கள் கணக்கைச் செயல்படுத்துங்கள் | ok |
+| `portal.afterActivation` | Claiming a record, filing a grievance and downloading your data become available once your account is active. | உங்கள் கணக்கு செயலில் வந்த பிறகு பதிவை இணைத்தல், குறை தெரிவித்தல், உங்கள் தரவைப் பதிவிறக்குதல் கிடைக்கும். | ok |
+| `portal.claim.alreadyLinked` | Your account is linked to a record. | உங்கள் கணக்கு ஒரு பதிவுடன் இணைக்கப்பட்டுள்ளது. | ok |
+| `portal.claim.body` | To see your own record, give the name and date of birth the hospital has for you. This also needs a verified mobile number. | உங்கள் சொந்த பதிவைப் பார்க்க, மருத்துவமனையிடம் உங்களுக்காக உள்ள பெயரையும் பிறந்த தேதியையும் கொடுங்கள். இதற்குச் சரிபார்க்கப்பட்ட கைபேசி எண்ணும் தேவை. | ok |
+| `portal.claim.button` | Link my record | என் பதிவை இணை | ok |
+| `portal.claim.confirmBody` | We compare what you give with the record that matches your verified mobile number. If it does not match for certain, a person at the hospital decides. | நீங்கள் கொடுப்பதை, உங்கள் சரிபார்க்கப்பட்ட கைபேசி எண்ணுடன் பொருந்தும் பதிவுடன் ஒப்பிடுகிறோம். உறுதியாகப் பொருந்தவில்லை என்றால், மருத்துவமனையில் ஒருவர் முடிவு செய்வார். | ok |
+| `portal.claim.dob` | Date of birth | பிறந்த தேதி | ok |
+| `portal.claim.invalid` | Check the name and date of birth. Nothing was recorded. | பெயரையும் பிறந்த தேதியையும் சரிபார்க்கவும். எதுவும் பதிவாகவில்லை. | ok |
+| `portal.claim.name` | Full name | முழுப் பெயர் | ok |
+| `portal.claim.outcome.already_bound` | Your account is already linked to a record. | உங்கள் கணக்கு ஏற்கனவே ஒரு பதிவுடன் இணைக்கப்பட்டுள்ளது. | ok |
+| `portal.claim.outcome.claimed` | Your record is linked. | உங்கள் பதிவு இணைக்கப்பட்டது. | ok |
+| `portal.claim.outcome.consent_required` | Grant the care-delivery notice first. | முதலில் பராமரிப்பு வழங்கல் அறிவிப்பை வழங்குங்கள். | ok |
+| `portal.claim.outcome.locked` | Too many attempts. Please try again later or contact the hospital. | பல முயற்சிகள். பிறகு முயற்சிக்கவும் அல்லது மருத்துவமனையைத் தொடர்பு கொள்ளவும். | ok |
+| `portal.claim.outcome.pending_review` | Your request was received. A person at the hospital will decide. | உங்கள் கோரிக்கை பெறப்பட்டது. மருத்துவமனையில் ஒருவர் முடிவு செய்வார். | ok |
+| `portal.claim.refused` | This cannot be done for this account: it must be active and have a verified mobile number. | இந்தக் கணக்கிற்கு இதைச் செய்ய முடியாது: அது செயலில் இருக்க வேண்டும், சரிபார்க்கப்பட்ட கைபேசி எண்ணும் இருக்க வேண்டும். | ok |
+| `portal.claim.title` | Link your record | உங்கள் பதிவை இணையுங்கள் | ok |
+| `portal.claim.unavailable` | This is not available right now. Nothing was recorded. | இது இப்போது கிடைக்கவில்லை. எதுவும் பதிவாகவில்லை. | ok |
+| `portal.clinicCode` | Clinic code | மருத்துவமனைக் குறியீடு | ok |
+| `portal.consent.changed` | The notice changed while you were reading. The page will refresh; please read the new version. | நீங்கள் படிக்கும்போது அறிவிப்பு மாறிவிட்டது. பக்கம் புதுப்பிக்கப்படும்; புதிய பதிப்பைப் படியுங்கள். | ok |
+| `portal.consent.confirmBody` | Your decision is recorded against the version shown above, with the time. | மேலே காட்டப்பட்ட பதிப்புக்கு எதிராக உங்கள் முடிவு நேரத்துடன் பதிவாகும். | ok |
+| `portal.consent.decision` | Your decision | உங்கள் முடிவு | ok |
+| `portal.consent.grant` | Grant | வழங்கு | ok |
+| `portal.consent.grantTitle` | Grant this? | இதை வழங்கவா? | ok |
+| `portal.consent.granted` | Granted | வழங்கப்பட்டது | ok |
+| `portal.consent.noDecision` | No decision yet | இன்னும் முடிவு இல்லை | ok |
+| `portal.consent.none` | No notice has been published yet. | இன்னும் அறிவிப்பு எதுவும் வெளியிடப்படவில்லை. | ok |
+| `portal.consent.recorded` | Your decision was recorded. | உங்கள் முடிவு பதிவானது. | ok |
+| `portal.consent.title` | Notices and your decisions | அறிவிப்புகளும் உங்கள் முடிவுகளும் | ok |
+| `portal.consent.version` | version {{version}} | பதிப்பு {{version}} | ok |
+| `portal.consent.withdraw` | Withdraw | திரும்பப் பெறு | ok |
+| `portal.consent.withdrawTitle` | Withdraw this? | இதைத் திரும்பப் பெறவா? | ok |
+| `portal.consent.withdrawn` | Withdrawn | திரும்பப் பெறப்பட்டது | ok |
+| `portal.erased` | Erased | அழிக்கப்பட்டது | ok |
+| `portal.grievance.body` | Use this for access, correction, erasure, a nominee, or any other request. A person at the hospital reads it. | அணுகல், திருத்தம், அழித்தல், பரிந்துரைக்கப்பட்டவர், அல்லது வேறு எந்தக் கோரிக்கைக்கும் இதைப் பயன்படுத்துங்கள். மருத்துவமனையில் ஒருவர் இதைப் படிப்பார். | ok |
+| `portal.grievance.category` | Category | வகை | ok |
+| `portal.grievance.categoryHint` | A code from the hospital's list (lowercase letters, digits and underscores). The hospital tells you which codes exist. | மருத்துவமனையின் பட்டியலிலிருந்து ஒரு குறியீடு (சிற்றெழுத்துகள், எண்கள், அடிக்கோடுகள்). எந்தக் குறியீடுகள் உள்ளன என்பதை மருத்துவமனை உங்களுக்குச் சொல்லும். | ok |
+| `portal.grievance.categoryRefused` | That category is not on the hospital's list. Nothing was sent. | அந்த வகை மருத்துவமனையின் பட்டியலில் இல்லை. எதுவும் அனுப்பப்படவில்லை. | ok |
+| `portal.grievance.confirmBody` | This sends your message to the hospital. It is stored encrypted. | இது உங்கள் செய்தியை மருத்துவமனைக்கு அனுப்புகிறது. அது குறியாக்கம் செய்து சேமிக்கப்படும். | ok |
+| `portal.grievance.file` | Send | அனுப்பு | ok |
+| `portal.grievance.filed` | Your message was sent. | உங்கள் செய்தி அனுப்பப்பட்டது. | ok |
+| `portal.grievance.mine` | Your earlier messages | நீங்கள் முன்பு அனுப்பிய செய்திகள் | ok |
+| `portal.grievance.none` | You have not sent any. | நீங்கள் எதுவும் அனுப்பவில்லை. | ok |
+| `portal.grievance.refused` | This cannot be done for this account: it must be active and linked to a record of that clinic. | இந்தக் கணக்கிற்கு இதைச் செய்ய முடியாது: அது செயலில் இருக்க வேண்டும், அந்த மருத்துவமனையின் ஒரு பதிவுடன் இணைக்கப்பட்டிருக்க வேண்டும். | ok |
+| `portal.grievance.status.acknowledged` | Seen | பார்க்கப்பட்டது | ok |
+| `portal.grievance.status.open` | Open | திறந்தது | ok |
+| `portal.grievance.status.resolved` | Resolved | தீர்க்கப்பட்டது | ok |
+| `portal.grievance.text` | What you want to tell us | எங்களிடம் நீங்கள் சொல்ல விரும்புவது | ok |
+| `portal.grievance.title` | Send a request or a complaint | கோரிக்கை அல்லது புகாரை அனுப்புங்கள் | ok |
+| `portal.grievance.unavailable` | This is not available right now (the category list or the encryption is not set up). Nothing was sent. | இது இப்போது கிடைக்கவில்லை (வகைப் பட்டியல் அல்லது குறியாக்கம் அமைக்கப்படவில்லை). எதுவும் அனுப்பப்படவில்லை. | ok |
+| `portal.linked.label` | Linked to a record | ஒரு பதிவுடன் இணைக்கப்பட்டுள்ளது | ok |
+| `portal.myData.body` | Downloads one file with everything the system holds about you that you may see. Each download is recorded. | நீங்கள் பார்க்க அனுமதிக்கப்பட்ட, அமைப்பு உங்களைப் பற்றி வைத்திருக்கும் அனைத்தையும் ஒரே கோப்பாகப் பதிவிறக்குகிறது. ஒவ்வொரு பதிவிறக்கமும் பதிவு செய்யப்படும். | ok |
+| `portal.myData.button` | Download my data | என் தரவைப் பதிவிறக்கு | ok |
+| `portal.myData.count.bookings` | bookings: {{count}} | முன்பதிவுகள்: {{count}} | ok |
+| `portal.myData.count.consents` | consent decisions: {{count}} | சம்மத முடிவுகள்: {{count}} | ok |
+| `portal.myData.count.grievances` | messages you sent to the hospital: {{count}} | நீங்கள் மருத்துவமனைக்கு அனுப்பிய செய்திகள்: {{count}} | ok |
+| `portal.myData.count.messages` | messages: {{count}} | செய்திகள்: {{count}} | ok |
+| `portal.myData.count.records` | records: {{count}} | பதிவுகள்: {{count}} | ok |
+| `portal.myData.done` | Your file was downloaded. It holds: | உங்கள் கோப்பு பதிவிறக்கப்பட்டது. அதில் உள்ளவை: | ok |
+| `portal.myData.title` | Download my data | என் தரவைப் பதிவிறக்கு | ok |
+| `portal.myData.truncated` | The file does not hold everything: some lists were cut short. | கோப்பில் அனைத்தும் இல்லை: சில பட்டியல்கள் சுருக்கப்பட்டன. | ok |
+| `portal.notAvailable` | This is not available to you yet. | இது இன்னும் உங்களுக்குக் கிடைக்கவில்லை. | ok |
+| `portal.register.body` | You are signed in, but you do not have a patient account here yet. Creating it does not link you to any record. | நீங்கள் உள்நுழைந்துள்ளீர்கள், ஆனால் இங்கு உங்களுக்கு இன்னும் நோயாளிக் கணக்கு இல்லை. அதை உருவாக்குவது உங்களை எந்தப் பதிவுடனும் இணைக்காது. | ok |
+| `portal.register.create` | Create my account | என் கணக்கை உருவாக்கு | ok |
+| `portal.register.refused` | This sign-in cannot be used for a patient account. | இந்த உள்நுழைவை நோயாளிக் கணக்குக்குப் பயன்படுத்த முடியாது. | ok |
+| `portal.register.title` | Create your patient account | உங்கள் நோயாளிக் கணக்கை உருவாக்குங்கள் | ok |
+| `portal.signIn.change` | Use a different number | வேறு எண்ணைப் பயன்படுத்து | ok |
+| `portal.signIn.code` | 6-digit code | 6 இலக்கக் குறியீடு | ok |
+| `portal.signIn.codeFailed` | That code did not work. Check it and try again, or ask for a new one. | அந்தக் குறியீடு செயல்படவில்லை. சரிபார்த்து மீண்டும் முயற்சிக்கவும், அல்லது புதியதைக் கேட்கவும். | ok |
+| `portal.signIn.intro` | We send a one-time code to your mobile number. The same steps sign you in or create your sign-in account. | உங்கள் கைபேசி எண்ணுக்கு ஒருமுறை குறியீடு அனுப்புவோம். அதே படிகள் உங்களை உள்நுழைவிக்கும் அல்லது உங்கள் உள்நுழைவுக் கணக்கை உருவாக்கும். | ok |
+| `portal.signIn.phone` | Mobile number | கைபேசி எண் | ok |
+| `portal.signIn.phoneBad` | Enter the number with a plus sign and the country code, using digits only. | கூட்டல் குறி மற்றும் நாட்டுக் குறியீட்டுடன், இலக்கங்களை மட்டும் பயன்படுத்தி எண்ணை உள்ளிடுங்கள். | ok |
+| `portal.signIn.phoneHint` | With the country code, for example +91 followed by your number. | நாட்டுக் குறியீட்டுடன், எடுத்துக்காட்டாக +91 மற்றும் உங்கள் எண். | ok |
+| `portal.signIn.send` | Send me a code | எனக்குக் குறியீட்டை அனுப்பு | ok |
+| `portal.signIn.sendFailed` | The code could not be sent. Check the number and try again in a moment. | குறியீட்டை அனுப்ப முடியவில்லை. எண்ணைச் சரிபார்த்து சிறிது நேரம் கழித்து மீண்டும் முயற்சிக்கவும். | ok |
+| `portal.signIn.sent` | A code was sent if the number can receive one. | எண்ணுக்குப் பெற முடிந்தால் ஒரு குறியீடு அனுப்பப்பட்டது. | ok |
+| `portal.signIn.title` | Sign in or create an account | உள்நுழைக அல்லது கணக்கை உருவாக்குக | ok |
+| `portal.signIn.verify` | Continue | தொடரவும் | ok |
+| `portal.stage.active` | Active | செயலில் | ok |
+| `portal.stage.label` | Where your account is | உங்கள் கணக்கு இருக்கும் நிலை | ok |
+| `portal.stage.new_patient` | New patient | புதிய நோயாளி | ok |
+| `portal.stage.pending_activation` | Waiting to be activated | செயல்படுத்தக் காத்திருக்கிறது | ok |
+| `portal.stage.registered` | Created | உருவாக்கப்பட்டது | ok |
+| `portal.title` | Your account | உங்கள் கணக்கு | ok |
+| `portal.unreadable` | Not readable | படிக்க இயலவில்லை | ok |
 | `problem.conflict` | That conflicts with the current state. Refresh and try again. | இது தற்போதைய நிலையுடன் முரண்படுகிறது. புதுப்பித்து மீண்டும் முயற்சிக்கவும். | ok |
 | `problem.forbidden` | This is not available to your role. | இது உங்கள் பங்கிற்குக் கிடைக்காது. | ok |
 | `problem.invalid` | Check what you entered and try again. | நீங்கள் உள்ளிட்டதைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும். | ok |
@@ -865,17 +951,14 @@ Terms standardised: proposal, resolve / resolved.
 | `review.mode` | Mode | முறை | ok |
 | `review.noAlternatives` | No alternatives were recorded. | மாற்றுகள் எதுவும் பதிவாகவில்லை. | ok |
 | `review.noEvidence` | No evidence was recorded. | சான்று எதுவும் பதிவாகவில்லை. | ok |
-| `review.none` | None | எதுவுமில்லை | ok |
 | `review.notRecorded` | Not recorded | பதிவு செய்யப்படவில்லை | ok |
 | `review.onApprove` | If you approve | நீங்கள் ஒப்புக்கொண்டால் | ok |
 | `review.onEdit` | If you edit | நீங்கள் திருத்தினால் | ok |
 | `review.onReject` | If you reject | நீங்கள் நிராகரித்தால் | ok |
-| `review.proposal` | Proposal | முன்மொழிவு | ok |
 | `review.reasonChoose` | Choose a reason | ஒரு காரணத்தைத் தேர்ந்தெடுங்கள் | ok |
 | `review.reasonLabel` | Reason | காரணம் | ok |
 | `review.reasonOptional` | Reason (optional for approve) | காரணம் (ஒப்புக்கொள்ள விருப்பம்) | ok |
 | `review.reasonRequired` | Choose a reason. A reject needs one. | ஒரு காரணத்தைத் தேர்ந்தெடுங்கள். நிராகரிக்க ஒன்று தேவை. | ok |
-| `review.reasonsNotConfigured` | The clinic has not set a list of reasons yet. | மருத்துவமனை இன்னும் காரணங்களின் பட்டியலை அமைக்கவில்லை. | ok |
 | `review.rule` | Rule that triggered review | மதிப்பாய்வைத் தூண்டிய விதி | ok |
 | `review.viewMissing` | There is no proposal to show for this referral. | இந்தப் பரிந்துரைக்குக் காட்ட முன்மொழிவு இல்லை. | ok |
 | `review.viewTitle` | Reviewer view | மதிப்பாய்வாளர் பார்வை | ok |

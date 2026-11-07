@@ -24,7 +24,7 @@ for (const lang of LANGS) {
   test(`admin, staff accounts [${lang}]`, async ({ page }) => {
     await openConsole(page, 'admin', lang);
     await go(page, '#/admin/accounts', /\S/);
-    await expect(page.locator('main table')).toBeVisible();
+    await expect(page.locator('main table').first()).toBeVisible();
     await sweep(page, 'f9-accounts', lang);
   });
 
@@ -39,35 +39,35 @@ for (const lang of LANGS) {
   test(`admin, autonomy [${lang}]`, async ({ page }) => {
     await openConsole(page, 'admin', lang);
     await go(page, '#/admin/autonomy', /\S/);
-    await expect(page.locator('main table')).toBeVisible();
+    await expect(page.locator('main table').first()).toBeVisible();
     await sweep(page, 'f9-autonomy', lang);
   });
 
   test(`doctor, autonomy (the only tab) [${lang}]`, async ({ page }) => {
     await openConsole(page, 'doctor', lang);
     await go(page, '#/admin', /\S/);
-    await expect(page.locator('main table')).toBeVisible();
+    await expect(page.locator('main table').first()).toBeVisible();
     await sweep(page, 'f9-autonomy-doctor', lang);
   });
 
   test(`admin, reviewer statistics [${lang}]`, async ({ page }) => {
     await openConsole(page, 'admin', lang);
     await go(page, '#/admin/reviewer', /\S/);
-    await expect(page.locator('main table')).toBeVisible();
+    await expect(page.locator('main table').first()).toBeVisible();
     await sweep(page, 'f9-reviewer', lang);
   });
 
   test(`admin, cost canvas [${lang}]`, async ({ page }) => {
     await openConsole(page, 'admin', lang);
     await go(page, '#/admin/cost', /\S/);
-    await expect(page.locator('main table')).toBeVisible();
+    await expect(page.locator('main table').first()).toBeVisible();
     await sweep(page, 'f9-cost', lang);
   });
 
   test(`admin, voice sessions [${lang}]`, async ({ page }) => {
     await openConsole(page, 'admin', lang);
     await go(page, '#/admin/voice', /\S/);
-    await expect(page.locator('main table')).toBeVisible();
+    await expect(page.locator('main table').first()).toBeVisible();
     await sweep(page, 'f9-voice', lang);
   });
 

@@ -16,7 +16,7 @@ import { formatNumber } from '../../shared/i18n/format';
 import { NotFoundPage } from './NotFoundPage';
 import { AddReference, BookingsList, OffersList, SlotsList, WaitlistList } from './SchedulingMore';
 
-export const SCHEDULING_LISTS = ['slots', 'bookings', 'waitlist', 'holds', 'offers', 'providers', 'locations', 'visit-types', 'priority-levels'] as const;
+const SCHEDULING_LISTS = ['slots', 'bookings', 'waitlist', 'holds', 'offers', 'providers', 'locations', 'visit-types', 'priority-levels'] as const;
 type ListId = (typeof SCHEDULING_LISTS)[number];
 const isListId = (v: string): v is ListId => (SCHEDULING_LISTS as readonly string[]).includes(v);
 const LABEL: Record<ListId, string> = {

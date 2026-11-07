@@ -105,10 +105,11 @@ describe('no promotional claims', () => {
 });
 
 describe.each(['sign-in', 'sign-up', 'privacy'] as PatientPage[])('%s page', (kind) => {
-  it('has one h1, a way back home, and says plainly when content is not available', () => {
+  it('has one h1 and a way back home; the portal pages say plainly when the site is not configured', () => {
     render(<App page={kind} />);
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.getByRole('link', { name: 'Back to the home page' })).toHaveAttribute('href', '/patient/');
-    if (kind !== 'privacy') expect(screen.getByRole('status')).toHaveTextContent('not available yet');
+    // Without sign-in values (no portal prop) the portal pages show the explicit not-configured state instead of a form that cannot work.
+    if (kind !== 'privacy') expect(screen.getByRole('status')).toHaveTextContent('not configured');
   });
 });

@@ -16,12 +16,12 @@ import { WriteProblem } from '../ui/WriteProblem';
 // Every write waits for a confirmation, carries a key that is reused on a retry, and shows the backend's refusals in fixed words.
 // The source words are those the backend documents in careflow/care_gaps.py; a row from a source not listed here simply has no action.
 
-export const SOURCE_BARRIER = 'unresolved_barrier';
-export const SOURCE_SAMPLE = 'after_the_fact_review';
-export const SOURCE_RECURRENCE = 'overdue_recurrence';
+const SOURCE_BARRIER = 'unresolved_barrier';
+const SOURCE_SAMPLE = 'after_the_fact_review';
+const SOURCE_RECURRENCE = 'overdue_recurrence';
 
 /** The barrier types the route accepts (BarrierIn.barrier), in the schema's order. None is pre-selected. */
-export const BARRIER_KINDS: readonly BarrierKind[] = ['transport', 'cost', 'childcare', 'forgot', 'scheduling_conflict', 'other'];
+const BARRIER_KINDS: readonly BarrierKind[] = ['transport', 'cost', 'childcare', 'forgot', 'scheduling_conflict', 'other'];
 
 /** A patient id handed over from the record or referral the person was just looking at (`?patient=`); anything that is not an id is ignored. */
 export function usePatientHint(): string {

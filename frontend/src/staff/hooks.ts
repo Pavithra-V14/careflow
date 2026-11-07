@@ -9,7 +9,7 @@ export function useApiQuery<T>(key: readonly unknown[], fn: () => Promise<T>, en
   return useQuery<T, ApiProblem>({ queryKey: [scopeKey, ...key], queryFn: fn, enabled, retry: false, staleTime: 0 });
 }
 
-export type IdempotentWrite<V, R> = Omit<UseMutationResult<R, ApiProblem, V>, 'reset'> & { reset: () => void };
+type IdempotentWrite<V, R> = Omit<UseMutationResult<R, ApiProblem, V>, 'reset'> & { reset: () => void };
 
 /**
  * A write that keeps ONE idempotency key per intent. The key is made on the first attempt and reused for every retry

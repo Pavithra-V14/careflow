@@ -28,7 +28,7 @@ export function ProblemText({ kind }: { kind: ProblemKind }) {
   return <>{t(`problem.${kind}`)}</>;
 }
 
-export function ProblemView({ problem, onRetry }: { problem: ApiProblem; onRetry?: (() => void) | undefined }) {
+function ProblemView({ problem, onRetry }: { problem: ApiProblem; onRetry?: (() => void) | undefined }) {
   const { t } = useTranslation();
   if (problem.kind === 'forbidden') return <NotAvailableToRole />;
   const retryable = problem.kind === 'network' || problem.kind === 'unavailable' || problem.kind === 'rate_limited' || problem.kind === 'unknown';
