@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-547 of 547 strings are unreviewed.
+648 of 648 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -60,9 +60,94 @@ Terms standardised: proposal, resolve / resolved.
 
 | Key | English | Tamil | AI review |
 |---|---|---|---|
+| `alerts.acknowledge` | Acknowledge | ஏற்றுக்கொள் | ok |
+| `alerts.acknowledged` | The alert was acknowledged. | எச்சரிக்கை ஏற்கப்பட்டது. | ok |
+| `alerts.already` | This alert was already acknowledged. The list will refresh. | இந்த எச்சரிக்கை ஏற்கனவே ஏற்கப்பட்டது. பட்டியல் புதுப்பிக்கப்படும். | ok |
+| `alerts.col.action` | Action | செயல் | ok |
+| `alerts.col.aimedAt` | Aimed at | யாருக்கு | ok |
+| `alerts.col.class` | Class | வகை | ok |
+| `alerts.col.count` | Count | எண்ணிக்கை | ok |
+| `alerts.col.raised` | Raised | எழுப்பப்பட்டது | ok |
+| `alerts.col.ref` | Reference | குறிப்பு | ok |
+| `alerts.col.state` | State | நிலை | ok |
+| `alerts.confirmBody` | This records that you have seen it, under your name. It can be done once. | இதைப் பார்த்தீர்கள் என்று உங்கள் பெயரில் பதிவாகும். இதை ஒரு முறை மட்டுமே செய்ய முடியும். | ok |
+| `alerts.confirmTitle` | Acknowledge this alert? | இந்த எச்சரிக்கையை ஏற்றுக்கொள்ளவா? | ok |
+| `alerts.empty` | There are no alerts. | எச்சரிக்கைகள் இல்லை. | ok |
+| `alerts.includeAcknowledged` | Include acknowledged alerts | ஏற்கப்பட்ட எச்சரிக்கைகளையும் சேர் | ok |
+| `alerts.note` | Alerts aimed at a role you hold. The role shown is who the alert has reached, so an overdue item that has escalated is aimed at a higher role. | நீங்கள் வகிக்கும் பங்கிற்கான எச்சரிக்கைகள். காட்டப்படும் பங்கு, எச்சரிக்கை யாரை அடைந்துள்ளது என்பதைக் குறிக்கும்; எனவே உயர்நிலைக்குச் சென்ற தாமதமான பணி உயர் பங்கிற்கு அனுப்பப்படும். | ok |
+| `alerts.stateDone` | Acknowledged | ஏற்கப்பட்டது | ok |
+| `alerts.stateOpen` | Open | திறந்தது | ok |
+| `alerts.title` | Alerts | எச்சரிக்கைகள் | ok |
 | `app.hospitalName` | [PLACEHOLDER: hospital name] | [PLACEHOLDER: மருத்துவமனையின் பெயர்] | ok |
 | `app.patientTitle` | Patient portal | நோயாளர் தளம் | ok |
 | `app.staffTitle` | Staff console | பணியாளர் தளம் | ok |
+| `care.changed` | That changed in the meantime. Refresh and look again. | இடைப்பட்ட நேரத்தில் இது மாறிவிட்டது. புதுப்பித்து மீண்டும் பாருங்கள். | ok |
+| `care.gaps.ageNotSet` | The age at which an item is flagged overdue is not set, so nothing is flagged. | ஒரு உருப்படி தாமதமானது எனக் குறிக்கும் வயது அமைக்கப்படவில்லை; எனவே எதுவும் குறிக்கப்படாது. | ok |
+| `care.gaps.ageUnknown` | Unknown | தெரியாது | ok |
+| `care.gaps.col.age` | Age (days) | வயது (நாட்கள்) | ok |
+| `care.gaps.col.flag` | Flag | குறி | ok |
+| `care.gaps.col.item` | Item | உருப்படி | ok |
+| `care.gaps.col.median` | Median age (days) | இடைநிலை வயது (நாட்கள்) | ok |
+| `care.gaps.col.open` | Open items | திறந்த உருப்படிகள் | ok |
+| `care.gaps.col.source` | Source | மூலம் | ok |
+| `care.gaps.col.undated` | Without a date | தேதி இல்லாதவை | ok |
+| `care.gaps.errorRate` | After-the-fact review error rate | பின்னாய்வு மறுஆய்வுப் பிழை விகிதம் | ok |
+| `care.gaps.noRows` | There are no items. | உருப்படிகள் இல்லை. | ok |
+| `care.gaps.noSummaries` | There are no summaries. | சுருக்கங்கள் இல்லை. | ok |
+| `care.gaps.notMeasured` | Not measured | அளக்கப்படவில்லை | ok |
+| `care.gaps.overdue` | Overdue | தாமதமானது | ok |
+| `care.gaps.rows` | Items | உருப்படிகள் | ok |
+| `care.gaps.summaries` | Summary by source | மூலம் வாரியான சுருக்கம் | ok |
+| `care.gaps.unknownLastDone` | Recurrence rules whose last-done date is unknown | கடைசியாகச் செய்த தேதி தெரியாத மீள்நிகழ்வு விதிகள் | ok |
+| `care.gaps.unreadable` | These sources could not be read: | இந்த மூலங்களைப் படிக்க இயலவில்லை: | ok |
+| `care.notReadable` | Not readable | படிக்க இயலவில்லை | ok |
+| `care.patientId` | Patient id | நோயாளி அடையாளம் | ok |
+| `care.patientIdBad` | That is not a patient id. | இது நோயாளி அடையாளம் அல்ல. | ok |
+| `care.plans.approve` | Approve | ஒப்புக்கொள் | ok |
+| `care.plans.approveTitle` | Approve this plan? | இந்தத் திட்டத்தை ஒப்புக்கொள்ளவா? | ok |
+| `care.plans.col.action` | Action | செயல் | ok |
+| `care.plans.col.created` | Created | உருவாக்கப்பட்டது | ok |
+| `care.plans.col.patient` | Patient | நோயாளி | ok |
+| `care.plans.col.plan` | Plan | திட்டம் | ok |
+| `care.plans.col.status` | Status | நிலை | ok |
+| `care.plans.decideBody` | Your decision is recorded under your name. Nothing runs before a plan is approved. | உங்கள் முடிவு உங்கள் பெயரில் பதிவாகும். திட்டம் ஒப்புக்கொள்ளப்படும் வரை எதுவும் இயங்காது. | ok |
+| `care.plans.decided` | Recorded. The plan is now waiting for: {{waiting}}. | பதிவானது. திட்டம் இப்போது இதற்காகக் காத்திருக்கிறது: {{waiting}}. | ok |
+| `care.plans.empty` | There are no care plans. | பராமரிப்புத் திட்டங்கள் இல்லை. | ok |
+| `care.plans.notConfigured` | Care plans are not set up yet. Nothing was written. | பராமரிப்புத் திட்டங்கள் இன்னும் அமைக்கப்படவில்லை. எதுவும் எழுதப்படவில்லை. | ok |
+| `care.plans.note` | A plan text is never shown here. A doctor writes a plan, the rules screen it, and it waits for a doctor to approve it. Nothing runs before then. | திட்ட உரை இங்கு ஒருபோதும் காட்டப்படாது. ஒரு மருத்துவர் திட்டத்தை எழுதுகிறார், விதிகள் அதைப் பரிசோதிக்கின்றன, பிறகு ஒரு மருத்துவர் ஒப்புக்கொள்ளக் காத்திருக்கும். அதற்கு முன் எதுவும் இயங்காது. | ok |
+| `care.plans.reject` | Reject | நிராகரி | ok |
+| `care.plans.rejectTitle` | Reject this plan? | இந்தத் திட்டத்தை நிராகரிக்கவா? | ok |
+| `care.plans.send` | Submit plan | திட்டத்தைச் சமர்ப்பி | ok |
+| `care.plans.text` | Plan text | திட்ட உரை | ok |
+| `care.plans.waiting.confirmation` | a confirmation | ஒரு உறுதிப்படுத்தல் | ok |
+| `care.plans.waiting.none` | nothing | எதுவுமில்லை | ok |
+| `care.plans.waiting.result` | a result | ஒரு முடிவு | ok |
+| `care.plans.write` | Write a care plan | பராமரிப்புத் திட்டம் எழுது | ok |
+| `care.plans.writeBody` | The rules screen the text first. It then waits for a doctor to approve it, and nothing runs before that. | விதிகள் முதலில் உரையைப் பரிசோதிக்கும். பிறகு ஒரு மருத்துவர் ஒப்புக்கொள்ளக் காத்திருக்கும்; அதற்கு முன் எதுவும் இயங்காது. | ok |
+| `care.plans.written` | The plan was submitted. It is now waiting for: {{waiting}}. | திட்டம் சமர்ப்பிக்கப்பட்டது. இப்போது இதற்காகக் காத்திருக்கிறது: {{waiting}}. | ok |
+| `care.results.addMeasure` | Add a measure | அளவீட்டைச் சேர் | ok |
+| `care.results.body` | This records a result for the patient. It cannot be edited afterwards. | இது நோயாளிக்கான ஒரு முடிவைப் பதிவு செய்கிறது. பின்னர் இதைத் திருத்த முடியாது. | ok |
+| `care.results.code` | Result code | முடிவுக் குறியீடு | ok |
+| `care.results.done` | The result was recorded. | முடிவு பதிவானது. | ok |
+| `care.results.doneWake` | The result was recorded. A waiting care plan will be woken. | முடிவு பதிவானது. காத்திருக்கும் பராமரிப்புத் திட்டம் எழுப்பப்படும். | ok |
+| `care.results.measureName` | Measure {{n}} name | அளவீடு {{n}} பெயர் | ok |
+| `care.results.measureValue` | Measure {{n}} value | அளவீடு {{n}} மதிப்பு | ok |
+| `care.results.measures` | Measures | அளவீடுகள் | ok |
+| `care.results.measuresHint` | Leave a value empty if it is not known; it is recorded as unknown, never as zero. | ஒரு மதிப்பு தெரியாவிட்டால் காலியாக விடுங்கள்; அது தெரியாதது எனப் பதிவாகும், பூஜ்யமாக அல்ல. | ok |
+| `care.results.notNumber` | A value must be a number or empty. | மதிப்பு ஒரு எண்ணாக அல்லது காலியாக இருக்க வேண்டும். | ok |
+| `care.results.note` | Results are append-only. To correct one, record a new result that names the one it replaces. | முடிவுகள் சேர்க்க மட்டுமே முடியும். ஒன்றைத் திருத்த, அது மாற்றும் முடிவைக் குறிப்பிடும் புதிய முடிவைப் பதிவு செய்யுங்கள். | ok |
+| `care.results.record` | Record a result | முடிவைப் பதிவு செய் | ok |
+| `care.results.save` | Save result | முடிவைச் சேமி | ok |
+| `care.results.supersedes` | Replaces result id (optional) | மாற்றப்படும் முடிவு அடையாளம் (விருப்பம்) | ok |
+| `care.results.validFrom` | Valid from | செல்லுபடியாகத் தொடங்குவது | ok |
+| `care.results.validTo` | Valid until (optional) | செல்லுபடியாகும் வரை (விருப்பம்) | ok |
+| `care.results.verified` | Verified | சரிபார்க்கப்பட்டது | ok |
+| `care.results.zoneNote` | Times are in the clinic time zone: {{zone}} (demo placeholder). | நேரங்கள் மருத்துவமனையின் நேர மண்டலத்தில் உள்ளன: {{zone}} (டெமோ இடஒதுக்கீடு). | ok |
+| `care.tab.gaps` | Care gaps | பராமரிப்பு இடைவெளிகள் | ok |
+| `care.tab.plans` | Care plans | பராமரிப்புத் திட்டங்கள் | ok |
+| `care.tab.results` | Results | முடிவுகள் | ok |
+| `care.tabs` | Care sections | பராமரிப்புப் பிரிவுகள் | ok |
+| `care.title` | Care | பராமரிப்பு | ok |
 | `common.cancel` | Cancel | ரத்து செய் | ok |
 | `common.comingSoon` | Coming soon | விரைவில் வரும் | ok |
 | `common.emergencyBanner` | In an emergency call 108 | அவசரநிலையில் 108 ஐ அழைக்கவும் | ok |
@@ -82,6 +167,18 @@ Terms standardised: proposal, resolve / resolved.
 | `common.staffSignIn` | Staff sign in | பணியாளர் உள்நுழைவு | ok |
 | `common.working` | Working… | செயல்படுகிறது… | minor drift; flag (unnatural): Literal "it is functioning"; wording for a busy state should read as processing. |
 | `common.yes` | Yes | ஆம் | ok |
+| `dashboard.col.metric` | Metric | அளவீடு | ok |
+| `dashboard.col.state` | State | நிலை | ok |
+| `dashboard.col.value` | Value | மதிப்பு | ok |
+| `dashboard.empty` | There is no metrics data to show. | காட்ட அளவீட்டுத் தரவு இல்லை. | ok |
+| `dashboard.measured` | Measured | அளக்கப்பட்டவை | ok |
+| `dashboard.noneMeasured` | No metric is measured. | எந்த அளவீடும் அளக்கப்படவில்லை. | ok |
+| `dashboard.noneMissing` | Every metric has a query behind it. | ஒவ்வொரு அளவீட்டிற்கும் ஒரு வினவல் உள்ளது. | ok |
+| `dashboard.notMeasured` | Not measured | அளக்கப்படாதவை | ok |
+| `dashboard.notReadable` | Not readable | படிக்க இயலவில்லை | ok |
+| `dashboard.state.measured` | Measured | அளக்கப்பட்டது | ok |
+| `dashboard.state.unreadable` | Not readable | படிக்க இயலவில்லை | ok |
+| `dashboard.title` | Dashboard | கட்டுப்பாட்டுப் பலகை | ok |
 | `dev.capture` | Capture claim structure | கோரிக்கை அமைப்பைப் பெறுக | minor drift |
 | `dev.failed` | Could not read the session. | அமர்வைப் படிக்க முடியவில்லை. | ok |
 | `dev.note` | Development builds only. Shows the structure of aal, amr and iat with values blanked. It never shows the token. | உருவாக்கப் பதிப்புகளில் மட்டும். aal, amr, iat ஆகியவற்றின் அமைப்பை மதிப்புகள் மறைக்கப்பட்டு காட்டும். டோக்கனைக் காட்டாது. | minor drift |
@@ -180,6 +277,9 @@ Terms standardised: proposal, resolve / resolved.
 | `landing.privacy.readNotice` | Read the privacy notice | தனியுரிமை அறிவிப்பைப் படிக்கவும் | ok |
 | `languages.en` | English | English | kept in English by design |
 | `languages.ta` | தமிழ் | தமிழ் | kept in English by design |
+| `nav.alerts` | Alerts | எச்சரிக்கைகள் | ok |
+| `nav.care` | Care | பராமரிப்பு | ok |
+| `nav.dashboard` | Dashboard | கட்டுப்பாட்டுப் பலகை | ok |
 | `nav.home` | Home | முகப்பு | ok |
 | `nav.identity` | Identity | அடையாளம் | ok |
 | `nav.label` | Sections | பிரிவுகள் | ok |
@@ -491,6 +591,7 @@ Terms standardised: proposal, resolve / resolved.
 | `scheduling.title` | Scheduling | நேர அட்டவணை | minor drift |
 | `scheduling.visitTypes` | Visit types | வருகை வகைகள் | ok |
 | `scheduling.waitlist` | Waitlist | காத்திருப்புப் பட்டியல் | ok |
+| `scheduling.zoneNote` | Times are in the clinic time zone: {{zone}} (demo placeholder). | நேரங்கள் மருத்துவமனையின் நேர மண்டலத்தில் உள்ளன: {{zone}} (டெமோ இடஒதுக்கீடு). | ok |
 | `shell.activeRole` | Active role | தற்போதைய பங்கு | minor drift; flag (ambiguous): Role is a key concept used on many screens; the word chosen literally means share/part. |
 | `shell.activeRoleUnavailable` | That role is not available right now. Choose a role to continue. You are still signed in. | அந்தப் பங்கு இப்போது கிடைக்கவில்லை. தொடர ஒரு பங்கைத் தேர்ந்தெடுங்கள். நீங்கள் இன்னும் உள்நுழைந்துள்ளீர்கள். | ok |
 | `shell.changeRole` | Change role | பங்கை மாற்று | ok |

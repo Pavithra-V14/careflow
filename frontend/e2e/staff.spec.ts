@@ -165,11 +165,11 @@ test('keyboard only: sign in and verify with Tab and Enter, never the mouse', as
   await page.keyboard.press('Enter');
   await expect(page.locator('.session-bar')).toBeVisible();
   // Every control in the session bar is reachable by keyboard.
-  // Walking backwards from the heading passes the six navigation links, then reaches Sign out.
+  // Walking backwards from the heading passes the seven navigation links, then reaches Sign out.
   await page.locator('h1').focus();
   await page.keyboard.press('Shift+Tab');
   await expect(page.locator('.main-nav a').last()).toBeFocused();
-  for (let i = 0; i < 6; i++) await page.keyboard.press('Shift+Tab');
+  for (let i = 0; i < 7; i++) await page.keyboard.press('Shift+Tab');
   await expect(page.locator('.session-bar button').last()).toBeFocused();
 });
 

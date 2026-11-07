@@ -46,6 +46,8 @@ const no = (status: number): Reply => [status, { detail: LEAK }];
 const page = (items: unknown[]) => ok({ items, limit: 100, has_more: false });
 const READERS = ['front_desk', 'nurse', 'doctor'];
 const REVIEWERS = ['nurse', 'doctor'];
+const SCHEDULE_READERS = [...READERS, 'admin'];
+const CLINICAL = ['nurse', 'doctor'];
 
 export function createConsoleApi(role: string, options: ConsoleOptions = {}, session: SessionFacts = { steppedUp: () => true }) {
   const taskStatus: Record<string, 'open' | 'acknowledged' | 'resolved'> = { [ID.task]: 'open', [ID.taskRed]: 'open' };
@@ -159,10 +161,10 @@ export function createConsoleApi(role: string, options: ConsoleOptions = {}, ses
     }
 
     // ---- F7: slots, bookings, waitlist, offers; the reviewer view and reason codes (MOCK ONLY) ----
-    if (method === 'GET' && path === '/v1/staff/scheduling/slots') return READERS.includes(role) ? page([{ clinic_id: ID.clinic, slot_id: ID.slot, provider_id: ID.doc, location_id: ID.slot, visit_type_id: ID.visitType, starts_at: '2026-11-10T04:00:00Z', ends_at: '2026-11-10T04:30:00Z', status: 'open', hold_expires_at: null }]) : no(403);
-    if (method === 'GET' && path === '/v1/staff/scheduling/bookings') return READERS.includes(role) ? page([{ booking_id: ID.merge, clinic_id: ID.clinic, created_at: '2026-11-09T04:00:00Z', ends_at: '2026-11-10T04:30:00Z', location_id: ID.slot, patient_id: ID.patient, provider_id: ID.doc, slot_id: ID.slot, starts_at: '2026-11-10T04:00:00Z', visit_type_id: ID.visitType }]) : no(403);
-    if (method === 'GET' && path === '/v1/staff/scheduling/waitlist') return READERS.includes(role) ? page([{ clinic_id: ID.clinic, clinical_priority: 'P1', joined_at: '2026-11-01T00:00:00Z', patient_id: ID.patient, rank: 1, visit_type_id: ID.visitType, waitlist_id: ID.task }]) : no(403);
-    if (method === 'GET' && path === '/v1/staff/scheduling/offers') return READERS.includes(role) ? page([{ channel: null, clinic_id: ID.clinic, created_at: '2026-11-09T05:00:00Z', delivered_at: null, expires_at: '2026-11-10T05:00:00Z', hold_id: ID.hold, patient_id: ID.patient, slot_id: ID.slot, state: 'awaiting_delivery' }]) : no(403);
+    if (method === 'GET' && path === '/v1/staff/scheduling/slots') return SCHEDULE_READERS.includes(role) ? page([{ clinic_id: ID.clinic, slot_id: ID.slot, provider_id: ID.doc, location_id: ID.slot, visit_type_id: ID.visitType, starts_at: '2026-11-10T04:00:00Z', ends_at: '2026-11-10T04:30:00Z', status: 'open', hold_expires_at: null }]) : no(403);
+    if (method === 'GET' && path === '/v1/staff/scheduling/bookings') return SCHEDULE_READERS.includes(role) ? page([{ booking_id: ID.merge, clinic_id: ID.clinic, created_at: '2026-11-09T04:00:00Z', ends_at: '2026-11-10T04:30:00Z', location_id: ID.slot, patient_id: ID.patient, provider_id: ID.doc, slot_id: ID.slot, starts_at: '2026-11-10T04:00:00Z', visit_type_id: ID.visitType }]) : no(403);
+    if (method === 'GET' && path === '/v1/staff/scheduling/waitlist') return SCHEDULE_READERS.includes(role) ? page([{ clinic_id: ID.clinic, clinical_priority: 'P1', joined_at: '2026-11-01T00:00:00Z', patient_id: ID.patient, rank: 1, visit_type_id: ID.visitType, waitlist_id: ID.task }]) : no(403);
+    if (method === 'GET' && path === '/v1/staff/scheduling/offers') return SCHEDULE_READERS.includes(role) ? page([{ channel: null, clinic_id: ID.clinic, created_at: '2026-11-09T05:00:00Z', delivered_at: null, expires_at: '2026-11-10T05:00:00Z', hold_id: ID.hold, patient_id: ID.patient, slot_id: ID.slot, state: 'awaiting_delivery' }]) : no(403);
     if (method === 'POST' && path.startsWith('/v1/staff/scheduling/')) {
       if (role !== 'front_desk' && !(role === 'admin' && /\/(providers|locations|visit-types|slots)$/.test(path))) return no(403);
       if (/\/slots\/[^/]+\/hold$/.test(path)) return ok({ expires_at: '2026-11-10T05:00:00Z', hold_id: ID.hold, replayed: false, slot_id: ID.slot });
@@ -173,6 +175,16 @@ export function createConsoleApi(role: string, options: ConsoleOptions = {}, ses
       if (/\/(providers|locations|visit-types|slots)$/.test(path)) return ok({ clinic_id: ID.clinic, id: ID.candidate, replayed: false });
     }
     if (method === 'POST' && path === '/v1/staff/patients/search' && READERS.includes(role)) return ok({ items: [{ patient_id: ID.patient, verified: true, registered_via: 'staff', matched_kinds: ['name'] }], labels_withheld: false, truncated: false });
+    // ---- batch 2: alerts, dashboard, care gaps, care plans, results (MOCK ONLY) ----
+    if (method === 'GET' && path === '/v1/staff/console/alerts') return [...READERS, 'admin'].includes(role) ? page([{ acknowledged: false, alert_class: 'task_overdue', alert_id: ID.merge, audience_role: role, clinic_id: ID.clinic, count: 3, created_at: '2026-11-09T05:00:00Z', ref: ID.task }]) : no(403);
+    const ackAlert = m(/^\/v1\/staff\/console\/alerts\/([^/]+)\/acknowledge$/);
+    if (method === 'POST' && ackAlert) return ok({ acknowledged: true, alert_id: ackAlert[1] });
+    if (method === 'GET' && path === '/v1/staff/console/dashboard') return role === 'admin' ? ok({ clinic_id: ID.clinic, metrics: [{ metric_id: 'metric_one', state: 'measured', value: 12 }, { metric_id: 'metric_two', state: 'unreadable', value: null }], not_measured: ['metric_three'] }) : no(403);
+    if (method === 'GET' && path === '/v1/staff/care-gaps') return [...CLINICAL, 'admin'].includes(role) ? ok({ after_the_fact_error_rate: null, alert_age_configured: false, clinic_id: ID.clinic, recurrence_rules_with_unknown_last_done: 2, rows: [{ age_days: null, flagged_overdue: false, item_id: ID.task, source: 'barrier' }, { age_days: 40, flagged_overdue: true, item_id: ID.taskRed, source: 'recurrence' }], summaries: [{ median_age_days: null, open_count: null, source: 'barrier', undated: 1 }, { median_age_days: 12, open_count: 4, source: 'recurrence', undated: 0 }], unreadable: ['barrier'] }) : no(403);
+    if (method === 'GET' && path === '/v1/staff/care-plans') return CLINICAL.includes(role) ? ok({ plans: [{ created_at: '2026-11-09T05:00:00Z', patient_id: ID.patient, plan_id: ID.merge, status: 'confirmation_requested' }] }) : no(403);
+    if (method === 'POST' && path === '/v1/staff/care-plans') return role === 'doctor' ? [201, { created: true, plan_id: ID.merge, status: 'proposed', task_id: null, waiting_for: 'confirmation' }] : no(403);
+    if (method === 'POST' && /^\/v1\/staff\/care-plans\/[^/]+\/confirm$/.test(path)) return role === 'doctor' ? ok({ created: false, plan_id: ID.merge, status: 'active', task_id: null, waiting_for: 'result' }) : no(403);
+    if (method === 'POST' && path === '/v1/staff/results') return CLINICAL.includes(role) ? [201, { created: true, result_id: ID.candidate, wake_queued: false }] : no(403);
     if (method === 'GET' && path === '/v1/staff/console/reason-codes') return REVIEWERS.includes(role) ? ok({ configured: options.reasonCodes === true, codes: options.reasonCodes === true ? ['reason_a', 'reason_b'] : [] }) : no(403);
     const reviewView = m(/^\/v1\/staff\/referrals\/([^/]+)\/review-view$/);
     if (method === 'GET' && reviewView) {
@@ -180,7 +192,7 @@ export function createConsoleApi(role: string, options: ConsoleOptions = {}, ses
       return ok({ alternatives: [{ label: 'card-placeholder@1', probability: null }, { label: 'card-other@2', probability: 0.25 }], confidence: null, engine: null, evidence: [{ field: 'reason', source: 'letter', crop_ref: null }], kind: 'triage_proposal', on_approve: 'Approve text from the API', on_edit: 'Edit text from the API', on_reject: 'Reject text from the API', proposal: { abstained: false, mode: 'shadow', candidate_count: 1 }, reason_codes: ['reason_a', 'reason_b'], task_id: ID.task, triggering_rule: null });
     }
     if (method === 'GET' && path.startsWith('/v1/staff/scheduling/')) {
-      if (!READERS.includes(role)) return no(403);
+      if (!SCHEDULE_READERS.includes(role)) return no(403);
       const inactive = query.get('include_inactive') === 'true';
       if (path.endsWith('/providers')) return page([{ active: true, clinic_id: ID.clinic, display_name: 'Placeholder Provider', provider_id: ID.doc }, ...(inactive ? [{ active: false, clinic_id: ID.clinic, display_name: 'Retired Provider', provider_id: ID.task }] : [])]);
       if (path.endsWith('/locations')) return page([{ active: true, clinic_id: ID.clinic, location_id: ID.slot, name: 'Room 1' }]);

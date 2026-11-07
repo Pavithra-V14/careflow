@@ -15,6 +15,9 @@ export type DuplicateStatus = NonNullable<DuplicateQuery['status']>;
 type TaskQuery = NonNullable<paths['/v1/staff/review-tasks']['get']['parameters']['query']>;
 export type ReviewTaskStatus = TaskQuery['status'];
 export type TaskRole = NonNullable<TaskQuery['assigned_role']>;
+export type CarePlanIn = components['schemas']['CarePlanIn'];
+export type ResultIn = components['schemas']['ResultIn'];
+export type CarePlanAction = components['schemas']['CarePlanConfirmIn']['action'];
 export type SlotIn = components['schemas']['SlotIn'];
 export type HoldIn = components['schemas']['HoldIn'];
 export type WaitlistJoinIn = components['schemas']['WaitlistJoinIn'];
@@ -83,6 +86,15 @@ export const OPERATIONS = {
   listThreads: { method: 'get', path: '/v1/staff/messages/threads' },
   listThreadMessages: { method: 'get', path: '/v1/staff/messages/threads/{thread_id}/messages' },
   readMessage: { method: 'get', path: '/v1/staff/messages/{message_id}' },
+  // ---- alerts, dashboard, care gaps, care plans, results ----
+  listAlerts: { method: 'get', path: '/v1/staff/console/alerts' },
+  acknowledgeAlert: { method: 'post', path: '/v1/staff/console/alerts/{alert_id}/acknowledge' },
+  dashboard: { method: 'get', path: '/v1/staff/console/dashboard' },
+  careGaps: { method: 'get', path: '/v1/staff/care-gaps' },
+  listCarePlans: { method: 'get', path: '/v1/staff/care-plans' },
+  createCarePlan: { method: 'post', path: '/v1/staff/care-plans' },
+  confirmCarePlan: { method: 'post', path: '/v1/staff/care-plans/{plan_id}/confirm' },
+  recordResult: { method: 'post', path: '/v1/staff/results' },
   // ---- review console ----
   reviewView: { method: 'get', path: '/v1/staff/referrals/{document_id}/review-view' },
   reasonCodes: { method: 'get', path: '/v1/staff/console/reason-codes' },
@@ -276,6 +288,19 @@ export function createApi(options: ApiOptions) {
     listThreadMessages: (threadId: string) => client.GET('/v1/staff/messages/threads/{thread_id}/messages', { params: { path: { thread_id: threadId } } }),
     // Reads one message AND audits the read: only on a person's click, never in the background, and the body is never cached.
     readMessage: (messageId: string) => client.GET('/v1/staff/messages/{message_id}', { params: { path: { message_id: messageId } } }),
+
+    // ---- alerts, dashboard, care gaps, care plans, results ---------------------------------------------------------------
+    listAlerts: (clinicId: string, includeAcknowledged = false) =>
+      client.GET('/v1/staff/console/alerts', { params: { query: { clinic_id: clinicId, ...(includeAcknowledged ? { include_acknowledged: true } : {}) } } }),
+    acknowledgeAlert: (alertId: string, o?: WriteOptions) =>
+      client.POST('/v1/staff/console/alerts/{alert_id}/acknowledge', { params: { path: { alert_id: alertId }, header: { 'X-Idempotency-Key': key(o) } } }),
+    dashboard: (clinicId: string) => client.GET('/v1/staff/console/dashboard', { params: { query: { clinic_id: clinicId } } }),
+    careGaps: (clinicId: string) => client.GET('/v1/staff/care-gaps', { params: { query: { clinic_id: clinicId } } }),
+    listCarePlans: (clinicId: string) => client.GET('/v1/staff/care-plans', { params: { query: { clinic_id: clinicId } } }),
+    createCarePlan: (body: CarePlanIn, o?: WriteOptions) => client.POST('/v1/staff/care-plans', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    confirmCarePlan: (planId: string, action: CarePlanAction, o?: WriteOptions) =>
+      client.POST('/v1/staff/care-plans/{plan_id}/confirm', { params: { path: { plan_id: planId }, header: { 'X-Idempotency-Key': key(o) } }, body: { action } }),
+    recordResult: (body: ResultIn, o?: WriteOptions) => client.POST('/v1/staff/results', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
 
     // ---- review console -----------------------------------------------------------------------------------------------
     reviewView: (documentId: string) => client.GET('/v1/staff/referrals/{document_id}/review-view', { params: { path: { document_id: documentId } } }),

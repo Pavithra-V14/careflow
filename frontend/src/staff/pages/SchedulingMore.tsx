@@ -13,6 +13,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Badge, PlaceholderNote, ShortId, Time, useLang, useWord } from '../ui/bits';
 import { NotAvailableToRole, ProblemText, QueryView } from '../ui/states';
 import { formatNumber } from '../../shared/i18n/format';
+import { clinicLocalToIso, getClinicTimeZone } from '../../shared/clinicTime';
 
 type Slot = components['schemas']['SlotOut'];
 
@@ -296,7 +297,6 @@ function BookDialog({ slot, onClose }: { slot: Slot; onClose: (ok: boolean) => v
 // ---- adding reference data and slots ----------------------------------------------------------------------------------
 
 type Refs = ReturnType<typeof useReferences>;
-const isoFromLocal = (v: string): string => new Date(v).toISOString();
 
 function AddSlotDialog({ refs, onClose }: { refs: Refs; onClose: (ok: boolean) => void }) {
   const { t } = useTranslation();
@@ -307,12 +307,12 @@ function AddSlotDialog({ refs, onClose }: { refs: Refs; onClose: (ok: boolean) =
   const [visitType, setVisitType] = useState('');
   const [starts, setStarts] = useState('');
   const [ends, setEnds] = useState('');
-  const complete = provider && location && visitType && starts && ends;
+  const complete = provider && location && visitType && clinicLocalToIso(starts) !== null && clinicLocalToIso(ends) !== null;
   const create = useIdempotentWrite(
     (_: void, key) =>
       unwrap(
         api.createSlot(
-          { clinic_id: active.clinicId, provider_id: provider, location_id: location, visit_type_id: visitType, starts_at: isoFromLocal(starts), ends_at: isoFromLocal(ends) },
+          { clinic_id: active.clinicId, provider_id: provider, location_id: location, visit_type_id: visitType, starts_at: clinicLocalToIso(starts) as string, ends_at: clinicLocalToIso(ends) as string },
           { idempotencyKey: key },
         ),
       ),
@@ -369,6 +369,7 @@ function AddSlotDialog({ refs, onClose }: { refs: Refs; onClose: (ok: boolean) =
           ))}
         </select>
       </label>
+      <p className="hint">{t('scheduling.zoneNote', { zone: getClinicTimeZone() })}</p>
       <label>
         {t('scheduling.startsAt')}
         <input type="datetime-local" value={starts} onChange={pick(setStarts)} />
