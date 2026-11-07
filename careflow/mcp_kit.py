@@ -136,7 +136,9 @@ def install_log_filter() -> None:
 # ---- the audit wrapper for the clinical read-only server ---------------------------------------------------------------------------------------
 
 
-def audited(tool_name: str, role: str, clinic_of: Callable[[Session], uuid.UUID]) -> Callable[[Callable[..., Awaitable[Envelope]]], Callable[..., Awaitable[Envelope]]]:
+def audited(
+    tool_name: str, role: str | Callable[[Session], Awaitable[str]], clinic_of: Callable[[Session], uuid.UUID]
+) -> Callable[[Callable[..., Awaitable[Envelope]]], Callable[..., Awaitable[Envelope]]]:
     """Wrap a tool so each call writes one audit row (who, role, tool, outcome) from the CALLER's session in the same transaction. Arguments and results are never recorded. If the audit
     insert fails the call fails (no unaudited read of clinical data)."""
 
@@ -150,8 +152,9 @@ def audited(tool_name: str, role: str, clinic_of: Callable[[Session], uuid.UUID]
                 outcome = result.status
                 return result
             finally:
+                acting_role = role if isinstance(role, str) else await role(session)  # a callable names the role actually used; if it cannot, the call fails (no unaudited read)
                 await write_audit(
-                    session.conn, clinic_id=clinic_of(session), origin=session.origin, actor_id=session.account_id, actor_role=role, action="clinical.tool_call",
+                    session.conn, clinic_id=clinic_of(session), origin=session.origin, actor_id=session.account_id, actor_role=acting_role, action="clinical.tool_call",
                     resource_type="mcp-tool", resource_id=uuid.uuid5(uuid.NAMESPACE_URL, f"careflow-mcp-tool:{tool_name}"),
                     details={"tool": tool_name, "outcome": outcome}, idempotency_key=f"audit:clinical-tool:{uuid.uuid4()}",
                 )

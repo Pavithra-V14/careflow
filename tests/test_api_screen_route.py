@@ -43,7 +43,7 @@ async def _fake_claims():
 
 def make_client(*, vault="default", authenticated=True):
     app = create_app(
-        Settings(supabase_url=PROJECT, database_url_app="postgresql://unused"),
+        Settings(_env_file=None, supabase_url=PROJECT, database_url_app="postgresql://unused"),
         jwks=JWKSClient(PROJECT + "/auth/v1/.well-known/jwks.json"), engine=object(),  # type: ignore[arg-type]
         vault=_vault() if vault == "default" else vault,
     )
@@ -212,7 +212,7 @@ def test_the_response_model_forbids_extra_fields_so_a_new_column_cannot_leak():
 
 
 def test_the_route_is_in_the_openapi_snapshot_as_a_post_with_the_required_header():
-    spec = create_app(Settings(supabase_url=PROJECT, database_url_app="postgresql://unused")).openapi()
+    spec = create_app(Settings(_env_file=None, supabase_url=PROJECT, database_url_app="postgresql://unused")).openapi()
     op = spec["paths"]["/v1/staff/messages/{message_id}/screen"]["post"]
     header = [p for p in op["parameters"] if p["in"] == "header"]
     assert [p["name"] for p in header] == ["X-Idempotency-Key"] and header[0]["required"] is True

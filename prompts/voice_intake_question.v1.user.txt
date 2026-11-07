@@ -1,0 +1,5 @@
+Task: {workflow_label}
+Question text to read exactly as written:
+{scripted_text}
+Decline text to say if the patient goes beyond answering the question:
+{decline_text}

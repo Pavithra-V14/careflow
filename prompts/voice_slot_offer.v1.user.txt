@@ -1,0 +1,5 @@
+Task: {workflow_label}
+Offer text to read exactly as written:
+{scripted_text}
+Decline text to say if the patient goes beyond replying to the offer:
+{decline_text}

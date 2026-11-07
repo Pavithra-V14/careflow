@@ -33,8 +33,8 @@ because the application role cannot UPDATE messages at all and, under RLS, would
 that way would be silently low, and "unknown is not zero" (rule 3), so a key could be retired while bodies still use
 it. A key may be retired only when BOTH `version_usage` (patients) and `message_version_usage` (messages) show zero.
 
-Role: the engine runs on whatever connection it is given. Under the restricted app role with a front-desk identity
-it rotates that clinic's rows (RLS decides); the maintenance script gives it the migrator connection to cover every
+Role: the engine runs on whatever connection it is given. Since migration 0032 the restricted application role can no longer UPDATE a patient's
+identity columns or an identity token, so rotation runs ONLY where the maintenance script runs it: on the migrator connection, which covers every
 clinic. Plaintext exists only in this process's memory and is never logged or put in an error message.
 """
 
@@ -495,4 +495,139 @@ async def message_version_usage(conn: AsyncConnection, *, clinic_id: uuid.UUID |
         text(f"select body_key_version, count(*) from msg.messages where erased_at is null{scope} group by 1 order by 1"),
         {} if clinic_id is None else {"clinic": clinic_id},
     )
+    return {v: n for v, n in rows.all()}
+
+
+# ---- care-plan text (migration 0056) ------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#
+# ops.care_plans.plan_ct is encrypted with the clinic and the PLAN id bound in (careflow.messages.encrypt_plan_text), so it rotates exactly like a message body. The guard of that table has ONE transition for it
+# (plan_ct and plan_key_version change, the version MUST change, nothing else), reachable only on the migrator connection; each batch writes one ops.plan_rotation_batches row. An ERASED plan (plan_ct null) is
+# never selected: erasure is final. Clinical results hold only numbers and have no key.
+
+
+@dataclass
+class PlanRotationReport:
+    from_version: int
+    to_version: int
+    batches: int = 0
+    plans_rotated: int = 0
+    batch_keys: list[str] = field(default_factory=list)
+
+
+@dataclass
+class PlanVerifyReport:
+    to_version: int
+    plans_checked: int = 0
+    unreadable: list[uuid.UUID] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        return not self.unreadable
+
+
+def _plan_ids(clinic_id: uuid.UUID, plan_id: uuid.UUID) -> dict:
+    return {"clinic_id": clinic_id, "thread_id": plan_id, "message_id": uuid.uuid5(plan_id, "care-plan-text")}
+
+
+def _plan_batch_key(from_v: int, to_v: int, clinic_id: uuid.UUID, origin: str, first: uuid.UUID, last: uuid.UUID) -> str:
+    return f"rotate-plans:v{from_v}->v{to_v}:{clinic_id}:{origin}:{first}:{last}"
+
+
+async def plans_table_has_text(conn: AsyncConnection) -> bool:
+    """False before migration 0056 is applied (no erased_at column yet), so the CLI can say so instead of failing."""
+    return bool((await conn.execute(text("select exists (select 1 from information_schema.columns where table_schema = 'ops' and table_name = 'care_plans' and column_name = 'erased_at')"))).scalar_one())
+
+
+async def rotate_plan_texts(
+    conn: AsyncConnection,
+    vault: DemographicVault,
+    *,
+    from_version: int,
+    to_version: int,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+    clinic_id: uuid.UUID | None = None,
+    commit_each_batch: bool = False,
+) -> PlanRotationReport:
+    check_versions(vault, from_version, to_version)
+    if not isinstance(batch_size, int) or isinstance(batch_size, bool) or not 1 <= batch_size <= MAX_BATCH_SIZE:
+        raise RotationError(f"batch_size must be between 1 and {MAX_BATCH_SIZE}")
+    await require_rls_bypass(conn)
+    report = PlanRotationReport(from_version, to_version)
+    scope = "" if clinic_id is None else " and clinic_id = :clinic"
+    groups = (
+        await conn.execute(
+            text(f"select distinct clinic_id, origin from ops.care_plans where erased_at is null and plan_key_version = :f{scope} order by clinic_id, origin"),
+            {"f": from_version, **({} if clinic_id is None else {"clinic": clinic_id})},
+        )
+    ).all()
+    if commit_each_batch:
+        await conn.commit()
+    for group_clinic, origin in groups:
+        while True:
+            async with conn.begin_nested():
+                rows = (
+                    await conn.execute(
+                        text("select id, plan_ct from ops.care_plans where clinic_id = :c and origin = :o and erased_at is null and plan_key_version = :f order by id limit :n for update"),
+                        {"c": group_clinic, "o": origin, "f": from_version, "n": batch_size},
+                    )
+                ).all()
+                if not rows:
+                    break
+                for row in rows:
+                    ids = _plan_ids(group_clinic, row.id)
+                    try:
+                        plain = vault.decrypt_message_body(bytes(row.plan_ct), key_version=from_version, **ids)
+                        fresh = vault.encrypt_message_body(plain, key_version=to_version, **ids)
+                        if vault.decrypt_message_body(fresh, key_version=to_version, **ids) != plain:
+                            raise RotationError("re-encrypted plan text did not read back identically")
+                    except (CryptoError, RotationError) as exc:
+                        raise RotationError(f"care plan {row.id}: {type(exc).__name__}: {exc}") from exc  # the id only, never the text
+                    await conn.execute(text("update ops.care_plans set plan_ct = :ct, plan_key_version = :t where id = :i"), {"ct": fresh, "t": to_version, "i": row.id})
+                key = _plan_batch_key(from_version, to_version, group_clinic, origin, rows[0].id, rows[-1].id)
+                ledgered = await conn.execute(
+                    text(
+                        "insert into ops.plan_rotation_batches (clinic_id, origin, from_version, to_version, plans_rotated, first_plan_id, last_plan_id, idempotency_key) "
+                        "values (:c, :o, :f, :t, :n, :first, :last, :k) on conflict (idempotency_key) do nothing"
+                    ),
+                    {"c": group_clinic, "o": origin, "f": from_version, "t": to_version, "n": len(rows), "first": rows[0].id, "last": rows[-1].id, "k": key},
+                )
+            report.batches += 1
+            report.plans_rotated += len(rows)
+            if ledgered.rowcount:
+                report.batch_keys.append(key)
+            if commit_each_batch:
+                await conn.commit()
+    return report
+
+
+async def verify_plan_texts(conn: AsyncConnection, vault: DemographicVault, *, to_version: int, clinic_id: uuid.UUID | None = None, batch_size: int = DEFAULT_BATCH_SIZE) -> PlanVerifyReport:
+    if to_version not in vault.key_versions:
+        raise UnknownKeyVersionError(f"no key loaded for key_version {to_version!r}")
+    await require_rls_bypass(conn)
+    report = PlanVerifyReport(to_version)
+    after = uuid.UUID(int=0)
+    scope = "" if clinic_id is None else " and clinic_id = :clinic"
+    while True:
+        rows = (
+            await conn.execute(
+                text(f"select id, clinic_id, plan_ct from ops.care_plans where erased_at is null and plan_key_version = :t and id > :after{scope} order by id limit :n"),
+                {"t": to_version, "after": after, "n": batch_size, **({} if clinic_id is None else {"clinic": clinic_id})},
+            )
+        ).all()
+        if not rows:
+            return report
+        for row in rows:
+            report.plans_checked += 1
+            try:
+                vault.decrypt_message_body(bytes(row.plan_ct), key_version=to_version, **_plan_ids(row.clinic_id, row.id))
+            except DecryptionError:
+                report.unreadable.append(row.id)
+        after = rows[-1].id
+
+
+async def plan_version_usage(conn: AsyncConnection, *, clinic_id: uuid.UUID | None = None) -> dict[int, int]:
+    """Non-erased care-plan texts on each key_version: the third half of the retirement checklist (patients, messages, plans). Refuses over a connection that does not bypass RLS."""
+    await require_rls_bypass(conn)
+    scope = "" if clinic_id is None else " and clinic_id = :clinic"
+    rows = await conn.execute(text(f"select plan_key_version, count(*) from ops.care_plans where erased_at is null{scope} group by 1 order by 1"), {} if clinic_id is None else {"clinic": clinic_id})
     return {v: n for v, n in rows.all()}

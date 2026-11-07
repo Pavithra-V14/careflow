@@ -34,9 +34,9 @@ pytestmark = [
 APP_SCHEMAS = ["iam", "mpi", "sched", "clinical", "docs", "msg", "kb", "agents", "ai", "ops", "audit"]  # not the migration ledger
 # ai.model_registry (0015) is platform-wide by design: one model registry for every clinic, readable only by admin and queue_worker. Its own
 # access and write tests are tests/test_rls_ai_registry_live.py and tests/test_rls_spend_and_approval_live.py.
-NO_CLINIC_COLUMN = {"iam.clinics", "iam.accounts", "ai.model_registry"}
+NO_CLINIC_COLUMN = {"iam.clinics", "iam.accounts", "ai.model_registry", "msg.voice_preferences", "iam.consent_notices", "iam.consent_events"}  # voice_preferences is keyed by the patient ACCOUNT (owner-only policy); its isolation cases are in tests/test_voice_db_live.py
 # (child table, parent table): a foreign key between two clinic-scoped tables that does not carry clinic_id on both sides. Empty since 0014.
-KNOWN_GAPS: set[tuple[str, str]] = set()
+KNOWN_GAPS: set[tuple[str, str]] = set()  # (0047 pinned care_review_samples to its decision's clinic)
 
 
 def _u() -> uuid.UUID:

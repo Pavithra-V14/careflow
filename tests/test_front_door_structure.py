@@ -85,14 +85,14 @@ def test_no_model_chooses_the_path_routing_functions_read_only_the_state():
 # ---- one agent, no fourth, no Care Journey while the flag is off -----------------------------------------------------------------------------
 
 
-def test_the_inventory_is_the_four_agents_of_the_spec_and_only_front_door_is_built():
+def test_the_inventory_is_the_four_agents_of_the_spec_and_only_front_door_and_scheduling_are_built():
     assert AGENT_INVENTORY == ("front_door", "scheduling", "care_journey", "visit_readiness")
-    assert BUILT_AGENTS == ("front_door",) and agents_to_build({}) == ("front_door",)
+    assert BUILT_AGENTS == ("front_door", "scheduling") and agents_to_build({}) == ("front_door", "scheduling")
 
 
 def test_no_other_graph_is_defined_anywhere_in_the_package():
     graph_makers = sorted(p.name for p in (ROOT / "careflow").rglob("*.py") if re.search(r"\bStateGraph\(", p.read_text(encoding="utf-8")))
-    assert graph_makers == ["front_door.py"]  # a second StateGraph is a fourth agent (or an unreviewed graph)
+    assert graph_makers == ["care_journey.py", "front_door.py", "scheduling_graph.py", "visit_readiness.py"]  # a fourth StateGraph is another agent (or an unreviewed graph); tests/test_scheduling_graph_structure.py and tests/test_care_journey_structure.py and tests/test_visit_readiness_structure.py gate the others
 
 
 def test_no_care_journey_scheduling_or_readiness_node_exists_in_the_front_door():
@@ -100,12 +100,12 @@ def test_no_care_journey_scheduling_or_readiness_node_exists_in_the_front_door()
         assert not re.search(r"care|journey|schedul|readiness|book", name), name
 
 
-@pytest.mark.parametrize("flag", ["FEATURE_CARE_JOURNEY", "FEATURE_VISIT_READINESS"])
-def test_a_feature_flag_on_for_an_agent_that_does_not_exist_fails_loudly_and_off_is_the_default(flag):
-    assert agents_to_build({flag: "false"}) == ("front_door",) and agents_to_build({}) == ("front_door",)
+@pytest.mark.parametrize(("flag", "agent"), [("FEATURE_CARE_JOURNEY", "care_journey"), ("FEATURE_VISIT_READINESS", "visit_readiness")])
+def test_a_flagged_agent_is_built_only_with_its_flag_on_and_off_is_the_default(flag, agent):
+    assert agents_to_build({flag: "false"}) == ("front_door", "scheduling") and agents_to_build({}) == ("front_door", "scheduling")
     for value in ("1", "true", "TRUE", "yes", "on"):
-        with pytest.raises(FrontDoorError):
-            agents_to_build({flag: value})
+        assert agents_to_build({flag: value}) == ("front_door", "scheduling", agent)
+    assert agents_to_build({"FEATURE_CARE_JOURNEY": "1", "FEATURE_VISIT_READINESS": "1"}) == ("front_door", "scheduling", "care_journey", "visit_readiness")
 
 
 def test_a_graph_without_a_checkpointer_cannot_be_built_and_hosted_tracing_is_refused():

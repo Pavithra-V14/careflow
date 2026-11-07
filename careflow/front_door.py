@@ -44,6 +44,7 @@ environment (CLAUDE.md rule 7: patient data leaves the trust boundary only throu
 
 import hashlib
 import os
+import re
 import uuid
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
@@ -65,6 +66,7 @@ from careflow.referral import (
     screen_referral,
 )
 from careflow.retrieval import CardRetriever
+from careflow.text_guard import mask_pii, scan_text
 
 RECURSION_LIMIT: Final = 40  # §7.3: 40 steps per run
 REVIEW_DECISIONS: Final = ("approve", "edit", "reject")
@@ -114,7 +116,7 @@ def hold_role_for(status: str) -> str:
 
 STATUSES: Final = (
     "started", "red_flag_escalated", "held_unassessable", "extraction_unavailable", "needs_front_desk", "identity_resolved", "matched",
-    "triage_proposed", "reviewed", "letter_unreadable", "identity_conflict",
+    "triage_proposed", "reviewed", "letter_unreadable", "identity_conflict", "held_suspect_text",
 )
 
 
@@ -156,7 +158,7 @@ class HoldTaskWriter(Protocol):
 
 class ReviewRecorder(Protocol):
     async def record(
-        self, conn: AsyncConnection, *, proposal_id: uuid.UUID, clinic_id: uuid.UUID, decision: str, reviewer_id: uuid.UUID, idempotency_key: str
+        self, conn: AsyncConnection, *, proposal_id: uuid.UUID, clinic_id: uuid.UUID, decision: str, reviewer_id: uuid.UUID, idempotency_key: str, reason_code: str | None = None
     ) -> None: ...
 
 
@@ -223,8 +225,26 @@ def thread_id_for(document_id: uuid.UUID) -> str:
     return f"front_door:{document_id}"
 
 
+def _suspect_text(text_: str) -> FrontDoorState | None:
+    """The heuristic injection scan (careflow/text_guard.py). A suspect, unscannable or oversized letter is HELD for a nurse with closed reason words: when unsure, hold, never pass. It runs AFTER the
+    deterministic red-flag rules (it can only add a hold, never clear or lower anything) and before any model reads the letter."""
+    scan = scan_text(text_)
+    if scan.suspect:
+        return {"status": "held_suspect_text", "reasons": list(scan.reasons)}
+    return None
+
+
 def _digest(*parts: str) -> str:
     return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
+
+
+
+async def _letter_text(texts: Any, document_id: uuid.UUID, origin: str) -> str:
+    """The letter text. A text source may offer `text_for_origin` (the DEMO source does, to make a canary's fabricated letter for origin `canary`); every other source is asked the plain way."""
+    by_origin = getattr(texts, "text_for_origin", None)
+    if by_origin is not None:
+        return await by_origin(document_id, origin)
+    return await texts.text_for(document_id)
 
 
 def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[str, str] | None = None):
@@ -240,7 +260,7 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
         document_id, _ = _ids(state)
         async with deps.session() as conn:
             try:
-                text_ = await deps.texts.text_for(document_id)
+                text_ = await _letter_text(deps.texts, document_id, state["origin"])
             except ExtractionNeedsManual as exc:
                 return _unavailable(exc)
             try:
@@ -252,6 +272,9 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
                 return {"status": "letter_unreadable", "reasons": ["empty_letter"]}
         if screened.result is not None:
             return {"status": screened.result.status, "reasons": list(screened.result.reasons)}
+        held = _suspect_text(text_)
+        if held is not None:
+            return held
         return {"status": "started", "reasons": []}
 
     async def resolve_identity(state: FrontDoorState) -> FrontDoorState:
@@ -259,9 +282,12 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
         document_id, _ = _ids(state)
         async with deps.session() as conn:
             try:
-                text_ = await deps.texts.text_for(document_id)
+                text_ = await _letter_text(deps.texts, document_id, state["origin"])
             except ExtractionNeedsManual as exc:
                 return _unavailable(exc)
+            held = _suspect_text(text_)  # a resume can land here without passing through `screen`: the extractor must not read a suspect letter
+            if held is not None:
+                return held
             result = await process_referral(conn, deps.engine, deps.extractor, deps.ingestor, document_id, text_, profile=deps.profile)  # type: ignore[arg-type]
         update: FrontDoorState = {"status": result.status, "reasons": list(result.reasons)}
         if result.identity is not None:
@@ -274,14 +300,18 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
         # Rules first on EVERY path, including a resume that lands here after a crash: the retriever embeds the letter text with a model.
         async with deps.session() as conn:
             try:
-                text_ = await deps.texts.text_for(document_id)
+                text_ = await _letter_text(deps.texts, document_id, state["origin"])
             except ExtractionNeedsManual as exc:
                 return _unavailable(exc)
             screened = await screen_referral(conn, deps.engine, document_id, text_, profile=deps.profile)  # type: ignore[arg-type]
         if screened.clearance is None:
             assert screened.result is not None
             return {"status": screened.result.status, "reasons": list(screened.result.reasons)}
-        found = await deps.retriever.retrieve(text_, scope=deps.retrieval_scope)
+        held = _suspect_text(text_)
+        if held is not None:
+            return held
+        # The retriever embeds the letter with a model: it receives the MASKED letter (no phone, e-mail, date or labelled name), not the original (BUILD-SPEC 11.3).
+        found = await deps.retriever.retrieve(mask_pii(text_).text, scope=deps.retrieval_scope)
         return {
             "status": "matched",
             "abstained": found.abstained,
@@ -321,15 +351,22 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
             uuid.UUID(answer["reviewer_id"])
         except ValueError:
             raise FrontDoorError("a review needs a decision and a reviewer") from None
-        return {"decision": {"decision": answer["decision"], "reviewer_id": answer["reviewer_id"]}}
+        decision = {"decision": answer["decision"], "reviewer_id": answer["reviewer_id"]}
+        reason = answer.get("reason_code")
+        if reason is not None:
+            if not isinstance(reason, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,59}", reason):
+                raise FrontDoorError("a review needs a decision and a reviewer")
+            decision["reason_code"] = reason  # a picklist word (12.2), checked against the clinic's list by the route before the run resumes
+        return {"decision": decision}
 
     async def apply_review(state: FrontDoorState) -> FrontDoorState:
         assert_tracing_off()  # also at run time: the environment can change after the graph was built
         document_id, clinic_id = _ids(state)
         async with deps.session() as conn:
+            extra = {"reason_code": state["decision"]["reason_code"]} if state["decision"].get("reason_code") else {}
             await deps.recorder.record(
                 conn, proposal_id=uuid.UUID(state["proposal_id"]), clinic_id=clinic_id, decision=state["decision"]["decision"],
-                reviewer_id=uuid.UUID(state["decision"]["reviewer_id"]), idempotency_key=f"review:{document_id}",
+                reviewer_id=uuid.UUID(state["decision"]["reviewer_id"]), idempotency_key=f"review:{document_id}", **extra,
             )
         return {"status": "reviewed"}
 
@@ -386,7 +423,7 @@ def initial_state(document_id: uuid.UUID, clinic_id: uuid.UUID, origin: str) -> 
 # ---- the agent inventory (§1, §4) ---------------------------------------------------------------------------------------------------------------
 
 AGENT_INVENTORY: Final = ("front_door", "scheduling", "care_journey", "visit_readiness")  # the four agents of §1, in build order
-BUILT_AGENTS: Final = ("front_door",)
+BUILT_AGENTS: Final = ("front_door", "scheduling")
 
 
 def feature_flags(environ: dict[str, str] | None = None) -> dict[str, bool]:
@@ -395,10 +432,7 @@ def feature_flags(environ: dict[str, str] | None = None) -> dict[str, bool]:
 
 
 def agents_to_build(environ: dict[str, str] | None = None) -> tuple[str, ...]:
-    """The agent graphs this process may build. A flag that is ON for an agent whose graph does not exist yet is an error, never a silent no-op."""
+    """The agent graphs this process may build, in build order. Care Journey and Visit Readiness are built only with their own flag on (each off by default; Visit Readiness comes after Care Journey, 22)."""
     flags = feature_flags(environ)
-    asked = [name for name, on in (("care_journey", flags["FEATURE_CARE_JOURNEY"]), ("visit_readiness", flags["FEATURE_VISIT_READINESS"])) if on]
-    if asked:
-        raise FrontDoorError(f"a feature flag is on for an agent that is not built yet: {', '.join(asked)}")
-    return BUILT_AGENTS
-
+    extra = tuple(name for name, on in (("care_journey", flags["FEATURE_CARE_JOURNEY"]), ("visit_readiness", flags["FEATURE_VISIT_READINESS"])) if on)
+    return (*BUILT_AGENTS, *extra)

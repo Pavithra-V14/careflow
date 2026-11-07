@@ -95,11 +95,12 @@ def test_a_token_issued_by_the_real_auth_is_es256_with_a_kid_the_real_jwks_serve
 def test_the_app_accepts_a_real_token_and_rejects_a_tampered_copy(real_user):
     user_id, clinic, email, password = real_user
     token = _sign_in(email, password)
-    app = create_app(Settings(supabase_url=ENV["SUPABASE_URL"], database_url_app=ENV["DATABASE_URL_APP"], supabase_jwks_url=ENV.get("SUPABASE_JWKS_URL") or None))
+    app = create_app(Settings(_env_file=None, supabase_url=ENV["SUPABASE_URL"], database_url_app=ENV["DATABASE_URL_APP"], supabase_jwks_url=ENV.get("SUPABASE_JWKS_URL") or None))
     with TestClient(app, raise_server_exceptions=False) as client:
         ok = client.get("/v1/iam/me", headers={"Authorization": f"Bearer {token}"})
         assert ok.status_code == 200, ok.text
-        assert ok.json() == {"account_id": str(user_id), "account_type": "staff", "status": "active", "roles": [{"clinic_id": str(clinic), "role": "nurse", "clinic_name": "Real Token Clinic", "clinic_origin": "test"}]}
+        assert ok.json() == {"account_id": str(user_id), "account_type": "staff", "status": "active", "roles": [{"clinic_id": str(clinic), "role": "nurse", "clinic_name": "Real Token Clinic", "clinic_origin": "test"}], "operating_profile": ok.json()["operating_profile"]}
+        assert ok.json()["operating_profile"] in ("demo", "clinical", None)
         header, payload, signature = token.split(".")
         flipped = signature[:-2] + ("AA" if signature[-2:] != "AA" else "BB")
         assert client.get("/v1/iam/me", headers={"Authorization": f"Bearer {header}.{payload}.{flipped}"}).status_code == 401

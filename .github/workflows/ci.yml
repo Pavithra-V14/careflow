@@ -21,12 +21,12 @@ name: CI
 
 on:
   # A change that touches ONLY the frontend (frontend/** and its own workflow) does not run this backend workflow: the frontend has its own (frontend.yml). A change that touches anything else
-  # still runs everything. NOTE for branch protection: a frontend-only pull request never reports the required `test` check from this workflow.
+  # still runs everything. The frontend's own notes (docs/frontend-*.md) count as frontend-only; docs/** in general does NOT (offline tests read the docs). NOTE for branch protection: a frontend-only pull request never reports the required `test` check from this workflow.
   pull_request:
-    paths-ignore: ['frontend/**', '.github/workflows/frontend.yml']
+    paths-ignore: ['frontend/**', '.github/workflows/frontend.yml', 'docs/frontend-*.md']
   push:
     branches: [main]
-    paths-ignore: ['frontend/**', '.github/workflows/frontend.yml']
+    paths-ignore: ['frontend/**', '.github/workflows/frontend.yml', 'docs/frontend-*.md']
 
 # A newer push to the same branch supersedes an older run of it, so superseded runs stop instead of piling up. Runs of DIFFERENT
 # branches still share ONE hosted CI database: each live shard below has its own, job-level group so two runs never overlap on the same shard
@@ -94,6 +94,22 @@ jobs:
       - name: OpenAPI snapshot is current (BUILD-SPEC.md §21)
         run: uv run python scripts/export_openapi.py --check
 
+      - name: Generated dashboard and alert rules are current (metrics-catalog.yaml)
+        run: uv run python scripts/generate_dashboard.py --check
+
+      # The gate scorecard (BUILD-SPEC.md 14.3): prints MEASURED / NOT MEASURED / FAILED per gate. --report-only because the gold sets do not exist yet, so every gate honestly reads NOT MEASURED;
+      # a FAILED gate (evidence that says so) still fails this step. Drop --report-only once the evidence file is produced in CI.
+      - name: Gate scorecard
+        run: uv run python scripts/gate_scorecard.py --report-only
+
+      # The gold set (BUILD-SPEC.md 14.1): a malformed case, or a frozen held-out case that was edited or removed, FAILS this step (the held-out split is never retuned). Empty today: no clinician has reviewed a case.
+      - name: Gold set is well-formed and the held-out split is frozen
+        run: uv run python scripts/gold_freeze.py
+
+      # The pre-deployment go/no-go (14.6), REPORT ONLY: the answer is NO-GO until real evidence exists, and that is printed, not hidden.
+      - name: Pre-deployment go/no-go (report only)
+        run: uv run python scripts/predeploy_check.py --report-only
+
       - name: "Offline tests (a skipped test is a failure)"
         run: |
           set -o pipefail
@@ -159,6 +175,8 @@ jobs:
       cancel-in-progress: false
     strategy:
       fail-fast: false
+      # AT MOST SIX shards at once: they share ONE hosted CI database behind a session-mode pooler that allows 15 clients (run 42336238364: eight at once gave EMAXCONNSESSION). The other two queue and start as soon as a slot frees.
+      max-parallel: 6
       matrix:
         include:
           # Four shards since 2026-10-30 (PR #9's run measured 47:00, 46:56 and 38:32 with the role matrix at 30 minutes in shard 1, and the matrix grows with every route). The role matrix is the
@@ -166,29 +184,31 @@ jobs:
           # every matrix test exactly once. Each part seeds its own clinics. Every shard prints per-file times (SHARD-TIME lines) so the next rebalance uses measurements; the targets below
           # are seconds from that run (matrix parts estimated at half of a matrix grown by this batch's routes). tests/test_ci_shards.py requires every live test file to appear in
           # exactly one shard, except the matrix, which must appear as complete parts.
-          - shard: 1  # about 43 min (run 41089472168 measured 55 min with identity and rules in it): matrix part 1 1964 s + rotation 319 + read 121 + screen 120 + binding 44 + staff roles 19
-            matrix_part: "1/2"
+          - shard: 1  # run 42258778879 (2026-11-06): the two-part matrix hit the 60-minute limit with the 0047-0050 routes, so the matrix is now THREE parts (shards 1, 2, 7); about 2200 s of matrix + 240
+            matrix_part: "1/3"
             files: >-
               tests/test_api_role_matrix.py
               tests/test_api_screen_message_live.py
               tests/test_api_read_message_live.py
+          - shard: 2  # matrix part 2 of 3 + rotation 319 + binding 44 + staff roles 19
+            matrix_part: "2/3"
+            files: >-
+              tests/test_api_role_matrix.py
               tests/test_patient_binding_live.py
               tests/test_staff_roles_concurrency_live.py
               tests/test_rotation_live.py
-          - shard: 2  # about 37 min: matrix part 2 (about 1200 s) + queue 370 + spend 362 + scheduling 299
-            matrix_part: "2/2"
+          - shard: 7  # matrix part 3 of 3 + queue 370 + spend 362 + scheduling 299
+            matrix_part: "3/3"
             files: >-
               tests/test_api_role_matrix.py
               tests/test_queue_live.py
               tests/test_rls_spend_and_approval_live.py
               tests/test_scheduling_live.py
-          - shard: 3  # about 44 min: referrals 1101 + identity 466 + mpi worker 263 + checkpoints 193 + triage 191 + docs 180 + msg 180 + real token 13 + storage policies 18 (measured on run 41089472168)
+          - shard: 3  # about 41 min (run 41842559711 measured 51.0 min job time, 2745 s of tests: referrals 1316 + identity 483 + mpi worker 315 + triage 234 + checkpoints 225 + msg 212 + docs 209 + real token 32 + storage policies 20; mpi worker and triage moved to shard 6 on 2026-11-04, about 550 s). The secret key reaches THIS shard only (storage policies and real token stay here).
             matrix_part: ""
             files: >-
               tests/test_api_referrals_live.py
               tests/test_identity_live.py
-              tests/test_rls_mpi_worker_live.py
-              tests/test_rls_triage_live.py
               tests/test_rls_checkpoints_live.py
               tests/test_rls_docs_live.py
               tests/test_rls_msg_live.py
@@ -212,11 +232,35 @@ jobs:
               tests/test_rls_child_tables_live.py
               tests/test_rules_live.py
               tests/test_phase2_e2e_live.py
-          - shard: 5  # the ACTIVE ROLE (docs/design/active-role.md): the database tests (never committed) and the header dimension of every staff route through the role matrix (its own seeded world). Estimated 15-25 min: measure on its first run.
-            matrix_part: ""
+          - shard: 5  # the ACTIVE ROLE (docs/design/active-role.md): the database tests (never committed) and PART 1 of 3 of the header dimension of every staff route (its own seeded world). Runs 41652369869 and 42258778879 measured 58 and 52 to 57 minutes for two parts, so it is three parts (shards 5, 6, 8).
+            matrix_part: "1/3"
             files: >-
               tests/test_active_role_live.py
               tests/test_active_role_matrix_live.py
+          - shard: 6  # PART 2 of 3 of the header dimension, plus the mpi worker and triage RLS files moved from shard 3
+            matrix_part: "2/3"
+            files: >-
+              tests/test_active_role_matrix_live.py
+              tests/test_rls_mpi_worker_live.py
+              tests/test_rls_triage_live.py
+              tests/test_staff_accounts_live.py
+              tests/test_erasure_live.py
+              tests/test_plan_erasure_rotation_live.py
+              tests/test_backfill_durable_db_live.py
+              tests/test_canary_document_db_live.py
+              tests/test_care_gaps_db_live.py
+              tests/test_voice_db_live.py
+              tests/test_alerts_live.py
+          - shard: 8  # PART 3 of 3 of the header dimension, plus the Phase 11 database files (migrations 0047 to 0050)
+            matrix_part: "3/3"
+            files: >-
+              tests/test_active_role_matrix_live.py
+              tests/test_voice_admin_db_live.py
+              tests/test_care_gap_producers_db_live.py
+              tests/test_patient_portal_db_live.py
+              tests/test_care_journey_db_live.py
+              tests/test_phase12_db_live.py
+              tests/test_visit_readiness_db_live.py
     env:
       CAREFLOW_ENV: ci
       CAREFLOW_PROFILE: demo
@@ -277,6 +321,76 @@ jobs:
       - name: "Per-file times, shard ${{ matrix.shard }}"
         if: always()
         run: uv run python scripts/ci_shard_times.py shard-times.xml --label "shard-${{ matrix.shard }}"
+
+      # The JUnit XML of this shard, kept so the gate-scorecard job can turn the tests that already exist into gate evidence (careflow/gate_evidence.py).
+      - name: "Keep this shard's JUnit XML"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-shard-${{ matrix.shard }}
+          path: shard-times.xml
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Dependency vulnerability audit (BUILD-SPEC.md 21; owner decision 2026-11-04). REPORT-ONLY for now: `continue-on-error`, and the `test` job below does not depend on it. It audits the exact versions in
+  # uv.lock against the public advisory database (pip-audit, pinned; the only thing sent out is package names and versions, no patient data). Stage two, after the first run's output has been read:
+  # fail the build on a vulnerability that has a fix version, with a reviewed ignore list (reason and date per entry). pip-audit reports no severity, so "high" is judged from the advisory text.
+  dependency-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Export the locked versions
+        run: |
+          python -m pip install --upgrade pip uv
+          uv export --frozen --no-hashes --no-emit-project > audit-requirements.txt
+
+      - name: pip-audit (report only)
+        run: |
+          set +e
+          uvx --from pip-audit==2.9.0 pip-audit -r audit-requirements.txt --no-deps --disable-pip --progress-spinner off 2>&1 | tee audit.out
+          status=${PIPESTATUS[0]}
+          { echo "### Dependency audit (report only)"; echo; echo '```'; cat audit.out; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          echo "pip-audit exit status: $status (report only; not a failure yet)"
+          exit 0
+
+  # The gate scorecard fed by real test results (BUILD-SPEC.md 14.3; docs/design/remaining-work.md A11). REPORT ONLY: `continue-on-error`, not needed by `test`. The three gates that already have CI tests
+  # (clinic isolation, double booking, idempotency) read MEASURED when their files ran and passed; every gold-set gate stays NOT MEASURED.
+  gate-scorecard:
+    if: always()
+    needs: [live]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Install dependencies from the lockfile
+        run: |
+          python -m pip install --upgrade pip uv
+          uv sync --frozen
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: junit-shard-*
+          path: junit
+          merge-multiple: false
+
+      - name: Gate evidence and scorecard (report only)
+        run: |
+          uv run python scripts/gate_evidence.py gate-evidence.json junit/*/shard-times.xml
+          uv run python scripts/gate_scorecard.py gate-evidence.json --report-only | tee scorecard.out
+          { echo "### Gate scorecard (report only)"; echo; echo '```'; cat scorecard.out; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
   # The single required check. It is named `test`, as before, so branch protection does not change: it passes only if EVERY shard passed.
   test:

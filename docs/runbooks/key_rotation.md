@@ -97,8 +97,8 @@ python scripts/rotate_keys.py status
 recorded version and that the `N+1` identity tokens exist and equal what the decrypted data derives. It must report
 `0 unreadable, 0 token problems` (exit 0). Anything else: stop, do not retire the old key, investigate.
 
-`status` must show **`0 ciphertext columns` for version `N` AND `0 message bodies` for version `N`**. If any remain (a patient
-registered, or a message posted, under `N` while you rotated), run step 3 again, then verify again.
+`status` must show **`0 ciphertext columns` for version `N` AND `0 message bodies` AND `0 care-plan texts` for version `N`**. If any remain (a patient
+registered, a message posted, or a care plan written, under `N` while you rotated), run step 3 again, then verify again.
 
 The message-body count is taken over the migrator connection and is **unscoped** (every clinic, every topic). The
 application role cannot be used for it: it cannot update messages, and under row-level security it sees only some topics,
@@ -115,8 +115,9 @@ test patient who already exists to confirm it is recognised as a match rather th
 ## 5. Retire the old key
 
 Wait a full release cycle, and confirm for that period that `status` still shows `0 ciphertext columns` on `N` **and
-`0 message bodies` on `N`**, and that no code path or job still constructs a vault pipeline or message encryption with
-`key_version=N`. A message body encrypted under a retired key is unrecoverable: this check is not optional.
+`0 message bodies` and `0 care-plan texts` on `N`**, and that no code path or job still constructs a vault pipeline or message encryption with
+`key_version=N`. A message body or care-plan text encrypted under a retired key is unrecoverable: this check is not optional.
+Care-plan texts (migration 0056) rotate with the same command; erased plans are skipped and counted nowhere. Clinical results hold only numbers and have no key.
 
 1. Remove `CAREFLOW_ENC_SECRET_V<N>` and `CAREFLOW_HMAC_SECRET_V<N>` from the platform manager, **both together**
    (the vault refuses a lone half).

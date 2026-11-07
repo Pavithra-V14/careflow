@@ -207,12 +207,12 @@ async def test_the_worker_cannot_update_or_delete_anything_in_mpi_and_cannot_wri
     assert await attempt(db, w, merge, c=a, m=near.patient_id, s=first.patient_id, cand=cand, u=w, k="m-worker") == "42501"
     assert await attempt(db, fd, merge, c=a, m=first.patient_id, s=near.patient_id, cand=cand, u=fd, k="m-fd") == 1  # a real pending merge, proposed by a person
     # positive controls: the same statements, as front desk, DO change rows, so a 0 for the worker means the policy filtered them
-    assert await attempt(db, fd, "update mpi.patients set name_key_version = name_key_version where id = :i", i=first.patient_id) == 1
+    assert await attempt(db, fd, "update mpi.patients set lock_version = lock_version where id = :i", i=first.patient_id) == 1  # (0032: the one column left)
     assert await attempt(db, fd, "update mpi.match_candidates set status = status where clinic_id = :c", c=a) == 1
     # the worker: nothing is updatable (RLS filters the rows; there is no error)
-    assert await attempt(db, w, "update mpi.patients set name_key_version = 2 where id = :i", i=first.patient_id) == 0
-    assert await attempt(db, w, "update mpi.patients set erased_at = now() where id = :i", i=first.patient_id) == 0
-    assert await attempt(db, w, "update mpi.identity_tokens set key_version = 2 where patient_id = :i", i=first.patient_id) == 0
+    assert await attempt(db, w, "update mpi.patients set lock_version = 2 where id = :i", i=first.patient_id) == 0
+    assert await attempt(db, w, "update mpi.patients set erased_at = now() where id = :i", i=first.patient_id) == "42501"  # no privilege on the column since 0032
+    assert await attempt(db, w, "update mpi.identity_tokens set key_version = 2 where patient_id = :i", i=first.patient_id) == "42501"  # tokens are no longer updatable (0032)
     assert await attempt(db, w, "update mpi.match_candidates set status = 'resolved', resolved_at = now() where clinic_id = :c", c=a) == 0
     assert await attempt(db, w, "update mpi.merges set status = 'active' where clinic_id = :c", c=a) == 0
     # no DELETE privilege exists on any of them

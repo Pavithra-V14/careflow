@@ -3,6 +3,7 @@ the CORS allowance, and the INVENTORY that fails on any new direct reader of iam
 tests/test_api_role_matrix.py and tests/test_active_role_live.py.
 """
 
+import inspect
 import json
 import re
 import uuid
@@ -13,6 +14,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from careflow import active_role
+from careflow import app as app_module
 from careflow.app import Settings, _begin_request, create_app, db_conn, verified_claims
 from careflow.auth import JWKSClient
 from careflow.cors import ALLOW_HEADERS
@@ -120,7 +122,7 @@ def _client(claims):
         raise AssertionError("the database was reached")
         yield
 
-    settings = Settings(supabase_url=PROJECT, database_url_app="postgresql://unused", step_up_max_age_seconds=300)
+    settings = Settings(_env_file=None, supabase_url=PROJECT, database_url_app="postgresql://unused", step_up_max_age_seconds=300)
     app = create_app(settings, jwks=JWKSClient(PROJECT + "/auth/v1/.well-known/jwks.json"), engine=object(), clock=lambda: NOW)  # type: ignore[arg-type]
     app.dependency_overrides[verified_claims] = fake_claims
     app.dependency_overrides[db_conn] = fake_db
@@ -164,6 +166,11 @@ ALLOWED = {
     "db/migrations/0016_spend_ledger_and_registry_approval.sql": "the approval trigger checks OTHER accounts (created_by, approved_by), not the caller; narrowing applies to checks about the caller only",
     "db/migrations/0024_worker_role_exclusive.sql": "the queue_worker exclusivity trigger: a property of the grants table itself, not of a request",
     "db/migrations/0028_active_role.sql": "the helpers that implement the active role",
+    "careflow/canary_injection.py": "lists the clinics where the signed-in WORKER holds queue_worker; it also checks iam.has_clinic_role (active-role aware) on every row, because the worker cannot read iam.clinics",
+    "careflow/producer_sweeps.py": "the same worker clinic list for the care-gap and sampler sweeps, also filtered through iam.has_clinic_role",
+    "db/migrations/0053_notice_lockdown_worker_results_two_person_autonomy.sql": "the approval function checks the PROPOSER (another account) still holds the role they proposed as; the caller is checked through iam.has_clinic_role",
+    "db/migrations/0054_autonomy_switch_admin_and_doctor.sql": "the same proposer check, for the corrected admin-and-doctor rule; the caller and the approver role go through iam.has_clinic_role (active-role aware)",
+    "db/migrations/0034_staff_account_management.sql": "the five staff-management functions: they change OTHER accounts' grants, and check the CALLER through iam.has_clinic_role (which honours the active role)",
 }
 
 
@@ -177,14 +184,16 @@ def test_only_the_listed_files_name_staff_roles():
     assert named <= set(ALLOWED), f"a new direct reader of iam.staff_roles (it would ignore the active role): {sorted(named - set(ALLOWED))}"
 
 
-def test_the_application_reads_staff_roles_in_exactly_one_place_the_me_route():
+def test_the_application_reads_staff_roles_in_exactly_two_places_the_me_route_and_the_admin_staff_list():
     text = (ROOT / "careflow" / "app.py").read_text(encoding="utf-8")
-    assert len(re.findall(r"iam\.staff_roles", text)) == 1
-    assert text.index("iam.staff_roles") < text.index("# ---- staff scheduling")  # and it is inside the /v1/iam/me handler, before the staff routes
+    assert len(re.findall(r"iam\.staff_roles", text)) == 2
+    assert text.index("iam.staff_roles") < text.index("# ---- staff scheduling")  # the first is inside the /v1/iam/me handler, before the staff routes
+    listing = inspect.getsource(app_module.list_staff_accounts)  # the second lists OTHER accounts' grants for an admin of the clinic, after the admin gate (it is not about the caller)
+    assert "iam.staff_roles" in listing and "await _admin_gate(" in listing and listing.index("await _admin_gate(") < listing.index("iam.staff_roles")
 
 
 def test_no_python_module_selects_from_staff_roles_except_the_two_allowed():
     for path in sorted((ROOT / "careflow").rglob("*.py")):
         rel = path.relative_to(ROOT).as_posix()
         if _mentions(path):
-            assert rel in {"careflow/app.py", "careflow/ops_checks.py"}, rel
+            assert rel in {"careflow/app.py", "careflow/ops_checks.py", "careflow/canary_injection.py", "careflow/producer_sweeps.py"}, rel  # (the last two list the clinics the WORKER serves, filtered through iam.has_clinic_role)

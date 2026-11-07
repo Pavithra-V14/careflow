@@ -291,8 +291,8 @@ async def test_erasure_guard_and_trigger_functions_are_not_executable_by_the_app
     fns = await db.fetch("select oid::regprocedure::text as f from pg_proc where pronamespace = 'msg'::regnamespace")
     assert len(fns) >= 5
     for fn in fns:
-        if fn["f"].startswith("msg.record_screening("):
-            continue  # the ONE function the application role may call (0013); everything else here is internal
+        if fn["f"].startswith(("msg.record_screening(", "msg.voice_sessions_for_admin(", "msg.read_voice_transcript(", "msg.purge_expired_voice_chunks(")):
+            continue  # the functions the application role may call: record_screening (0013) and the admin-only audited voice transcript functions (0047, each checks admin + aal2 inside); everything else here is internal
         assert not await db.fetchval("select has_function_privilege('careflow_app', $1, 'EXECUTE')", fn["f"]), fn["f"]
     assert await db.fetchval("select has_function_privilege('careflow_app', 'msg.record_screening(uuid,text,text,integer,text,jsonb,text)', 'EXECUTE')")
 
@@ -437,8 +437,16 @@ async def test_unknown_topic_is_refused(db):
     w = await seed(db)
     async with claims(db, w.people["nurse_a"]):
         patient = await new_patient(db, w.a)
-        assert await fails(db, thread_sql(w.a, patient, "readiness", w.people["nurse_a"])) == "23514"
-        assert await fails(db, message_sql(w.a, w.threads["care"], "readiness", w.people["nurse_a"])) == "23514"
+        assert await fails(db, thread_sql(w.a, patient, "marketing", w.people["nurse_a"])) == "23514"  # ('readiness' became a topic in migration 0050)
+        assert await fails(db, message_sql(w.a, w.threads["care"], "marketing", w.people["nurse_a"])) == "23514"
+
+
+async def test_the_readiness_topic_is_nurse_and_doctor_only(db):
+    w = await seed(db)
+    patient = await new_patient(db, w.a)
+    nurse, fd = w.people["nurse_a"], w.people["fd_a"]
+    assert (await attempts(db, nurse, [thread_sql(w.a, patient, "readiness", nurse)])) != [DENIED]  # a nurse may open a readiness thread
+    assert (await attempts(db, fd, [thread_sql(w.a, patient, "readiness", fd)])) == [DENIED]  # front desk may not: its topic allowlist is appointments and safety
 
 
 # =====================================================================================================================
@@ -648,7 +656,7 @@ async def test_append_only_trigger_blocks_edits_even_for_the_owner(db):
     assert await fails(db, "truncate msg.messages") == "0A000"
     # Naming the referencing table too gets past the foreign-key check and reaches the append-only triggers, which refuse it with
     # restrict_violation (both msg.messages and msg.screenings raise it). This keeps the trigger itself under test.
-    assert await fails(db, "truncate msg.messages, msg.screenings") == "23001"
+    assert await fails(db, "truncate msg.messages, msg.screenings, ops.visit_facts, ops.visit_readiness_answers") == "23001"  # (the visit readiness tables of 0052 reference msg.messages too, so they are named as well)
 
 
 async def test_erasure_transition_is_the_only_edit_and_changes_nothing_else(db):

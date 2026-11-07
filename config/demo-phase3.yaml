@@ -11,6 +11,11 @@
 # the demo would answer 503 on every view route without a placeholder; an explicit CAREFLOW_PATIENT_VIEW_* value in the environment always wins over these. They are privacy-throttle
 # stand-ins for the synthetic demo, not recommendations for a clinic.
 #
+# ALSO HERE (owner decision 2026-11-04): demo stand-ins for clinician items 23 and 24 (docs/design/clinician-sheet.md, section E): the revoke reasons, who re-checks, and how urgently. They are the
+# AI-drafted OPTIONS from that sheet used as demo values, NOT answers: the sheet's answer cells stay blank. The urgency is expressed in the demo priority levels above (DEMO-LEVEL-A is the highest).
+# Nothing for items 25 (closing a red-flag task) or 26 (editing a triage proposal) is here, and none may be added: their safe defaults are "no route closes one" and "edit is refused".
+# These values are NOT wired into the revoke route and will not be until the clinician answers items 23 and 24 (then built once, with the final list and any migration). There is no front-desk supervisor role and no admin alert today; adding either is a new role or feature and needs a design note and the user's OK.
+#
 # DELIBERATELY ABSENT, even for demo: red-flag rules, thresholds, emergency wording, protocol cards, unit synonyms, identity rules, the accept-confidence threshold.
 
 label: "DEMO ONLY - NOT A CLINICAL DECISION"
@@ -40,11 +45,42 @@ settings:
     value: standard
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
   scheduling_task_role:
-    value: front_desk
+    value: nurse
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  revoke_reasons:
+    value: ["wrong_person", "planted_or_suspect", "mistaken_click", "other"]
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  revoke_recheck_role:
+    value: admin
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  revoke_priority_by_reason:
+    value:
+      wrong_person: "DEMO-LEVEL-C"
+      planted_or_suspect: "DEMO-LEVEL-A"
+      mistaken_click: "DEMO-LEVEL-C"
+      other: "DEMO-LEVEL-C"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  revoke_admin_alert_reasons:
+    value: ["planted_or_suspect"]
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
   patient_view_max_opens_per_minute:
     value: 30
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
   patient_view_max_label_rows_per_minute:
     value: 200
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  triage_task_role:
+    value: nurse
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  triage_task_priority:
+    value: standard
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  hold_task_priority:
+    value: standard
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  dead_letter_task_priority:
+    value: standard
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  triage_mode:
+    value: assisted
     label: "DEMO ONLY - NOT A CLINICAL DECISION"

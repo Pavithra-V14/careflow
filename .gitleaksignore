@@ -9,3 +9,7 @@ be0532a4b81a1f981e8ba1dc2a69f81f84f709bf:careflow/app.py:generic-api-key:263
 # encryption to prove the text never reaches a log or exception. Not credentials; there is no key material in either line.
 9602949b968d9d4f05b495d8944599b33e6e01f7:tests/test_messages.py:generic-api-key:84
 53465ebb20cab9b98c207b4bf1fca077416ed045:tests/test_messages.py:generic-api-key:281
+# Reviewed 2026-11-05: a test constant named SECRET holding an invented sentence (renamed since); not a credential.
+d7075a019146848c5ff20927e8062bf69f1af81f:tests/test_reply_interpretation.py:generic-api-key:36
+# Reviewed 2026-11-07: the identifier idempotency_key in a route call (care plan creation), not a credential
+a5c5067291b175627f16838f15edc2d4cbe21ab6:careflow/app.py:generic-api-key:3994

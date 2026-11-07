@@ -54,7 +54,7 @@ from tests.test_api_role_matrix import (  # noqa: F401  (the fixtures are import
 )
 
 EXEMPT = {("GET", "/v1/iam/me")}  # the picker needs every grant: the header is ignored there on purpose
-ROUTES = sorted(set(MATRIX) - EXEMPT)
+ROUTES = sorted(k for k in set(MATRIX) - EXEMPT if not k[1].startswith("/v1/portal/"))  # patient routes carry no staff active-role header
 STEP_UP_ROUTES = {("POST", MERGES), ("POST", APPROVE), ("POST", UNMERGE)}
 FIXED = {"detail": "active role not available"}
 HEADER = active_role.HEADER
@@ -103,7 +103,7 @@ def single_role_identities(ids):  # noqa: F811
 
 
 # Cases whose expectation depends on WHICH PERSON acts, not on the role: an identity swap cannot reproduce them (the proposal's proposer is a fixed database row).
-IDENTITY_BOUND = ("SAME person",)
+IDENTITY_BOUND = ("SAME person", "cannot approve their own", "last administrator", "cannot suspend themselves")  # (the all-roles accounts are administrators and second approvers too, which changes who counts as "the last" or "the other" person)
 
 
 def fresh(ids, method, path):  # noqa: F811
@@ -201,7 +201,7 @@ def test_every_header_that_cannot_be_held_or_is_malformed_is_the_same_fixed_403_
 def test_on_a_step_up_route_the_header_syntax_comes_first_and_a_good_header_never_skips_the_step_up(client, ids, allroles, method, path):  # noqa: F811
     target = concrete(path)
     a = ids.clinic_a
-    not_stepped = bearer(mint(ids.allroles))  # a token with no aal / amr
+    not_stepped = bearer(mint(ids.allroles, aal=None, amr=None))  # a token with no aal / amr
     stepped = bearer(mint(ids.allroles, aal="aal2", amr=[{"method": "totp", "timestamp": int(time.time()) - 5}]))
     base = {"X-Idempotency-Key": _new_key()}
     bad = client.request(method, target, headers={**not_stepped, **base, HEADER: "garbage"}, json={})

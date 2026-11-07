@@ -81,7 +81,7 @@ async def test_free_text_and_anything_that_is_not_an_id_a_number_a_boolean_or_a_
 
 
 async def test_the_action_origin_key_and_tokens_are_closed():
-    for override in ({"action": "patient.erase"}, {"origin": "production"}, {"idempotency_key": "  "}, {"resource_type": "A merge"}, {"actor_role": "Front Desk"}):
+    for override in ({"action": "patient.delete"}, {"origin": "production"}, {"idempotency_key": "  "}, {"resource_type": "A merge"}, {"actor_role": "Front Desk"}):
         conn = Conn()
         with pytest.raises(AuditError):
             await write_audit(conn, details={}, **{**KW, **override})  # type: ignore[arg-type]
@@ -111,7 +111,9 @@ ROUTES = {
     "acknowledge_review_task": "review_task.acknowledge",
     "resolve_review_task": "review_task.resolve",
     "send_offer_route": "offer.send",
+    "interpret_reply_route": "offer.interpret_reply",
     "release_hold_route": "hold.release",
+    "mark_offer_delivered": "offer.mark_delivered",
     "search_patients": "patient.search",
     "open_patient_record": "patient.view",
     "patient_labels_route": "patient.view_labels",
@@ -138,9 +140,65 @@ async def test_each_human_decision_route_writes_its_audit_row_in_the_same_transa
     assert re.search(r"write_audit\(\s*conn,", source)
 
 
+SETUP_ROUTES = {
+    "create_location": "setup.create_location",
+    "create_provider": "setup.create_provider",
+    "create_visit_type": "setup.create_visit_type",
+    "create_slot": "setup.create_slot",
+}
+
+
+@pytest.mark.parametrize(("function", "action"), sorted(SETUP_ROUTES.items()))
+async def test_each_set_up_route_audits_through_the_one_helper_in_the_same_transaction(function, action):
+    source = inspect.getsource(getattr(app_module, function))
+    assert f'action="{action}"' in source and "await _setup_audit(" in source and source.index("await _setup_audit(") > source.index("await _setup_insert(")
+    helper = inspect.getsource(app_module._setup_audit)
+    assert "await write_audit(" in helper and 'idempotency_key=f"audit:' in helper and re.search(r"write_audit\(\s*conn,", helper)
+
+
+BACKFILL_ROUTES = {"start_backfill": "backfill.start", "decide_backfill": "backfill.decide", "reply_backfill": "backfill.reply"}
+
+
+@pytest.mark.parametrize(("function", "action"), sorted(BACKFILL_ROUTES.items()))
+async def test_each_backfill_route_audits_through_the_one_helper_after_the_step_in_the_same_transaction(function, action):
+    source = inspect.getsource(getattr(app_module, function))
+    assert f'action="{action}"' in source and "await _backfill_audit(" in source and source.index("await _backfill_audit(") > source.index("await runner.")
+    helper = inspect.getsource(app_module._backfill_audit)
+    assert "await write_audit(" in helper and 'idempotency_key=f"audit:' in helper and re.search(r"write_audit\(\s*conn,", helper)
+
+
+CONSOLE_ROUTES = {"acknowledge_alert": "alert.acknowledge"}
+PRODUCER_ROUTES = {
+    "set_autonomy": ("autonomy.set", "set_mode"), "create_care_plan": ("care_plan.create", "create_plan"), "start_visit_readiness": ("readiness.start", "start"), "propose_autonomous_mode": ("autonomy.propose", "propose_autonomous"), "reply_visit_readiness": ("readiness.reply", "reply"), "record_result": ("result.record", "record_result"), "confirm_care_plan": ("care_plan.confirm", "confirm"), "create_care_episode": ("care_gap.episode_create", "create_episode"), "record_rule_done": ("care_gap.rule_done", "record_done"),
+    "recheck_care_sample": ("care_gap.sample_recheck", "recheck_sample"),
+}  # (migration 0048)
+CARE_GAP_ROUTES = {"record_barrier": ("care_gap.barrier_record", "record_barrier"), "resolve_barrier": ("care_gap.barrier_resolve", "resolve_barrier")}
+
+
+@pytest.mark.parametrize(("function", "action"), sorted(CONSOLE_ROUTES.items()))
+async def test_acknowledging_an_alert_audits_in_the_same_transaction_after_the_update(function, action):
+    source = inspect.getsource(getattr(app_module, function))
+    assert f'action="{action}"' in source and "await write_audit(" in source and source.index("await write_audit(") > source.index("update ops.alerts")
+
+
+@pytest.mark.parametrize(("function", "spec"), sorted(PRODUCER_ROUTES.items()))
+async def test_the_producer_routes_audit_in_the_same_transaction_after_the_write(function, spec):
+    action, helper = spec
+    source = inspect.getsource(getattr(app_module, function))
+    assert f'action="{action}"' in source and "await write_audit(" in source and source.index("await write_audit(") > source.index(f".{helper}(")
+
+
+@pytest.mark.parametrize(("function", "spec"), sorted(CARE_GAP_ROUTES.items()))
+async def test_the_care_gap_write_routes_audit_in_the_same_transaction_after_the_write(function, spec):
+    action, helper = spec
+    source = inspect.getsource(getattr(app_module, function))
+    assert f'action="{action}"' in source and "await write_audit(" in source and source.index("await write_audit(") > source.index(f"care_gap_sql.{helper}(")
+
+
 async def test_every_action_has_a_route_or_is_listed_as_pending():
     pending = {"clinical.tool_call"}  # written by careflow/mcp_kit.py `audited` (no clinical server is mounted yet)
-    assert set(ROUTES.values()) | pending == set(ACTIONS)
+    written_by_the_database = {"patient.erase_request", "patient.erase", "patient.erase_cancel", "staff.invite", "staff.grant_role", "staff.revoke_role", "staff.suspend", "staff.reinstate", "staff.activate", "backfill.task_raised", "canary.injected", "voice.transcript_read", "voice.transcript_purge", "patient.register", "patient.activate", "patient.claim", "portal.claim_approve", "portal.claim_reject", "consent.notice_publish", "autonomy.proposal_approve", "autonomy.proposal_reject", "autonomy.proposal_expire", "care_record.erased"}  # (patient.*: iam.register_patient_account, iam.activate_patient_account and mpi.claim_patient_record, migration 0049) (voice.*: msg.read_voice_transcript and msg.purge_expired_voice_chunks, migration 0047) (canary.injected: by docs.register_canary_document, migration 0042) (backfill.task_raised: by agents.raise_backfill_task, migration 0038) written by the mpi.*_patient_erasure functions (migration 0032) in the same transaction; the live tests pin the rows
+    assert set(ROUTES.values()) | set(SETUP_ROUTES.values()) | set(BACKFILL_ROUTES.values()) | set(CONSOLE_ROUTES.values()) | {a for a, _ in CARE_GAP_ROUTES.values()} | {a for a, _ in PRODUCER_ROUTES.values()} | pending | written_by_the_database == set(ACTIONS)
 
 
 async def test_the_audit_module_adds_no_dependency_and_uses_only_the_existing_table():

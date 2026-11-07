@@ -26,6 +26,7 @@ import json
 import os
 import time
 import uuid
+from decimal import Decimal
 from pathlib import Path
 
 import httpx
@@ -40,8 +41,11 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from careflow.app import Settings, create_app, db_conn, verified_claims
 from careflow.crypto import DemographicVault
 from careflow.db import set_request_claims
+from careflow.decision import DecisionService, InMemoryDecisionRecorder
+from careflow.gateway import Gateway, InMemorySpendLedger, ModelRow, SpendLimits
 from careflow.messages import encrypt_body
-from tests.db_helpers import ensure_app_role_sa
+from careflow.ports import AdapterResult, DecisionResult, Usage
+from tests.db_helpers import ensure_app_role_sa, without_scope
 from tests.test_api_role_matrix import ATTACKER, PROJECT, bearer, fake_jwks_client, mint
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -147,9 +151,21 @@ async def world():
         # patient-kind messages must be screened before commit; nothing here commits, so the deferred check never fires.
         await raw(conn, "select set_config('request.jwt.claims', '', true);")
 
+        model_calls: list = []
+
+        async def fake_engine(request):  # a FAKE decision engine for patient text (phi_approved): it counts its calls and always says "accept" with a raw confidence
+            model_calls.append(request.question_type)
+            probs = {o: (0.7 if o == "accept" else 0.075) for o in request.options}
+            return AdapterResult(DecisionResult("accept", probs, 0.7, "fake-engine", False, "fake-route"), Usage(1, 1))
+
+        zero = Decimal(0)
+        interpreter = DecisionService(
+            Gateway([ModelRow("decision", "fake", "fake-decision-1", "phi_approved", 1, zero, zero, zero, zero)], {("fake", "fake-decision-1"): fake_engine}, InMemorySpendLedger(), SpendLimits(clinic_daily_usd=Decimal(100)), origin="test"),
+            InMemoryDecisionRecorder(),
+        )
         app = create_app(
-            Settings(supabase_url=PROJECT, database_url_app="postgresql://unused"), jwks=fake_jwks_client(), engine=object(),  # type: ignore[arg-type]
-            vault=vault,
+            Settings(_env_file=None, supabase_url=PROJECT, database_url_app="postgresql://unused"), jwks=fake_jwks_client(), engine=object(),  # type: ignore[arg-type]
+            vault=vault, reply_interpreter=interpreter,
         )
 
         async def shared_db(claims=Depends(verified_claims)):
@@ -167,7 +183,7 @@ async def world():
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
                 yield type("World", (), {"conn": conn, "client": client, "ids": ids, "a": a, "b": b, "messages": messages, "vault": vault,
-                                         "thread": thread})
+                                         "thread": thread, "model_calls": model_calls})
     finally:
         await outer.rollback()
         await conn.close()
@@ -333,3 +349,137 @@ async def test_there_is_no_route_level_role_gate_a_database_role_change_applies_
     assert (await post(w, "nurse_a", w.messages["care"])).status_code == 200
     await w.conn.execute(text("update iam.staff_roles set revoked_at = now() where account_id = :a and role = 'nurse' and clinic_id = :c"), {"a": w.ids["nurse_a"], "c": w.a})
     assert (await post(w, "nurse_a", w.messages["care"])).status_code == 404
+
+
+# ---- POST /v1/staff/scheduling/offers/interpret-reply (reply interpretation, FAKES ONLY; remaining-work A8) --------------------------------------------------------
+#
+# The same world and the same never-committed transaction: the route screens an ENCRYPTED patient message (msg.screenings, audit.log and review tasks are append-only), so its role matrix lives here,
+# beside the screening route's. The committed half (random message ids: 401 / 404 / 422) is in tests/test_api_role_matrix.py (SPLIT_HARNESS). The decision tier is a FAKE adapter that counts its calls.
+
+INTERPRET = "/v1/staff/scheduling/offers/interpret-reply"
+# Front desk of the message's clinic: 200. A nurse, a doctor and `multi` (a nurse in clinic A) can SEE the message but are not front desk: 403. Everyone else cannot see it: the one fixed 404.
+INTERPRETS = {who: (200 if who == "fd_a" else 403 if who in {"nurse_a", "doctor_a", "multi"} else 404) for who in SCREENS}
+GRID_AXIS = ("interpret",)
+GRID_DRIVER = "test_who_can_interpret_a_reply"
+GRID_REQUIRED_TESTS = (
+    "test_who_can_interpret_a_reply",
+    "test_a_flagged_reply_is_never_put_to_the_model_and_still_raises_the_immediate_nurse_task",
+    "test_a_clear_reply_gets_a_suggestion_with_no_text_and_one_audit_row",
+    "test_only_a_patients_reply_on_the_appointments_topic_reaches_the_model",
+)
+# Read by tests/test_api_role_matrix.py::test_split_routes_have_both_halves_and_the_dedicated_half_covers_every_role_on_every_topic
+COVERED_GRID = {("POST", "/v1/staff/scheduling/offers/interpret-reply"): {who: GRID_AXIS for who in SCREENS}}
+
+
+async def interpret(w, who, message, *, key="new", token=None):
+    headers = {} if key is None else {"X-Idempotency-Key": f"k-{_u()}" if key == "new" else key}
+    headers.update(bearer(token) if token else bearer(mint(w.ids[who])) if who else {})
+    return await w.client.post(INTERPRET, headers=headers, json={"message_id": str(message)})
+
+
+async def synthetic_rule(w):
+    """An approved SYNTHETIC rule (`zzalpha`, nothing clinical) inside the rolled-back transaction, so that a reply without it screens CLEAR instead of unassessable."""
+    rid = _u()
+    await w.conn.execute(
+        text(
+            "insert into kb.red_flag_rules (id, clinic_id, rule_code, version_id, status, phrases, patterns, governance_metadata, authored_by, "
+            "approved_by_1, approved_by_2, approved_at, origin, idempotency_key) values (:i, null, 'interpret_route_rule', 1, 'approved', "
+            "array['zzalpha'], '{}', cast('{}' as jsonb), :d, :d, :n, now(), 'test', :k)"
+        ),
+        {"i": rid, "d": w.ids["doctor_a"], "n": w.ids["nurse_a"], "k": f"r-{rid}"},
+    )
+
+
+async def stored_message(w, body, *, topic="appointments", sender="patient"):
+    mid = _u()
+    enc = encrypt_body(w.vault, body, clinic_id=w.a, thread_id=w.thread[topic], key_version=1, message_id=mid)
+    await raw(
+        w.conn,
+        f"select set_config('request.jwt.claims', '{{\"sub\": \"{w.ids['nurse_a']}\", \"role\": \"authenticated\"}}', true); "
+        "insert into msg.messages (id, clinic_id, origin, topic, thread_id, sender_kind, recorded_by, body_ct, body_key_version, idempotency_key) "
+        f"values ('{mid}', '{w.a}', 'test', '{topic}', '{w.thread[topic]}', '{sender}', '{w.ids['nurse_a']}', {ct(enc)}, 1, 'm-{mid}'); "
+        "select set_config('request.jwt.claims', '', true);",
+    )
+    return mid
+
+
+@pytest.mark.parametrize("who", list(INTERPRETS))
+async def test_who_can_interpret_a_reply(w, who):
+    await synthetic_rule(w)
+    mid = await stored_message(w, f"yes that time suits me {PRIVATE}")
+    before = len(w.model_calls)
+    r = await interpret(w, who, mid)
+    assert r.status_code == INTERPRETS[who], (who, r.text)
+    if INTERPRETS[who] == 200:
+        body = r.json()
+        assert body["outcome"] == "clear" and body["suggestion"] == "accept" and body["needs_person"] is True and body["reason"] is None
+        assert PRIVATE not in r.text and len(w.model_calls) == before + 1
+    else:
+        assert r.json() in ({"detail": "not found"}, {"detail": "your role may not do this"}), who
+        assert len(w.model_calls) == before  # a refused caller never causes a model call
+
+
+async def test_a_flagged_reply_is_never_put_to_the_model_and_still_raises_the_immediate_nurse_task(w):
+    """# CLINICAL-PLACEHOLDER: needs clinician sign-off. Rule 2: the rules run first; a hit raises the task and no model is asked."""
+    await synthetic_rule(w)
+    mid = await stored_message(w, f"{PRIVATE} and zzalpha here")
+    before = len(w.model_calls)
+    r = await interpret(w, "fd_a", mid)
+    assert r.status_code == 200
+    body = r.json()
+    assert (body["outcome"], body["suggestion"], body["reason"], body["needs_person"]) == ("red_flag", None, "red_flag", True) and PRIVATE not in r.text
+    assert len(w.model_calls) == before  # the model was not asked
+    ((kind, priority, role),) = await one(w, "select kind, priority, assigned_role from agents.review_tasks where source_message_id = :m", m=str(mid))
+    assert (kind, priority, role) == ("red_flag", "immediate", "nurse")  # the nurse task exists, exactly as if the reply had been screened alone
+
+
+async def test_an_unassessable_reply_is_no_suggestion_and_raises_the_standard_nurse_task(w):
+    mid = w.messages["tampered"]  # a body that fails authentication is recorded unassessable
+    before = len(w.model_calls)
+    r = await interpret(w, "fd_a", mid)
+    assert r.status_code == 404  # a care-topic message is invisible to front desk: the one fixed 404; the appointments one below proves the 200 path
+    appt = await stored_message(w, f"{PRIVATE} no rule exists in this transaction")
+    r = await interpret(w, "fd_a", appt)
+    assert r.status_code == 200 and r.json()["outcome"] == "unassessable" and r.json()["suggestion"] is None and r.json()["reason"] == "unassessable"
+    assert len(w.model_calls) == before  # no approved rule means the reply cannot be assessed, so no model is asked
+    assert len(await one(w, "select id from agents.review_tasks where source_message_id = :m", m=str(appt))) == 1
+
+
+async def test_a_clear_reply_gets_a_suggestion_with_no_text_and_one_audit_row(w):
+    await synthetic_rule(w)
+    mid = await stored_message(w, f"please can we move it {PRIVATE}")
+    r = await interpret(w, "fd_a", mid, key="same-key")
+    again = await interpret(w, "fd_a", mid, key="same-key")
+    assert r.status_code == 200 and again.status_code == 200 and again.json()["replayed"] is True and r.json()["replayed"] is False
+    assert set(r.json()) == {"message_id", "screening_id", "outcome", "replayed", "suggestion", "confidence", "calibrated", "engine", "reason", "needs_person"}
+    assert PRIVATE not in r.text and PRIVATE not in again.text
+    rows = await one(w, "select actor_id, actor_role, details from audit.log where action = 'offer.interpret_reply' and resource_id = :m", m=str(mid))
+    assert len(rows) == 1 and rows[0][0] == w.ids["fd_a"] and rows[0][1] == "front_desk"  # one row: the replay wrote none (same audit key)
+    details = without_scope(rows[0][2])  # (every audit writer adds role_scope since 0028)
+    assert details == {"outcome": "clear", "suggestion": "accept", "reason": "none"}
+
+
+async def test_only_a_patients_reply_on_the_appointments_topic_reaches_the_model(w):
+    await synthetic_rule(w)
+    before = len(w.model_calls)
+    staff_message = await stored_message(w, "a staff message", sender="staff")
+    r = await interpret(w, "fd_a", staff_message)
+    assert r.status_code == 200 and r.json()["reason"] == "not_a_patient_reply" and r.json()["suggestion"] is None
+    safety = await stored_message(w, "a patient message on the safety topic", topic="safety")
+    r = await interpret(w, "fd_a", safety)
+    assert r.status_code == 200 and r.json()["reason"] == "not_a_patient_reply"
+    assert len(w.model_calls) == before
+
+
+async def test_interpretation_authentication_comes_first_and_the_key_and_the_body_are_validated(w):
+    mid = w.messages["appointments"]
+    sub = w.ids["fd_a"]
+    for label, token in (("garbage", "not.a.jwt"), ("expired", mint(sub, exp=int(time.time()) - 3600)), ("attacker key", mint(sub, key=ATTACKER))):
+        r = await interpret(w, None, mid, token=token)
+        assert r.status_code == 401, label
+    assert (await interpret(w, "fd_a", mid, key=None)).status_code == 422
+    assert (await interpret(w, "fd_a", mid, key="   ")).status_code == 422
+    r = await w.client.post(INTERPRET, headers={**bearer(mint(sub)), "X-Idempotency-Key": "k"}, json={"message_id": "nope"})
+    assert r.status_code == 422
+    r = await w.client.post(INTERPRET, headers={**bearer(mint(sub)), "X-Idempotency-Key": "k"}, json={"message_id": str(mid), "actor": str(sub)})
+    assert r.status_code == 422  # the actor is the signed-in account, never the body

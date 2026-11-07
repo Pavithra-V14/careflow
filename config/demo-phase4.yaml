@@ -1,0 +1,75 @@
+# DEMO ONLY - NOT A CLINICAL DECISION.
+#
+# Placeholder values for the Phase 4 required settings (review reason codes, deadlines, watchdog limits, canary rate, rubber-stamp thresholds, sampling rates, the label pseudonym key, the cost
+# figures, the sign-in link) so the review console, the watchdog, the canaries and the cost canvas can be exercised end to end on SYNTHETIC data in the demo profile (owner decision 2026-11-06 item 1).
+# Every value is an invented stand-in: none is a clinical judgment, a recommendation or a proposal for a clinic. The real values are owned by the clinic / the owner and stay unset in every other
+# profile. The cost figures are zero on purpose (the demo has no commercial figure); the pseudonym key is a public placeholder, NOT a secret, and protects nothing.
+#
+# LOADS ONLY WHEN CAREFLOW_PROFILE=demo AND CAREFLOW_DATA_POLICY=synthetic_only AND CAREFLOW_DEMO_PHASE4=1 (careflow/demo_phase4.py). In any other profile, or with any other data policy, the
+# application REFUSES TO START if CAREFLOW_DEMO_PHASE4 is set. An explicit CAREFLOW_* value in the environment always wins over a placeholder here. None of these is a default in .env or in code.
+#
+# DELIBERATELY ABSENT, even for demo: red-flag rules, thresholds, emergency wording, protocol cards, the accept-confidence threshold.
+
+label: "DEMO ONLY - NOT A CLINICAL DECISION"
+loads_only_when:
+  profile: demo
+  data_policy: synthetic_only
+
+settings:
+  review_reason_codes:
+    value: "wrong_card,missing_information,unsafe,other"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  review_deadline_minutes:
+    value: '{"triage_proposal": 60, "red_flag": 15, "backfill_needs_human": 120, "screening_unassessable": 30}'
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  watchdog_limits:
+    value: '{"red_flag_minutes": 15, "queue_age_seconds": 600}'
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  canary_rate:
+    value: "0.02"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  rubber_stamp_policy:
+    value: '{"min_decisions": 20, "max_approval_rate": 0.98, "min_median_seconds": 5}'
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  auto_review_sample_rate:
+    value: "0.05"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  label_pseudonym_key:
+    value: "demo-only-placeholder-pseudonym-key-not-a-secret"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  trace_sample_rate:
+    value: "0.1"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  cost_platform_floor:
+    value: "0"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  cost_reviewer_rates:
+    value: '{"nurse": 0, "doctor": 0}'
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  sign_in_url:
+    value: "http://localhost:5173/sign-in"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  care_gap_rules:
+    value: '{"rules": {"demo_rule": {"interval_days": 30, "overdue_after_days": 5}}, "episodes": {"demo_episode": ["demo_rule"]}}'
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  consent_notices:
+    value: '{"care_delivery": {"version": 1, "body": "DEMO ONLY - NOT A LEGAL NOTICE. Placeholder text for a synthetic demonstration. Counsel owns the real consent wording."}}'
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  visit_readiness_content:
+    value: '{"facts": {"demo_fact_one": "DEMO ONLY - NOT A CLINICAL QUESTION. Placeholder question one?"}, "visit_types": {"DEMO visit type": {"intake": ["demo_fact_one"], "checklist": [{"id": "demo_item_one", "text": "DEMO ONLY - NOT A CLINICAL INSTRUCTION. Placeholder checklist item one: please confirm."}]}}}'
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  visit_readiness_task_priority:
+    value: "standard"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  care_plan_task_priority:
+    value: "standard"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  care_plan_task_role:
+    value: "doctor"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  care_gap_alert_days:
+    value: "14"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  voice_transcript_retention_days:
+    value: "30"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"

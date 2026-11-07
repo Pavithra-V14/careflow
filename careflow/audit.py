@@ -1,6 +1,6 @@
 """Audit rows for human decisions (BUILD-SPEC.md 17.1 `audit`, 18.4; pre-launch item 5). Writes `audit.log` from the CALLING person's own session, in the SAME transaction as the decision.
 
-* No migration and no new grant: `careflow_app` already holds INSERT on `audit.log`, and the policy `log_insert_as_self` (migration 0001) requires `actor_id` to be the signed-in account, so nobody
+* No migration and no new grant: `careflow_app` already holds INSERT on `audit.log`, and the policy `log_insert_own_clinic` (migration 0030, replacing 0001's `log_insert_as_self`) requires `actor_id` to be the signed-in account holding a front-desk, nurse, doctor or admin role at the row's clinic, so nobody
   can write a row as someone else. Reading audit rows stays with the auditor role.
 * Same transaction: the decision and its audit row commit together or not at all. If the audit insert fails the exception propagates and the request rolls back (a decision with no audit row must not
   commit).
@@ -35,8 +35,13 @@ ACTIONS: Final = frozenset(
         "patient.view",  # a front-desk person, nurse or doctor OPENED one record in full: who, role, patient id; never the contents
         "patient.view_labels",  # list rows decrypted for a page: the COUNT only
         "patient.search",  # a front-desk person searched for a patient: the KIND of search and the result count only, never the query or the results
+        "setup.create_location", "setup.create_provider", "setup.create_visit_type", "setup.create_slot",  # a front-desk person or admin set the clinic up (careflow/app.py set-up routes): ids only
+        "patient.erase_request", "patient.erase", "patient.erase_cancel",  # the two-person erasure of a patient's identity (written by the mpi.*_patient_erasure functions in the same transaction): reason code and role scope only
+        "staff.invite", "staff.grant_role", "staff.revoke_role", "staff.suspend", "staff.reinstate", "staff.activate",  # staff account changes, written by the iam.* functions (migration 0034): role word and scope only
+        "backfill.start", "backfill.decide", "backfill.reply", "backfill.task_raised", "canary.injected", "alert.acknowledge", "care_gap.barrier_record", "care_gap.barrier_resolve", "voice.transcript_read", "voice.transcript_purge", "autonomy.set", "care_record.erased", "autonomy.propose", "autonomy.proposal_approve", "autonomy.proposal_reject", "autonomy.proposal_expire", "readiness.start", "readiness.reply", "portal.claim_approve", "portal.claim_reject", "consent.notice_publish", "care_plan.create", "care_plan.confirm", "result.record", "patient.register", "patient.activate", "patient.claim", "care_gap.episode_create", "care_gap.rule_done", "care_gap.sample_recheck",  # a front-desk person started a backfill run for a freed slot, or answered one of its pauses: the closed action or outcome word and the run status only
+        "offer.mark_delivered",  # a front-desk person delivered an offer by hand (channel manual): hold id and the closed channel word only
         "hold.release",  # a front-desk person gave a held slot back before its time ran out
-        "offer.send",  # a front-desk person sent an offer: the slot hold and the offer message (careflow/offers.py)
+        "offer.send", "offer.interpret_reply",  # a front-desk person sent an offer: the slot hold and the offer message (careflow/offers.py)
         "clinical.tool_call",  # a call on the clinical read-only MCP server (careflow/mcp_kit.py `audited`): tool name and outcome only
     }
 )

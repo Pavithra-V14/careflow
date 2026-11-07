@@ -1,0 +1,9 @@
+# Phase 3 delivery with no external service (pre-approved 2026-11-05, built)
+
+**Decision (owner):** at launch the system sends nothing to a patient. The front desk copies the drafted offer text and sends it from the clinic's own phone. SMS and DLT registration only if that proves too slow.
+
+**What was built.** `sched.offer_deliveries` (migration 0031): one append-only row per offer hold saying who delivered it, when, and by which channel; the only channel the table accepts is the closed word `manual`. `POST /v1/staff/scheduling/offers/{hold_id}/mark-delivered` (front desk only; idempotency key; one audit row `offer.mark_delivered`; a second press is a replay; a hold that is not an offer, or an offer that is expired, released or booked, is a 409). `GET /v1/staff/scheduling/offers` lists the offers (front desk, nurse, doctor) with a state DERIVED from the hold and the delivery row: `awaiting_delivery`, `delivered`, `expired`, `booked`, `released`, optionally filtered. An offer is never shown as delivered unless a person marked it; expired offers are a list the front desk works, not a background job, so the worker needs no new permission.
+
+**The text to copy** is the offer message `send` already records (the clinician-approved template verbatim, encrypted); reading it is the existing audited message read. The patient's reply is typed in by the front desk as a staff-entered message and goes through reply interpretation with the red-flag rules first. No external service, no worker identity. The frontend work (a "copy text" button, a "mark as delivered" action) is not touched here.
+
+**Not done:** editing or undoing a delivery mark (it is a record of what a person did; a correction would be a new, separately designed event), and any check of the patient's open red-flag tasks before an offer (a clinical decision, sheet item 22).

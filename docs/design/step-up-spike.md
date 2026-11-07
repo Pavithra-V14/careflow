@@ -1,9 +1,9 @@
 # Step-up re-authentication: design and the required spike (BUILD-SPEC 18.1, Appendix B)
 
-**Status: step-up implemented, claim shape pending live verification.** The merge routes (`POST /v1/staff/merges`,
-`.../{merge_id}/approve`, `.../{merge_id}/unmerge`) refuse any request that is not stepped up. The check has only been tested
-against tokens this repository mints itself in the documented shape. **No real Supabase token has been inspected.** Until the
-spike below is recorded, do not call the step-up check verified, and do not depend on it in any non-test path.
+**Status (updated 2026-11-04): step-up implemented; the claim shape was VERIFIED on a real dev-project token on 2026-10-30** (recorded in `docs/frontend-backend-requests.md` section 4: `aal` "aal2", `amr` entries with exactly `method` and `timestamp`, `totp` present, integer unix seconds, a refresh keeps the stamp).
+The merge routes (`POST /v1/staff/merges`, `.../{merge_id}/approve`, `.../{merge_id}/unmerge`) refuse any request that is not stepped up.
+**Still NOT covered by that capture:** the legacy string `amr` (not seen), a token from a later sign-in challenge, a token older than the window, and one live merge call end to end. The tables below keep the original assumptions; read the "Verified" column with this paragraph.
+The same shape rules now also gate EVERY staff route (`careflow.auth.mfa_failure`, setting `CAREFLOW_REQUIRE_AAL2`, default on) (`careflow/app.py` `_require_mfa`). The three merge route docstrings in `careflow/app.py` still say "pending live verification" because they are copied into the OpenAPI document the frontend's generated types follow; they change with the next schema regeneration.
 
 ## What the code does
 

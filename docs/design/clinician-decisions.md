@@ -13,7 +13,7 @@ column, never a default, and is marked `# CLINICAL-PLACEHOLDER: needs clinician 
 | 6 | Review deadlines per task class and the escalation timing | `next_escalation(deadline_seconds=...)` required | clinic / clinical lead |
 | 7 | Retrieval abstention thresholds (dense similarity, BM25 ratio) | `AbstentionPolicy(...)` required, none by default; no policy means abstain | clinical lead, from the gold set |
 | 8 | Protocol-card content, the card attributes (risk class, priority), the scope keys, the gold set | no cards exist; cards are clinician-authored | clinicians |
-| 9 | Red-flag rules (phrases, patterns, vitals) | `kb.red_flag_rules` is data; approved only under the two-person rule | clinicians |
+| 9 | Red-flag rules (phrases, patterns, vitals) | `kb.red_flag_rules` is data; approved only under the two-person rule. **NOTE (2026-11-03): no API route exists to author, submit or approve a rule with its two named approvers (the app role can only read the table); design that route with the clinicians before any clinical use (pre-launch blocker 19 in `phase2-status.md`). The dev demo seeds a synthetic DRAFT rule over invented non-medical tokens, usable only in the `demo` profile and approved by nobody.** | clinicians |
 | 10 | Unit synonyms and conversions for grounding (mg vs milligram, mcg to mg) | none: units must match as spelt; a mismatch is "unverified" | clinical lead |
 | 11 | Which structured facts a card reads (so that only those raise a review when unverified) | `needs_review(fields_read_by_matched_rules)` takes it as input | card authors |
 | 12 | The patient-facing emergency template and any reply text | `patient_reply = pending_clinician_template`; nothing is sent | clinical lead |
