@@ -15,6 +15,7 @@ import { QueryView } from '../ui/states';
 import { WriteProblem } from '../ui/WriteProblem';
 import { NotFoundPage } from './NotFoundPage';
 import { CostCanvas, ReviewerStats, VoicePanel } from './AdminReports';
+import { Grievances, Recovery } from './AdminMore';
 
 type Account = components['schemas']['StaffAccountOut'];
 
@@ -47,6 +48,8 @@ export function AdminPage() {
       {current.id === 'reviewer' && <ReviewerStats />}
       {current.id === 'cost' && <CostCanvas />}
       {current.id === 'voice' && <VoicePanel />}
+      {current.id === 'recovery' && <Recovery />}
+      {current.id === 'grievances' && <Grievances />}
     </section>
   );
 }

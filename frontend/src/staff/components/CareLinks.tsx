@@ -25,6 +25,9 @@ export function CareLinks({ patientId }: { patientId: string }) {
         <li>
           <Link to={`/care/results${q}`}>{t('care.tab.results')}</Link>
         </li>
+        <li>
+          <Link to={`/notes${q}`}>{t('care.links.notes')}</Link>
+        </li>
       </ul>
     </nav>
   );

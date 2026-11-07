@@ -393,6 +393,7 @@ function RecordResultDialog({ onClose }: { onClose: (r: { wake: boolean } | null
   const [validTo, setValidTo] = useState('');
   const [verified, setVerified] = useState<'yes' | 'no' | null>(null); // nothing chosen for the person
   const [supersedes, setSupersedes] = useState('');
+  const [change, setChange] = useState<'amendment' | 'correction' | ''>('');
   const [next, setNext] = useState(2);
   const radio = useId();
 
@@ -426,6 +427,7 @@ function RecordResultDialog({ onClose }: { onClose: (r: { wake: boolean } | null
             valid_to: toIso,
             verified: verified === 'yes',
             supersedes_id: supersedes.trim() === '' ? null : supersedes.trim(),
+            ...(supersedes.trim() !== '' && change !== '' ? { change } : {}),
           },
           { idempotencyKey: key },
         ),
@@ -507,6 +509,17 @@ function RecordResultDialog({ onClose }: { onClose: (r: { wake: boolean } | null
       </fieldset>
       <label htmlFor="res-sup">{t('care.results.supersedes')}</label>
       <input id="res-sup" type="text" autoComplete="off" spellCheck={false} value={supersedes} onChange={(e) => touch(setSupersedes)(e.target.value)} />
+      {supersedes.trim() !== '' && (
+        <>
+          <label htmlFor="res-change">{t('care.results.change')}</label>
+          <select id="res-change" value={change} onChange={(e) => touch(setChange)(e.target.value as 'amendment' | 'correction' | '')}>
+            <option value="">{t('care.results.changeNone')}</option>
+            <option value="amendment">{t('care.results.changes.amendment')}</option>
+            <option value="correction">{t('care.results.changes.correction')}</option>
+          </select>
+          <p className="hint">{t('care.results.changeHint')}</p>
+        </>
+      )}
     </ConfirmDialog>
   );
 }

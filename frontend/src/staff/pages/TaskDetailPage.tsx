@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { unwrap } from '../apiState';
 import { useAuth } from '../auth/AuthProvider';
 import { useApiQuery, useIdempotentWrite } from '../hooks';
-import { RESOLVABLE_TASK_KINDS, URGENT_TASK_KINDS } from '../sections';
+import { URGENT_TASK_KINDS } from '../sections';
 import { useSession } from '../session/SessionContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Badge, PageHeading, PlaceholderNote, ShortId, Time, UUID, useWord } from '../ui/bits';
@@ -73,7 +73,7 @@ function Detail({ taskId }: { taskId: string }) {
       <QueryView query={query}>
         {(task) => {
           const urgent = isUrgentTask(task);
-          const closable = (RESOLVABLE_TASK_KINDS as readonly string[]).includes(task.kind);
+          const closable = task.resolvable === true;
           const documentId = typeof task.provenance.document_id === 'string' && UUID.test(task.provenance.document_id) ? task.provenance.document_id : null;
           return (
             <>
