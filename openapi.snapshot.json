@@ -3802,6 +3802,10 @@
             ],
             "title": "Stage",
             "type": "string"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
           }
         },
         "required": [
@@ -3811,7 +3815,8 @@
           "consents",
           "bookings",
           "messages",
-          "grievances"
+          "grievances",
+          "truncated"
         ],
         "title": "MyDataOut",
         "type": "object"
@@ -4738,6 +4743,157 @@
           "codes"
         ],
         "title": "ReasonCodesOut",
+        "type": "object"
+      },
+      "RecoveryList": {
+        "additionalProperties": false,
+        "properties": {
+          "requests": {
+            "items": {
+              "$ref": "#/components/schemas/RecoveryRowOut"
+            },
+            "title": "Requests",
+            "type": "array"
+          }
+        },
+        "required": [
+          "requests"
+        ],
+        "title": "RecoveryList",
+        "type": "object"
+      },
+      "RecoveryRequestIn": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "account_id"
+        ],
+        "title": "RecoveryRequestIn",
+        "type": "object"
+      },
+      "RecoveryRequestOut": {
+        "additionalProperties": false,
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "created"
+        ],
+        "title": "RecoveryRequestOut",
+        "type": "object"
+      },
+      "RecoveryResolveOut": {
+        "additionalProperties": false,
+        "properties": {
+          "result": {
+            "enum": [
+              "approved",
+              "completed",
+              "cancelled",
+              "not_requested",
+              "not_approved",
+              "not_open",
+              "same_person"
+            ],
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "RecoveryResolveOut",
+        "type": "object"
+      },
+      "RecoveryRowOut": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "approved_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved By"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "requested_by": {
+            "format": "uuid",
+            "title": "Requested By",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "requested",
+              "approved",
+              "completed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "account_id",
+          "requested_by",
+          "approved_by",
+          "status",
+          "created_at",
+          "decided_at"
+        ],
+        "title": "RecoveryRowOut",
         "type": "object"
       },
       "ReferralDetailOut": {
@@ -13440,6 +13596,327 @@
         "summary": "Resolve Portal Claim",
         "tags": [
           "staff portal claims"
+        ]
+      }
+    },
+    "/v1/staff/recovery": {
+      "get": {
+        "description": "The clinic's recovery requests (the open ones by default), newest first: ids, status and times only. 404 if the clinic is not visible to you, 403 unless you are an admin there.",
+        "operationId": "list_staff_recovery_v1_staff_recovery_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Clinic Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "open_only",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Open Only",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Staff Recovery",
+        "tags": [
+          "staff recovery"
+        ]
+      },
+      "post": {
+        "description": "Ask for the second factor of a staff account of the clinic to be reset (you cannot ask for your own). A second admin must approve. 404 if the clinic is not visible to you, 403 unless you are an admin there or the account cannot be recovered by you (not staff of the clinic, or a recovery is already open).",
+        "operationId": "request_staff_recovery_v1_staff_recovery_post",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecoveryRequestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryRequestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Request Staff Recovery",
+        "tags": [
+          "staff recovery"
+        ]
+      }
+    },
+    "/v1/staff/recovery/{request_id}/approve": {
+      "post": {
+        "description": "Approve a pending recovery as a SECOND admin (not the requester, not the account being recovered). 404 if you cannot see it, 403 unless you are an admin of its clinic.",
+        "operationId": "approve_staff_recovery_v1_staff_recovery__request_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryResolveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Approve Staff Recovery",
+        "tags": [
+          "staff recovery"
+        ]
+      }
+    },
+    "/v1/staff/recovery/{request_id}/cancel": {
+      "post": {
+        "description": "Cancel an open recovery (requested or approved, not yet completed). 404 if you cannot see it, 403 unless you are an admin of its clinic.",
+        "operationId": "cancel_staff_recovery_v1_staff_recovery__request_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryResolveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Cancel Staff Recovery",
+        "tags": [
+          "staff recovery"
+        ]
+      }
+    },
+    "/v1/staff/recovery/{request_id}/complete": {
+      "post": {
+        "description": "Reset the account's second factor through the Auth admin port and record the completion, for an APPROVED request. 404 if you cannot see it, 403 unless you are an admin of its clinic, 503 while no Auth admin adapter is configured.",
+        "operationId": "complete_staff_recovery_v1_staff_recovery__request_id__complete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryResolveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Complete Staff Recovery",
+        "tags": [
+          "staff recovery"
         ]
       }
     },

@@ -3290,7 +3290,7 @@ def portal_grievance_list_cases(ids) -> list[tuple]:
 
 
 def portal_my_data_cases(ids) -> list[tuple]:
-    ok = lambda b: set(b) == {"account_status", "stage", "records", "consents", "bookings", "messages", "grievances"} and b["stage"] == "new_patient" and b["records"] == [] and b["messages"] == [] and b["bookings"] == []
+    ok = lambda b: set(b) == {"account_status", "stage", "records", "consents", "bookings", "messages", "grievances", "truncated"} and b["truncated"] is False and b["stage"] == "new_patient" and b["records"] == [] and b["messages"] == [] and b["bookings"] == []
     cases = [_case(ids, "an active patient account downloads its own data", "patient", 200, PORTAL_MY_DATA, key=None, body=ok)]
     cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, PORTAL_MY_DATA, key=None, body=NOT_A_PATIENT) for p in _non_patients(ids)]
     cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, PORTAL_MY_DATA, key=None, body=NOT_A_PATIENT))
@@ -3318,6 +3318,106 @@ def staff_grievance_status_cases(ids) -> list[tuple]:
         _case(ids, "a grievance id that is not a uuid is rejected", "admin_a", 422, f"{STAFF_GRIEVANCES}/nope/status", json=body, body=_fixed(422)),
     ]
     return cases + _unauthenticated(ids, path(), body)
+
+
+# ---- staff recovery through two admins (migration 0060; BUILD-SPEC.md 18.1) ----------------------------------------------------------------------------------------------------------------------------------
+# admin_a requests (a fresh nurse account is the target); the approve, cancel and complete cases run against requests the owner seeded (a second fresh admin approves). The Auth admin port is not configured
+# in this world, so complete answers 503 after the request is found.
+
+RECOVERY = "/v1/staff/recovery"
+
+
+def _seed_recovery(ids, status="requested", approver=None):
+    """A recovery request for a fresh nurse account, written by the owner (the functions are the only application path); returns (request id, requester id)."""
+    target = new_staff_account(ids, roles=("nurse",))
+    requester = ids.people["admin_a"][0]
+
+    async def make(conn):
+        return await conn.fetchval(
+            "insert into iam.recovery_requests (clinic_id, origin, target_account_id, requested_by, approved_by, status, decided_at, idempotency_key) values ($1, 'test', $2, $3, $4, $5, "
+            "case when $5 = 'requested' then null else now() end, $6) returning id",
+            ids.clinic_a, target, requester, approver, status, f"mx-rec-{uuid.uuid4()}",
+        )
+
+    return _run(_owner(make))
+
+
+def staff_recovery_request_cases(ids) -> list[tuple]:
+    target = new_staff_account(ids, roles=("nurse",))
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "account_id": str(target), **o}
+    admin, key = _admin_stepped(ids), _new_key()
+    made = lambda created: (lambda b: set(b) == {"request_id", "created"} and b["created"] is created)
+    ok = [
+        _case(ids, "an admin asks for a recovery", admin, 201, RECOVERY, json=body(), key=key, body=made(True)),
+        _case(ids, "the same request again is a replay", admin, 201, RECOVERY, json=body(), key=key, body=made(False)),
+        _case(ids, "a second recovery for the same account is refused while one is open", admin, 403, RECOVERY, json=body(), body=NOT_YOUR_ROLE),
+        _case(ids, "an admin cannot ask for their own recovery", admin, 403, RECOVERY, json=body(account_id=str(ids.people["admin_a"][0])), body=NOT_YOUR_ROLE),
+        _case(ids, "an account that is not staff of the clinic is refused", admin, 403, RECOVERY, json=body(account_id=str(uuid.uuid4())), body=NOT_YOUR_ROLE),
+        _case(ids, "missing X-Idempotency-Key is rejected", admin, 422, RECOVERY, json=body(), key=None, body=_fixed(422)),
+        _case(ids, "an unknown clinic is not found", admin, 404, RECOVERY, json=body(clinic_id=str(uuid.uuid4())), body=_fixed(404)),
+    ]
+    return _staff_write_cases(ids, lambda: RECOVERY, body, ok)
+
+
+def staff_recovery_list_cases(ids) -> list[tuple]:
+    path = lambda **o: RECOVERY + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
+    visible = ("front_desk_a", "nurse_a", "doctor_a", "business_owner_a", "auditor_a", "multi")
+    ok = lambda b: set(b) == {"requests"} and isinstance(b["requests"], list)
+    cases = _console_clinic_cases(ids, path, allowed=("admin_a",), ok_status=200, ok_body=ok, visible_refused=visible)
+    cases += [
+        _case(ids, "an unknown clinic is not found", "admin_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "limit=0 is rejected", "admin_a", 422, path(limit=0), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
+def _recovery_action_cases(ids, action, seeded_ok) -> list[tuple]:
+    path = lambda rid: f"{RECOVERY}/{rid}/{action}"
+    unknown = path(uuid.uuid4())
+    admin = _admin_stepped(ids)
+    cases = list(seeded_ok)
+    cases += [_case(ids, f"{p} with a second factor cannot see a request that does not exist", stepped(ids.people[p][0]), 404, unknown, body=_fixed(404)) for p in ids.people]
+    cases += [
+        _case(ids, "missing X-Idempotency-Key is rejected", admin, 422, unknown, key=None, body=_fixed(422)),
+        _case(ids, "a request id that is not a uuid is rejected", admin, 422, f"{RECOVERY}/nope/{action}", body=_fixed(422)),
+    ]
+    cases += [_case(ids, f"admin_a with {label} is told to step up", headers, 401, unknown, body=_fixed(401)) for label, headers in not_stepped_variants(ids.people["admin_a"][0])]
+    return cases + _unauthenticated(ids, unknown, None)
+
+
+def staff_recovery_approve_cases(ids) -> list[tuple]:
+    rid = _seed_recovery(ids)
+    approver = new_staff_account(ids, roles=("admin",))
+    path = f"{RECOVERY}/{rid}/approve"
+    seeded = [
+        _case(ids, "the requester cannot approve their own request", _admin_stepped(ids), 200, path, body=lambda b: b == {"result": "same_person"}),
+        _case(ids, "a nurse cannot see the request", stepped(ids.people["nurse_a"][0]), 404, path, body=_fixed(404)),
+        _case(ids, "a second admin approves", stepped(approver), 200, path, body=lambda b: b == {"result": "approved"}),
+        _case(ids, "the approver again is a replay", stepped(approver), 200, path, body=lambda b: b == {"result": "approved"}),
+    ]
+    return _recovery_action_cases(ids, "approve", seeded)
+
+
+def staff_recovery_cancel_cases(ids) -> list[tuple]:
+    rid = _seed_recovery(ids)
+    path = f"{RECOVERY}/{rid}/cancel"
+    seeded = [
+        _case(ids, "an admin cancels an open request", _admin_stepped(ids), 200, path, body=lambda b: b == {"result": "cancelled"}),
+        _case(ids, "cancelling again is a replay", _admin_stepped(ids), 200, path, body=lambda b: b == {"result": "cancelled"}),
+        _case(ids, "a doctor cannot see the request", stepped(ids.people["doctor_a"][0]), 404, path, body=_fixed(404)),
+    ]
+    return _recovery_action_cases(ids, "cancel", seeded)
+
+
+def staff_recovery_complete_cases(ids) -> list[tuple]:
+    approver = new_staff_account(ids, roles=("admin",))
+    rid = _seed_recovery(ids, status="approved", approver=approver)
+    path = f"{RECOVERY}/{rid}/complete"
+    seeded = [
+        _case(ids, "an admin completes: no Auth admin adapter is configured here", _admin_stepped(ids), 503, path, body=lambda b: "unavailable" in b["detail"]),
+        _case(ids, "a nurse cannot see the request", stepped(ids.people["nurse_a"][0]), 404, path, body=_fixed(404)),
+    ]
+    return _recovery_action_cases(ids, "complete", seeded)
 
 
 MATRIX: dict[tuple[str, str], Callable] = {
@@ -3379,6 +3479,11 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", CARE_PLANS): care_plan_list_cases,
     ("POST", CARE_PLAN_CONFIRM): care_plan_confirm_cases,
     ("POST", RESULTS): result_record_cases,
+    ("POST", RECOVERY): staff_recovery_request_cases,
+    ("GET", RECOVERY): staff_recovery_list_cases,
+    ("POST", RECOVERY + "/{request_id}/approve"): staff_recovery_approve_cases,
+    ("POST", RECOVERY + "/{request_id}/cancel"): staff_recovery_cancel_cases,
+    ("POST", RECOVERY + "/{request_id}/complete"): staff_recovery_complete_cases,
     ("POST", PORTAL_GRIEVANCES): portal_grievance_file_cases,
     ("GET", PORTAL_GRIEVANCES): portal_grievance_list_cases,
     ("GET", PORTAL_MY_DATA): portal_my_data_cases,

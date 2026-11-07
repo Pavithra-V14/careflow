@@ -82,6 +82,7 @@ from careflow import (
     patient_view,
     portal_sql,
     producers_sql,
+    recovery_sql,
     reply_interpretation,
     review_tasks,
     rights_sql,
@@ -4426,7 +4427,7 @@ async def purge_voice_transcripts(body: VoicePurgeIn, idempotency_key: Idempoten
 #
 # A front-desk, nurse or doctor with a recent second factor opens a TIME-LIMITED grant for ONE patient of their clinic, naming a reason CODE from the clinic's list (iam.break_glass_reasons, kept by the owner; no free
 # text is stored). The window length is the required setting CAREFLOW_BREAK_GLASS_MINUTES. While it is open the holder can read that patient's messages (every topic) and every read is an audit
-# row. An admin of the clinic, a different person, reviews each grant afterwards. While either setting is unset the open route answers 503 and nothing is written.
+# row. An admin of the clinic, a different person, reviews each grant afterwards. While the window length is unset the open route answers 503 and nothing is written; with no reason rows for the clinic every open is refused (422).
 
 staff_break_glass = APIRouter(prefix="/v1/staff/break-glass", tags=["staff break-glass"])
 BREAK_GLASS_OPENERS = ("front_desk", "nurse", "doctor")
@@ -4653,6 +4654,7 @@ class MyDataOut(_Out):
     bookings: list[ExportBookingOut]
     messages: list[ExportMessageOut]
     grievances: list[GrievanceOut]
+    truncated: bool  # true when the bookings or messages hit the 2000-row cap and the download is NOT complete
 
 
 def _grievance_out(r: Any, vault: DemographicVault | None) -> GrievanceOut:
@@ -4716,7 +4718,9 @@ async def download_my_data(request: Request, conn: TxConnAllGrants, claims: dict
                 name = dob = phone = None
         records.append(ExportRecordOut(clinic_id=r.clinic_id, erased=r.erased_at is not None, name=name, date_of_birth=dob, phone=phone))
     messages_out: list[ExportMessageOut] = []
-    for m in await rights_sql.export_messages(conn):
+    message_rows = await rights_sql.export_messages(conn)
+    booking_rows = await rights_sql.export_bookings(conn)
+    for m in message_rows[:2000]:
         text_: str | None = None
         if vault is not None and m.body_ct is not None and m.body_key_version is not None:
             try:
@@ -4731,10 +4735,11 @@ async def download_my_data(request: Request, conn: TxConnAllGrants, claims: dict
         consents=[ExportConsentOut(purpose=c.purpose, action=c.action, notice_version=c.version, occurred_at=c.occurred_at) for c in await rights_sql.consent_history(conn, account_id)],
         bookings=[
             ExportBookingOut(clinic_id=b.clinic_id, booking_id=b.booking_id, status=b.status, starts_at=b.starts_at, ends_at=b.ends_at, created_at=b.created_at, cancelled_at=b.cancelled_at)
-            for b in await rights_sql.export_bookings(conn)
+            for b in booking_rows[:2000]
         ],
         messages=messages_out,
         grievances=[_grievance_out(r, vault) for r in await rights_sql.list_own(conn, account_id=account_id, limit=500)],
+        truncated=len(message_rows) > 2000 or len(booking_rows) > 2000,
     )
 
 
@@ -4767,6 +4772,112 @@ def _word_list(raw: str | None) -> frozenset[str] | None:
     if not words or any(not re.fullmatch(r"[a-z][a-z0-9_]{0,39}", w) for w in words):
         return None
     return frozenset(words)
+
+
+# ---- Staff account recovery through two admins (migration 0060; BUILD-SPEC.md 18.1) ------------------------------------------------------------------------------------------------------------------------
+#
+# A staff member who lost their second factor cannot recover it themselves. One admin of the clinic requests recovery; a SECOND admin (not the requester, not the account) approves; the Auth admin PORT then
+# resets the account's factors and the completion is recorded. With no Auth admin adapter configured (the default) the complete route answers 503 and an approved request waits. Every step needs a recent
+# second factor (step-up) and is an audit row written by the database.
+
+staff_recovery = APIRouter(prefix="/v1/staff/recovery", tags=["staff recovery"])
+RECOVERY_ADMINS = ("admin",)
+
+
+class RecoveryRequestIn(_Body):
+    clinic_id: uuid.UUID
+    account_id: uuid.UUID
+
+
+class RecoveryRequestOut(_Out):
+    request_id: uuid.UUID
+    created: bool
+
+
+class RecoveryRowOut(_Out):
+    request_id: uuid.UUID
+    account_id: uuid.UUID
+    requested_by: uuid.UUID
+    approved_by: uuid.UUID | None
+    status: Literal["requested", "approved", "completed", "cancelled"]
+    created_at: datetime
+    decided_at: datetime | None
+
+
+class RecoveryList(_Out):
+    requests: list[RecoveryRowOut]
+
+
+class RecoveryResolveOut(_Out):
+    result: Literal["approved", "completed", "cancelled", "not_requested", "not_approved", "not_open", "same_person"]
+
+
+@staff_recovery.post("", response_model=RecoveryRequestOut, status_code=201, dependencies=[Depends(require_step_up)])
+async def request_staff_recovery(body: RecoveryRequestIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> RecoveryRequestOut:
+    """Ask for the second factor of a staff account of the clinic to be reset (you cannot ask for your own). A second admin must approve. 404 if the clinic is not visible to you, 403 unless you are an admin there or the account cannot be recovered by you (not staff of the clinic, or a recovery is already open)."""
+    await _console_clinic(conn, body.clinic_id, RECOVERY_ADMINS)
+    try:
+        request_id, created = await recovery_sql.request(conn, clinic_id=body.clinic_id, account_id=body.account_id, idempotency_key=f"recovery:{idempotency_key}")
+    except recovery_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return RecoveryRequestOut(request_id=request_id, created=created)
+
+
+@staff_recovery.get("", response_model=RecoveryList)
+async def list_staff_recovery(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), open_only: bool = True, limit: Limit = 100) -> RecoveryList:
+    """The clinic's recovery requests (the open ones by default), newest first: ids, status and times only. 404 if the clinic is not visible to you, 403 unless you are an admin there."""
+    await _console_clinic(conn, clinic_id, RECOVERY_ADMINS)
+    rows = await recovery_sql.list_requests(conn, clinic_id=clinic_id, open_only=open_only, limit=limit)
+    return RecoveryList(
+        requests=[RecoveryRowOut(request_id=r.id, account_id=r.target_account_id, requested_by=r.requested_by, approved_by=r.approved_by, status=r.status, created_at=r.created_at, decided_at=r.decided_at) for r in rows]
+    )
+
+
+async def _recovery_resolve(conn: AsyncConnection, request_id: uuid.UUID, action: str) -> str:
+    clinic_id = await recovery_sql.request_clinic(conn, request_id)
+    if clinic_id is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _clinic_role_held(conn, clinic_id, RECOVERY_ADMINS):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    try:
+        return await recovery_sql.resolve(conn, request_id=request_id, action=action)
+    except recovery_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+
+
+@staff_recovery.post("/{request_id}/approve", response_model=RecoveryResolveOut, dependencies=[Depends(require_step_up)])
+async def approve_staff_recovery(request_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> RecoveryResolveOut:
+    """Approve a pending recovery as a SECOND admin (not the requester, not the account being recovered). 404 if you cannot see it, 403 unless you are an admin of its clinic."""
+    return RecoveryResolveOut(result=await _recovery_resolve(conn, request_id, "approve"))  # type: ignore[arg-type]
+
+
+@staff_recovery.post("/{request_id}/cancel", response_model=RecoveryResolveOut, dependencies=[Depends(require_step_up)])
+async def cancel_staff_recovery(request_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> RecoveryResolveOut:
+    """Cancel an open recovery (requested or approved, not yet completed). 404 if you cannot see it, 403 unless you are an admin of its clinic."""
+    return RecoveryResolveOut(result=await _recovery_resolve(conn, request_id, "cancel"))  # type: ignore[arg-type]
+
+
+@staff_recovery.post("/{request_id}/complete", response_model=RecoveryResolveOut, dependencies=[Depends(require_step_up)])
+async def complete_staff_recovery(request_id: uuid.UUID, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> RecoveryResolveOut:
+    """Reset the account's second factor through the Auth admin port and record the completion, for an APPROVED request. 404 if you cannot see it, 403 unless you are an admin of its clinic, 503 while no Auth admin adapter is configured."""
+    clinic_id = await recovery_sql.request_clinic(conn, request_id)
+    if clinic_id is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _clinic_role_held(conn, clinic_id, RECOVERY_ADMINS):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    port: AuthAdminPort | None = request.app.state.auth_admin
+    if port is None:
+        log.error("staff recovery cannot complete: no Auth admin adapter is configured")
+        raise HTTPException(status_code=503, detail="recovery is unavailable: not configured")
+    state = await recovery_sql.request_state(conn, request_id)
+    if state is not None and state.target_account_id == uuid.UUID(claims["sub"]):
+        raise HTTPException(status_code=403, detail="your role may not do this")  # the account being recovered never completes its own recovery (checked BEFORE the port is called)
+    if state is not None and state.status == "approved":
+        try:
+            await port.reset_factors(state.target_account_id)
+        except AuthAdminError:
+            raise HTTPException(status_code=503, detail="recovery is unavailable: not configured") from None  # (nothing about the exchange is kept)
+    return RecoveryResolveOut(result=await _recovery_resolve(conn, request_id, "complete"))  # type: ignore[arg-type]
 
 
 def _positive_int(raw: str | None) -> int | None:
@@ -4969,6 +5080,7 @@ def create_app(
     app.include_router(staff_break_glass)
     app.include_router(portal_rights)
     app.include_router(staff_grievances)
+    app.include_router(staff_recovery)
     app.include_router(health)
     openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, portal, staff_voice, staff_care_plans, staff_results, staff_portal_claims, staff_visits])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
     return app

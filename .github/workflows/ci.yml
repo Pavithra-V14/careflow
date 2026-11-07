@@ -248,6 +248,7 @@ jobs:
               tests/test_plan_erasure_rotation_live.py
               tests/test_break_glass_db_live.py
               tests/test_patient_rights_db_live.py
+              tests/test_staff_recovery_db_live.py
               tests/test_backfill_durable_db_live.py
               tests/test_canary_document_db_live.py
               tests/test_care_gaps_db_live.py

@@ -30,10 +30,15 @@ class AuthAdminPort(Protocol):
         """Create (or find) the sign-in for this address and send the invitation. Returns the account id Auth gave it. Idempotent for the same address."""
         ...
 
+    async def reset_factors(self, account_id: uuid.UUID) -> None:
+        """Remove the account's enrolled second factors so the person can enrol again (staff recovery, migration 0060). Idempotent."""
+        ...
+
 
 class FakeAuthAdmin:
     def __init__(self) -> None:
         self.invited: dict[str, uuid.UUID] = {}
+        self.reset: set[uuid.UUID] = set()
         self.calls = 0
 
     async def invite(self, email: str) -> uuid.UUID:
@@ -42,6 +47,10 @@ class FakeAuthAdmin:
         if "@" not in normalised or len(normalised) > 254:
             raise AuthAdminError("the address is not valid")
         return self.invited.setdefault(normalised, uuid.uuid5(NAMESPACE, normalised))
+
+    async def reset_factors(self, account_id: uuid.UUID) -> None:
+        self.calls += 1
+        self.reset.add(account_id)
 
 
 class SupabaseAuthAdmin:
@@ -68,6 +77,10 @@ class SupabaseAuthAdmin:
             return uuid.UUID(str(body["id"]))
         except (httpx.HTTPError, KeyError, ValueError, TypeError):
             raise AuthAdminError("the invitation could not be created") from None  # nothing from the exchange is kept or logged
+
+
+    async def reset_factors(self, account_id: uuid.UUID) -> None:
+        raise AuthAdminError("the factor reset call has not been verified against a real project")  # no HTTP is written for an unverified endpoint (Appendix B; CLAUDE.md verification discipline)
 
 
 def from_environment(environ: Mapping[str, str], supabase_url: str) -> AuthAdminPort | None:

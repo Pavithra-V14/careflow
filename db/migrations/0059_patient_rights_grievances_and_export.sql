@@ -6,7 +6,7 @@
 --     and a TEXT that is stored ENCRYPTED (bound to the clinic and the grievance id, key version beside it), never in a log or an audit row. An admin of the clinic (second factor required) acknowledges and
 --     resolves it through iam.update_grievance; the status trail is append-only (iam.grievance_updates). The patient reads their own grievances and trail; admins read their clinic's. The text is erased
 --     with the patient by the existing audited erasure (below) and rotates with the other ciphertexts (careflow/rotation.py).
--- (2) EXPORT. iam.export_my_messages and iam.export_my_bookings return the caller's OWN messages (ciphertext; the application decrypts) and bookings, filtered by the account's stage (spec 17.5: appointments
+-- (2) EXPORT (at most 2000 rows of each kind; the functions return one row MORE so the application can say the download is truncated; the audit count of messages is approximate under concurrent writes). iam.export_my_messages and iam.export_my_bookings return the caller's OWN messages (ciphertext; the application decrypts) and bookings, filtered by the account's stage (spec 17.5: appointments
 --     and safety need an active, bound account; care needs an account the clinic has activated for full access, which has no step in this build, so care messages are never exported yet). Each call is an audit row.
 -- No application role can insert into or update any table here directly.
 
@@ -142,11 +142,18 @@ begin
     if not found then
         raise exception 'grievance refused' using errcode = '42501';
     end if;
-    insert into iam.grievances (id, clinic_id, origin, account_id, category, body_ct, body_key_version, idempotency_key)
-    values (p_grievance_id, p_clinic_id, v_origin, v_actor, p_category, p_body_ct, p_key_version, p_idempotency_key) on conflict (account_id, idempotency_key) do nothing;
-    if not found then
-        raise exception 'grievance refused' using errcode = '42501';  -- a concurrent call with the same key won; the retry gets the replay
-    end if;
+    begin
+        insert into iam.grievances (id, clinic_id, origin, account_id, category, body_ct, body_key_version, idempotency_key)
+        values (p_grievance_id, p_clinic_id, v_origin, v_actor, p_category, p_body_ct, p_key_version, p_idempotency_key);
+    exception when unique_violation then
+        -- a concurrent call with the same key won (its replay is returned), or the id is taken (refused; nothing is overwritten)
+        select g.id, g.clinic_id, g.category into v_prior from iam.grievances g where g.account_id = v_actor and g.idempotency_key = p_idempotency_key;
+        if found and v_prior.clinic_id = p_clinic_id and v_prior.category = p_category then
+            return query select v_prior.id, false;
+            return;
+        end if;
+        raise exception 'grievance refused' using errcode = '42501';
+    end;
     insert into audit.log (origin, clinic_id, actor_id, actor_role, action, resource_type, resource_id, details, idempotency_key)
     values (v_origin, p_clinic_id, v_actor, 'patient', 'grievance.file', 'grievance', p_grievance_id::text, jsonb_build_object('category', p_category), 'sys:grievance-file:' || p_grievance_id::text);
     return query select p_grievance_id, true;
@@ -165,7 +172,7 @@ begin
     if v_actor is null or p_grievance_id is null or p_status is null or p_status not in ('acknowledged', 'resolved') or not iam.aal2_session() then
         raise exception 'grievance update refused' using errcode = '42501';
     end if;
-    select g.id, g.clinic_id, g.origin into v_g from iam.grievances g where g.id = p_grievance_id;
+    select g.id, g.clinic_id, g.origin into v_g from iam.grievances g where g.id = p_grievance_id for update;  -- two admins acting at once are serialised (FOR UPDATE fires no trigger)
     if not found or not iam.has_clinic_role(v_g.clinic_id, array['admin']) then
         raise exception 'grievance update refused' using errcode = '42501';
     end if;
@@ -198,14 +205,14 @@ begin
     -- appointments and safety topics only: the care topic needs full access, which no step of this build grants (spec 17.5)
     select count(*) into v_n from (
         select m.id from msg.messages m join msg.threads t on t.id = m.thread_id and t.clinic_id = m.clinic_id join mpi.patients pt on pt.id = t.patient_id and pt.clinic_id = t.clinic_id
-         where pt.account_id = v_actor and pt.erased_at is null and m.topic in ('appointments', 'safety') limit 2000) c;
+         where pt.account_id = v_actor and pt.erased_at is null and m.topic in ('appointments', 'safety') limit 2001) c;
     insert into audit.log (origin, clinic_id, actor_id, actor_role, action, resource_type, resource_id, details, idempotency_key)
     select pt.origin, pt.clinic_id, v_actor, 'patient', 'portal.export', 'account', v_actor::text, jsonb_build_object('part', 'messages', 'messages', v_n), 'sys:portal-export:' || gen_random_uuid()::text
       from mpi.patients pt where pt.account_id = v_actor limit 1;
     return query
     select m.clinic_id, m.id, m.thread_id, m.topic, m.sender_kind, m.created_at, m.erased_at, m.body_ct, m.body_key_version
       from msg.messages m join msg.threads t on t.id = m.thread_id and t.clinic_id = m.clinic_id join mpi.patients pt on pt.id = t.patient_id and pt.clinic_id = t.clinic_id
-     where pt.account_id = v_actor and pt.erased_at is null and m.topic in ('appointments', 'safety') order by m.created_at, m.id limit 2000;
+     where pt.account_id = v_actor and pt.erased_at is null and m.topic in ('appointments', 'safety') order by m.created_at, m.id limit 2001;
 end
 $$;
 
@@ -219,10 +226,13 @@ begin
     if v_actor is null or not exists (select 1 from iam.accounts a where a.id = v_actor and a.account_type = 'patient' and a.status = 'active') then
         raise exception 'export refused' using errcode = '42501';
     end if;
+    insert into audit.log (origin, clinic_id, actor_id, actor_role, action, resource_type, resource_id, details, idempotency_key)
+    select pt.origin, pt.clinic_id, v_actor, 'patient', 'portal.export', 'account', v_actor::text, jsonb_build_object('part', 'bookings'), 'sys:portal-export:' || gen_random_uuid()::text
+      from mpi.patients pt where pt.account_id = v_actor limit 1;
     return query
     select b.clinic_id, b.id, b.status, b.created_at, b.cancelled_at, s.starts_at, s.ends_at
       from sched.bookings b join sched.slots s on s.id = b.slot_id and s.clinic_id = b.clinic_id join mpi.patients pt on pt.id = b.patient_id and pt.clinic_id = b.clinic_id
-     where pt.account_id = v_actor and pt.erased_at is null order by s.starts_at, b.id limit 2000;
+     where pt.account_id = v_actor and pt.erased_at is null order by s.starts_at, b.id limit 2001;
 end
 $$;
 

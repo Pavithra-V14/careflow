@@ -210,7 +210,7 @@ async def test_the_export_returns_only_the_callers_own_appointment_and_safety_me
     assert await as_app(db, w["admin"], "select count(*) from iam.export_my_messages()") == "42501"  # staff have no export
     assert await as_app(db, w["p1"], "select count(*) from iam.export_my_bookings()", aal2=False) == [(0,)]
     n = (await db.execute(text("select count(*) from audit.log where action = 'portal.export' and actor_id = :a"), {"a": w["p1"]})).scalar()
-    assert n == 1
+    assert n == 2  # one row per export call (messages, bookings)
 
 
 async def test_grievance_texts_rotate_to_a_new_key_with_a_ledger_row_and_erased_ones_are_skipped(db):
