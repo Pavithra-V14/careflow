@@ -23,6 +23,13 @@ async def ensure_app_role_sa(conn) -> None:
         await conn.exec_driver_sql(GRANT)
 
 
+def aal2_claims(sub, **extra) -> dict:
+    """Claims of a staff session with a verified authenticator-app factor (what iam.aal2_session() reads, migration 0047)."""
+    import time
+
+    return {"sub": str(sub), "role": "authenticated", "aal": "aal2", "amr": [{"method": "totp", "timestamp": int(time.time()) - 60}], **extra}
+
+
 def without_scope(details) -> dict:
     """An audit row's `details` without `role_scope`, which every audit writer now adds (migration 0028: 'active' when the request carried a verified X-CareFlow-Active-Role, else 'all_grants').
     The tests that compare the rest exactly keep doing so; this asserts the key is there and well formed."""

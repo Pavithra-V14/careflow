@@ -79,9 +79,8 @@ class SqlWatchdogReader:
         row = (
             await self._conn.execute(
                 text(
-                    "select extract(epoch from (clock_timestamp() - min(created_at) filter (where state = 'unclaimed')))::bigint as oldest, "
-                    "count(*) filter (where state = 'dead_lettered' and dead_lettered_at > clock_timestamp() - interval '7 days') as dead "
-                    "from ops.queue where clinic_id = :c and origin = :o"
+                    "select (select extract(epoch from (clock_timestamp() - min(q.created_at)))::bigint from ops.queue q where q.clinic_id = :c and q.origin = :o and q.state = 'unclaimed') as oldest, "
+                    "(select count(*) from ops.queue d where d.clinic_id = :c and d.origin = :o and d.state = 'dead_lettered' and d.dead_lettered_at > clock_timestamp() - interval '7 days') as dead"
                 ),
                 {"c": uuid.UUID(clinic_id), "o": self._origin},
             )

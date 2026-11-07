@@ -19,7 +19,7 @@ attrs==26.1.0
     # via
     #   jsonschema
     #   referencing
-certifi==2026.7.22
+certifi==2026.10.23
     # via
     #   httpcore
     #   httpx
@@ -106,7 +106,7 @@ mcp==2.3.0
     # via careflow
 mcp-types==2.3.0
     # via mcp
-opentelemetry-api==1.45.0
+opentelemetry-api==1.45.1
     # via
     #   fastapi
     #   mcp
@@ -145,7 +145,7 @@ pyjwt==2.15.1
     # via
     #   careflow
     #   mcp
-pypdf==6.21.3
+pypdf==6.21.4
     # via careflow
 pytest==9.1.1
     # via pytest-asyncio

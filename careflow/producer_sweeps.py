@@ -79,3 +79,19 @@ async def sampler_sweep(conn: AsyncConnection, rate: float | None, *, source: Ca
         except Exception as exc:  # noqa: BLE001
             log.error("sampler sweep failed for one clinic: %s", type(exc).__name__)
     return made
+
+
+async def voice_purge_sweep(conn: AsyncConnection, retention_days: int | None, *, origin: str = "live", batch: int = 500) -> int:
+    """The scheduled purge of EXPIRED voice transcript chunks (migration 0063). Runs only while the retention setting is configured (a required setting; unset purges nothing). Per clinic the worker serves
+    it calls the worker-only definer function, which deletes only chunks past their own expiry and writes one audit row when it deleted something. One clinic failing never stops the others. Returns the
+    number of chunks deleted."""
+    if retention_days is None or retention_days < 1:
+        return 0
+    deleted = 0
+    for clinic in await _clinics(conn, origin):
+        try:
+            async with conn.begin_nested():
+                deleted += int((await conn.execute(text("select msg.purge_expired_voice_chunks_as_worker(:c, :n)"), {"c": clinic, "n": batch})).scalar() or 0)
+        except Exception:
+            log.exception("voice purge sweep failed for one clinic")
+    return deleted
