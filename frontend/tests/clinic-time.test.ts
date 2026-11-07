@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { CLINIC_TIME_ZONE_PLACEHOLDER, clinicLocalToIso, getClinicTimeZone, setClinicTimeZone } from '../src/shared/clinicTime';
+import { CLINIC_TIME_ZONE_PLACEHOLDER, clinicLocalToIso, getClinicTimeZone, isClinicTimeZonePlaceholder, resetClinicTimeZone, setClinicTimeZone } from '../src/shared/clinicTime';
 import { formatDateTime } from '../src/shared/i18n/format';
 
-afterEach(() => setClinicTimeZone(CLINIC_TIME_ZONE_PLACEHOLDER));
+afterEach(() => resetClinicTimeZone());
 
 describe('the clinic time zone (owner decision 2026-11-07; the zone is a labelled demo placeholder until the backend sends it)', () => {
   it('defaults to the demo placeholder Asia/Calcutta', () => {
@@ -24,6 +24,14 @@ describe('the clinic time zone (owner decision 2026-11-07; the zone is a labelle
 
   it('returns null for anything that is not a real wall-clock time, so a half-typed value never becomes a date', () => {
     for (const bad of ['', '2026-11-10', '2026-02-31T10:00', '2026-13-01T10:00', 'tomorrow', '2026-11-10T25:00']) expect(clinicLocalToIso(bad), bad).toBeNull();
+  });
+
+  it('is labelled a placeholder until the clinic sends its own, and not afterwards', () => {
+    expect(isClinicTimeZonePlaceholder()).toBe(true);
+    setClinicTimeZone('Asia/Calcutta'); // even the same name is a real setting once the clinic sent it
+    expect(isClinicTimeZonePlaceholder()).toBe(false);
+    resetClinicTimeZone();
+    expect(isClinicTimeZonePlaceholder()).toBe(true);
   });
 
   it('ignores a zone name Intl does not know, and keeps the previous one', () => {

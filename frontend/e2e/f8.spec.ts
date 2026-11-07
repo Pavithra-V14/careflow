@@ -87,7 +87,7 @@ test('200% zoom: alerts, care gaps and care plans stay usable with no horizontal
 test('the admin menu has Scheduling (read plus setup), Alerts, Dashboard and Care', async ({ page }) => {
   await openConsole(page, 'admin', 'en');
   const nav = page.locator('.main-nav');
-  for (const name of ['Tasks', 'Scheduling', 'Alerts', 'Dashboard', 'Care']) await expect(nav.getByRole('link', { name, exact: true })).toBeVisible();
+  for (const name of ['Tasks', 'Scheduling', 'Alerts', 'Dashboard', 'Care', 'Admin']) await expect(nav.getByRole('link', { name, exact: true })).toBeVisible();
   await go(page, '#/scheduling/slots', /\S/);
   await expect(page.locator('main table').first()).toBeVisible();
 });

@@ -11,6 +11,7 @@ import { ReferralReview } from './ReferralReview';
 import { ReviewerView } from './ReviewerView';
 import { CAN_REVIEW_REFERRAL } from '../sections';
 import { useSession } from '../session/SessionContext';
+import { CareLinks } from '../components/CareLinks';
 import { TYPE_LABEL } from './ReferralsPage';
 import { formatNumber } from '../../shared/i18n/format';
 
@@ -112,6 +113,7 @@ function Detail({ documentId }: { documentId: string }) {
 
             {/* The reviewer view and the decision are for nurse and doctor, and only on a proposal they can see. The backend decides (409 when no run is waiting). */}
             {hasRole(CAN_REVIEW_REFERRAL) && r.proposal_visible && <ReviewerView documentId={documentId} />}
+            {r.proposal_visible && r.proposal?.patient_id && <CareLinks patientId={r.proposal.patient_id} />}
             {recorded && (
               <p role="status" className="state state-ok">
                 {t('referrals.review.done')}

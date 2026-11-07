@@ -28,7 +28,8 @@ describe('navigation', () => {
   it.each([
     ['front_desk', ['Referrals', 'Tasks', 'Patients', 'Identity', 'Scheduling', 'Alerts']],
     ['nurse', ['Referrals', 'Tasks', 'Patients', 'Identity', 'Scheduling', 'Alerts', 'Care']],
-    ['admin', ['Tasks', 'Scheduling', 'Alerts', 'Dashboard', 'Care']],
+    ['doctor', ['Referrals', 'Tasks', 'Patients', 'Identity', 'Scheduling', 'Alerts', 'Care', 'Admin']],
+    ['admin', ['Tasks', 'Scheduling', 'Alerts', 'Dashboard', 'Care', 'Admin']],
     ['auditor', []],
     ['business_owner', []],
   ])('shows %s only the sections its role may use (a convenience; the backend decides)', async (role, expected) => {

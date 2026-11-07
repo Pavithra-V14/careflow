@@ -13,7 +13,8 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Badge, PlaceholderNote, ShortId, Time, useLang, useWord } from '../ui/bits';
 import { NotAvailableToRole, ProblemText, QueryView } from '../ui/states';
 import { formatNumber } from '../../shared/i18n/format';
-import { clinicLocalToIso, getClinicTimeZone } from '../../shared/clinicTime';
+import { clinicLocalToIso } from '../../shared/clinicTime';
+import { ZoneNote } from '../components/ZoneNote';
 
 type Slot = components['schemas']['SlotOut'];
 
@@ -369,7 +370,7 @@ function AddSlotDialog({ refs, onClose }: { refs: Refs; onClose: (ok: boolean) =
           ))}
         </select>
       </label>
-      <p className="hint">{t('scheduling.zoneNote', { zone: getClinicTimeZone() })}</p>
+      <ZoneNote />
       <label>
         {t('scheduling.startsAt')}
         <input type="datetime-local" value={starts} onChange={pick(setStarts)} />
@@ -737,24 +738,10 @@ function JoinDialog({ refs, onClose }: { refs: Refs; onClose: (ok: boolean) => v
 const OFFER_STATES: readonly OfferState[] = ['awaiting_delivery', 'delivered', 'expired', 'booked', 'released'];
 type Offer = components['schemas']['OfferRowOut'];
 
-/**
- * Finds the text of an offer: the message the send recorded in the patient's `appointments` thread, read through the audited
- * message read. The row carries no message id, so the message is the one created closest to the offer, and only when that is
- * within a minute of it; otherwise the text is reported as not found rather than guessing.
- */
+/** The text of an offer: the message the send recorded, read by its id through the audited message read. No id means no text to copy. */
 async function fetchOfferText(api: ReturnType<typeof useAuth>['api'], offer: Offer): Promise<string> {
-  if (!offer.patient_id) throw new ApiProblem('not_found');
-  const threads = await unwrap(api.listThreads(offer.patient_id, 'appointments'));
-  const thread = threads.items[0];
-  if (!thread) throw new ApiProblem('not_found');
-  const headers = await unwrap(api.listThreadMessages(thread.thread_id));
-  const created = Date.parse(offer.created_at);
-  const nearest = headers.items
-    .filter((m) => !m.erased)
-    .map((m) => ({ m, gap: Math.abs(Date.parse(m.created_at) - created) }))
-    .sort((a, b) => a.gap - b.gap)[0];
-  if (!nearest || !Number.isFinite(nearest.gap) || nearest.gap > 60_000) throw new ApiProblem('not_found');
-  return (await unwrap(api.readMessage(nearest.m.message_id))).body;
+  if (!offer.message_id) throw new ApiProblem('not_found');
+  return (await unwrap(api.readMessage(offer.message_id))).body;
 }
 
 export function OffersList() {
@@ -855,7 +842,7 @@ export function OffersList() {
                   </td>
                   <td>{o.channel ?? '–'}</td>
                   <td>
-                    {o.patient_id && (o.state === 'awaiting_delivery' || o.state === 'delivered') && (
+                    {o.message_id && (o.state === 'awaiting_delivery' || o.state === 'delivered') && (
                       <button
                         type="button"
                         disabled={copy.isPending}

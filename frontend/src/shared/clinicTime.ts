@@ -5,17 +5,27 @@
 export const CLINIC_TIME_ZONE_PLACEHOLDER = 'Asia/Calcutta';
 
 let zone = CLINIC_TIME_ZONE_PLACEHOLDER;
+let fromSetting = false;
 export const getClinicTimeZone = (): string => zone;
+/** True while the zone is the demo placeholder (the backend sent none), so screens that take a time can say so. */
+export const isClinicTimeZonePlaceholder = (): boolean => !fromSetting;
 
 /** Accepts only a zone name Intl knows; anything else is ignored so a bad setting cannot break every time shown. */
 export function setClinicTimeZone(name: string): boolean {
   try {
     new Intl.DateTimeFormat('en', { timeZone: name });
     zone = name;
+    fromSetting = true;
     return true;
   } catch {
     return false;
   }
+}
+
+/** Back to the labelled placeholder (the setting is null, or signed out). */
+export function resetClinicTimeZone(): void {
+  zone = CLINIC_TIME_ZONE_PLACEHOLDER;
+  fromSetting = false;
 }
 
 /** Milliseconds the zone is ahead of UTC at the given instant. */

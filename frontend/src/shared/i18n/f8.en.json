@@ -121,7 +121,6 @@
       "measureValue": "Measure {{n}} value",
       "notNumber": "A value must be a number or empty.",
       "addMeasure": "Add a measure",
-      "zoneNote": "Times are in the clinic time zone: {{zone}} (demo placeholder).",
       "validFrom": "Valid from",
       "validTo": "Valid until (optional)",
       "verified": "Verified",

@@ -1,0 +1,217 @@
+{
+  "nav": {
+    "admin": "Admin"
+  },
+  "care": {
+    "links": {
+      "title": "Care for this patient"
+    },
+    "gaps": {
+      "recordBarrier": "Record a barrier",
+      "startEpisode": "Start an episode",
+      "record": "Record",
+      "start": "Start",
+      "barrierBody": "Records a barrier that stops this patient from attending. The type is chosen from a fixed list.",
+      "barrierKind": "Barrier",
+      "barrier": {
+        "transport": "Transport",
+        "cost": "Cost",
+        "childcare": "Childcare",
+        "forgot": "Forgot",
+        "scheduling_conflict": "Scheduling conflict",
+        "other": "Other"
+      },
+      "barrierDone": "The barrier was recorded.",
+      "episodeBody": "Starts a care episode for the patient and attaches the rules the clinic has set for that kind of episode.",
+      "episodeCode": "Episode code",
+      "startedOn": "Started on",
+      "episodeDone": "The episode was started.",
+      "episodeNotFound": "The clinic, the patient or the episode code was not found. Nothing was started.",
+      "episodeNotConfigured": "Episode rules are not set up yet. Nothing was started.",
+      "col": {
+        "action": "Action"
+      },
+      "resolve": "Resolve",
+      "resolveTitle": "Resolve this barrier?",
+      "resolveBody": "This closes the barrier, under your name. It can be done once.",
+      "resolved": "The barrier was resolved.",
+      "alreadyResolved": "This barrier was already resolved. The list will refresh.",
+      "recheck": "Re-check",
+      "recheckTitle": "Mark this sample re-checked?",
+      "recheckBody": "This records that you re-checked the sample, under your name. It can be done once.",
+      "rechecked": "The sample was marked re-checked.",
+      "sameDecider": "You made the decision this sample was drawn from, so someone else must re-check it. Nothing was recorded.",
+      "markDone": "Mark done",
+      "doneBody": "Records the date this rule was last done. It can only move forward and never into the future.",
+      "doneOn": "Done on",
+      "doneRecorded": "The date was recorded.",
+      "dateRefused": "That date is refused: it would move backwards or fall in the future. Nothing was recorded.",
+      "itemGone": "That item could not be found, or it has already been dealt with. The list will refresh."
+    }
+  },
+  "admin": {
+    "title": "Admin",
+    "tabs": "Admin sections",
+    "tab": {
+      "accounts": "Staff accounts",
+      "autonomy": "Autonomy",
+      "reviewer": "Reviewer statistics",
+      "cost": "Cost canvas",
+      "voice": "Voice transcripts"
+    },
+    "stepUp": "This needs a fresh authenticator code. You will be asked for it.",
+    "notRecorded": "Not recorded",
+    "accounts": {
+      "note": "Accounts that hold or held a role at this clinic. Only ids, a status and role words are shown; no e-mail is stored here.",
+      "empty": "There are no staff accounts to show.",
+      "col": {
+        "account": "Account",
+        "status": "Status",
+        "roles": "Roles",
+        "action": "Action"
+      },
+      "status": {
+        "invited": "Invited",
+        "active": "Active",
+        "suspended": "Suspended",
+        "closed": "Closed"
+      },
+      "invite": "Invite a staff member",
+      "inviteTitle": "Invite a staff member?",
+      "inviteBody": "Creates an account with the one role you choose. They activate it themselves.",
+      "email": "E-mail address",
+      "role": "Role",
+      "suspend": "Suspend",
+      "suspendTitle": "Suspend this account?",
+      "suspendBody": "The account can no longer sign in to this system until it is reinstated.",
+      "reinstate": "Reinstate",
+      "reinstateTitle": "Reinstate this account?",
+      "reinstateBody": "The suspended account can sign in again.",
+      "grant": "Grant a role",
+      "grantTitle": "Grant a role?",
+      "grantBody": "Gives this account the role you choose at this clinic.",
+      "revoke": "Revoke a role",
+      "revokeTitle": "Revoke a role?",
+      "revokeBody": "Removes the role you choose from this account at this clinic.",
+      "done": {
+        "invite": "The invitation was created.",
+        "suspend": "The account was suspended.",
+        "reinstate": "The account was reinstated.",
+        "grant": "The role was granted.",
+        "revoke": "The role was revoked."
+      },
+      "notConfigured": "Inviting is not set up yet (no sign-in administration is configured). Nothing was sent.",
+      "exists": "An account with that e-mail already exists. Grant it a role instead.",
+      "lastAdmin": "That would leave the clinic without an active administrator. Nothing was changed.",
+      "cannotChange": "You cannot change this account: it is your own, or you are not an administrator of every clinic where it holds a role."
+    },
+    "autonomy": {
+      "mode": "Mode",
+      "modes": {
+        "shadow": "Shadow",
+        "assisted": "Assisted",
+        "autonomous": "Autonomous"
+      },
+      "neverSet": "(never set, so shadow)",
+      "change": "Change the mode",
+      "changeBody": "Sets the clinic to shadow or assisted. Switching to autonomous is only done through a proposal that a second person approves.",
+      "set": "Set mode",
+      "modeSet": "The mode was set.",
+      "propose": "Propose switching to autonomous",
+      "proposeConfirm": "Propose",
+      "proposeBody": "You propose as {{role}}. A different person who holds the other role must approve it within 7 days. Nothing changes until then.",
+      "proposed": "The proposal was made.",
+      "alreadyPending": "A proposal is already pending.",
+      "notEnabled": "Switching to autonomous is not enabled yet. Nothing was changed.",
+      "note": "There is no history list: only proposals that are still pending are shown.",
+      "pending": "Pending proposals",
+      "noPending": "There are no pending proposals.",
+      "col": {
+        "proposal": "Proposal",
+        "by": "Proposed by",
+        "role": "As",
+        "created": "Created",
+        "action": "Action"
+      },
+      "you": "You",
+      "approve": "Approve",
+      "reject": "Reject",
+      "approveTitle": "Approve this proposal?",
+      "rejectTitle": "Reject this proposal?",
+      "decideBody": "Your decision is recorded under your name by the database.",
+      "result": {
+        "approved": "Approved. The proposal is resolved.",
+        "rejected": "Rejected. The proposal is closed.",
+        "same_person": "The person who proposed it cannot approve it.",
+        "wrong_role": "Approval has to come from the other role.",
+        "expired": "This proposal has expired.",
+        "not_pending": "This proposal is no longer pending."
+      }
+    },
+    "reviewer": {
+      "window": "The last {{days}} days.",
+      "noPolicy": "The policy that judges rubber-stamping is not set, so no verdict is given.",
+      "empty": "There are no reviewer decisions in this period.",
+      "col": {
+        "reviewer": "Reviewer",
+        "decisions": "Decisions",
+        "approvals": "Approvals",
+        "rejections": "Rejections",
+        "edits": "Edits",
+        "rate": "Approval rate",
+        "median": "Median seconds to decide",
+        "canaries": "Test cases approved",
+        "verdict": "Verdict",
+        "reasons": "Reasons"
+      },
+      "canaryCount": "{{approved}} of {{seen}}"
+    },
+    "cost": {
+      "note": "Monthly cost from the spend ledger and completed jobs, in two columns: actual, and at the scale you plan for. A term that is not configured or not measured stays empty.",
+      "state": "State",
+      "amplification": "Amplification over the ceiling",
+      "reasons": "Reasons",
+      "noColumn": "No column",
+      "notMeasured": "Not measured",
+      "col": {
+        "term": "Term",
+        "actual": "Actual",
+        "shadow": "At scale"
+      },
+      "term": {
+        "workflows": "Workflows per day",
+        "calls": "Calls per workflow",
+        "perCall": "Cost per call",
+        "variable": "Variable cost per month",
+        "floor": "Platform floor per month",
+        "failure": "Failure tax per month",
+        "total": "Total per month"
+      }
+    },
+    "voice": {
+      "note": "Transcripts are read and purged only by an administrator with a fresh second factor. Every read and purge is audited by the database.",
+      "empty": "There are no voice sessions.",
+      "col": {
+        "session": "Session",
+        "workflow": "Workflow",
+        "status": "Status",
+        "started": "Started",
+        "chunks": "Chunks",
+        "expired": "Expired chunks",
+        "retention": "Retention (days)",
+        "action": "Action"
+      },
+      "read": "Read transcript",
+      "readTitle": "Read this transcript?",
+      "readBody": "The text is shown only while this window is open, and the read is audited.",
+      "transcript": "Transcript",
+      "noChunks": "There is no unexpired text in this session.",
+      "keysMissing": "Encryption keys are not configured, so the transcript cannot be read.",
+      "purge": "Purge expired transcripts",
+      "purgeConfirm": "Purge",
+      "purgeBody": "Deletes expired transcript chunks of this clinic. An unexpired chunk is never deleted. This cannot be undone.",
+      "purgeLimit": "Most chunks to delete (optional)",
+      "purged": "Deleted {{count}} expired chunks."
+    }
+  }
+}

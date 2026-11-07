@@ -15,6 +15,15 @@ export type DuplicateStatus = NonNullable<DuplicateQuery['status']>;
 type TaskQuery = NonNullable<paths['/v1/staff/review-tasks']['get']['parameters']['query']>;
 export type ReviewTaskStatus = TaskQuery['status'];
 export type TaskRole = NonNullable<TaskQuery['assigned_role']>;
+export type BarrierIn = components['schemas']['BarrierIn'];
+export type BarrierKind = BarrierIn['barrier'];
+export type EpisodeIn = components['schemas']['EpisodeIn'];
+export type InviteIn = components['schemas']['InviteIn'];
+export type StaffRole = InviteIn['role'];
+export type RoleChangeIn = components['schemas']['RoleChangeIn'];
+export type AutonomySetIn = components['schemas']['AutonomySetIn'];
+export type AutonomyDecision = components['schemas']['AutonomyResolveIn']['decision'];
+export type VoicePurgeIn = components['schemas']['VoicePurgeIn'];
 export type CarePlanIn = components['schemas']['CarePlanIn'];
 export type ResultIn = components['schemas']['ResultIn'];
 export type CarePlanAction = components['schemas']['CarePlanConfirmIn']['action'];
@@ -26,8 +35,6 @@ export type ProviderIn = components['schemas']['ProviderIn'];
 export type VisitTypeIn = components['schemas']['VisitTypeIn'];
 type OfferQuery = NonNullable<paths['/v1/staff/scheduling/offers']['get']['parameters']['query']>;
 export type OfferState = NonNullable<OfferQuery['state']>;
-type ThreadQuery = NonNullable<paths['/v1/staff/messages/threads']['get']['parameters']['query']>;
-export type ThreadTopic = NonNullable<ThreadQuery['topic']>;
 export type HoldStatus = NonNullable<paths['/v1/staff/scheduling/holds']['get']['parameters']['query']>['status'];
 
 /** The request header that names the active role (docs/design/active-role.md; the backend reads it since migration 0028). */
@@ -83,8 +90,6 @@ export const OPERATIONS = {
   createLocation: { method: 'post', path: '/v1/staff/scheduling/locations' },
   createProvider: { method: 'post', path: '/v1/staff/scheduling/providers' },
   createVisitType: { method: 'post', path: '/v1/staff/scheduling/visit-types' },
-  listThreads: { method: 'get', path: '/v1/staff/messages/threads' },
-  listThreadMessages: { method: 'get', path: '/v1/staff/messages/threads/{thread_id}/messages' },
   readMessage: { method: 'get', path: '/v1/staff/messages/{message_id}' },
   // ---- alerts, dashboard, care gaps, care plans, results ----
   listAlerts: { method: 'get', path: '/v1/staff/console/alerts' },
@@ -95,6 +100,29 @@ export const OPERATIONS = {
   createCarePlan: { method: 'post', path: '/v1/staff/care-plans' },
   confirmCarePlan: { method: 'post', path: '/v1/staff/care-plans/{plan_id}/confirm' },
   recordResult: { method: 'post', path: '/v1/staff/results' },
+  // ---- care-gap writes ----
+  recordBarrier: { method: 'post', path: '/v1/staff/care-gaps/barriers' },
+  resolveBarrier: { method: 'post', path: '/v1/staff/care-gaps/barriers/{barrier_id}/resolve' },
+  startEpisode: { method: 'post', path: '/v1/staff/care-gaps/episodes' },
+  markRuleDone: { method: 'post', path: '/v1/staff/care-gaps/episode-rules/{episode_rule_id}/done' },
+  recheckSample: { method: 'post', path: '/v1/staff/care-gaps/samples/{sample_id}/recheck' },
+  // ---- admin ----
+  listAccounts: { method: 'get', path: '/v1/staff/accounts' },
+  inviteAccount: { method: 'post', path: '/v1/staff/accounts/invite' },
+  suspendAccount: { method: 'post', path: '/v1/staff/accounts/{account_id}/suspend' },
+  reinstateAccount: { method: 'post', path: '/v1/staff/accounts/{account_id}/reinstate' },
+  grantRole: { method: 'post', path: '/v1/staff/accounts/{account_id}/roles' },
+  revokeRole: { method: 'post', path: '/v1/staff/accounts/{account_id}/roles/revoke' },
+  getAutonomy: { method: 'get', path: '/v1/staff/console/autonomy' },
+  setAutonomy: { method: 'post', path: '/v1/staff/console/autonomy' },
+  listAutonomyProposals: { method: 'get', path: '/v1/staff/console/autonomy/proposals' },
+  proposeAutonomy: { method: 'post', path: '/v1/staff/console/autonomy/proposals' },
+  resolveAutonomyProposal: { method: 'post', path: '/v1/staff/console/autonomy/proposals/{proposal_id}/resolve' },
+  reviewerStats: { method: 'get', path: '/v1/staff/console/reviewer-stats' },
+  costCanvas: { method: 'get', path: '/v1/staff/console/cost-canvas' },
+  listVoiceSessions: { method: 'get', path: '/v1/staff/voice/sessions' },
+  readTranscript: { method: 'get', path: '/v1/staff/voice/sessions/{session_id}/transcript' },
+  purgeVoice: { method: 'post', path: '/v1/staff/voice/purge' },
   // ---- review console ----
   reviewView: { method: 'get', path: '/v1/staff/referrals/{document_id}/review-view' },
   reasonCodes: { method: 'get', path: '/v1/staff/console/reason-codes' },
@@ -284,8 +312,6 @@ export function createApi(options: ApiOptions) {
     createLocation: (body: LocationIn, o?: WriteOptions) => client.POST('/v1/staff/scheduling/locations', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
     createProvider: (body: ProviderIn, o?: WriteOptions) => client.POST('/v1/staff/scheduling/providers', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
     createVisitType: (body: VisitTypeIn, o?: WriteOptions) => client.POST('/v1/staff/scheduling/visit-types', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
-    listThreads: (patientId: string, topic: ThreadTopic) => client.GET('/v1/staff/messages/threads', { params: { query: { patient_id: patientId, topic } } }),
-    listThreadMessages: (threadId: string) => client.GET('/v1/staff/messages/threads/{thread_id}/messages', { params: { path: { thread_id: threadId } } }),
     // Reads one message AND audits the read: only on a person's click, never in the background, and the body is never cached.
     readMessage: (messageId: string) => client.GET('/v1/staff/messages/{message_id}', { params: { path: { message_id: messageId } } }),
 
@@ -301,6 +327,43 @@ export function createApi(options: ApiOptions) {
     confirmCarePlan: (planId: string, action: CarePlanAction, o?: WriteOptions) =>
       client.POST('/v1/staff/care-plans/{plan_id}/confirm', { params: { path: { plan_id: planId }, header: { 'X-Idempotency-Key': key(o) } }, body: { action } }),
     recordResult: (body: ResultIn, o?: WriteOptions) => client.POST('/v1/staff/results', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+
+    // ---- care-gap writes (nurse and doctor) -----------------------------------------------------------------------------------
+    recordBarrier: (body: BarrierIn, o?: WriteOptions) => client.POST('/v1/staff/care-gaps/barriers', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    resolveBarrier: (barrierId: string, o?: WriteOptions) =>
+      client.POST('/v1/staff/care-gaps/barriers/{barrier_id}/resolve', { params: { path: { barrier_id: barrierId }, header: { 'X-Idempotency-Key': key(o) } } }),
+    startEpisode: (body: EpisodeIn, o?: WriteOptions) => client.POST('/v1/staff/care-gaps/episodes', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    markRuleDone: (ruleId: string, doneOn: string, o?: WriteOptions) =>
+      client.POST('/v1/staff/care-gaps/episode-rules/{episode_rule_id}/done', { params: { path: { episode_rule_id: ruleId }, header: { 'X-Idempotency-Key': key(o) } }, body: { done_on: doneOn } }),
+    recheckSample: (sampleId: string, o?: WriteOptions) =>
+      client.POST('/v1/staff/care-gaps/samples/{sample_id}/recheck', { params: { path: { sample_id: sampleId }, header: { 'X-Idempotency-Key': key(o) } } }),
+
+    // ---- admin ------------------------------------------------------------------------------------------------------------------
+    listAccounts: (clinicId: string) => client.GET('/v1/staff/accounts', { params: { query: { clinic_id: clinicId } } }),
+    inviteAccount: (body: InviteIn, o?: WriteOptions) => client.POST('/v1/staff/accounts/invite', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    suspendAccount: (accountId: string, o?: WriteOptions) =>
+      client.POST('/v1/staff/accounts/{account_id}/suspend', { params: { path: { account_id: accountId }, header: { 'X-Idempotency-Key': key(o) } } }),
+    reinstateAccount: (accountId: string, o?: WriteOptions) =>
+      client.POST('/v1/staff/accounts/{account_id}/reinstate', { params: { path: { account_id: accountId }, header: { 'X-Idempotency-Key': key(o) } } }),
+    grantRole: (accountId: string, body: RoleChangeIn, o?: WriteOptions) =>
+      client.POST('/v1/staff/accounts/{account_id}/roles', { params: { path: { account_id: accountId }, header: { 'X-Idempotency-Key': key(o) } }, body }),
+    revokeRole: (accountId: string, body: RoleChangeIn, o?: WriteOptions) =>
+      client.POST('/v1/staff/accounts/{account_id}/roles/revoke', { params: { path: { account_id: accountId }, header: { 'X-Idempotency-Key': key(o) } }, body }),
+    getAutonomy: (clinicId: string) => client.GET('/v1/staff/console/autonomy', { params: { query: { clinic_id: clinicId } } }),
+    setAutonomy: (body: AutonomySetIn, o?: WriteOptions) => client.POST('/v1/staff/console/autonomy', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    listAutonomyProposals: (clinicId: string) => client.GET('/v1/staff/console/autonomy/proposals', { params: { query: { clinic_id: clinicId } } }),
+    proposeAutonomy: (clinicId: string, proposerRole: 'admin' | 'doctor' | null, o?: WriteOptions) =>
+      client.POST('/v1/staff/console/autonomy/proposals', { params: { header: { 'X-Idempotency-Key': key(o) } }, body: { clinic_id: clinicId, proposer_role: proposerRole } }),
+    resolveAutonomyProposal: (proposalId: string, decision: AutonomyDecision, o?: WriteOptions) =>
+      client.POST('/v1/staff/console/autonomy/proposals/{proposal_id}/resolve', { params: { path: { proposal_id: proposalId }, header: { 'X-Idempotency-Key': key(o) } }, body: { decision } }),
+    reviewerStats: (clinicId: string, days?: number) => client.GET('/v1/staff/console/reviewer-stats', { params: { query: { clinic_id: clinicId, ...(days ? { days } : {}) } } }),
+    costCanvas: (clinicId: string, days?: number) => client.GET('/v1/staff/console/cost-canvas', { params: { query: { clinic_id: clinicId, ...(days ? { days } : {}) } } }),
+    listVoiceSessions: (clinicId: string) => client.GET('/v1/staff/voice/sessions', { params: { query: { clinic_id: clinicId } } }),
+    // Reads a transcript AND the database audits the read: only on a person's click, and the text is never cached.
+    readTranscript: (sessionId: string, clinicId: string) =>
+      client.GET('/v1/staff/voice/sessions/{session_id}/transcript', { params: { path: { session_id: sessionId }, query: { clinic_id: clinicId } } }),
+    // `limit` is optional on the wire: the schema's own default (500, at most 1000) applies when it is left out.
+    purgeVoice: (body: { clinic_id: string; limit?: number }, o?: WriteOptions) => client.POST('/v1/staff/voice/purge', { params: { header: { 'X-Idempotency-Key': key(o) } }, body: body as VoicePurgeIn }),
 
     // ---- review console -----------------------------------------------------------------------------------------------
     reviewView: (documentId: string) => client.GET('/v1/staff/referrals/{document_id}/review-view', { params: { path: { document_id: documentId } } }),

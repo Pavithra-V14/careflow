@@ -21,6 +21,7 @@ import { MergeDetailPage } from '../pages/MergeDetailPage';
 import { AlertsPage } from '../pages/AlertsPage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { CarePage } from '../pages/CarePage';
+import { AdminPage } from '../pages/AdminPage';
 
 /**
  * The signed-in console: a persistent session bar (role, clinic, LIVE / TEST badge) above every screen, a role-aware
@@ -100,6 +101,8 @@ export function Shell() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/care" element={<Navigate to="/care/gaps" replace />} />
           <Route path="/care/:tab" element={<CarePage />} />
+          <Route path="/admin" element={<AdminPage />} />
+          <Route path="/admin/:tab" element={<AdminPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </GuardedRoutes>

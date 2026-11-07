@@ -6,7 +6,7 @@
 // backend disagree, the backend wins and this list is the thing to fix. Roles below follow the route docstrings in
 // openapi.snapshot.json and docs/design/review-task-routes.md.
 
-export type SectionId = 'referrals' | 'tasks' | 'patients' | 'identity' | 'scheduling' | 'alerts' | 'dashboard' | 'care';
+export type SectionId = 'referrals' | 'tasks' | 'patients' | 'identity' | 'scheduling' | 'alerts' | 'dashboard' | 'care' | 'admin';
 
 export interface Section {
   id: SectionId;
@@ -25,7 +25,21 @@ export const SECTIONS: readonly Section[] = [
   { id: 'alerts', path: '/alerts', labelKey: 'nav.alerts', roles: ['front_desk', 'nurse', 'doctor', 'admin'] },
   { id: 'dashboard', path: '/dashboard', labelKey: 'nav.dashboard', roles: ['admin'] },
   { id: 'care', path: '/care', labelKey: 'nav.care', roles: ['nurse', 'doctor', 'admin'] },
+  { id: 'admin', path: '/admin', labelKey: 'nav.admin', roles: ['admin', 'doctor'] },
 ];
+
+/**
+ * The admin section's tabs and who sees each. The doctor sees only Autonomy (the two-person switch); the rest are admin only.
+ * A convenience: the backend decides, and every tab still shows "not available to your role" on a 403.
+ */
+export const ADMIN_TABS = [
+  { id: 'accounts', roles: ['admin'] },
+  { id: 'autonomy', roles: ['admin', 'doctor'] },
+  { id: 'reviewer', roles: ['admin'] },
+  { id: 'cost', roles: ['admin'] },
+  { id: 'voice', roles: ['admin'] },
+] as const;
+export type AdminTab = (typeof ADMIN_TABS)[number]['id'];
 
 export const sectionsFor = (role: string): Section[] => SECTIONS.filter((s) => s.roles.includes(role));
 
@@ -35,6 +49,8 @@ export const CAN_SEARCH_PATIENTS = ['front_desk'] as const;
 export const CAN_CONFIRM_IDENTITY = ['front_desk'] as const;
 /** Write a care plan, and approve or reject a proposed one (a doctor, per the route docs). */
 export const CAN_DECIDE_CARE_PLAN = ['doctor'] as const;
+/** Care-gap writes: record a barrier, start an episode, resolve, mark a rule done, re-check a sample (owner: nurse and doctor only). */
+export const CAN_RECORD_CARE_GAP = ['nurse', 'doctor'] as const;
 /** Record a result (nurse or doctor). */
 export const CAN_RECORD_RESULT = ['nurse', 'doctor'] as const;
 export const CAN_RELEASE_HOLD = ['front_desk'] as const;

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { formatActiveRole } from '../../shared/api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { readStoredGrant, storeGrant } from '../activeRole';
+import { resetClinicTimeZone, setClinicTimeZone } from '../../shared/clinicTime';
 import { parseMe, type Account, type Grant } from '../me';
 import { SessionProvider } from '../session/SessionContext';
 import { DevSpikeSlot } from '../components/DevSpikeSlot';
@@ -42,7 +43,12 @@ export function Console() {
     retry: false,
     queryFn: async (): Promise<Account> => {
       const res = await api.getMe();
-      if (res.data) return parseMe(res.data);
+      if (res.data) {
+        // The clinic's own time zone, when the backend sends one; otherwise the labelled demo placeholder stays.
+        const zone = res.data.clinic_time_zone;
+        if (typeof zone !== 'string' || !setClinicTimeZone(zone)) resetClinicTimeZone();
+        return parseMe(res.data);
+      }
       // 403 is the API's single answer for "no active account" and "not allowed": say nothing more than it does.
       if (res.response.status === 403) throw new AccountUnavailable();
       throw new Error('me failed');

@@ -29,7 +29,7 @@ const refs: Routes = [
 const searchRoute: Routes[number] = ['post', '/v1/staff/patients/search', () => json({ items: [{ patient_id: ID.patient, verified: true, registered_via: 'staff', matched_kinds: ['name'] }], labels_withheld: false, truncated: false })];
 const booking = { booking_id: BOOKING, clinic_id: CLINIC_A, created_at: '2026-11-09T04:00:00Z', ends_at: '2026-11-10T04:30:00Z', location_id: LOCATION, patient_id: ID.patient, provider_id: ID.doc, slot_id: ID.slot, starts_at: '2026-11-10T04:00:00Z', visit_type_id: ID.visitType };
 const offer = (over: Record<string, unknown> = {}) => ({
-  channel: null, clinic_id: CLINIC_A, created_at: '2026-11-09T05:00:00Z', delivered_at: null, expires_at: '2026-11-10T05:00:00Z', hold_id: ID.hold, patient_id: ID.patient, slot_id: ID.slot, state: 'awaiting_delivery', ...over,
+  channel: null, clinic_id: CLINIC_A, created_at: '2026-11-09T05:00:00Z', delivered_at: null, expires_at: '2026-11-10T05:00:00Z', hold_id: ID.hold, message_id: MESSAGE, patient_id: ID.patient, slot_id: ID.slot, state: 'awaiting_delivery', ...over,
 });
 
 async function findPatient(user: ReturnType<typeof userEvent.setup>, dialog: HTMLElement) {
@@ -198,12 +198,8 @@ describe('waitlist', () => {
 });
 
 describe('offers: list, copy the text, mark delivered (the system sends nothing)', () => {
-  const textRoutes = (headers: unknown[]): Routes => [
-    ['get', '/v1/staff/messages/threads', () => list([{ clinic_id: CLINIC_A, created_at: '2026-11-09T05:00:00Z', last_message_at: null, message_count: 1, patient_id: ID.patient, status: 'open', thread_id: THREAD, topic: 'appointments' }])],
-    ['get', `/v1/staff/messages/threads/${THREAD}/messages`, () => list(headers)],
-    ['get', `/v1/staff/messages/${MESSAGE}`, () => json({ body: 'Placeholder offer text', message_id: MESSAGE, sender_kind: 'staff', thread_id: THREAD, topic: 'appointments' })],
-  ];
-  const header = (createdAt: string) => ({ created_at: createdAt, erased: false, message_id: MESSAGE, sender_kind: 'staff', thread_id: THREAD, topic: 'appointments' });
+  const textRoute = (answer: () => Response): Routes[number] => ['get', `/v1/staff/messages/${MESSAGE}`, answer];
+  const text = () => json({ body: 'Placeholder offer text', message_id: MESSAGE, sender_kind: 'staff', thread_id: THREAD, topic: 'appointments' });
 
   it('shows every state in words, filters by state, and has empty and error states', async () => {
     const user = userEvent.setup();
@@ -215,32 +211,36 @@ describe('offers: list, copy the text, mark delivered (the system sends nothing)
     expect(calls.filter((c) => c.path === '/v1/staff/scheduling/offers').map((c) => c.query.get('state'))).toEqual([null, 'expired']);
   });
 
-  it('copies the text on a click only (never before), picks the message created with the offer, and then says to send it yourself', async () => {
+  it('copies the text by the offer\'s message id on a click only (never before), and then says to send it yourself', async () => {
     const user = userEvent.setup();
     const writeText = vi.fn(async () => undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-    const { calls } = await openConsole({ hash: '/scheduling/offers', routes: [...refs, ...textRoutes([header('2026-11-09T05:00:02Z')]), ['get', '/v1/staff/scheduling/offers', () => list([offer()])]] });
+    const { calls } = await openConsole({ hash: '/scheduling/offers', routes: [...refs, textRoute(text), ['get', '/v1/staff/scheduling/offers', () => list([offer()])]] });
     await screen.findAllByRole('row');
     expect(calls.some((c) => c.path.startsWith('/v1/staff/messages'))).toBe(false); // no message is read, and so none audited, until asked
     await user.click(screen.getByRole('button', { name: /Copy offer text/ }));
     await screen.findByText('The offer text was copied. Send it yourself, then mark it delivered.');
     expect(writeText).toHaveBeenCalledWith('Placeholder offer text');
+    expect(calls.filter((c) => c.path.startsWith('/v1/staff/messages')).map((c) => c.path)).toEqual([`/v1/staff/messages/${MESSAGE}`]); // exactly one read, by id: no thread search, no guess
     expect(writes(calls)).toHaveLength(0);
     expect(document.body.textContent).not.toContain('Placeholder offer text'); // the text is not left on the page
   });
 
-  it('says the text was not found rather than guessing when no message was created with the offer', async () => {
+  it('offers no copy button when the offer has no message id, and says so plainly when the message cannot be found', async () => {
     const user = userEvent.setup();
-    const { calls } = await openConsole({ hash: '/scheduling/offers', routes: [...refs, ...textRoutes([header('2026-11-09T09:00:00Z')]), ['get', '/v1/staff/scheduling/offers', () => list([offer()])]] });
+    const a = await openConsole({ hash: '/scheduling/offers', routes: [...refs, ['get', '/v1/staff/scheduling/offers', () => list([offer({ message_id: null })])]] });
+    await screen.findAllByRole('row');
+    expect(screen.queryByRole('button', { name: /Copy offer text/ })).toBeNull();
+    a.unmount();
+    await openConsole({ hash: '/scheduling/offers', routes: [...refs, textRoute(() => fail(404)), ['get', '/v1/staff/scheduling/offers', () => list([offer()])]] });
     await user.click(await screen.findByRole('button', { name: /Copy offer text/ }));
     expect(await screen.findByText('The offer text could not be found.')).toBeInTheDocument();
-    expect(calls.some((c) => c.path === `/v1/staff/messages/${MESSAGE}`)).toBe(false);
   });
 
   it('shows the text for manual copying when the browser refuses the clipboard', async () => {
     const user = userEvent.setup();
     Object.defineProperty(navigator, 'clipboard', { value: { writeText: async () => Promise.reject(new Error('blocked')) }, configurable: true });
-    await openConsole({ hash: '/scheduling/offers', routes: [...refs, ...textRoutes([header('2026-11-09T05:00:00Z')]), ['get', '/v1/staff/scheduling/offers', () => list([offer()])]] });
+    await openConsole({ hash: '/scheduling/offers', routes: [...refs, textRoute(text), ['get', '/v1/staff/scheduling/offers', () => list([offer()])]] });
     await user.click(await screen.findByRole('button', { name: /Copy offer text/ }));
     expect(await screen.findByText(/Copying was blocked by the browser/)).toBeInTheDocument();
     expect(screen.getByLabelText('Copy offer text')).toHaveValue('Placeholder offer text');

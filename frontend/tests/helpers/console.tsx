@@ -29,8 +29,8 @@ export const list = <T,>(items: T[], more = false) => json({ items, limit: 100, 
 export const fail = (status: number, headers: Record<string, string> = {}) => json({ detail: LEAK }, status, headers);
 
 /** A fake backend: first matching route wins; /v1/iam/me is answered for the given roles unless overridden. */
-export function backend(routes: Routes, roles: Record<string, unknown>[] = [{ clinic_id: CLINIC_A, role: 'front_desk' }]) {
-  const table: Routes = [['get', '/v1/iam/me', () => json(meBody(roles))], ...routes];
+export function backend(routes: Routes, roles: Record<string, unknown>[] = [{ clinic_id: CLINIC_A, role: 'front_desk' }], meExtra: Record<string, unknown> = {}) {
+  const table: Routes = [['get', '/v1/iam/me', () => json({ ...meBody(roles), ...meExtra })], ...routes];
   return (req: FakeApiRequest): Response | Promise<Response> => {
     for (const [method, path, handler] of table) {
       if (method !== req.method) continue;
@@ -48,16 +48,18 @@ export interface OpenOptions {
   hash?: string;
   routes?: Routes;
   lang?: 'en' | 'ta';
+  /** Extra top-level fields on the /v1/iam/me answer (for example clinic_time_zone). */
+  me?: Record<string, unknown>;
 }
 
 /** Signs in at aal2 (no sign-in screens) and renders the console at a hash route. Returns the recorded API calls. */
-export async function openConsole({ role = 'front_desk', roles, hash = '/', routes = [], lang = 'en' }: OpenOptions = {}) {
+export async function openConsole({ role = 'front_desk', roles, hash = '/', routes = [], lang = 'en', me = {} }: OpenOptions = {}) {
   initI18n('en');
   await setLanguage(lang);
   window.location.hash = `#${hash}`;
   const fake = makeFakePort({ signedInAt: 'aal2' });
   const grants = roles ?? [{ clinic_id: CLINIC_A, role }];
-  const calls = stubApi(backend(routes, grants));
+  const calls = stubApi(backend(routes, grants, me));
   const view = render(<App port={fake.port} apiBaseUrl="http://api.test" />);
   await screen.findByRole('group', { name: lang === 'en' ? 'Session' : 'அமர்வு' });
   return { calls, fake, ...view };
