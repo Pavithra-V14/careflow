@@ -158,7 +158,7 @@ async def test_a_correction_raises_a_review_task_for_each_decision_that_used_the
     assert len(tasks) == 1
     t = tasks[0]
     assert (t.kind, t.priority, t.assigned_role, t.status) == ("result_correction", "standard", "doctor", "open")
-    assert t.provenance == {"old_result_id": str(old), "new_result_id": str(new), "plan_id": str(plan), "step_key": "demo_test", "decision": "met"}
+    assert t.provenance == {"old_result_id": str(old), "new_result_id": str(new), "plan_id": str(plan), "step_key": "demo_test", "decision": "met", "declared": "correction"}
     assert "9.0" not in json.dumps(t.provenance)  # ids and a fixed word, never a value
     assert (await db.execute(text("select count(*) from agents.review_tasks where kind = 'result_correction' and clinic_id = :c"), {"c": w["clinic"]})).scalar() == 1  # the other patient's decision is untouched
     amend = await result(db, w, w["pat2"], "n2", supersedes=other_old, kind="amendment", valid_from="2026-03-01T00:00:00Z")

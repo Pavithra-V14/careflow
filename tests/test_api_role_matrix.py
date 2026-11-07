@@ -160,7 +160,7 @@ async def _seed() -> Identities:
 
 
 POOL = {"hold": 90, "book": 90, "extra": 110, "cancel": 70}  # slots / bookings handed out one per test case
-N_PATIENTS = 45
+N_PATIENTS = 49
 
 
 async def _seed_scheduling(ids, conn) -> None:
@@ -2091,7 +2091,7 @@ def test_a_completed_erasure_clears_the_identity_columns_and_leaves_exactly_the_
     assert _run(_fetch("select status from ops.care_plans where id = $1", plan_id))[0]["status"] == "erased"
     assert str(plan_id) not in {p["plan_id"] for p in client.get(f"{CARE_PLANS}?clinic_id={ids.clinic_a}&limit=200", headers=stepped(doctor)).json()["plans"]}  # hidden from the staff list
     care = _run(_fetch("select details::text as d from audit.log where action = 'care_record.erased' and idempotency_key = $1", f"sys:erase-care-record:{request_id}"))
-    assert len(care) == 1 and json.loads(care[0]["d"]) == {"care_plans": 1, "results": 1, "messages": 0, "voice_chunks": 0, "grievances": 0}  # counts only, in a row of its own
+    assert len(care) == 1 and json.loads(care[0]["d"]) == {"care_plans": 1, "results": 1, "messages": 0, "voice_chunks": 0, "grievances": 0, "notes": 0}  # counts only, in a row of its own
     request = _run(_fetch("select status, requested_by, approved_by from mpi.erasure_requests where id = $1::uuid", request_id))[0]
     assert (request["status"], request["requested_by"], request["approved_by"]) == ("erased", fd1, fd2)
 

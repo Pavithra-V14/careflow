@@ -253,7 +253,7 @@ async def test_the_stage_is_derived_and_the_care_topic_is_exported_only_at_activ
     assert await as_app(db, w["nurse"], "select iam.patient_stage()") == "42501"  # staff have no stage
     await h.execute("insert into mpi.claim_requests (clinic_id, origin, account_id, status) values ($1, 'test', $2, 'pending')", w["clinic"], w["p1"])
     assert await stage(w["p1"]) == [("pending_activation",)]  # a pending claim
-    await h.execute("insert into mpi.claim_requests (clinic_id, origin, account_id, status) values ($1, 'test', $2, 'resolved')", w["clinic"], w["p2"])
+    await h.execute("insert into mpi.claim_requests (clinic_id, origin, account_id, status, resolved_by, resolved_at, resolved_patient_id) values ($1, 'test', $2, 'resolved', $3, now(), $4)", w["clinic"], w["p2"], w["nurse"], w["pat2"])
     assert await stage(w["p2"]) == [("active",)]  # a record bound through a claim the front desk approved
     thread = (await as_app(db, w["nurse"], "insert into msg.threads (clinic_id, patient_id, topic, created_by, origin, idempotency_key) values (:c, :p, 'care', :u, 'test', :k) returning id", c=w["clinic"], p=w["pat2"], u=w["nurse"], k="st-care"))[0][0]
     assert await as_app(
