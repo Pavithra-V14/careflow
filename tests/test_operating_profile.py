@@ -20,9 +20,9 @@ def test_the_profile_is_one_of_the_two_known_values_or_null(monkeypatch, raw, ex
 def test_the_response_model_only_admits_the_known_values_and_null():
     base = {"account_id": "00000000-0000-0000-0000-000000000001", "account_type": "staff", "status": "active", "roles": []}
     for good in ("demo", "clinical", None):
-        assert Me(**base, operating_profile=good).operating_profile == good
+        assert Me(**base, operating_profile=good, clinic_time_zone=None).operating_profile == good
     with pytest.raises(ValueError):
-        Me(**base, operating_profile="staging")  # type: ignore[arg-type]
+        Me(**base, operating_profile="staging", clinic_time_zone=None)  # type: ignore[arg-type]
     assert "operating_profile" in Me.model_fields and Me.model_fields["operating_profile"].is_required()
 
 
@@ -33,3 +33,11 @@ def test_it_names_the_profile_only_never_another_setting():
 
     source = inspect.getsource(app_module.operating_profile)
     assert source.count("os.environ.get") == 1 and "CAREFLOW_PROFILE" in source  # reads exactly one variable
+
+
+def test_the_clinic_time_zone_setting_is_a_shaped_name_or_null_never_a_guess():
+    from careflow.app import clinic_time_zone
+
+    assert clinic_time_zone("Asia/Calcutta") == "Asia/Calcutta" and clinic_time_zone(" Europe/London ") == "Europe/London" and clinic_time_zone("UTC") == "UTC"
+    for bad in (None, "", "  ", "not a zone", "Asia/../x", "x" * 80, "Asia/Calcutta; drop", "/Asia"):
+        assert clinic_time_zone(bad) is None, bad

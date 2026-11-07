@@ -73,3 +73,6 @@ settings:
   voice_transcript_retention_days:
     value: "30"
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  clinic_time_zone:
+    value: "Asia/Calcutta"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"

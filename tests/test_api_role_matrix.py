@@ -351,6 +351,15 @@ def client(app, ids):
         yield c
 
 
+def _expected_time_zone():
+    """The clinic time zone /v1/iam/me should carry: the required setting, or the labelled demo placeholder under the demo pack (the same environment the app is built from)."""
+    from careflow import demo_phase4
+    from careflow.app import clinic_time_zone
+    from careflow.rules import resolve_profile
+
+    return clinic_time_zone(demo_phase4.effective_environ(os.environ, resolve_profile()).get("CAREFLOW_CLINIC_TIME_ZONE"))
+
+
 def expected_me(ids, key):
     account_id, kind, status, grants = ids.people[key]
     return {
@@ -358,6 +367,7 @@ def expected_me(ids, key):
         "account_type": kind,
         "status": status,
         # the deployment's profile (the live job sets CAREFLOW_PROFILE=demo); unset or unrecognised is null
+        "clinic_time_zone": _expected_time_zone(),
         "operating_profile": (os.environ.get("CAREFLOW_PROFILE") or "").strip().lower() if (os.environ.get("CAREFLOW_PROFILE") or "").strip().lower() in ("demo", "clinical") else None,
         # each grant also names its clinic and that clinic's origin (the frontend shows them): the fixture's two clinics are "Matrix A" and "Matrix B", both origin 'test'
         "roles": sorted(
@@ -1863,7 +1873,7 @@ def offer_list_cases(ids) -> list[tuple]:
         _case(ids, "state=expired filters", "front_desk_a", 200, OFFERS + "?state=expired", key=None,
               body=_page(ids, clinic_only=ids.clinic_a, non_empty=True, check=lambda items: all(i["state"] == "expired" for i in items) and state_of(waiting, items) is None)),
         _case(ids, "an offer row carries ids, times and closed words only", "nurse_a", 200, OFFERS, key=None,
-              body=_page(ids, check=lambda items: all(set(i) == {"hold_id", "clinic_id", "slot_id", "patient_id", "state", "created_at", "expires_at", "delivered_at", "channel"} for i in items))),
+              body=_page(ids, check=lambda items: all(set(i) == {"hold_id", "clinic_id", "slot_id", "patient_id", "state", "created_at", "expires_at", "delivered_at", "channel", "message_id"} for i in items))),
         _case(ids, "a reader of another clinic sees none of this clinic's offers", "front_desk_b", 200, OFFERS, key=None, body=_page(ids, check=lambda items: items == [])),
         _case(ids, "an unknown state is rejected", "front_desk_a", 422, OFFERS + "?state=sent", key=None, body=_fixed(422)),
         _case(ids, "limit=0 is rejected", "front_desk_a", 422, OFFERS + "?limit=0", key=None, body=_fixed(422)),
