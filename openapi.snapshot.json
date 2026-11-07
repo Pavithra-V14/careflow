@@ -968,6 +968,275 @@
         "title": "BookingOut",
         "type": "object"
       },
+      "BreakGlassList": {
+        "additionalProperties": false,
+        "properties": {
+          "grants": {
+            "items": {
+              "$ref": "#/components/schemas/BreakGlassRowOut"
+            },
+            "title": "Grants",
+            "type": "array"
+          }
+        },
+        "required": [
+          "grants"
+        ],
+        "title": "BreakGlassList",
+        "type": "object"
+      },
+      "BreakGlassMessageOut": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "erased": {
+            "title": "Erased",
+            "type": "boolean"
+          },
+          "message_id": {
+            "format": "uuid",
+            "title": "Message Id",
+            "type": "string"
+          },
+          "readable": {
+            "title": "Readable",
+            "type": "boolean"
+          },
+          "sender_kind": {
+            "title": "Sender Kind",
+            "type": "string"
+          },
+          "thread_id": {
+            "format": "uuid",
+            "title": "Thread Id",
+            "type": "string"
+          },
+          "topic": {
+            "title": "Topic",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message_id",
+          "thread_id",
+          "topic",
+          "sender_kind",
+          "created_at",
+          "erased",
+          "readable",
+          "body"
+        ],
+        "title": "BreakGlassMessageOut",
+        "type": "object"
+      },
+      "BreakGlassMessages": {
+        "additionalProperties": false,
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/BreakGlassMessageOut"
+            },
+            "title": "Messages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "messages"
+        ],
+        "title": "BreakGlassMessages",
+        "type": "object"
+      },
+      "BreakGlassOpenIn": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "reason_code": {
+            "pattern": "^[a-z][a-z0-9_]{0,39}$",
+            "title": "Reason Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "patient_id",
+          "reason_code"
+        ],
+        "title": "BreakGlassOpenIn",
+        "type": "object"
+      },
+      "BreakGlassOpenOut": {
+        "additionalProperties": false,
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "grant_id": {
+            "format": "uuid",
+            "title": "Grant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "grant_id",
+          "expires_at",
+          "created"
+        ],
+        "title": "BreakGlassOpenOut",
+        "type": "object"
+      },
+      "BreakGlassReviewIn": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "enum": [
+              "appropriate",
+              "inappropriate"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "BreakGlassReviewIn",
+        "type": "object"
+      },
+      "BreakGlassReviewOut": {
+        "additionalProperties": false,
+        "properties": {
+          "result": {
+            "enum": [
+              "reviewed",
+              "already_reviewed",
+              "same_person"
+            ],
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "BreakGlassReviewOut",
+        "type": "object"
+      },
+      "BreakGlassRowOut": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "grant_id": {
+            "format": "uuid",
+            "title": "Grant Id",
+            "type": "string"
+          },
+          "opened_at": {
+            "format": "date-time",
+            "title": "Opened At",
+            "type": "string"
+          },
+          "opened_by": {
+            "format": "uuid",
+            "title": "Opened By",
+            "type": "string"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "reason_code": {
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "review_outcome": {
+            "anyOf": [
+              {
+                "enum": [
+                  "appropriate",
+                  "inappropriate"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Outcome"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By"
+          }
+        },
+        "required": [
+          "grant_id",
+          "patient_id",
+          "opened_by",
+          "reason_code",
+          "opened_at",
+          "expires_at",
+          "reviewed_by",
+          "reviewed_at",
+          "review_outcome"
+        ],
+        "title": "BreakGlassRowOut",
+        "type": "object"
+      },
       "CancelErasureOut": {
         "additionalProperties": false,
         "properties": {
@@ -2153,6 +2422,19 @@
           "detail"
         ],
         "title": "ErrorBody",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
         "type": "object"
       },
       "HoldIn": {
@@ -5836,6 +6118,46 @@
         "title": "UnmergeOut",
         "type": "object"
       },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
       "ValidationErrorBody": {
         "additionalProperties": false,
         "properties": {
@@ -7882,6 +8204,260 @@
         "summary": "Read Audit Log",
         "tags": [
           "staff audit"
+        ]
+      }
+    },
+    "/v1/staff/break-glass": {
+      "get": {
+        "description": "The clinic's grants, newest first (unreviewed ones by default): ids, a reason code and times, never patient text. 404 if the clinic is not visible to you, 403 unless you are an admin there.",
+        "operationId": "list_break_glass_v1_staff_break_glass_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Clinic Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "unreviewed_only",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Unreviewed Only",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BreakGlassList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Break Glass",
+        "tags": [
+          "staff break-glass"
+        ]
+      },
+      "post": {
+        "description": "Open a time-limited grant to read ONE patient's messages, with a reason code from the clinic's list (kept by the owner, not the application). 404 if the clinic or patient is not visible to you, 403 unless you are front desk, nurse or doctor there (with a recent second factor), 422 for a reason code that is not on the list, 503 while the window length is not configured.",
+        "operationId": "open_break_glass_v1_staff_break_glass_post",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BreakGlassOpenIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BreakGlassOpenOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Open Break Glass",
+        "tags": [
+          "staff break-glass"
+        ]
+      }
+    },
+    "/v1/staff/break-glass/{grant_id}/messages": {
+      "get": {
+        "description": "The patient's messages while YOUR grant is open (each read is an audit row). 404 if you cannot see the grant, 403 unless you are its holder and the window is still open, 503 while encryption keys are not configured.",
+        "operationId": "read_break_glass_messages_v1_staff_break_glass__grant_id__messages_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "grant_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Grant Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BreakGlassMessages"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read Break Glass Messages",
+        "tags": [
+          "staff break-glass"
+        ]
+      }
+    },
+    "/v1/staff/break-glass/{grant_id}/review": {
+      "post": {
+        "description": "Review a grant afterwards (appropriate or inappropriate) as an admin who did NOT open it; audited by the database. 404 if you cannot see the grant, 403 unless you are an admin of its clinic.",
+        "operationId": "review_break_glass_v1_staff_break_glass__grant_id__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "grant_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Grant Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BreakGlassReviewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BreakGlassReviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Review Break Glass",
+        "tags": [
+          "staff break-glass"
         ]
       }
     },

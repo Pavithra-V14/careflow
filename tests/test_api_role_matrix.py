@@ -142,6 +142,15 @@ async def _seed() -> Identities:
         await conn.execute("insert into ops.care_recurrence_rules (id, clinic_id, origin, rule_code, interval_days, overdue_after_days, idempotency_key) values ($1, $2, 'test', 'matrix_seed_rule', 30, 5, $3)", rule, ids.clinic_a, f"mx-r-{rule}")
         await conn.execute("insert into ops.care_episodes (id, clinic_id, origin, patient_id, episode_code, started_on, idempotency_key) values ($1, $2, 'test', $3, 'matrix_seed_episode', current_date - 60, $4)", episode, ids.clinic_a, ids.patients_a[42], f"mx-e-{episode}")
         await conn.execute("insert into ops.care_episode_rules (id, clinic_id, origin, episode_id, rule_id, idempotency_key) values ($1, $2, 'test', $3, $4, $5)", ids.episode_rule, ids.clinic_a, episode, rule, f"mx-er-{ids.episode_rule}")
+        await conn.execute("insert into iam.break_glass_reasons (clinic_id, code) values ($1, 'demo_reason')", ids.clinic_a)
+        ids.bg_grants = []
+        for n in range(2):  # grants held by nurse_a: one the read cases use, one the review cases use (append-only: they stay behind with their clinic)
+            ids.bg_grants.append(
+                await conn.fetchval(
+                    "insert into iam.break_glass_grants (clinic_id, origin, patient_id, opened_by, reason_code, expires_at, idempotency_key) values ($1, 'test', $2, $3, 'demo_reason', now() + interval '3 hours', $4) returning id",
+                    ids.clinic_a, ids.patients_a[45], ids.people["nurse_a"][0], f"mx-bg-{n}-{uuid.uuid4()}",
+                )
+            )
     except Exception:
         await _cleanup(ids, conn)
         await conn.close()
@@ -245,6 +254,7 @@ async def _cleanup(ids, conn=None):
                     "and not exists (select 1 from ops.care_episodes ce where ce.patient_id = p.id) "
                     "and not exists (select 1 from clinical.results cr where cr.patient_id = p.id) "
                     "and not exists (select 1 from ops.care_plans cp where cp.patient_id = p.id) "
+                    "and not exists (select 1 from iam.break_glass_grants bg where bg.patient_id = p.id) "
                     "and not exists (select 1 from msg.threads th where th.patient_id = p.id) "
                     "and not exists (select 1 from sched.holds h where h.patient_id = p.id)", clinics  # (a hold left behind for an append-only delivery row keeps its patient)
                 )
@@ -259,6 +269,7 @@ async def _cleanup(ids, conn=None):
                 await conn.execute(f"delete from {table} t where t.clinic_id = any($1) and {LEFT_BEHIND_WHERE[table]}", clinics)
                 continue
             await conn.execute(f"delete from {table} where clinic_id = any($1)", clinics)
+        await conn.execute("delete from iam.break_glass_reasons where clinic_id = any($1)", clinics)
         await conn.execute("delete from msg.voice_preferences where account_id = any($1)", accounts)
         await conn.execute("delete from iam.staff_roles where clinic_id = any($1)", [ids.clinic_a, ids.clinic_b])
         for statement, args in (("delete from iam.accounts where id = any($1)", accounts), ("delete from iam.clinics where id = any($1)", [ids.clinic_a, ids.clinic_b])):
@@ -3170,6 +3181,83 @@ def autonomy_resolve_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(), {"decision": "approve"})
 
 
+# ---- break-glass access (migration 0058; BUILD-SPEC.md 18.4) ------------------------------------------------------------------------------------------------------------------------------------------------
+# Front desk, nurse and doctor open a time-limited grant for one patient (a reason code from the clinic's owner-kept list); the holder reads that patient's messages (this world has no encryption keys, so the
+# read answers 503 after the grant is found; the decrypting path and the database behaviour are in tests/test_break_glass_db_live.py); an admin of the clinic who did not open it reviews. Opening writes
+# a grant and an audit row that stay behind with the clinic (append-only).
+
+os.environ.setdefault("CAREFLOW_BREAK_GLASS_MINUTES", "30")
+BREAK_GLASS = "/v1/staff/break-glass"
+BG_OPENERS = ("front_desk_a", "nurse_a", "doctor_a", "multi")
+BG_VISIBLE_REFUSED = ("admin_a", "business_owner_a", "auditor_a")
+
+
+def break_glass_open_cases(ids) -> list[tuple]:
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "patient_id": str(ids.patients_a[46]), "reason_code": "demo_reason", **o}
+    made = lambda b: set(b) == {"grant_id", "expires_at", "created"} and b["created"] is True
+    key = _new_key()
+    cases = [_case(ids, f"{p} opens a grant", p, 201, BREAK_GLASS, json=body(), body=made) for p in BG_OPENERS]
+    cases += [
+        _case(ids, "the same key again is the same grant", "nurse_a", 201, BREAK_GLASS, json=body(), key=key, body=made),
+        _case(ids, "replaying that key returns the grant", "nurse_a", 201, BREAK_GLASS, json=body(), key=key, body=lambda b: b["created"] is False),
+    ]
+    cases += [_case(ids, f"{p} sees the clinic but is refused", p, 403, BREAK_GLASS, json=body(), body=NOT_YOUR_ROLE) for p in BG_VISIBLE_REFUSED]
+    others = [p for p in ids.people if p not in (*BG_OPENERS, *BG_VISIBLE_REFUSED)]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused with the one not-found", p, 404, BREAK_GLASS, json=body(), body=_fixed(404)) for p in others]
+    cases += [
+        _case(ids, "a patient that is not in this clinic is not found", "nurse_a", 404, BREAK_GLASS, json=body(patient_id=str(uuid.uuid4())), body=_fixed(404)),
+        _case(ids, "a reason that is not on the clinic's list is rejected", "nurse_a", 422, BREAK_GLASS, json=body(reason_code="not_listed"), body=_rejected),
+        _case(ids, "a reason with a bad shape is rejected", "nurse_a", 422, BREAK_GLASS, json=body(reason_code="Free text here"), body=_fixed(422)),
+        _case(ids, "an extra field is rejected", "nurse_a", 422, BREAK_GLASS, json=body(extra=1), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "nurse_a", 422, BREAK_GLASS, json=body(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, BREAK_GLASS, body())
+
+
+def break_glass_read_cases(ids) -> list[tuple]:
+    mine = f"{BREAK_GLASS}/{ids.bg_grants[0]}/messages"
+    unknown = f"{BREAK_GLASS}/{uuid.uuid4()}/messages"
+    unavailable = lambda b: b == {"detail": "patient view is unavailable: encryption keys are not configured"}
+    cases = [_case(ids, "the holder finds the grant (503: no keys in this world)", "nurse_a", 503, mine, key=None, body=unavailable), _case(ids, "an admin of the clinic sees the grant (503: no keys in this world)", "admin_a", 503, mine, key=None, body=unavailable)]
+    others = [p for p in ids.people if p not in ("nurse_a", "admin_a")]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) cannot see the grant: the one not-found", p, 404, mine, key=None, body=_fixed(404)) for p in others]
+    cases += [_case(ids, f"{p} asks for a grant that does not exist", p, 404, unknown, key=None, body=_fixed(404)) for p in ids.people]
+    cases += [_case(ids, "a grant id that is not a uuid is rejected", "nurse_a", 422, f"{BREAK_GLASS}/nope/messages", key=None, body=_fixed(422))]
+    return cases + _unauthenticated(ids, mine, None)[:4]
+
+
+def break_glass_list_cases(ids) -> list[tuple]:
+    path = lambda **o: BREAK_GLASS + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
+    ok = lambda b: set(b) == {"grants"} and isinstance(b["grants"], list) and all(set(g) == {"grant_id", "patient_id", "opened_by", "reason_code", "opened_at", "expires_at", "reviewed_by", "reviewed_at", "review_outcome"} for g in b["grants"])
+    visible = ("front_desk_a", "nurse_a", "doctor_a", "business_owner_a", "auditor_a", "multi")
+    cases = _console_clinic_cases(ids, path, allowed=("admin_a",), ok_status=200, ok_body=ok, visible_refused=visible)
+    cases += [
+        _case(ids, "an unknown clinic is not found", "admin_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "limit=0 is rejected", "admin_a", 422, path(limit=0), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
+def break_glass_review_cases(ids) -> list[tuple]:
+    path = lambda: f"{BREAK_GLASS}/{ids.bg_grants[1]}/review"
+    unknown = f"{BREAK_GLASS}/{uuid.uuid4()}/review"
+    body = {"outcome": "appropriate"}
+    cases = [
+        _case(ids, "an admin who did not open it reviews", "admin_a", 200, path(), json=body, body=lambda b: b == {"result": "reviewed"}),
+        _case(ids, "the same outcome again is a replay", "admin_a", 200, path(), json=body, body=lambda b: b == {"result": "reviewed"}),
+        _case(ids, "a different outcome after a review is refused as already reviewed", "admin_a", 200, path(), json={"outcome": "inappropriate"}, body=lambda b: b == {"result": "already_reviewed"}),
+        _case(ids, "the holder sees the grant but is not an admin", "nurse_a", 403, path(), json=body, body=NOT_YOUR_ROLE),
+    ]
+    others = [p for p in ids.people if p not in ("admin_a", "nurse_a")]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) cannot see the grant: the one not-found", p, 404, path(), json=body, body=_fixed(404)) for p in others]
+    cases += [_case(ids, f"{p} reviews a grant that does not exist", p, 404, unknown, json=body, body=_fixed(404)) for p in ids.people]
+    cases += [
+        _case(ids, "an outcome that is not one of the two is rejected", "admin_a", 422, path(), json={"outcome": "fine"}, body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "admin_a", 422, path(), json=body, key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), body)
+
+
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
     ("POST", HOLD): lambda ids: slot_write_cases(ids, "hold"),
@@ -3229,6 +3317,10 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", CARE_PLANS): care_plan_list_cases,
     ("POST", CARE_PLAN_CONFIRM): care_plan_confirm_cases,
     ("POST", RESULTS): result_record_cases,
+    ("POST", BREAK_GLASS): break_glass_open_cases,
+    ("GET", BREAK_GLASS + "/{grant_id}/messages"): break_glass_read_cases,
+    ("GET", BREAK_GLASS): break_glass_list_cases,
+    ("POST", BREAK_GLASS + "/{grant_id}/review"): break_glass_review_cases,
     ("GET", PORTAL_CLAIM_LIST): portal_claim_list_cases,
     ("POST", PORTAL_CLAIM_RESOLVE): portal_claim_resolve_cases,
     ("POST", VISITS + "/{visit_id}/readiness/start"): visit_readiness_start_cases,

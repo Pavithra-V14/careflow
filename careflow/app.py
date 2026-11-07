@@ -65,6 +65,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from careflow import (
     active_role,
+    break_glass_sql,
     care_gap_rules,
     care_gap_sql,
     care_gaps,
@@ -87,6 +88,7 @@ from careflow import (
     visit_readiness_sql,
     voice_sql,
 )
+from careflow import messages as messages_mod
 from careflow.adapters.storage import DOCUMENT_BUCKET, SupabaseUploadAdapter
 from careflow.audit import write_audit
 from careflow.auth import (
@@ -4418,6 +4420,148 @@ async def purge_voice_transcripts(body: VoicePurgeIn, idempotency_key: Idempoten
     return VoicePurgeOut(deleted=deleted)
 
 
+# ---- Break-glass access (migration 0058; BUILD-SPEC.md 18.4) ------------------------------------------------------------------------------------------------------------------------------------------------
+#
+# A front-desk, nurse or doctor with a recent second factor opens a TIME-LIMITED grant for ONE patient of their clinic, naming a reason CODE from the clinic's list (iam.break_glass_reasons, kept by the owner; no free
+# text is stored). The window length is the required setting CAREFLOW_BREAK_GLASS_MINUTES. While it is open the holder can read that patient's messages (every topic) and every read is an audit
+# row. An admin of the clinic, a different person, reviews each grant afterwards. While either setting is unset the open route answers 503 and nothing is written.
+
+staff_break_glass = APIRouter(prefix="/v1/staff/break-glass", tags=["staff break-glass"])
+BREAK_GLASS_OPENERS = ("front_desk", "nurse", "doctor")
+BREAK_GLASS_REVIEWERS = ("admin",)
+
+
+class BreakGlassOpenIn(_Body):
+    clinic_id: uuid.UUID
+    patient_id: uuid.UUID
+    reason_code: str = Field(pattern=r"^[a-z][a-z0-9_]{0,39}$")
+
+
+class BreakGlassOpenOut(_Out):
+    grant_id: uuid.UUID
+    expires_at: datetime
+    created: bool
+
+
+class BreakGlassMessageOut(_Out):
+    message_id: uuid.UUID
+    thread_id: uuid.UUID
+    topic: str
+    sender_kind: str
+    created_at: datetime
+    erased: bool
+    readable: bool
+    body: str | None
+
+
+class BreakGlassMessages(_Out):
+    messages: list[BreakGlassMessageOut]
+
+
+class BreakGlassReviewIn(_Body):
+    outcome: Literal["appropriate", "inappropriate"]
+
+
+class BreakGlassReviewOut(_Out):
+    result: Literal["reviewed", "already_reviewed", "same_person"]
+
+
+class BreakGlassRowOut(_Out):
+    grant_id: uuid.UUID
+    patient_id: uuid.UUID
+    opened_by: uuid.UUID
+    reason_code: str
+    opened_at: datetime
+    expires_at: datetime
+    reviewed_by: uuid.UUID | None
+    reviewed_at: datetime | None
+    review_outcome: Literal["appropriate", "inappropriate"] | None
+
+
+class BreakGlassList(_Out):
+    grants: list[BreakGlassRowOut]
+
+
+@staff_break_glass.post("", response_model=BreakGlassOpenOut, status_code=201)
+async def open_break_glass(body: BreakGlassOpenIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> BreakGlassOpenOut:
+    """Open a time-limited grant to read ONE patient's messages, with a reason code from the clinic's list (kept by the owner, not the application). 404 if the clinic or patient is not visible to you, 403 unless you are front desk, nurse or doctor there (with a recent second factor), 422 for a reason code that is not on the list, 503 while the window length is not configured."""
+    await _console_clinic(conn, body.clinic_id, BREAK_GLASS_OPENERS)
+    known = (await conn.execute(text("select 1 from mpi.patients where id = :p and clinic_id = :c"), {"p": body.patient_id, "c": body.clinic_id})).first()
+    if known is None:
+        raise HTTPException(status_code=404, detail="not found")
+    minutes = request.app.state.break_glass_minutes
+    if minutes is None:
+        raise HTTPException(status_code=503, detail="break-glass is unavailable: the window length is not configured")
+    try:
+        opened = await break_glass_sql.open_grant(conn, clinic_id=body.clinic_id, patient_id=body.patient_id, reason_code=body.reason_code, minutes=minutes, idempotency_key=f"break-glass:{idempotency_key}")
+    except break_glass_sql.UnknownReason:
+        raise HTTPException(status_code=422, detail="request rejected") from None
+    except break_glass_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return BreakGlassOpenOut(grant_id=opened.grant_id, expires_at=opened.expires_at, created=opened.created)
+
+
+@staff_break_glass.get("/{grant_id}/messages", response_model=BreakGlassMessages)
+async def read_break_glass_messages(grant_id: uuid.UUID, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> BreakGlassMessages:
+    """The patient's messages while YOUR grant is open (each read is an audit row). 404 if you cannot see the grant, 403 unless you are its holder and the window is still open, 503 while encryption keys are not configured."""
+    clinic_id = await break_glass_sql.grant_clinic(conn, grant_id)
+    if clinic_id is None:
+        raise HTTPException(status_code=404, detail="not found")
+    vault = _vault_or_503(request)
+    try:
+        rows = await break_glass_sql.read_messages(conn, grant_id=grant_id)
+    except break_glass_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    if rows is None:  # refused and audited: answer without raising, so the audit row commits with the request
+        return JSONResponse(status_code=403, content={"detail": "your role may not do this"})  # type: ignore[return-value]
+    out: list[BreakGlassMessageOut] = []
+    for r in rows:
+        body: str | None = None
+        if r.body_ct is not None and r.body_key_version is not None:
+            try:
+                body = messages_mod.decrypt_break_glass_message(vault, bytes(r.body_ct), clinic_id=clinic_id, thread_id=r.thread_id, message_id=r.message_id, key_version=r.body_key_version)
+            except CryptoError:  # an unreadable body is reported as such, never as an error that names it
+                body = None
+        out.append(BreakGlassMessageOut(message_id=r.message_id, thread_id=r.thread_id, topic=r.topic, sender_kind=r.sender_kind, created_at=r.created_at, erased=r.erased_at is not None, readable=body is not None, body=body))
+    return BreakGlassMessages(messages=out)
+
+
+@staff_break_glass.get("", response_model=BreakGlassList)
+async def list_break_glass(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), unreviewed_only: bool = True, limit: Limit = 100) -> BreakGlassList:
+    """The clinic's grants, newest first (unreviewed ones by default): ids, a reason code and times, never patient text. 404 if the clinic is not visible to you, 403 unless you are an admin there."""
+    await _console_clinic(conn, clinic_id, BREAK_GLASS_REVIEWERS)
+    rows = await break_glass_sql.list_grants(conn, clinic_id=clinic_id, unreviewed_only=unreviewed_only, limit=limit)
+    return BreakGlassList(
+        grants=[
+            BreakGlassRowOut(
+                grant_id=r.id, patient_id=r.patient_id, opened_by=r.opened_by, reason_code=r.reason_code, opened_at=r.opened_at, expires_at=r.expires_at, reviewed_by=r.reviewed_by, reviewed_at=r.reviewed_at,
+                review_outcome=r.review_outcome,
+            )
+            for r in rows
+        ]
+    )
+
+
+@staff_break_glass.post("/{grant_id}/review", response_model=BreakGlassReviewOut)
+async def review_break_glass(grant_id: uuid.UUID, body: BreakGlassReviewIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> BreakGlassReviewOut:
+    """Review a grant afterwards (appropriate or inappropriate) as an admin who did NOT open it; audited by the database. 404 if you cannot see the grant, 403 unless you are an admin of its clinic."""
+    clinic_id = await break_glass_sql.grant_clinic(conn, grant_id)
+    if clinic_id is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _clinic_role_held(conn, clinic_id, BREAK_GLASS_REVIEWERS):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    try:
+        result = await break_glass_sql.review(conn, grant_id=grant_id, outcome=body.outcome)
+    except break_glass_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return BreakGlassReviewOut(result=result)  # type: ignore[arg-type]
+
+
+def _minutes_in_range(raw: str | None, upper: int) -> int | None:
+    n = _positive_int(raw)
+    return n if n is not None and n <= upper else None
+
+
 def _positive_int(raw: str | None) -> int | None:
     """A required numeric setting: unset, blank, non-numeric or below 1 is None (unset), never a default."""
     try:
@@ -4458,6 +4602,7 @@ def create_app(
         app.state.voice_feature_on = voice_feature_on(os.environ)
         app.state.voice_engine = None  # no real voice engine exists (owner decision 2026-11-06): the session route answers 503
         app.state.voice_retention_days = _positive_int(p4env.get('CAREFLOW_VOICE_TRANSCRIPT_RETENTION_DAYS'))
+        app.state.break_glass_minutes = _minutes_in_range(p4env.get("CAREFLOW_BREAK_GLASS_MINUTES"), 240)
         app.state.clinic_time_zone = clinic_time_zone(p4env.get("CAREFLOW_CLINIC_TIME_ZONE"))
         app.state.care_gap_alert_days = _positive_int(p4env.get('CAREFLOW_CARE_GAP_ALERT_DAYS'))
         try:
@@ -4613,6 +4758,7 @@ def create_app(
     app.include_router(staff_portal_claims)
     app.include_router(staff_care_plans)
     app.include_router(staff_results)
+    app.include_router(staff_break_glass)
     app.include_router(health)
     openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, portal, staff_voice, staff_care_plans, staff_results, staff_portal_claims, staff_visits])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
     return app
