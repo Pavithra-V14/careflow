@@ -68,6 +68,12 @@ class Policy:
         return self.decider(action_class) in {"automatic", "automatic_ack"}
 
 
+def switch_pair_allowed(proposer_role: str, proposer: object | None, approver_role: str, approver: object | None) -> bool:
+    """The pure mirror of ops.resolve_autonomy_proposal (migration 0054): the switch to `autonomous` needs two DIFFERENT people of the clinic, one an active ADMIN and the other an active DOCTOR (12.5). Either may
+    propose; the approver holds the OTHER role. Missing anything is False."""
+    return proposer is not None and approver is not None and proposer != approver and {proposer_role, approver_role} == {"admin", "doctor"}
+
+
 @dataclass(frozen=True)
 class AutonomyChange:
     """Switching a clinic to `autonomous` needs an admin AND a doctor, two different people (12.5). Pure: the caller supplies who signed."""

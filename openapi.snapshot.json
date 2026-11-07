@@ -368,11 +368,20 @@
             "format": "uuid",
             "title": "Proposed By",
             "type": "string"
+          },
+          "proposer_role": {
+            "enum": [
+              "admin",
+              "doctor"
+            ],
+            "title": "Proposer Role",
+            "type": "string"
           }
         },
         "required": [
           "proposal_id",
           "proposed_by",
+          "proposer_role",
           "created_at"
         ],
         "title": "AutonomyProposalRowOut",
@@ -385,6 +394,21 @@
             "format": "uuid",
             "title": "Clinic Id",
             "type": "string"
+          },
+          "proposer_role": {
+            "anyOf": [
+              {
+                "enum": [
+                  "admin",
+                  "doctor"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposer Role"
           }
         },
         "required": [
@@ -419,6 +443,7 @@
               "approved",
               "rejected",
               "same_person",
+              "wrong_role",
               "expired",
               "not_pending"
             ],
@@ -9090,7 +9115,7 @@
     },
     "/v1/staff/console/autonomy/proposals": {
       "get": {
-        "description": "Pending proposals of the clinic. 404 if the clinic is not visible to you, 403 unless you are an admin there.",
+        "description": "Pending proposals of the clinic. 404 if the clinic is not visible to you, 403 unless you are an admin or doctor there.",
         "operationId": "list_autonomy_proposals_v1_staff_console_autonomy_proposals_get",
         "parameters": [
           {
@@ -9167,7 +9192,7 @@
         ]
       },
       "post": {
-        "description": "Propose switching the clinic to autonomous; a DIFFERENT admin must approve it. Idempotent on the key. 404 if the clinic is not visible to you, 403 unless you are an admin there, 409 if a proposal is already pending, 503 until CAREFLOW_AUTONOMOUS_MODE_ENABLED is on.",
+        "description": "Propose switching the clinic to autonomous as an admin or a doctor; a DIFFERENT person holding the OTHER role (doctor or admin) must approve it. Idempotent on the key. 404 if the clinic is not visible to you, 403 unless you are an admin or doctor there, 409 if a proposal is already pending, 503 until CAREFLOW_AUTONOMOUS_MODE_ENABLED is on.",
         "operationId": "propose_autonomous_mode_v1_staff_console_autonomy_proposals_post",
         "parameters": [
           {
@@ -9280,7 +9305,7 @@
     },
     "/v1/staff/console/autonomy/proposals/{proposal_id}/resolve": {
       "post": {
-        "description": "Approve (as a DIFFERENT admin than the proposer, within 7 days) or reject a pending proposal; audited by the database. 404 if you cannot see it, 403 unless you are an admin of its clinic, 503 until the switch is enabled.",
+        "description": "Approve (as a DIFFERENT person holding the OTHER role than the proposer: admin for a doctor's proposal, doctor for an admin's; within 7 days) or reject a pending proposal; audited by the database. 404 if you cannot see it, 403 unless you are an admin or doctor of its clinic, 503 until the switch is enabled.",
         "operationId": "resolve_autonomy_proposal_v1_staff_console_autonomy_proposals__proposal_id__resolve_post",
         "parameters": [
           {

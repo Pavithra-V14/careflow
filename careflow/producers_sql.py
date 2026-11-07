@@ -152,22 +152,22 @@ async def record_sample(conn: AsyncConnection, *, clinic_id: uuid.UUID, origin: 
 # ---- the two-person switch to autonomous (migration 0053) ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-async def propose_autonomous(conn: AsyncConnection, *, clinic_id: uuid.UUID, origin: str, proposed_by: uuid.UUID, idempotency_key: str) -> tuple[uuid.UUID, bool]:
+async def propose_autonomous(conn: AsyncConnection, *, clinic_id: uuid.UUID, origin: str, proposed_by: uuid.UUID, proposer_role: str, idempotency_key: str) -> tuple[uuid.UUID, bool]:
     return await _insert(
         conn,
-        "insert into ops.autonomy_proposals (clinic_id, origin, proposed_by, idempotency_key) values (:c, :o, :p, :k)",
-        {"c": clinic_id, "o": origin, "p": proposed_by, "k": idempotency_key},
+        "insert into ops.autonomy_proposals (clinic_id, origin, proposed_by, proposer_role, idempotency_key) values (:c, :o, :p, :r, :k)",
+        {"c": clinic_id, "o": origin, "p": proposed_by, "r": proposer_role, "k": idempotency_key},
         "select id from ops.autonomy_proposals where clinic_id = :c and idempotency_key = :k",
         {"c": clinic_id, "k": idempotency_key},
     )
 
 
 async def pending_proposals(conn: AsyncConnection, clinic_id: uuid.UUID) -> list:
-    return list((await conn.execute(text("select id, proposed_by, created_at from ops.autonomy_proposals where clinic_id = :c and status = 'pending' order by created_at"), {"c": clinic_id})).all())
+    return list((await conn.execute(text("select id, proposed_by, proposer_role, created_at from ops.autonomy_proposals where clinic_id = :c and status = 'pending' order by created_at"), {"c": clinic_id})).all())
 
 
 async def resolve_proposal(conn: AsyncConnection, *, proposal_id: uuid.UUID, decision: str) -> str:
-    """'approved', 'rejected', 'same_person', 'expired' or 'not_pending'. Raises Refused when the database refuses the caller (not an admin of the clinic, no second factor)."""
+    """'approved', 'rejected', 'same_person', 'wrong_role', 'expired' or 'not_pending'. Raises Refused when the database refuses the caller (not an admin of the clinic, no second factor)."""
     try:
         async with conn.begin_nested():
             return str((await conn.execute(text("select ops.resolve_autonomy_proposal(:i, :d)"), {"i": proposal_id, "d": decision})).scalar())

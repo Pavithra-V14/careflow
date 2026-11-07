@@ -3098,11 +3098,15 @@ AUTONOMY_PROPOSALS = "/v1/staff/console/autonomy/proposals"
 AUTONOMY_RESOLVE = AUTONOMY_PROPOSALS + "/{proposal_id}/resolve"
 
 
+PROPOSAL_VISIBLE_REFUSED = ("front_desk_a", "nurse_a", "business_owner_a", "auditor_a", "multi")  # (admin and doctor may propose / resolve; multi is a nurse here)
+
+
 def autonomy_propose_cases(ids) -> list[tuple]:
     body = lambda **o: {"clinic_id": str(ids.clinic_a), **o}
-    cases = [_case(ids, "admin_a is told the switch is not enabled", "admin_a", 503, AUTONOMY_PROPOSALS, json=body(), body=lambda b: b == {"detail": "the switch to autonomous is unavailable: not enabled"})]
-    cases += [_case(ids, f"{p} sees the clinic but is refused", p, 403, AUTONOMY_PROPOSALS, json=body(), body=NOT_YOUR_ROLE) for p in ADMIN_ONLY_VISIBLE_REFUSED]
-    others = [p for p in ids.people if p != "admin_a" and p not in ADMIN_ONLY_VISIBLE_REFUSED]
+    off = lambda b: b == {"detail": "the switch to autonomous is unavailable: not enabled"}
+    cases = [_case(ids, f"{p} is told the switch is not enabled", p, 503, AUTONOMY_PROPOSALS, json=body(), body=off) for p in ("admin_a", "doctor_a")]
+    cases += [_case(ids, f"{p} sees the clinic but is refused", p, 403, AUTONOMY_PROPOSALS, json=body(), body=NOT_YOUR_ROLE) for p in PROPOSAL_VISIBLE_REFUSED]
+    others = [p for p in ids.people if p not in ("admin_a", "doctor_a") and p not in PROPOSAL_VISIBLE_REFUSED]
     cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused with the one not-found", p, 404, AUTONOMY_PROPOSALS, json=body(), body=_fixed(404)) for p in others]
     cases += [
         _case(ids, "an unknown clinic is not found", "admin_a", 404, AUTONOMY_PROPOSALS, json=body(clinic_id=str(uuid.uuid4())), body=_fixed(404)),
@@ -3114,7 +3118,7 @@ def autonomy_propose_cases(ids) -> list[tuple]:
 
 def autonomy_proposals_list_cases(ids) -> list[tuple]:
     path = lambda **o: AUTONOMY_PROPOSALS + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
-    cases = _console_clinic_cases(ids, path, allowed=("admin_a",), ok_status=200, ok_body=lambda b: b == {"proposals": []}, visible_refused=ADMIN_ONLY_VISIBLE_REFUSED)
+    cases = _console_clinic_cases(ids, path, allowed=("admin_a", "doctor_a"), ok_status=200, ok_body=lambda b: b == {"proposals": []}, visible_refused=PROPOSAL_VISIBLE_REFUSED)
     cases += [_case(ids, "an unknown clinic is not found", "admin_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404))]
     return cases + _unauthenticated(ids, path(), None)[:4]
 

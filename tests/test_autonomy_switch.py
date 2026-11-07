@@ -8,8 +8,10 @@ from careflow.autonomy import (
     LOCKED_TO_AUTOMATIC,
     LOCKED_TO_HUMAN,
     MATRIX,
+    AutonomyChange,
     Policy,
     effective_policy,
+    switch_pair_allowed,
 )
 from careflow.consent_settings import NoticeDef, parse, plan_publication
 
@@ -71,3 +73,14 @@ def test_no_route_or_application_function_publishes_a_notice_any_more():
     root = Path(__file__).resolve().parent.parent
     assert "publish_consent_notice" not in (root / "careflow" / "app.py").read_text(encoding="utf-8")
     assert "publish_consent_notice" not in (root / "careflow" / "portal_sql.py").read_text(encoding="utf-8")
+
+
+def test_the_switch_needs_two_different_people_one_admin_and_one_doctor_either_may_propose():
+    assert switch_pair_allowed("admin", "a1", "doctor", "d1")
+    assert switch_pair_allowed("doctor", "d1", "admin", "a1")  # either may propose; the approver holds the other role
+    assert not switch_pair_allowed("admin", "a1", "admin", "a2")  # two admins are not an admin AND a doctor
+    assert not switch_pair_allowed("doctor", "d1", "doctor", "d2")
+    assert not switch_pair_allowed("admin", "x", "doctor", "x")  # one account holding both roles is one person
+    assert not switch_pair_allowed("admin", None, "doctor", "d1") and not switch_pair_allowed("admin", "a1", "doctor", None)
+    assert not switch_pair_allowed("nurse", "n1", "doctor", "d1")
+    assert AutonomyChange("a1", "d1").allowed() and not AutonomyChange("x", "x").allowed() and not AutonomyChange("a1", None).allowed()

@@ -3527,7 +3527,8 @@ async def resolve_barrier(barrier_id: uuid.UUID, idempotency_key: IdempotencyKey
 # `POST /v1/staff/care-gaps/episodes`, `.../episode-rules/{id}/done`, `.../samples/{id}/recheck`: the care-gap producers (nurse and doctor). Rule definitions come ONLY from the required setting
 # CAREFLOW_CARE_GAP_RULES; unset means 503. `GET /v1/staff/console/dashboard` is the admin's metrics data: each value is a number, or null with a state (never a made-up zero).
 
-AUTONOMY_SETTERS = ("admin",)
+AUTONOMY_SETTERS = ("admin",)  # lowering the mode (shadow / assisted) is a one-admin act
+AUTONOMY_PROPOSERS = ("admin", "doctor")  # the switch to autonomous: an admin AND a doctor (12.5)
 
 
 class AutonomyOut(_Out):
@@ -3577,12 +3578,13 @@ async def set_autonomy(body: AutonomySetIn, idempotency_key: IdempotencyKey, con
 
 # ---- The two-person switch to AUTONOMOUS (migration 0053; BUILD-SPEC.md 12.5) ----------------------------------------------------------------------------------------------------------------------------------------
 #
-# One admin PROPOSES; a DIFFERENT admin of the clinic APPROVES (or any admin rejects); only the approval writes `autonomous` into the history. The enabling setting CAREFLOW_AUTONOMOUS_MODE_ENABLED is unset by
+# One person PROPOSES as an admin or a doctor; a DIFFERENT person holding the OTHER role APPROVES (12.5: an admin AND a doctor); any admin or doctor rejects; only the approval writes `autonomous` into the history. The enabling setting CAREFLOW_AUTONOMOUS_MODE_ENABLED is unset by
 # default (503 until it is on). Even then a stored `autonomous` changes nothing in the `clinical` profile until CAREFLOW_CLINICAL_AUTONOMY_SIGNOFF is present. The locked rows of the approval matrix are code and
 # are untouched. Lowering the mode (shadow / assisted, `POST /autonomy`) stays a one-admin act.
 
 class AutonomyProposeIn(_Body):
     clinic_id: uuid.UUID
+    proposer_role: Literal["admin", "doctor"] | None = None  # which role to propose as, for someone who holds both (the database checks it is held now)
 
 
 class AutonomyProposalOut(_Out):
@@ -3593,6 +3595,7 @@ class AutonomyProposalOut(_Out):
 class AutonomyProposalRowOut(_Out):
     proposal_id: uuid.UUID
     proposed_by: uuid.UUID
+    proposer_role: Literal["admin", "doctor"]
     created_at: datetime
 
 
@@ -3605,7 +3608,7 @@ class AutonomyResolveIn(_Body):
 
 
 class AutonomyResolveOut(_Out):
-    result: Literal["approved", "rejected", "same_person", "expired", "not_pending"]
+    result: Literal["approved", "rejected", "same_person", "wrong_role", "expired", "not_pending"]
 
 
 def _autonomous_enabled(request: Request) -> None:
@@ -3615,12 +3618,13 @@ def _autonomous_enabled(request: Request) -> None:
 
 @staff_console.post("/autonomy/proposals", response_model=AutonomyProposalOut, status_code=201)
 async def propose_autonomous_mode(body: AutonomyProposeIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> AutonomyProposalOut:
-    """Propose switching the clinic to autonomous; a DIFFERENT admin must approve it. Idempotent on the key. 404 if the clinic is not visible to you, 403 unless you are an admin there, 409 if a proposal is already pending, 503 until CAREFLOW_AUTONOMOUS_MODE_ENABLED is on."""
-    origin = await _console_clinic(conn, body.clinic_id, AUTONOMY_SETTERS)
+    """Propose switching the clinic to autonomous as an admin or a doctor; a DIFFERENT person holding the OTHER role (doctor or admin) must approve it. Idempotent on the key. 404 if the clinic is not visible to you, 403 unless you are an admin or doctor there, 409 if a proposal is already pending, 503 until CAREFLOW_AUTONOMOUS_MODE_ENABLED is on."""
+    origin = await _console_clinic(conn, body.clinic_id, AUTONOMY_PROPOSERS)
     _autonomous_enabled(request)
     actor = uuid.UUID(claims["sub"])
+    proposer_role = body.proposer_role or ("admin" if await _clinic_role_held(conn, body.clinic_id, ("admin",)) else "doctor")
     try:
-        proposal_id, created = await producers_sql.propose_autonomous(conn, clinic_id=body.clinic_id, origin=origin, proposed_by=actor, idempotency_key=f"autonomy-proposal:{idempotency_key}")
+        proposal_id, created = await producers_sql.propose_autonomous(conn, clinic_id=body.clinic_id, origin=origin, proposed_by=actor, proposer_role=proposer_role, idempotency_key=f"autonomy-proposal:{idempotency_key}")
     except producers_sql.Refused:
         raise HTTPException(status_code=409, detail="a proposal is already pending") from None
     except DBAPIError as exc:
@@ -3629,7 +3633,7 @@ async def propose_autonomous_mode(body: AutonomyProposeIn, idempotency_key: Idem
         raise
     if created:
         await write_audit(
-            conn, clinic_id=body.clinic_id, origin=origin, actor_id=actor, actor_role=await _acting_role(conn, claims, body.clinic_id, AUTONOMY_SETTERS), action="autonomy.propose",
+            conn, clinic_id=body.clinic_id, origin=origin, actor_id=actor, actor_role=await _acting_role(conn, claims, body.clinic_id, AUTONOMY_PROPOSERS), action="autonomy.propose",
             resource_type="autonomy_proposal", resource_id=proposal_id, details={}, idempotency_key=f"audit:autonomy-propose:{proposal_id}",
         )
     return AutonomyProposalOut(proposal_id=proposal_id, created=created)
@@ -3637,18 +3641,18 @@ async def propose_autonomous_mode(body: AutonomyProposeIn, idempotency_key: Idem
 
 @staff_console.get("/autonomy/proposals", response_model=AutonomyProposalList)
 async def list_autonomy_proposals(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> AutonomyProposalList:
-    """Pending proposals of the clinic. 404 if the clinic is not visible to you, 403 unless you are an admin there."""
-    await _console_clinic(conn, clinic_id, AUTONOMY_SETTERS)
-    return AutonomyProposalList(proposals=[AutonomyProposalRowOut(proposal_id=r.id, proposed_by=r.proposed_by, created_at=r.created_at) for r in await producers_sql.pending_proposals(conn, clinic_id)])
+    """Pending proposals of the clinic. 404 if the clinic is not visible to you, 403 unless you are an admin or doctor there."""
+    await _console_clinic(conn, clinic_id, AUTONOMY_PROPOSERS)
+    return AutonomyProposalList(proposals=[AutonomyProposalRowOut(proposal_id=r.id, proposed_by=r.proposed_by, proposer_role=r.proposer_role, created_at=r.created_at) for r in await producers_sql.pending_proposals(conn, clinic_id)])
 
 
 @staff_console.post("/autonomy/proposals/{proposal_id}/resolve", response_model=AutonomyResolveOut)
 async def resolve_autonomy_proposal(proposal_id: uuid.UUID, body: AutonomyResolveIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> AutonomyResolveOut:
-    """Approve (as a DIFFERENT admin than the proposer, within 7 days) or reject a pending proposal; audited by the database. 404 if you cannot see it, 403 unless you are an admin of its clinic, 503 until the switch is enabled."""
+    """Approve (as a DIFFERENT person holding the OTHER role than the proposer: admin for a doctor's proposal, doctor for an admin's; within 7 days) or reject a pending proposal; audited by the database. 404 if you cannot see it, 403 unless you are an admin or doctor of its clinic, 503 until the switch is enabled."""
     row = (await conn.execute(text("select clinic_id from ops.autonomy_proposals where id = :i"), {"i": proposal_id})).first()
     if row is None:
         raise HTTPException(status_code=404, detail="not found")
-    if not await _clinic_role_held(conn, row.clinic_id, AUTONOMY_SETTERS):
+    if not await _clinic_role_held(conn, row.clinic_id, AUTONOMY_PROPOSERS):
         raise HTTPException(status_code=403, detail="your role may not do this")
     _autonomous_enabled(request)
     try:
