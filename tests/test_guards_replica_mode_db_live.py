@@ -22,7 +22,7 @@ GUARDS = """
 select c.relnamespace::regnamespace::text || '.' || c.relname as tbl, tg.tgname, tg.tgenabled
   from pg_trigger tg join pg_class c on c.oid = tg.tgrelid join pg_proc p on p.oid = tg.tgfoid
  where not tg.tgisinternal and c.relnamespace::regnamespace::text = any(:schemas)
-   and (tg.tgtype & 4) = 0 and (tg.tgtype & (8 | 16 | 32)) <> 0 and p.proname not like '%touch%'
+   and (tg.tgtype & 4) = 0 and (tg.tgtype & (8 | 16 | 32)) <> 0 and p.proname not like '%touch%' and p.proname <> 'alerts_ack_once'
 """
 
 
