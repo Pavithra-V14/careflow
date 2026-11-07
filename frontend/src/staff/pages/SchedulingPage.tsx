@@ -14,11 +14,15 @@ import { Badge, ComingSoon, PageHeading, ShortId, Time, useLang, useWord } from 
 import { NotAvailableToRole, ProblemText, QueryView } from '../ui/states';
 import { formatNumber } from '../../shared/i18n/format';
 import { NotFoundPage } from './NotFoundPage';
+import { AddReference, BookingsList, OffersList, SlotsList, WaitlistList } from './SchedulingMore';
 
-export const SCHEDULING_LISTS = ['providers', 'locations', 'visit-types', 'priority-levels', 'holds', 'offers'] as const;
+export const SCHEDULING_LISTS = ['slots', 'bookings', 'waitlist', 'holds', 'offers', 'providers', 'locations', 'visit-types', 'priority-levels'] as const;
 type ListId = (typeof SCHEDULING_LISTS)[number];
 const isListId = (v: string): v is ListId => (SCHEDULING_LISTS as readonly string[]).includes(v);
 const LABEL: Record<ListId, string> = {
+  slots: 'scheduling.slots',
+  bookings: 'scheduling.bookings',
+  waitlist: 'scheduling.waitlist',
   providers: 'scheduling.providers',
   locations: 'scheduling.locations',
   'visit-types': 'scheduling.visitTypes',
@@ -29,7 +33,7 @@ const LABEL: Record<ListId, string> = {
 
 export function SchedulingPage() {
   const { t } = useTranslation();
-  const { list = 'providers' } = useParams();
+  const { list = 'slots' } = useParams();
   if (!isListId(list)) return <NotFoundPage />;
   return (
     <section aria-labelledby="sched-title">
@@ -44,12 +48,21 @@ export function SchedulingPage() {
         </ul>
       </nav>
       <h2>{t(LABEL[list])}</h2>
+      {list === 'slots' && <SlotsList />}
+      {list === 'bookings' && <BookingsList />}
+      {list === 'waitlist' && <WaitlistList />}
       {list === 'providers' && <ProvidersList />}
       {list === 'locations' && <LocationsList />}
       {list === 'visit-types' && <VisitTypesList />}
       {list === 'priority-levels' && <PriorityLevelsList />}
       {list === 'holds' && <HoldsList />}
-      {list === 'offers' && <OffersView />}
+      {list === 'offers' && (
+        <>
+          <OffersList />
+          <h3>{t('scheduling.draftTitle')}</h3>
+          <OffersView />
+        </>
+      )}
     </section>
   );
 }
@@ -121,6 +134,8 @@ function RefList<T extends { active: boolean }>({
 function ProvidersList() {
   const { api } = useAuth();
   return (
+    <>
+    <AddReference kind="provider" />
     <RefList<components['schemas']['ProviderOut']>
       keyName="providers"
       load={(i) => unwrap(api.listProviders(i))}
@@ -128,12 +143,15 @@ function ProvidersList() {
       row={(p) => [p.display_name, <ActiveBadge key="a" active={p.active} />]}
       rowKey={(p) => p.provider_id}
     />
+    </>
   );
 }
 
 function LocationsList() {
   const { api } = useAuth();
   return (
+    <>
+    <AddReference kind="location" />
     <RefList<components['schemas']['LocationOut']>
       keyName="locations"
       load={(i) => unwrap(api.listLocations(i))}
@@ -141,6 +159,7 @@ function LocationsList() {
       row={(l) => [l.name, <ActiveBadge key="a" active={l.active} />]}
       rowKey={(l) => l.location_id}
     />
+    </>
   );
 }
 
@@ -149,6 +168,8 @@ function VisitTypesList() {
   const lang = useLang();
   const { t } = useTranslation();
   return (
+    <>
+    <AddReference kind="visitType" />
     <RefList<components['schemas']['VisitTypeOut']>
       keyName="visitTypes"
       load={(i) => unwrap(api.listVisitTypes(i))}
@@ -156,6 +177,7 @@ function VisitTypesList() {
       row={(v) => [v.name, `${formatNumber(v.duration_minutes, lang)} ${t('scheduling.minutes')}`, <ActiveBadge key="a" active={v.active} />]}
       rowKey={(v) => v.visit_type_id}
     />
+    </>
   );
 }
 

@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '../shared/i18n/LanguageSwitcher';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 import type { AuthPort } from './auth/port';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { OfflineBanner } from './components/OfflineBanner';
 import { Console } from './screens/Console';
 import { MfaChallenge } from './screens/MfaChallenge';
 import { MfaEnrol } from './screens/MfaEnrol';
@@ -51,18 +53,21 @@ export function App({ port, apiBaseUrl }: { port: AuthPort | null; apiBaseUrl: s
         <p className="app-name">{t('app.hospitalName')}</p>
         <LanguageSwitcher />
       </header>
+      <OfflineBanner />
       <main id="main" tabIndex={-1}>
-        {port ? (
-          <QueryClientProvider client={queryClient}>
-            <AuthProvider port={port} apiBaseUrl={apiBaseUrl}>
-              <Screens />
-            </AuthProvider>
-          </QueryClientProvider>
-        ) : (
-          <Message id="not-configured-title" title={t('app.staffTitle')} alert>
-            <p>{t('common.notConfigured')}</p>
-          </Message>
-        )}
+        <ErrorBoundary>
+          {port ? (
+            <QueryClientProvider client={queryClient}>
+              <AuthProvider port={port} apiBaseUrl={apiBaseUrl}>
+                <Screens />
+              </AuthProvider>
+            </QueryClientProvider>
+          ) : (
+            <Message id="not-configured-title" title={t('app.staffTitle')} alert>
+              <p>{t('common.notConfigured')}</p>
+            </Message>
+          )}
+        </ErrorBoundary>
       </main>
     </>
   );

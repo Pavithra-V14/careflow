@@ -1,5 +1,7 @@
-import { HashRouter, Navigate, NavLink, Route, Routes } from 'react-router';
+import type { ReactNode } from 'react';
+import { HashRouter, Navigate, NavLink, Route, Routes, useLocation } from 'react-router';
 import { useTranslation } from 'react-i18next';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { EnvironmentBadge } from '../components/EnvironmentBadge';
 import { shortClinicId } from '../me';
 import { sectionsFor } from '../sections';
@@ -24,6 +26,12 @@ import { MergeDetailPage } from '../pages/MergeDetailPage';
  * The navigation hides sections the active role cannot use. That is a CONVENIENCE: the backend decides, and every
  * page still calls the API and shows "not available to your role" on a 403, so typing a URL by hand gets nowhere.
  */
+/** A screen that fails to render is replaced by a fixed message; the session bar and navigation stay, and another screen starts fresh. */
+function GuardedRoutes({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation();
+  return <ErrorBoundary resetKey={pathname}>{children}</ErrorBoundary>;
+}
+
 export function Shell() {
   const { t } = useTranslation();
   const { account, active, changeRole, signOut } = useSession();
@@ -69,23 +77,25 @@ export function Shell() {
         </ul>
       </nav>
 
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/referrals" element={<ReferralsPage />} />
-        <Route path="/referrals/upload" element={<UploadPage />} />
-        <Route path="/referrals/:documentId" element={<ReferralDetailPage />} />
-        <Route path="/tasks" element={<TasksPage />} />
-        <Route path="/tasks/:taskId" element={<TaskDetailPage />} />
-        <Route path="/patients" element={<PatientsPage />} />
-        <Route path="/patients/:patientId" element={<PatientRecordPage />} />
-        <Route path="/identity" element={<Navigate to="/identity/merges" replace />} />
-        <Route path="/identity/merges/:mergeId" element={<MergeDetailPage />} />
-        <Route path="/identity/:list" element={<IdentityPage />} />
-        {/* The bare section opens its first list, so the sub-navigation always shows where you are. */}
-        <Route path="/scheduling" element={<Navigate to="/scheduling/providers" replace />} />
-        <Route path="/scheduling/:list" element={<SchedulingPage />} />
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
+      <GuardedRoutes>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/referrals" element={<ReferralsPage />} />
+          <Route path="/referrals/upload" element={<UploadPage />} />
+          <Route path="/referrals/:documentId" element={<ReferralDetailPage />} />
+          <Route path="/tasks" element={<TasksPage />} />
+          <Route path="/tasks/:taskId" element={<TaskDetailPage />} />
+          <Route path="/patients" element={<PatientsPage />} />
+          <Route path="/patients/:patientId" element={<PatientRecordPage />} />
+          <Route path="/identity" element={<Navigate to="/identity/merges" replace />} />
+          <Route path="/identity/merges/:mergeId" element={<MergeDetailPage />} />
+          <Route path="/identity/:list" element={<IdentityPage />} />
+          {/* The bare section opens its first list, so the sub-navigation always shows where you are. */}
+          <Route path="/scheduling" element={<Navigate to="/scheduling/slots" replace />} />
+          <Route path="/scheduling/:list" element={<SchedulingPage />} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </GuardedRoutes>
     </HashRouter>
   );
 }

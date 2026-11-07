@@ -15,9 +15,19 @@ export type DuplicateStatus = NonNullable<DuplicateQuery['status']>;
 type TaskQuery = NonNullable<paths['/v1/staff/review-tasks']['get']['parameters']['query']>;
 export type ReviewTaskStatus = TaskQuery['status'];
 export type TaskRole = NonNullable<TaskQuery['assigned_role']>;
+export type SlotIn = components['schemas']['SlotIn'];
+export type HoldIn = components['schemas']['HoldIn'];
+export type WaitlistJoinIn = components['schemas']['WaitlistJoinIn'];
+export type LocationIn = components['schemas']['LocationIn'];
+export type ProviderIn = components['schemas']['ProviderIn'];
+export type VisitTypeIn = components['schemas']['VisitTypeIn'];
+type OfferQuery = NonNullable<paths['/v1/staff/scheduling/offers']['get']['parameters']['query']>;
+export type OfferState = NonNullable<OfferQuery['state']>;
+type ThreadQuery = NonNullable<paths['/v1/staff/messages/threads']['get']['parameters']['query']>;
+export type ThreadTopic = NonNullable<ThreadQuery['topic']>;
 export type HoldStatus = NonNullable<paths['/v1/staff/scheduling/holds']['get']['parameters']['query']>['status'];
 
-/** The request header that names the active role. See docs/design/active-role.md (a proposal: the backend does not read it yet). */
+/** The request header that names the active role (docs/design/active-role.md; the backend reads it since migration 0028). */
 export const ACTIVE_ROLE_HEADER = 'X-CareFlow-Active-Role';
 const ACTIVE_ROLE_VALUE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[a-z][a-z_]*$/;
 export const formatActiveRole = (clinicId: string, role: string): string => `${clinicId}:${role}`;
@@ -56,6 +66,26 @@ export const OPERATIONS = {
   listMerges: { method: 'get', path: '/v1/staff/identity/merges' },
   openMerge: { method: 'get', path: '/v1/staff/identity/merges/{merge_id}' },
   listDuplicates: { method: 'get', path: '/v1/staff/identity/possible-duplicates' },
+  // ---- F7: scheduling ----
+  listSlots: { method: 'get', path: '/v1/staff/scheduling/slots' },
+  createSlot: { method: 'post', path: '/v1/staff/scheduling/slots' },
+  holdSlot: { method: 'post', path: '/v1/staff/scheduling/slots/{slot_id}/hold' },
+  bookSlot: { method: 'post', path: '/v1/staff/scheduling/slots/{slot_id}/book' },
+  listBookings: { method: 'get', path: '/v1/staff/scheduling/bookings' },
+  cancelBooking: { method: 'post', path: '/v1/staff/scheduling/bookings/{booking_id}/cancel' },
+  listWaitlist: { method: 'get', path: '/v1/staff/scheduling/waitlist' },
+  joinWaitlist: { method: 'post', path: '/v1/staff/scheduling/waitlist/join' },
+  listOffers: { method: 'get', path: '/v1/staff/scheduling/offers' },
+  markOfferDelivered: { method: 'post', path: '/v1/staff/scheduling/offers/{hold_id}/mark-delivered' },
+  createLocation: { method: 'post', path: '/v1/staff/scheduling/locations' },
+  createProvider: { method: 'post', path: '/v1/staff/scheduling/providers' },
+  createVisitType: { method: 'post', path: '/v1/staff/scheduling/visit-types' },
+  listThreads: { method: 'get', path: '/v1/staff/messages/threads' },
+  listThreadMessages: { method: 'get', path: '/v1/staff/messages/threads/{thread_id}/messages' },
+  readMessage: { method: 'get', path: '/v1/staff/messages/{message_id}' },
+  // ---- review console ----
+  reviewView: { method: 'get', path: '/v1/staff/referrals/{document_id}/review-view' },
+  reasonCodes: { method: 'get', path: '/v1/staff/console/reason-codes' },
 } as const satisfies Record<string, { method: 'get' | 'post'; path: keyof paths }>;
 
 export interface ApiOptions {
@@ -78,7 +108,24 @@ export interface ApiOptions {
    * value is sent on the first request AND on a step-up retry, and only if it is exactly `<clinic uuid>:<role>`.
    */
   activeRole?: { enabled: boolean; get: () => string | null };
+  /**
+   * Called when the backend answers the ONE fixed refusal for the active-role header (403, detail "active role not available")
+   * to a request that carried the header. The caller falls back to choosing a role again; the user stays signed in.
+   */
+  onActiveRoleRefused?: () => void;
+  /** True while the browser reports no connection. A write is then not sent at all (it fails as a network error, key kept). */
+  isOffline?: () => boolean;
 }
+
+/** A write that was not sent because the browser reports no connection. Nothing reached the server. */
+export class OfflineWriteError extends TypeError {
+  constructor() {
+    super('offline');
+  }
+}
+
+/** The body the backend sends for a refused active-role header. Matched exactly: any other 403 is an ordinary refusal. */
+export const ACTIVE_ROLE_REFUSAL_DETAIL = 'active role not available';
 
 /** True only for the exact step-up challenge the backend sends. Anything else is an ordinary 401. */
 export function isStepUpChallenge(res: Response): boolean {
@@ -95,6 +142,13 @@ const newKey = (): string => globalThis.crypto.randomUUID();
 
 export function createApi(options: ApiOptions) {
   const transport = options.fetch ?? ((input: Request) => globalThis.fetch(input));
+  // A search is a POST only so personal details stay out of the URL; it changes nothing, so it is not held back here (offline it fails by itself).
+  const isSearch = (r: Request) => new URL(r.url).pathname === '/v1/staff/patients/search';
+  async function noteActiveRoleRefusal(res: Response, req: Request): Promise<void> {
+    if (!options.onActiveRoleRefused || !req.headers.has(ACTIVE_ROLE_HEADER)) return;
+    const body: unknown = await res.clone().json().catch(() => null);
+    if ((body as { detail?: unknown } | null)?.detail === ACTIVE_ROLE_REFUSAL_DETAIL) options.onActiveRoleRefused();
+  }
   const client = createClient<paths>({
     baseUrl: options.baseUrl,
     fetch: async (request: Request) => {
@@ -106,14 +160,18 @@ export function createApi(options: ApiOptions) {
         const role = options.activeRole?.enabled ? options.activeRole.get() : null;
         if (role !== null && ACTIVE_ROLE_VALUE.test(role)) r.headers.set(ACTIVE_ROLE_HEADER, role);
       };
+      // Offline: nothing is sent for a write, so it can never half-happen. It fails like any lost connection (the caller keeps its key).
+      if (options.isOffline?.() && request.method !== 'GET' && request.method !== 'HEAD' && !isSearch(request)) throw new OfflineWriteError();
       await authorize(request);
       const first = await transport(request);
+      if (first.status === 403) await noteActiveRoleRefusal(first, request);
       if (first.status !== 401) return first;
 
       if (isStepUpChallenge(first) && options.onStepUp && retry) {
         if (!(await options.onStepUp())) return first;
         await authorize(retry); // the token minted by the fresh verification
         const second = await transport(retry);
+        if (second.status === 403) await noteActiveRoleRefusal(second, retry);
         // One retry only. A second step-up challenge is returned to the caller, never looped on.
         if (second.status === 401 && !isStepUpChallenge(second)) options.onUnauthorized?.();
         return second;
@@ -179,10 +237,10 @@ export function createApi(options: ApiOptions) {
       client.GET('/v1/staff/scheduling/offers/draft', { params: { query: { clinic_id: clinicId, visit_type_id: visitTypeId } } }),
 
     // ---- F4: referral decisions, identity revoke, merge and duplicate lists ---------------------------------------
-    reviewReferral: (documentId: string, decision: ReviewDecision, o?: WriteOptions) =>
+    reviewReferral: (documentId: string, decision: ReviewDecision, o?: WriteOptions, reasonCode?: string | null) =>
       client.POST('/v1/staff/referrals/{document_id}/review', {
         params: { path: { document_id: documentId }, header: { 'X-Idempotency-Key': key(o) } },
-        body: { decision },
+        body: reasonCode ? { decision, reason_code: reasonCode } : { decision },
       }),
     revokeIdentity: (patientId: string, reason: RevokeReason, o?: WriteOptions) =>
       client.POST('/v1/staff/patients/{patient_id}/revoke-identity', {
@@ -192,6 +250,36 @@ export function createApi(options: ApiOptions) {
     listMerges: (status?: MergeStatus) => client.GET('/v1/staff/identity/merges', { params: { query: status ? { status } : {} } }),
     openMerge: (mergeId: string) => client.GET('/v1/staff/identity/merges/{merge_id}', { params: { path: { merge_id: mergeId } } }),
     listDuplicates: (status?: DuplicateStatus) => client.GET('/v1/staff/identity/possible-duplicates', { params: { query: status ? { status } : {} } }),
+
+    // ---- F7: scheduling ---------------------------------------------------------------------------------------------
+    listSlots: (f: { providerId?: string; locationId?: string; limit?: number } = {}) =>
+      client.GET('/v1/staff/scheduling/slots', {
+        params: { query: { ...(f.providerId ? { provider_id: f.providerId } : {}), ...(f.locationId ? { location_id: f.locationId } : {}), ...(f.limit ? { limit: f.limit } : {}) } },
+      }),
+    createSlot: (body: SlotIn, o?: WriteOptions) => client.POST('/v1/staff/scheduling/slots', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    holdSlot: (slotId: string, body: HoldIn, o?: WriteOptions) =>
+      client.POST('/v1/staff/scheduling/slots/{slot_id}/hold', { params: { path: { slot_id: slotId }, header: { 'X-Idempotency-Key': key(o) } }, body }),
+    bookSlot: (slotId: string, patientId: string, o?: WriteOptions) =>
+      client.POST('/v1/staff/scheduling/slots/{slot_id}/book', { params: { path: { slot_id: slotId }, header: { 'X-Idempotency-Key': key(o) } }, body: { patient_id: patientId } }),
+    listBookings: (limit?: number) => client.GET('/v1/staff/scheduling/bookings', { params: { query: limit ? { limit } : {} } }),
+    cancelBooking: (bookingId: string, o?: WriteOptions) =>
+      client.POST('/v1/staff/scheduling/bookings/{booking_id}/cancel', { params: { path: { booking_id: bookingId }, header: { 'X-Idempotency-Key': key(o) } } }),
+    listWaitlist: (visitTypeId?: string) => client.GET('/v1/staff/scheduling/waitlist', { params: { query: visitTypeId ? { visit_type_id: visitTypeId } : {} } }),
+    joinWaitlist: (body: WaitlistJoinIn, o?: WriteOptions) => client.POST('/v1/staff/scheduling/waitlist/join', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    listOffers: (state?: OfferState) => client.GET('/v1/staff/scheduling/offers', { params: { query: state ? { state } : {} } }),
+    markOfferDelivered: (holdId: string, o?: WriteOptions) =>
+      client.POST('/v1/staff/scheduling/offers/{hold_id}/mark-delivered', { params: { path: { hold_id: holdId }, header: { 'X-Idempotency-Key': key(o) } } }),
+    createLocation: (body: LocationIn, o?: WriteOptions) => client.POST('/v1/staff/scheduling/locations', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    createProvider: (body: ProviderIn, o?: WriteOptions) => client.POST('/v1/staff/scheduling/providers', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    createVisitType: (body: VisitTypeIn, o?: WriteOptions) => client.POST('/v1/staff/scheduling/visit-types', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    listThreads: (patientId: string, topic: ThreadTopic) => client.GET('/v1/staff/messages/threads', { params: { query: { patient_id: patientId, topic } } }),
+    listThreadMessages: (threadId: string) => client.GET('/v1/staff/messages/threads/{thread_id}/messages', { params: { path: { thread_id: threadId } } }),
+    // Reads one message AND audits the read: only on a person's click, never in the background, and the body is never cached.
+    readMessage: (messageId: string) => client.GET('/v1/staff/messages/{message_id}', { params: { path: { message_id: messageId } } }),
+
+    // ---- review console -----------------------------------------------------------------------------------------------
+    reviewView: (documentId: string) => client.GET('/v1/staff/referrals/{document_id}/review-view', { params: { path: { document_id: documentId } } }),
+    reasonCodes: () => client.GET('/v1/staff/console/reason-codes'),
   };
 }
 

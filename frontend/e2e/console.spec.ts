@@ -51,13 +51,19 @@ for (const lang of LANGS) {
     await sweep(page, 'patient-confirm-dialog', lang);
   });
 
-  test(`front desk, scheduling lists, holds and offers [${lang}]`, async ({ page }) => {
-    await openConsole(page, 'front_desk', lang);
-    for (const list of ['providers', 'locations', 'visit-types', 'priority-levels', 'holds', 'offers']) {
+  // Measured: waiting is not the cost (a screen is ready in about 20 ms); each axe pass takes about a second, and a screen is checked at
+  // three widths. So one test per screen keeps every test to a few seconds with the same assertions, instead of one test of about 40.
+  for (const list of ['providers', 'locations', 'visit-types', 'priority-levels', 'holds', 'offers']) {
+    test(`front desk, scheduling ${list} [${lang}]`, async ({ page }) => {
+      await openConsole(page, 'front_desk', lang);
       await go(page, `#/scheduling/${list}`, READY[lang].scheduling && list !== 'holds' && list !== 'offers' ? (READY[lang].scheduling as string) : /\S/);
       await expect(page.locator('main table, main select, main .state').first()).toBeVisible();
       await sweep(page, `scheduling-${list}`, lang);
-    }
+    });
+  }
+
+  test(`front desk, the hold release dialog [${lang}]`, async ({ page }) => {
+    await openConsole(page, 'front_desk', lang);
     await go(page, '#/scheduling/holds', /\S/);
     await page.getByRole('button', { name: /^(Release|விடுவி)\s/ }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
