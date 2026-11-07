@@ -52,6 +52,21 @@ settings:
   care_gap_rules:
     value: '{"rules": {"demo_rule": {"interval_days": 30, "overdue_after_days": 5}}, "episodes": {"demo_episode": ["demo_rule"]}}'
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  consent_notices:
+    value: '{"care_delivery": {"version": 1, "body": "DEMO ONLY - NOT A LEGAL NOTICE. Placeholder text for a synthetic demonstration. Counsel owns the real consent wording."}}'
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  visit_readiness_content:
+    value: '{"facts": {"demo_fact_one": "DEMO ONLY - NOT A CLINICAL QUESTION. Placeholder question one?"}, "visit_types": {"DEMO visit type": {"intake": ["demo_fact_one"], "checklist": [{"id": "demo_item_one", "text": "DEMO ONLY - NOT A CLINICAL INSTRUCTION. Placeholder checklist item one: please confirm."}]}}}'
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  visit_readiness_task_priority:
+    value: "standard"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  care_plan_task_priority:
+    value: "standard"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  care_plan_task_role:
+    value: "doctor"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
   care_gap_alert_days:
     value: "14"
     label: "DEMO ONLY - NOT A CLINICAL DECISION"

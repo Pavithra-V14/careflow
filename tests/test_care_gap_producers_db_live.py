@@ -148,21 +148,22 @@ async def test_the_worker_inserts_a_sample_for_a_decision_of_its_clinic_and_a_nu
     await handle.execute(decision_sql(w.a, proposal, p["nurse_a"]))
     decision = await handle.fetchval("select id from agents.review_decisions where proposal_id = $1", proposal)
     ins = "insert into ops.care_review_samples (clinic_id, origin, decision_id, idempotency_key) values (:c, 'test', :d, :k)"
+    assert await state_of(db, p["worker_b"], ins, claims={}, c=w.b, d=decision, k="s3") == "23503"  # the clinic is pinned to the decision's own
     assert await state_of(db, p["worker_a"], ins, claims={}, c=w.a, d=decision, k="s1") == 1
     assert await state_of(db, p["worker_a"], ins, claims={}, c=w.a, d=decision, k="s2") == "23505"  # one sample per decision
-    assert await state_of(db, p["worker_b"], ins, claims={}, c=w.b, d=decision, k="s3") == "23503"  # the clinic is pinned to the decision's own
     assert await state_of(db, p["worker_a"], ins, claims={}, c=w.a, d=uuid.uuid4(), k="s4") == "23503"
     for who in ("nurse_a", "doctor_a", "admin_a", "front_desk_a"):
         assert await state_of(db, p[who], ins, c=w.a, d=decision, k=f"s-{who}") == "42501", who
     sample = (await state_of(db, p["nurse_a"], "select id from ops.care_review_samples where decision_id = :d", d=decision))[0][0]
     recheck = "update ops.care_review_samples set rechecked_by = :by where id = :i"
-    assert await state_of(db, p["nurse_a"], recheck, by=p["doctor_a"], i=sample) == 0  # only as yourself
-    assert await state_of(db, p["nurse_a"], recheck, by=p["nurse_a"], i=sample, claims={"aal": "aal1", "amr": []}) == 0
+    assert await state_of(db, p["doctor_a"], recheck, by=p["nurse_a"], i=sample) == "42501"  # only as yourself (the new row fails the policy check)
+    assert await state_of(db, p["doctor_a"], recheck, by=p["doctor_a"], i=sample, claims={"aal": "aal1", "amr": []}) == 0
     assert await state_of(db, p["front_desk_a"], recheck, by=p["front_desk_a"], i=sample) == 0
-    async with as_user(db, p["nurse_a"], aal2()) as c:
-        assert (await c.execute(text(recheck), {"by": p["nurse_a"], "i": sample})).rowcount == 1
+    assert await state_of(db, p["nurse_a"], recheck, by=p["nurse_a"], i=sample) == "23001"  # the nurse made the decision: someone else must re-check it (decision 7)
+    async with as_user(db, p["doctor_a"], aal2()) as c:
+        assert (await c.execute(text(recheck), {"by": p["doctor_a"], "i": sample})).rowcount == 1
         assert (await c.execute(text("select rechecked_at is not null from ops.care_review_samples where id = :i"), {"i": sample})).scalar() is True  # the database's clock
-    assert await state_of(db, p["doctor_a"], recheck, by=p["doctor_a"], i=sample) == 0  # re-checked once; the update policy no longer matches
+    assert await state_of(db, p["nurse_a"], recheck, by=p["nurse_a"], i=sample) == 0  # re-checked once; the update policy no longer matches
 
 
 async def test_the_overdue_sweep_raises_one_alert_per_overdue_rule_through_the_narrow_read_and_a_second_pass_adds_none(db):

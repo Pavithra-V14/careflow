@@ -133,7 +133,7 @@ class _Conn:
     async def execute(self, statement, params=None):
         sql = str(statement)
         self.calls.append((sql, params))
-        if "from iam.clinics" in sql:
+        if "from iam.staff_roles" in sql:
             return _Rows([(c,) for c in self.clinics])
         if "from agents.review_tasks" in sql:
             return _Rows(scalar=self.live_tasks)

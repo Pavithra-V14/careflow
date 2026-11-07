@@ -31,7 +31,7 @@ async def canary_sweep(conn: AsyncConnection, rate: float | None, *, draw: Calla
     """One pass. Returns how many canaries were enqueued. No rate (a required setting): returns 0 without reading anything. The daily cap lives in the database (docs.canary_settings, migration 0047); a clinic with no cap row gets no canary."""
     if rate is None:
         return 0
-    clinics = [r[0] for r in (await conn.execute(text("select id from iam.clinics where origin = :o and iam.has_clinic_role(id, array['queue_worker']) order by id"), {"o": origin})).all()]
+    clinics = [r[0] for r in (await conn.execute(text("select distinct r.clinic_id from iam.staff_roles r where r.role = 'queue_worker' and ops.clinic_origin(r.clinic_id) = :o and iam.has_clinic_role(r.clinic_id, array['queue_worker']) order by r.clinic_id"), {"o": origin})).all()]
     made = 0
     for clinic in clinics:
         try:

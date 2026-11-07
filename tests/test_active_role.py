@@ -166,6 +166,8 @@ ALLOWED = {
     "db/migrations/0016_spend_ledger_and_registry_approval.sql": "the approval trigger checks OTHER accounts (created_by, approved_by), not the caller; narrowing applies to checks about the caller only",
     "db/migrations/0024_worker_role_exclusive.sql": "the queue_worker exclusivity trigger: a property of the grants table itself, not of a request",
     "db/migrations/0028_active_role.sql": "the helpers that implement the active role",
+    "careflow/canary_injection.py": "lists the clinics where the signed-in WORKER holds queue_worker; it also checks iam.has_clinic_role (active-role aware) on every row, because the worker cannot read iam.clinics",
+    "careflow/producer_sweeps.py": "the same worker clinic list for the care-gap and sampler sweeps, also filtered through iam.has_clinic_role",
     "db/migrations/0034_staff_account_management.sql": "the five staff-management functions: they change OTHER accounts' grants, and check the CALLER through iam.has_clinic_role (which honours the active role)",
 }
 
@@ -192,4 +194,4 @@ def test_no_python_module_selects_from_staff_roles_except_the_two_allowed():
     for path in sorted((ROOT / "careflow").rglob("*.py")):
         rel = path.relative_to(ROOT).as_posix()
         if _mentions(path):
-            assert rel in {"careflow/app.py", "careflow/ops_checks.py"}, rel
+            assert rel in {"careflow/app.py", "careflow/ops_checks.py", "careflow/canary_injection.py", "careflow/producer_sweeps.py"}, rel  # (the last two list the clinics the WORKER serves, filtered through iam.has_clinic_role)

@@ -1270,6 +1270,58 @@
         "title": "ClaimOut",
         "type": "object"
       },
+      "ClaimResolveIn": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "patient_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Id"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "ClaimResolveIn",
+        "type": "object"
+      },
+      "ClaimResolveOut": {
+        "additionalProperties": false,
+        "properties": {
+          "result": {
+            "enum": [
+              "approved",
+              "rejected",
+              "already_resolved",
+              "record_not_claimable",
+              "claimant_already_bound",
+              "consent_required"
+            ],
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "ClaimResolveOut",
+        "type": "object"
+      },
       "ConfirmIdentityOut": {
         "additionalProperties": false,
         "description": "Ids and a flag only.",
@@ -2963,6 +3015,45 @@
         "title": "NoticeOut",
         "type": "object"
       },
+      "NoticePublishIn": {
+        "additionalProperties": false,
+        "properties": {
+          "purpose": {
+            "enum": [
+              "care_delivery",
+              "ai_processing",
+              "service_improvement"
+            ],
+            "title": "Purpose",
+            "type": "string"
+          }
+        },
+        "required": [
+          "purpose"
+        ],
+        "title": "NoticePublishIn",
+        "type": "object"
+      },
+      "NoticePublishOut": {
+        "additionalProperties": false,
+        "properties": {
+          "result": {
+            "enum": [
+              "published",
+              "exists",
+              "conflict",
+              "version_gap"
+            ],
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "NoticePublishOut",
+        "type": "object"
+      },
       "OfferRowList": {
         "additionalProperties": false,
         "properties": {
@@ -3357,6 +3448,44 @@
         "title": "PatientViewOut",
         "type": "object"
       },
+      "PendingClaimList": {
+        "additionalProperties": false,
+        "properties": {
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/PendingClaimOut"
+            },
+            "title": "Claims",
+            "type": "array"
+          }
+        },
+        "required": [
+          "claims"
+        ],
+        "title": "PendingClaimList",
+        "type": "object"
+      },
+      "PendingClaimOut": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "created_at"
+        ],
+        "title": "PendingClaimOut",
+        "type": "object"
+      },
       "PortalActivateOut": {
         "additionalProperties": false,
         "properties": {
@@ -3652,6 +3781,96 @@
           "active"
         ],
         "title": "ProviderOut",
+        "type": "object"
+      },
+      "ReadinessReplyIn": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "outcome": {
+            "enum": [
+              "replied",
+              "no_reply"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "ReadinessReplyIn",
+        "type": "object"
+      },
+      "ReadinessViewOut": {
+        "additionalProperties": false,
+        "properties": {
+          "current_item": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Item"
+          },
+          "finished": {
+            "title": "Finished",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          },
+          "visit_id": {
+            "format": "uuid",
+            "title": "Visit Id",
+            "type": "string"
+          },
+          "waiting_for": {
+            "enum": [
+              "reply",
+              "none"
+            ],
+            "title": "Waiting For",
+            "type": "string"
+          }
+        },
+        "required": [
+          "visit_id",
+          "status",
+          "waiting_for",
+          "current_item",
+          "task_id",
+          "finished"
+        ],
+        "title": "ReadinessViewOut",
         "type": "object"
       },
       "ReasonCodesOut": {
@@ -4156,24 +4375,20 @@
             "title": "Created",
             "type": "boolean"
           },
-          "plans_woken": {
-            "items": {
-              "format": "uuid",
-              "type": "string"
-            },
-            "title": "Plans Woken",
-            "type": "array"
-          },
           "result_id": {
             "format": "uuid",
             "title": "Result Id",
             "type": "string"
+          },
+          "wake_queued": {
+            "title": "Wake Queued",
+            "type": "boolean"
           }
         },
         "required": [
           "result_id",
           "created",
-          "plans_woken"
+          "wake_queued"
         ],
         "title": "ResultOut",
         "type": "object"
@@ -8014,7 +8229,7 @@
     },
     "/v1/staff/care-gaps/samples/{sample_id}/recheck": {
       "post": {
-        "description": "Mark an after-the-fact review sample as re-checked, once, as yourself. 404 if you cannot see it, it was already re-checked, or you may not change it.",
+        "description": "Mark an after-the-fact review sample as re-checked, once, as yourself. 404 if you cannot see it, it was already re-checked, or you may not change it, 409 if you made the decision the sample was drawn from.",
         "operationId": "recheck_care_sample_v1_staff_care_gaps_samples__sample_id__recheck_post",
         "parameters": [
           {
@@ -8072,6 +8287,16 @@
               }
             },
             "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body."
           },
           "422": {
             "content": {
@@ -8779,6 +9004,99 @@
           }
         ],
         "summary": "Set Autonomy",
+        "tags": [
+          "staff console"
+        ]
+      }
+    },
+    "/v1/staff/console/consent-notices/publish": {
+      "post": {
+        "description": "Publish the notice for a purpose exactly as the required setting states it (version and text come from the setting, never from the caller). Admin with a verified second factor. 403 unless you are an admin, 503 while the setting is not configured or has no entry for the purpose.",
+        "operationId": "publish_consent_notice_v1_staff_console_consent_notices_publish_post",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoticePublishIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoticePublishOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Publish Consent Notice",
         "tags": [
           "staff console"
         ]
@@ -11309,6 +11627,200 @@
         ]
       }
     },
+    "/v1/staff/portal-claims": {
+      "get": {
+        "description": "Pending portal claim requests of the clinic, oldest first: an opaque request id and a time, nothing about the claimant. 404 if the clinic is not visible to you, 403 unless you are front desk there.",
+        "operationId": "list_pending_claims_v1_staff_portal_claims_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Clinic Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingClaimList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Pending Claims",
+        "tags": [
+          "staff portal claims"
+        ]
+      }
+    },
+    "/v1/staff/portal-claims/{request_id}/resolve": {
+      "post": {
+        "description": "Approve (naming the confirmed patient record) or reject a pending claim, as front desk of the clinic; audited by the database. Idempotent on the request. 404 if you cannot see the request, 403 unless you are front desk there, 422 if an approval names no patient.",
+        "operationId": "resolve_portal_claim_v1_staff_portal_claims__request_id__resolve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimResolveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimResolveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Resolve Portal Claim",
+        "tags": [
+          "staff portal claims"
+        ]
+      }
+    },
     "/v1/staff/referrals": {
       "get": {
         "description": "The referral documents you may see, newest first, with the state of their run. 403 unless you hold front desk, nurse or doctor somewhere.",
@@ -11766,7 +12278,7 @@
     },
     "/v1/staff/results": {
       "post": {
-        "description": "Record a result for a patient of the clinic (append-only; a correction names the result it supersedes) and wake any care plan whose open wait it matches. Idempotent on the key. 404 if the clinic or patient is not visible, 403 unless you are a nurse or doctor there, 422 for a malformed measure.",
+        "description": "Record a result for a patient of the clinic (append-only; a correction names the result it supersedes) and queue the wake-up of any care plan whose open wait it matches (through the outbox; the worker wakes the plan). Idempotent on the key. 404 if the clinic or patient is not visible, 403 unless you are a nurse or doctor there, 422 for a malformed measure.",
         "operationId": "record_result_v1_staff_results_post",
         "parameters": [
           {
@@ -14677,6 +15189,331 @@
         "summary": "Join Waitlist",
         "tags": [
           "staff scheduling"
+        ]
+      }
+    },
+    "/v1/staff/visits/{visit_id}/readiness": {
+      "get": {
+        "description": "Where the readiness run for a visit is: a closed status word, what it waits for, the id of the current item. 404 if the visit is not visible or has no run, 403 unless you are a nurse or doctor there, 503 while visit readiness is not configured.",
+        "operationId": "get_visit_readiness_v1_staff_visits__visit_id__readiness_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "visit_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Visit Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessViewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Visit Readiness",
+        "tags": [
+          "staff visit readiness"
+        ]
+      }
+    },
+    "/v1/staff/visits/{visit_id}/readiness/reply": {
+      "post": {
+        "description": "Relay the patient's reply (text, stored encrypted) or record that none came; the run resumes at its pause. The rules read the reply first. 404 if the visit is not visible or has no run, 403 unless you are a nurse or doctor there, 409 if the run is not waiting for a reply, 422 if a reply has no text, 503 while visit readiness is not configured.",
+        "operationId": "reply_visit_readiness_v1_staff_visits__visit_id__readiness_reply_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "visit_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Visit Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadinessReplyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessViewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reply Visit Readiness",
+        "tags": [
+          "staff visit readiness"
+        ]
+      }
+    },
+    "/v1/staff/visits/{visit_id}/readiness/start": {
+      "post": {
+        "description": "Start (or read back) the readiness run for a visit. Idempotent: a second start returns the same run. 404 if the visit is not visible to you, 403 unless you are a nurse or doctor there, 409 if the visit type has no readiness content, 503 while visit readiness is not configured (nothing is written).",
+        "operationId": "start_visit_readiness_v1_staff_visits__visit_id__readiness_start_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "visit_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Visit Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessViewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Start Visit Readiness",
+        "tags": [
+          "staff visit readiness"
         ]
       }
     },

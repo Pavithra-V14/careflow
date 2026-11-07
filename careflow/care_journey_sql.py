@@ -7,7 +7,6 @@ A plan text is encrypted at rest (careflow.messages.encrypt_plan_text) and decry
 
 import uuid
 from collections.abc import Awaitable, Callable
-from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, Final, Literal
 
@@ -30,8 +29,10 @@ from careflow.care_journey import (
 from careflow.checkpointer import PostgresCheckpointSaver, SqlCheckpointStore
 from careflow.crypto import DecryptionError, DemographicVault, UnknownKeyVersionError
 from careflow.front_door import FrontDoorError
+from careflow.front_door_runner import RunnerError, request_session, worker_session
 from careflow.messages import decrypt_plan_text
 from careflow.rules import RedFlagEngine
+from careflow.tick import Handler, JobContext
 
 PlanModel = Callable[[str], Awaitable[object]]  # plan text in, a raw proposal out (validated by code afterwards): the approved model route, when there is one
 PAUSES: Final = ("await_confirmation", "await_result")
@@ -252,10 +253,11 @@ class CareJourneyComponents:
             raise ValueError("the task priority and role must be set to allowed values")
 
     def runner(self, conn: AsyncConnection, *, clinic_id: uuid.UUID, origin: str) -> "CareJourneyRunner":
-        @asynccontextmanager
-        async def session():
-            yield conn
+        """A runner whose every step is a savepoint on the REQUEST's own transaction (as the signed-in person)."""
+        return self.runner_with(request_session(conn), clinic_id=clinic_id, origin=origin)
 
+    def runner_with(self, session: Any, *, clinic_id: uuid.UUID, origin: str) -> "CareJourneyRunner":
+        """A runner over any session factory (the worker's: one transaction per use). Needs a durable checkpointer when the run spans transactions."""
         deps = CareJourneyDeps(
             session, self.screener or SqlPlanScreener(self.vault, self.engine), SqlPlanParser(self.vault, self.model), SqlPlanProposals(), SqlPlanActivator(), SqlPlanReader(), SqlResultReader(), SqlWaitClaims(),
             SqlPlanCloser(), SqlDoctorTasks(), self.task_priority, self.task_role,
@@ -388,3 +390,33 @@ async def plans_waiting_for(conn: AsyncConnection, *, clinic_id: uuid.UUID, pati
         )
     ).all()
     return [r.plan_id for r in rows]
+
+
+# ---- the outbox-woken wake-up (owner decision of 2026-11-07, item 11) ------------------------------------------------------------------------------------------------------------------------
+
+
+TASK_TYPE: Final = "care_plan_result"  # the outbox event type, and so the job's task type: payload {"result_id"} only (an id, never a value)
+
+
+def care_plan_result_handler(components: CareJourneyComponents, *, session_for: Any = worker_session) -> Handler:
+    """The job handler for a recorded result: as the WORKER identity, find the plans of that patient with an open wait whose prefix the result's code carries, and resume each at its result pause. Safe to run
+    twice: a plan not at a result pause (already woken, held, finished) raises WrongStep and is skipped; the claim, the closure and the tasks carry idempotency keys derived from the plan and the step."""
+
+    async def handle(ctx: JobContext) -> None:
+        try:
+            result_id = uuid.UUID(str(ctx.job.payload["result_id"]))
+        except (KeyError, ValueError):
+            raise RunnerError("the job payload does not name a result") from None
+        session = session_for(ctx.engine, ctx.worker_account_id)
+        async with session() as conn:
+            row = (await conn.execute(text("select clinic_id, origin, patient_id, code from clinical.results where id = :r"), {"r": result_id})).first()
+            if row is None or row.clinic_id != ctx.job.clinic_id or row.origin != ctx.job.origin:
+                raise RunnerError("the result is not in the job's clinic and origin")  # a tampered or mis-addressed job: retried, then dead-lettered, never run
+            plans = await plans_waiting_for(conn, clinic_id=row.clinic_id, patient_id=row.patient_id, code=row.code)
+        for plan_id in plans:
+            try:
+                await components.runner_with(session, clinic_id=ctx.job.clinic_id, origin=ctx.job.origin).deliver_result(plan_id, result_id)
+            except (WrongStep, NoSuchPlan):
+                continue
+
+    return handle

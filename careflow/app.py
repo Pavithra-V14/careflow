@@ -27,6 +27,7 @@ missing.
 
 import asyncio
 import contextlib
+import dataclasses
 import json
 import logging
 import math
@@ -68,6 +69,7 @@ from careflow import (
     care_gap_sql,
     care_gaps,
     care_journey_sql,
+    consent_settings,
     demo_front_door,
     demo_phase3,
     demo_phase4,
@@ -82,6 +84,8 @@ from careflow import (
     producers_sql,
     reply_interpretation,
     review_tasks,
+    visit_readiness_content,
+    visit_readiness_sql,
     voice_sql,
 )
 from careflow.adapters.storage import DOCUMENT_BUCKET, SupabaseUploadAdapter
@@ -95,10 +99,12 @@ from careflow.auth import (
     verify_token,
 )
 from careflow.auth_admin import AuthAdminError, AuthAdminPort
+from careflow.autonomy import tightened
 from careflow.canary import CanaryError
 from careflow.canary import on_decision as canary_on_decision
 from careflow.canary import rate_from as canary_rate_from
 from careflow.canary_injection import canary_sweep
+from careflow.care_journey import care_journey_enabled
 from careflow.checkpointer import CheckpointerError
 from careflow.clinical_server import build_clinical_server
 from careflow.cors import middleware_kwargs, parse_origins
@@ -187,6 +193,7 @@ from careflow.scheduling_runner import (
 from careflow.tick import Poker, worker_loop
 from careflow.triage_store import DecisionConflict, TriageStoreError
 from careflow.triage_store import NotPermitted as TriageNotPermitted
+from careflow.visit_readiness import visit_readiness_enabled
 from careflow.voice import mic_state, voice_feature_on
 from careflow.watchdog import AlertRouter, limits_from
 
@@ -2670,11 +2677,13 @@ def _backfill_out(v: Any) -> BackfillOut:
     )
 
 
-def _backfill_runner(request: Request, conn: AsyncConnection, clinic_id: uuid.UUID, origin: str) -> SchedulingRunner:
+async def _backfill_runner(request: Request, conn: AsyncConnection, clinic_id: uuid.UUID, origin: str) -> SchedulingRunner:
     components: SchedulingComponents | None = request.app.state.scheduling
     if components is None:
         log.error("backfill runs are unavailable: no components are configured (nothing is run; nothing is lost)")
         raise HTTPException(status_code=503, detail="backfill runs are unavailable: not configured")
+    stored, configured_row = await producers_sql.read_mode(conn, clinic_id)
+    components = dataclasses.replace(components, policy=tightened(components.policy, stored if configured_row else None))  # the stored mode can only make the run MORE human (decision 9)
     return components.runner(request_session(conn), clinic_id=clinic_id, origin=origin)
 
 
@@ -2715,7 +2724,7 @@ async def _backfill_audit(conn: AsyncConnection, *, clinic_id: uuid.UUID, origin
 async def start_backfill(body: BackfillStartIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> BackfillOut:
     """Start (or find) the backfill run for a freed slot: rank the waitlist by clinical priority and stop at the first pause. 404 if the clinic is not visible to you, 403 unless you are front desk there, 503 while no components are configured."""
     origin = await _front_desk_gate(conn, claims, body.clinic_id)
-    runner = _backfill_runner(request, conn, body.clinic_id, origin)
+    runner = await _backfill_runner(request, conn, body.clinic_id, origin)
     with _backfill_errors():
         view = await runner.start(clinic_id=body.clinic_id, slot_id=body.slot_id, visit_type_id=body.visit_type_id, origin=origin)
     await _backfill_audit(conn, clinic_id=body.clinic_id, origin=origin, claims=claims, action="backfill.start", slot_id=body.slot_id, key=idempotency_key, details={"status": view.status})
@@ -2726,7 +2735,7 @@ async def start_backfill(body: BackfillStartIn, idempotency_key: IdempotencyKey,
 async def get_backfill(slot_id: uuid.UUID, request: Request, conn: TxConn) -> BackfillOut:
     """Where the backfill run for this slot is. 404 if you cannot see the slot or there is no run, 403 unless you are front desk, nurse or doctor there, 503 while no components are configured."""
     clinic_id, origin = await _slot_clinic(conn, slot_id, SCHEDULING_READERS, denied="your role may not read this")
-    runner = _backfill_runner(request, conn, clinic_id, origin)
+    runner = await _backfill_runner(request, conn, clinic_id, origin)
     with _backfill_errors():
         return _backfill_out(await runner.view(slot_id))
 
@@ -2735,7 +2744,7 @@ async def get_backfill(slot_id: uuid.UUID, request: Request, conn: TxConn) -> Ba
 async def decide_backfill(slot_id: uuid.UUID, body: BackfillDecideIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> BackfillOut:
     """Answer the pause: send the offer to the current candidate, skip them, or stop. 404 if you cannot see the slot or there is no run, 403 unless you are front desk there, 409 if the run is not waiting for this, 503 while no components are configured."""
     clinic_id, origin = await _slot_clinic(conn, slot_id, ("front_desk",))
-    runner = _backfill_runner(request, conn, clinic_id, origin)
+    runner = await _backfill_runner(request, conn, clinic_id, origin)
     with _backfill_errors(), _scheduling_errors():
         view = await runner.decide(slot_id, body.action)
     await _backfill_audit(conn, clinic_id=clinic_id, origin=origin, claims=claims, action="backfill.decide", slot_id=slot_id, key=idempotency_key, details={"action": body.action, "status": view.status})
@@ -2748,7 +2757,7 @@ async def reply_backfill(slot_id: uuid.UUID, body: BackfillReplyIn, idempotency_
     if (body.outcome == "replied") != (body.message_id is not None):
         raise HTTPException(status_code=422, detail="request rejected")
     clinic_id, origin = await _slot_clinic(conn, slot_id, ("front_desk",))
-    runner = _backfill_runner(request, conn, clinic_id, origin)
+    runner = await _backfill_runner(request, conn, clinic_id, origin)
     with _backfill_errors(), _scheduling_errors():
         view = await runner.reply(slot_id, body.outcome, body.message_id)
     await _backfill_audit(conn, clinic_id=clinic_id, origin=origin, claims=claims, action="backfill.reply", slot_id=slot_id, key=idempotency_key, details={"outcome": body.outcome, "status": view.status})
@@ -3641,7 +3650,7 @@ async def record_rule_done(episode_rule_id: uuid.UUID, body: RuleDoneIn, idempot
 
 @staff_care_gaps.post("/samples/{sample_id}/recheck", response_model=SampleRecheckOut)
 async def recheck_care_sample(sample_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> SampleRecheckOut:
-    """Mark an after-the-fact review sample as re-checked, once, as yourself. 404 if you cannot see it, it was already re-checked, or you may not change it."""
+    """Mark an after-the-fact review sample as re-checked, once, as yourself. 404 if you cannot see it, it was already re-checked, or you may not change it, 409 if you made the decision the sample was drawn from."""
     row = (await conn.execute(text("select clinic_id, origin from ops.care_review_samples where id = :i"), {"i": sample_id})).first()
     if row is None:
         raise HTTPException(status_code=404, detail="not found")
@@ -3652,6 +3661,8 @@ async def recheck_care_sample(sample_id: uuid.UUID, idempotency_key: Idempotency
         if care_gap_sql.sqlstate(exc) == "42501":
             raise HTTPException(status_code=403, detail="your role may not do this") from None
         raise
+    if outcome == "same_person":
+        raise HTTPException(status_code=409, detail="a sample must be re-checked by someone other than the person who made the decision")
     if outcome != "rechecked":
         raise HTTPException(status_code=404, detail="not found")
     await write_audit(
@@ -3960,7 +3971,7 @@ class ResultIn(_Body):
 class ResultOut(_Out):
     result_id: uuid.UUID
     created: bool
-    plans_woken: list[uuid.UUID]
+    wake_queued: bool  # true when an outbox event was written so the worker wakes any plan waiting for this result
 
 
 _MEASURE_KEY = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
@@ -4038,7 +4049,7 @@ async def confirm_care_plan(plan_id: uuid.UUID, body: CarePlanConfirmIn, idempot
 
 @staff_results.post("", response_model=ResultOut, status_code=201)
 async def record_result(body: ResultIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> ResultOut:
-    """Record a result for a patient of the clinic (append-only; a correction names the result it supersedes) and wake any care plan whose open wait it matches. Idempotent on the key. 404 if the clinic or patient is not visible, 403 unless you are a nurse or doctor there, 422 for a malformed measure."""
+    """Record a result for a patient of the clinic (append-only; a correction names the result it supersedes) and queue the wake-up of any care plan whose open wait it matches (through the outbox; the worker wakes the plan). Idempotent on the key. 404 if the clinic or patient is not visible, 403 unless you are a nurse or doctor there, 422 for a malformed measure."""
     origin = await _console_clinic(conn, body.clinic_id, RESULT_WRITERS)
     if any(not _MEASURE_KEY.match(k) or (v is not None and not math.isfinite(v)) for k, v in body.measures.items()) or (body.valid_to is not None and body.valid_to <= body.valid_from):
         raise HTTPException(status_code=422, detail="request rejected")
@@ -4054,21 +4065,193 @@ async def record_result(body: ResultIn, idempotency_key: IdempotencyKey, request
         if care_gap_sql.sqlstate(exc) == "42501":
             raise HTTPException(status_code=403, detail="your role may not do this") from None
         raise
-    woken: list[uuid.UUID] = []
+    wake_queued = False
     components = request.app.state.care_journey
     if created:
         await write_audit(
             conn, clinic_id=body.clinic_id, origin=origin, actor_id=actor, actor_role=await _acting_role(conn, claims, body.clinic_id, RESULT_WRITERS), action="result.record", resource_type="result", resource_id=result_id,
             details={"verified": body.verified}, idempotency_key=f"audit:result-record:{result_id}",
         )
-        if components is not None:
-            for plan_id in await care_journey_sql.plans_waiting_for(conn, clinic_id=body.clinic_id, patient_id=body.patient_id, code=body.code):
-                try:
-                    await _cj_runner(components, conn, body.clinic_id, origin).deliver_result(plan_id, result_id)
-                    woken.append(plan_id)
-                except (care_journey_sql.WrongStep, care_journey_sql.NoSuchPlan):
-                    continue  # the plan is not at a result pause: the result stays recorded and unclaimed
-    return ResultOut(result_id=result_id, created=created, plans_woken=woken)
+        if components is not None and components.durable:
+            # the producer side of the outbox (decision 11): the event is written in THIS transaction, next to the result; the tick's relay turns it into a job and the worker identity wakes the plans
+            await PostgresQueue().record_event(conn, body.clinic_id, origin, care_journey_sql.TASK_TYPE, {"result_id": str(result_id)}, f"care-plan-result:{result_id}")
+            wake_queued = True
+    return ResultOut(result_id=result_id, created=created, wake_queued=wake_queued)
+
+
+# ---- Portal claim resolution and consent notice publication (migration 0051; BUILD-SPEC.md 17.2, 20.1) --------------------------------------------------------------------------------------------------------
+#
+# A claim that found no single confirmed record becomes a pending request; a FRONT-DESK person of the clinic resolves it (audited by the database): approve binds the claimant's account to a CONFIRMED, unbound
+# record they name, reject closes it. A record with no identity event cannot be approved until the existing confirm-identity route has confirmed it. The consent notice texts come ONLY from the required setting
+# CAREFLOW_CONSENT_NOTICES (counsel owns the real wording); unset means 503 and nothing can be consented to.
+
+staff_portal_claims = APIRouter(prefix="/v1/staff/portal-claims", tags=["staff portal claims"])
+CLAIM_RESOLVERS = ("front_desk",)
+
+
+class PendingClaimOut(_Out):
+    request_id: uuid.UUID
+    created_at: datetime
+
+
+class PendingClaimList(_Out):
+    claims: list[PendingClaimOut]
+
+
+class ClaimResolveIn(_Body):
+    decision: Literal["approve", "reject"]
+    patient_id: uuid.UUID | None = None
+
+
+class ClaimResolveOut(_Out):
+    result: Literal["approved", "rejected", "already_resolved", "record_not_claimable", "claimant_already_bound", "consent_required"]
+
+
+class NoticePublishIn(_Body):
+    purpose: Literal["care_delivery", "ai_processing", "service_improvement"]
+
+
+class NoticePublishOut(_Out):
+    result: Literal["published", "exists", "conflict", "version_gap"]
+
+
+@staff_portal_claims.get("", response_model=PendingClaimList)
+async def list_pending_claims(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 100) -> PendingClaimList:
+    """Pending portal claim requests of the clinic, oldest first: an opaque request id and a time, nothing about the claimant. 404 if the clinic is not visible to you, 403 unless you are front desk there."""
+    await _console_clinic(conn, clinic_id, CLAIM_RESOLVERS)
+    return PendingClaimList(claims=[PendingClaimOut(request_id=r.id, created_at=r.created_at) for r in await portal_sql.pending_claims(conn, clinic_id, limit)])
+
+
+@staff_portal_claims.post("/{request_id}/resolve", response_model=ClaimResolveOut)
+async def resolve_portal_claim(request_id: uuid.UUID, body: ClaimResolveIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> ClaimResolveOut:
+    """Approve (naming the confirmed patient record) or reject a pending claim, as front desk of the clinic; audited by the database. Idempotent on the request. 404 if you cannot see the request, 403 unless you are front desk there, 422 if an approval names no patient."""
+    row = (await conn.execute(text("select clinic_id from mpi.claim_requests where id = :r"), {"r": request_id})).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _clinic_role_held(conn, row.clinic_id, CLAIM_RESOLVERS):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    if body.decision == "approve" and body.patient_id is None:
+        raise HTTPException(status_code=422, detail="request rejected")
+    try:
+        result = await portal_sql.resolve_claim(conn, request_id=request_id, decision=body.decision, patient_id=body.patient_id, idempotency_key=f"claim-resolve:{idempotency_key}")
+    except portal_sql.PortalRefused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return ClaimResolveOut(result=result)  # type: ignore[arg-type]
+
+
+@staff_console.post("/consent-notices/publish", response_model=NoticePublishOut)
+async def publish_consent_notice(body: NoticePublishIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> NoticePublishOut:
+    """Publish the notice for a purpose exactly as the required setting states it (version and text come from the setting, never from the caller). Admin with a verified second factor. 403 unless you are an admin, 503 while the setting is not configured or has no entry for the purpose."""
+    if not await _any_role_held(conn, ("admin",)):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    notices = request.app.state.consent_notices
+    notice = (notices or {}).get(body.purpose)
+    if notice is None:
+        raise HTTPException(status_code=503, detail="consent notices are unavailable: not configured")
+    try:
+        result = await portal_sql.publish_notice(conn, purpose=notice.purpose, version=notice.version, body=notice.body)
+    except portal_sql.PortalRefused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return NoticePublishOut(result=result)  # type: ignore[arg-type]
+
+
+# ---- Visit Readiness (migration 0052; BUILD-SPEC.md 22) ------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#
+# A VISIT is a booking. A nurse or doctor starts the readiness run for it; the agent asks for the facts still missing (only those) and then walks the visit type's checklist, each question sent as the clinician's
+# EXACT text from the required setting CAREFLOW_VISIT_READINESS_CONTENT. The patient's reply is relayed by the nurse or doctor who receives it; the rules read it first, then (fake, unapproved) model roles classify
+# it: with no approved model route every reply is unclear, re-asked once, and then goes to front desk. Any checklist item not confirmed raises a nurse task in every autonomy mode. With the Visit Readiness flag off,
+# the content or the task priority unset, or no vault, these routes answer 503 and NOTHING is written.
+
+staff_visits = APIRouter(prefix="/v1/staff/visits", tags=["staff visit readiness"])
+READINESS_ROLES = ("nurse", "doctor")
+
+
+class ReadinessViewOut(_Out):
+    visit_id: uuid.UUID
+    status: str
+    waiting_for: Literal["reply", "none"]
+    current_item: str | None  # an item id (never the wording)
+    task_id: uuid.UUID | None
+    finished: bool
+
+
+class ReadinessReplyIn(_Body):
+    outcome: Literal["replied", "no_reply"]
+    body: str | None = Field(default=None, min_length=1, max_length=2000)
+
+
+def _readiness_view(v: "visit_readiness_sql.RunView") -> ReadinessViewOut:
+    return ReadinessViewOut(visit_id=v.visit_id, status=v.status, waiting_for=v.waiting_for, current_item=v.current_item, task_id=v.task_id, finished=v.finished)
+
+
+async def _readiness_runner(request: Request, conn: AsyncConnection, visit_id: uuid.UUID, claims: dict[str, Any]):
+    """(runner, visit): 404 if the visit is not visible, 403 unless nurse or doctor there, 503 while the feature is not configured, 409 if the visit type has no content."""
+    visit = await visit_readiness_sql.load_visit(conn, visit_id, confirmed_only=False)
+    if visit is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _clinic_role_held(conn, visit.clinic_id, READINESS_ROLES):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    components = request.app.state.visit_readiness
+    key_version = _active_key_version(request)
+    if components is None or key_version is None:
+        raise HTTPException(status_code=503, detail="visit readiness is unavailable: not configured")
+    if components.content.for_visit_type(visit.visit_type) is None:
+        raise HTTPException(status_code=409, detail="there is no readiness content for this visit type")
+    stored, has_row = await producers_sql.read_mode(conn, visit.clinic_id)
+    policy = tightened(components.policy, stored if has_row else None)
+    try:
+        return components.runner(conn, visit=visit, actor=uuid.UUID(claims["sub"]), key_version=key_version, policy=policy), visit
+    except visit_readiness_sql.Unavailable:
+        raise HTTPException(status_code=503, detail="visit readiness is unavailable: not configured") from None
+
+
+@staff_visits.post("/{visit_id}/readiness/start", response_model=ReadinessViewOut)
+async def start_visit_readiness(visit_id: uuid.UUID, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> ReadinessViewOut:
+    """Start (or read back) the readiness run for a visit. Idempotent: a second start returns the same run. 404 if the visit is not visible to you, 403 unless you are a nurse or doctor there, 409 if the visit type has no readiness content, 503 while visit readiness is not configured (nothing is written)."""
+    runner, visit = await _readiness_runner(request, conn, visit_id, claims)
+    try:
+        view = await runner.start()
+    except visit_readiness_sql.NoContent:
+        raise HTTPException(status_code=409, detail="there is no readiness content for this visit type") from None
+    await write_audit(
+        conn, clinic_id=visit.clinic_id, origin=visit.origin, actor_id=uuid.UUID(claims["sub"]), actor_role=await _acting_role(conn, claims, visit.clinic_id, READINESS_ROLES), action="readiness.start",
+        resource_type="visit", resource_id=visit_id, details={"status": view.status}, idempotency_key=f"audit:readiness-start:{visit_id}",
+    )
+    return _readiness_view(view)
+
+
+@staff_visits.get("/{visit_id}/readiness", response_model=ReadinessViewOut)
+async def get_visit_readiness(visit_id: uuid.UUID, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> ReadinessViewOut:
+    """Where the readiness run for a visit is: a closed status word, what it waits for, the id of the current item. 404 if the visit is not visible or has no run, 403 unless you are a nurse or doctor there, 503 while visit readiness is not configured."""
+    runner, _ = await _readiness_runner(request, conn, visit_id, claims)
+    try:
+        return _readiness_view(await runner.view())
+    except visit_readiness_sql.NoSuchRun:
+        raise HTTPException(status_code=404, detail="not found") from None
+
+
+@staff_visits.post("/{visit_id}/readiness/reply", response_model=ReadinessViewOut)
+async def reply_visit_readiness(visit_id: uuid.UUID, body: ReadinessReplyIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> ReadinessViewOut:
+    """Relay the patient's reply (text, stored encrypted) or record that none came; the run resumes at its pause. The rules read the reply first. 404 if the visit is not visible or has no run, 403 unless you are a nurse or doctor there, 409 if the run is not waiting for a reply, 422 if a reply has no text, 503 while visit readiness is not configured."""
+    if (body.outcome == "replied") != (body.body is not None):
+        raise HTTPException(status_code=422, detail="request rejected")
+    runner, visit = await _readiness_runner(request, conn, visit_id, claims)
+    actor = uuid.UUID(claims["sub"])
+    message_id = None
+    if body.body is not None:
+        components = request.app.state.visit_readiness
+        message_id = await visit_readiness_sql.store_reply(conn, components.vault, _active_key_version(request), visit, actor, body.body, f"{visit_id}:{idempotency_key}")  # type: ignore[arg-type]
+    try:
+        view = await runner.reply(message_id)
+    except visit_readiness_sql.NoSuchRun:
+        raise HTTPException(status_code=404, detail="not found") from None
+    except visit_readiness_sql.WrongStep:
+        raise HTTPException(status_code=409, detail="the run is not waiting for a reply") from None
+    await write_audit(
+        conn, clinic_id=visit.clinic_id, origin=visit.origin, actor_id=actor, actor_role=await _acting_role(conn, claims, visit.clinic_id, READINESS_ROLES), action="readiness.reply",
+        resource_type="visit", resource_id=visit_id, details={"outcome": body.outcome}, idempotency_key=f"audit:readiness-reply:{visit_id}:{idempotency_key}",
+    )
+    return _readiness_view(view)
 
 
 # ---- Voice transcripts: admin-only, audited reading and purging (migration 0047; BUILD-SPEC.md 9.4) ----------------------------------------------------------------------------------------------------------
@@ -4165,6 +4348,7 @@ def create_app(
     front_door_session_for: Callable[..., Any] = worker_session, document_intake: DocumentIntake | None = None, reply_interpreter: DecisionService | None = None,
     auth_admin: AuthAdminPort | None = None, scheduling_components: SchedulingComponents | None = None,
     care_journey_components: "care_journey_sql.CareJourneyComponents | None" = None,
+    visit_readiness_components: "visit_readiness_sql.VisitReadinessComponents | None" = None,
 ) -> FastAPI:
     """Build the app. `jwks`, `engine`, `vault` and `clock` (for the step-up window) can be injected (tests do); otherwise they come from
     settings / the environment. `front_door` holds the Front Door's stand-in components; with None the run and review routes answer 503 and no handler is registered."""
@@ -4220,7 +4404,29 @@ def create_app(
             except Exception:  # noqa: BLE001 - a fault in the demo configuration leaves the routes unwired, never a startup crash
                 log.error("the demo Scheduling components could not be built: the backfill routes stay unavailable")
                 scheduling = None
-        app.state.care_journey = care_journey_components  # None unless injected: no model route is approved and the required task settings are owner decisions, so the plan routes answer 503
+        try:
+            app.state.consent_notices = consent_settings.parse(p4env.get("CAREFLOW_CONSENT_NOTICES"))
+        except consent_settings.ConsentSettingsError:
+            log.error("CAREFLOW_CONSENT_NOTICES is invalid: no consent notice can be published")
+            app.state.consent_notices = None
+        care_components = care_journey_components
+        if care_components is None and app.state.vault is not None and care_journey_enabled(dict(os.environ)):  # the flag, the vault and BOTH required task settings must be present
+            priority, role = (p4env.get("CAREFLOW_CARE_PLAN_TASK_PRIORITY") or "").strip(), (p4env.get("CAREFLOW_CARE_PLAN_TASK_ROLE") or "").strip()
+            if priority in care_journey_sql.TASK_PRIORITIES and role in care_journey_sql.TASK_ROLES:
+                care_components = care_journey_sql.CareJourneyComponents(app.state.vault, RedFlagEngine(), None, priority, role, None, durable=True)  # NO model route is approved: a plan is held for a doctor
+            else:
+                log.error("the Care Journey flag is on but CAREFLOW_CARE_PLAN_TASK_PRIORITY / _ROLE are not both set to allowed values: plan routes stay unavailable")
+        vr_components = None
+        try:
+            vr_content = visit_readiness_content.parse(p4env.get("CAREFLOW_VISIT_READINESS_CONTENT"))
+        except visit_readiness_content.VisitContentError:
+            log.error("CAREFLOW_VISIT_READINESS_CONTENT is invalid: no readiness run can start")
+            vr_content = None
+        vr_priority = (p4env.get("CAREFLOW_VISIT_READINESS_TASK_PRIORITY") or "").strip()
+        if vr_content is not None and app.state.vault is not None and visit_readiness_enabled(dict(os.environ)) and vr_priority in visit_readiness_sql.TASK_PRIORITIES:  # the flag, the vault, the content and the required priority
+            vr_components = visit_readiness_sql.VisitReadinessComponents(app.state.vault, RedFlagEngine(), vr_content, vr_priority, None, durable=True)  # the model roles have NO approved route: every reply is unclear
+        app.state.visit_readiness = visit_readiness_components if visit_readiness_components is not None else vr_components
+        app.state.care_journey = care_components  # None unless the flag, the vault and the required task settings are present (or it is injected): the plan routes then answer 503
         app.state.scheduling = scheduling  # None unless injected: the backfill routes answer 503 (all ports are fakes in this package)
         app.state.clinical_server = build_clinical_server()  # the READ-ONLY `clinical` MCP server, in process only (no socket); called through careflow.mcp_kit.invoke
         app.state.auth_admin = auth_admin  # None unless injected: no Auth admin adapter is wired by default (the secret key stays out of the web process); the invite route answers 503
@@ -4232,6 +4438,8 @@ def create_app(
         app.state.document_intake = intake  # None unless storage is configured AND verified (below): the upload routes answer 503
         app.state.poker = Poker()  # routes that enqueue call `app.state.poker.poke()` after their transaction commits (7.4)
         handlers = {FRONT_DOOR_TASK: front_door_handler(components, session_for=front_door_session_for)} if components is not None else {}
+        if app.state.care_journey is not None and app.state.care_journey.durable:
+            handlers[care_journey_sql.TASK_TYPE] = care_journey_sql.care_plan_result_handler(app.state.care_journey)  # a recorded result wakes its plan through the outbox, as the worker identity
         sweeps = [release_expired_holds_sweep]  # tidy expired holds on every tick (migration 0033); correctness never depended on it
         if components is not None:
             sweeps.append(lambda conn: raise_dead_letter_tasks(conn, components.dead_letters))  # a dead-lettered run is never silent
@@ -4318,10 +4526,12 @@ def create_app(
     app.include_router(portal_voice)
     app.include_router(portal)
     app.include_router(staff_voice)
+    app.include_router(staff_visits)
+    app.include_router(staff_portal_claims)
     app.include_router(staff_care_plans)
     app.include_router(staff_results)
     app.include_router(health)
-    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, portal, staff_voice, staff_care_plans, staff_results])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
+    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, portal, staff_voice, staff_care_plans, staff_results, staff_portal_claims, staff_visits])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
     return app
 
 
