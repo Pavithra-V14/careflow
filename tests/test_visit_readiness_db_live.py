@@ -123,7 +123,7 @@ async def world(db):
         "insert into iam.staff_roles (account_id, clinic_id, role, origin) values ($1, $5, 'nurse', 'test'), ($2, $5, 'front_desk', 'test'), ($3, $5, 'doctor', 'test'), ($4, $6, 'nurse', 'test')",
         ids["nurse"], ids["front_desk"], ids["doctor"], ids["nurse_b"], ids["clinic"], ids["other"],
     )
-    await h.execute("insert into mpi.patients (id, clinic_id, name_ct, name_key_version, dob_ct, dob_key_version, origin, idempotency_key) values ($1, $2, '\\x01'::bytea, 1, '\\x01'::bytea, 1, 'test', $3)", ids["patient"], ids["clinic"], f"vr-{ids['patient']}")
+    await h.execute("insert into mpi.patients (id, clinic_id, name_ct, name_key_version, dob_ct, dob_key_version, origin, idempotency_key) values ($1, $2, decode(repeat('01', 32), 'hex'), 1, decode(repeat('01', 32), 'hex'), 1, 'test', $3)", ids["patient"], ids["clinic"], f"vr-{ids['patient']}")
     await h.execute("insert into sched.providers (id, clinic_id, display_name, origin, idempotency_key) values ($1, $2, 'P', 'test', $3)", ids["provider"], ids["clinic"], f"vp-{ids['provider']}")
     await h.execute("insert into sched.locations (id, clinic_id, name, origin, idempotency_key) values ($1, $2, 'L', 'test', $3)", ids["location"], ids["clinic"], f"vl-{ids['location']}")
     await h.execute("insert into sched.visit_types (id, clinic_id, name, duration_minutes, origin, idempotency_key) values ($1, $2, 'DEMO visit type', 30, 'test', $3)", ids["vt"], ids["clinic"], f"vv-{ids['vt']}")
@@ -223,7 +223,7 @@ async def test_the_tables_are_append_only_pinned_to_the_clinic_and_topic_and_nee
         care_thread = (await c.execute(text("insert into msg.threads (clinic_id, patient_id, topic, created_by, origin, idempotency_key) values (:c, :p, 'care', :u, 'test', 'ct') returning id"), {"c": w["clinic"], "p": w["patient"], "u": w["nurse"]})).scalar_one()
         care_msg = (
             await c.execute(
-                text("insert into msg.messages (id, clinic_id, origin, topic, thread_id, sender_kind, recorded_by, body_ct, body_key_version, idempotency_key) values (gen_random_uuid(), :c, 'test', 'care', :t, 'staff', :u, '\\x01'::bytea, 1, 'cm') returning id"),
+                text("insert into msg.messages (id, clinic_id, origin, topic, thread_id, sender_kind, recorded_by, body_ct, body_key_version, idempotency_key) values (gen_random_uuid(), :c, 'test', 'care', :t, 'staff', :u, decode(repeat('01', 32), 'hex'), 1, 'cm') returning id"),
                 {"c": w["clinic"], "t": care_thread, "u": w["nurse"]},
             )
         ).scalar_one()
@@ -243,7 +243,7 @@ async def test_a_fact_cannot_cite_another_patients_readiness_reply(db, monkeypat
         theirs = (await c.execute(text("insert into msg.threads (clinic_id, patient_id, topic, created_by, origin, idempotency_key) values (:c, :p, 'readiness', :u, 'test', 'ot') returning id"), {"c": w["clinic"], "p": other, "u": w["nurse"]})).scalar_one()
         their_msg = (
             await c.execute(
-                text("insert into msg.messages (id, clinic_id, origin, topic, thread_id, sender_kind, recorded_by, body_ct, body_key_version, idempotency_key) values (gen_random_uuid(), :c, 'test', 'readiness', :t, 'staff', :u, '\\x01'::bytea, 1, 'om') returning id"),
+                text("insert into msg.messages (id, clinic_id, origin, topic, thread_id, sender_kind, recorded_by, body_ct, body_key_version, idempotency_key) values (gen_random_uuid(), :c, 'test', 'readiness', :t, 'staff', :u, decode(repeat('01', 32), 'hex'), 1, 'om') returning id"),
                 {"c": w["clinic"], "t": theirs, "u": w["nurse"]},
             )
         ).scalar_one()

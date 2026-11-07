@@ -34,9 +34,13 @@ from careflow.rotation import (
     RotationError,
     message_version_usage,
     messages_table_exists,
+    plan_version_usage,
+    plans_table_has_text,
     rotate_key_version,
     rotate_message_bodies,
+    rotate_plan_texts,
     verify_message_bodies,
+    verify_plan_texts,
     verify_rotation,
     version_usage,
 )
@@ -80,7 +84,13 @@ async def _run(args: argparse.Namespace, env: dict[str, str], vault: Demographic
                         print("message bodies: none stored (0 on every key_version)")
                 else:
                     print("message bodies: msg.messages does not exist yet (migration 0011 not applied)")
-                print("a key may be retired only when BOTH the ciphertext columns AND the message bodies show 0")
+                if await plans_table_has_text(conn):
+                    plans = await plan_version_usage(conn)
+                    for v, n in plans.items():
+                        print(f"key_version {v}: {n} care-plan texts")
+                    if not plans:
+                        print("care-plan texts: none stored (0 on every key_version)")
+                print("a key may be retired only when the ciphertext columns, the message bodies AND the care-plan texts all show 0")
                 return 0
             if args.command == "verify":
                 rep = await verify_rotation(conn, vault, to_version=args.to_version, clinic_id=args.clinic)
@@ -95,6 +105,12 @@ async def _run(args: argparse.Namespace, env: dict[str, str], vault: Demographic
                     for mid in mrep.unreadable:
                         print(f"  problem: message {mid}")
                     ok = ok and mrep.ok
+                if await plans_table_has_text(conn):
+                    prep = await verify_plan_texts(conn, vault, to_version=args.to_version, clinic_id=args.clinic)
+                    print(f"checked {prep.plans_checked} care-plan texts on key_version {prep.to_version}: {len(prep.unreadable)} unreadable")
+                    for pid in prep.unreadable:
+                        print(f"  problem: care plan {pid}")
+                    ok = ok and prep.ok
                 return 0 if ok else 1
 
             def progress(rep) -> None:
@@ -114,6 +130,12 @@ async def _run(args: argparse.Namespace, env: dict[str, str], vault: Demographic
                 print(f"rotated {mrep.messages_rotated} message bodies in {mrep.batches} batches")
             else:
                 print("message bodies: msg.messages does not exist yet (migration 0011 not applied); nothing to do")
+            if await plans_table_has_text(conn):
+                prep = await rotate_plan_texts(
+                    conn, vault, from_version=args.from_version, to_version=args.to_version,
+                    batch_size=args.batch_size, clinic_id=args.clinic, commit_each_batch=True,
+                )
+                print(f"rotated {prep.plans_rotated} care-plan texts in {prep.batches} batches")
             print("next: run `verify`, then follow the retirement checklist in docs/runbooks/key_rotation.md")
             return 0
     except (RotationError, CryptoError) as exc:

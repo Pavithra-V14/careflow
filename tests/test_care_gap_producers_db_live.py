@@ -82,7 +82,7 @@ async def test_only_an_admin_with_aal2_appends_to_the_autonomy_history_and_only_
     ins = "insert into ops.autonomy_changes (clinic_id, origin, mode, changed_by, idempotency_key) values (:c, 'test', :m, :by, :k)"
     assert await state_of(db, p["admin_a"], ins, c=w.a, m="assisted", by=p["admin_a"], k=f"a-{uuid.uuid4()}") == 1
     assert await state_of(db, p["admin_a"], ins, c=w.a, m="assisted", by=p["admin_a"], k=f"a-{uuid.uuid4()}", claims={"aal": "aal1", "amr": []}) == "42501"  # no verified second factor
-    assert await state_of(db, p["admin_a"], ins, c=w.a, m="autonomous", by=p["admin_a"], k=f"a-{uuid.uuid4()}") == "23514"  # the two-person act is not built
+    assert await state_of(db, p["admin_a"], ins, c=w.a, m="autonomous", by=p["admin_a"], k=f"a-{uuid.uuid4()}") == "42501"  # the policy refuses it: the switch is the two-person proposal (0053/0054)
     assert await state_of(db, p["admin_a"], ins, c=w.a, m="shadow", by=p["doctor_a"], k=f"a-{uuid.uuid4()}") == "42501"  # only as yourself
     for who in ("nurse_a", "doctor_a", "front_desk_a", "owner_a", "auditor_a", "worker_a", "nurse_b"):
         assert await state_of(db, p[who], ins, c=w.a, m="shadow", by=p[who], k=f"a-{uuid.uuid4()}") == "42501", who

@@ -76,8 +76,8 @@ class SqlPlanScreener:
 
     async def screen(self, conn: AsyncConnection, *, plan_id: uuid.UUID, clinic_id: uuid.UUID) -> str:
         row = (await conn.execute(text("select plan_ct, plan_key_version, origin from ops.care_plans where id = :p and clinic_id = :c"), {"p": plan_id, "c": clinic_id})).first()
-        if row is None:
-            return "held_unassessable"
+        if row is None or row.plan_ct is None:
+            return "held_unassessable"  # no such plan, or its text was erased: unknown is not clear
         try:
             plain = decrypt_plan_text(self._vault, row.plan_ct, clinic_id=clinic_id, plan_id=plan_id, key_version=row.plan_key_version)
         except (UnknownKeyVersionError, DecryptionError):
@@ -98,6 +98,8 @@ class SqlPlanParser:
         if self._model is None:
             return None  # no approved model route: the graph holds the plan for a doctor
         row = (await conn.execute(text("select plan_ct, plan_key_version from ops.care_plans where id = :p and clinic_id = :c"), {"p": plan_id, "c": clinic_id})).one()
+        if row.plan_ct is None:
+            return None  # erased
         plain = decrypt_plan_text(self._vault, row.plan_ct, clinic_id=clinic_id, plan_id=plan_id, key_version=row.plan_key_version)
         try:
             return await self._model(plain)

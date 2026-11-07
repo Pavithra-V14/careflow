@@ -2035,6 +2035,15 @@ def erase_cancel_cases(ids) -> list[tuple]:
 def test_a_completed_erasure_clears_the_identity_columns_and_leaves_exactly_the_three_audit_rows_and_the_app_role_cannot_update_by_hand(client, ids):
     patient, _, _ = new_pair(ids, candidate=False)
     fd1, fd2 = ids.people["front_desk_a"][0], ids.fd2
+    doctor = ids.people["doctor_a"][0]
+
+    async def seed_result(conn):
+        return await conn.fetchval(
+            "insert into clinical.results (clinic_id, origin, patient_id, code, measures, verified, valid_from, recorded_by, idempotency_key) values ($1, 'test', $2, 'DEMO-T1.a', '{\"demo_value\": 5.5}'::jsonb, true, now(), $3, $4) returning id",
+            ids.clinic_a, patient, doctor, f"er-{uuid.uuid4()}",
+        )
+
+    result_id = _run(_owner(seed_result))
     asked = client.post(ERASE_REQUEST.format(patient_id=patient), headers={**stepped(fd1), "X-Idempotency-Key": _new_key()}, json={"reason": ERASE_REASON})
     assert asked.status_code == 200
     request_id = asked.json()["request_id"]
@@ -2045,6 +2054,10 @@ def test_a_completed_erasure_clears_the_identity_columns_and_leaves_exactly_the_
     audit = _run(_fetch("select actor_id, action, details from audit.log where resource_id = $1 and action like 'patient.erase%' order by id", str(patient)))
     assert [(a["action"], a["actor_id"]) for a in audit] == [("patient.erase_request", fd1), ("patient.erase", fd2)]
     assert all(without_scope(a["details"]) == {"reason": ERASE_REASON} for a in audit)
+    result = _run(_fetch("select measures::text as m, erased_at from clinical.results where id = $1", result_id))[0]
+    assert result["m"] == "{}" and result["erased_at"] is not None  # the clinical numbers went with the identity (migration 0056)
+    care = _run(_fetch("select details::text as d from audit.log where action = 'care_record.erased' and idempotency_key = $1", f"sys:erase-care-record:{request_id}"))
+    assert len(care) == 1 and json.loads(care[0]["d"]) == {"care_plans": 0, "results": 1}  # counts only, in a row of its own
     request = _run(_fetch("select status, requested_by, approved_by from mpi.erasure_requests where id = $1::uuid", request_id))[0]
     assert (request["status"], request["requested_by"], request["approved_by"]) == ("erased", fd1, fd2)
 

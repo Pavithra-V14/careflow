@@ -136,7 +136,7 @@ async def test_the_whole_path_confirm_then_a_matching_good_result_closes_the_ste
         assert await cj.plans_waiting_for(c, clinic_id=clinic, patient_id=patient, code="DEMO-T1.a") == [plan_id]
     async with as_user(db, doctor) as c:
         view = await comps.runner(c, clinic_id=clinic, origin="test").deliver_result(plan_id, rid)
-        assert view.status == "referral_proposed" and view.task_id is not None
+        assert view.status == "completed" and view.task_id is not None  # the referral is proposed (a task), then the last step is done and the plan completes
         step = (await c.execute(text("select status, evidence_result_id from ops.care_plan_steps where plan_id = :i and step_key = 'demo_test'"), {"i": plan_id})).one()
         assert tuple(step) == ("met", rid)  # closed as met, citing the result that justified it
         assert (await c.execute(text("select open, claimed_result_id from ops.care_plan_waits where plan_id = :i"), {"i": plan_id})).one() == (False, rid)
