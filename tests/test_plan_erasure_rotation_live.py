@@ -133,7 +133,7 @@ async def test_the_audited_erasure_also_erases_plan_text_step_labels_and_measure
     assert (await db.execute(text("select label from ops.care_plan_steps where plan_id = :i"), {"i": other})).scalar() == "DEMO book a review visit"
     assert (await db.execute(text("select measures ->> 'demo_value', erased_at is null from clinical.results where id = :i"), {"i": r_other})).one() == ("5.5", True)
     audit = (await db.execute(text("select details from audit.log where action = 'care_record.erased' and idempotency_key = :k"), {"k": f"sys:erase-care-record:{request}"})).scalar()
-    assert audit == {"care_plans": 1, "results": 2, "messages": 0, "voice_chunks": 0}  # counts only, never content
+    assert audit == {"care_plans": 1, "results": 2, "messages": 0, "voice_chunks": 0, "grievances": 0}  # counts only, never content
     assert [a for (a,) in (await db.execute(text("select action from audit.log where resource_id = :p and action like 'patient.erase%' order by id"), {"p": str(w["patient"])})).all()] == ["patient.erase_request", "patient.erase"]
     assert await as_app(db, w["fd2"], APPROVE, q=request, k="again") == [(False,)]  # a replay does nothing more
     assert (await db.execute(text("select count(*) from audit.log where action = 'care_record.erased' and idempotency_key = :k and true"), {"k": f"sys:erase-care-record:{request}"})).scalar() == 1
@@ -243,7 +243,7 @@ async def test_the_erasure_also_erases_messages_and_voice_chunks_and_closes_plan
     assert (await db.execute(text("select status from msg.voice_sessions where id = :s"), {"s": session})).scalar() == "ended"  # an open session is ended by the erasure
     assert await owner(db, "insert into msg.voice_transcript_chunks (session_id, clinic_id, seq, body_ct, body_key_version, idempotency_key) values (:s, :c, 9, decode(repeat('02', 32), 'hex'), 1, 'late')", s=session, c=w["clinic"]) == "23001"  # nothing is written after an erasure
     audit = (await db.execute(text("select details from audit.log where action = 'care_record.erased' and idempotency_key = :k"), {"k": f"sys:erase-care-record:{request}"})).scalar()
-    assert audit == {"care_plans": 1, "results": 0, "messages": 2, "voice_chunks": 2}
+    assert audit == {"care_plans": 1, "results": 0, "messages": 2, "voice_chunks": 2, "grievances": 0}
     # nothing else may close a wait or a plan this way
     assert await owner(db, "update ops.care_plan_waits set open = true where plan_id = :i", i=plan) == "23001"
     assert await as_app(db, w["doctor"], "update msg.messages set erased_at = now()") == "42501"

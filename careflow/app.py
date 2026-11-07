@@ -65,6 +65,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from careflow import (
     active_role,
+    break_glass_sql,
     care_gap_rules,
     care_gap_sql,
     care_gaps,
@@ -76,17 +77,21 @@ from careflow import (
     learning_labels,
     metrics_catalog,
     mpi,
+    notes_sql,
     offers,
     openapi_errors,
     patient_view,
     portal_sql,
     producers_sql,
+    recovery_sql,
     reply_interpretation,
     review_tasks,
+    rights_sql,
     visit_readiness_content,
     visit_readiness_sql,
     voice_sql,
 )
+from careflow import messages as messages_mod
 from careflow.adapters.storage import DOCUMENT_BUCKET, SupabaseUploadAdapter
 from careflow.audit import write_audit
 from careflow.auth import (
@@ -3916,6 +3921,7 @@ class PortalMeOut(_Out):
     status: str
     bound_to_a_patient_record: bool
     consents: dict[str, bool | None]  # purpose -> granted / withdrawn / never decided (or decided against an older notice text)
+    stage: Literal["registered", "new_patient", "pending_activation", "active"]  # spec 17.5, as far as this build can know it (see portal_stage)
 
 
 class NoticeOut(_Out):
@@ -3970,7 +3976,7 @@ async def portal_me(conn: TxConnAllGrants, claims: dict[str, Any] = Depends(veri
     """Your account state and consent decisions. 403 unless you are a patient account (invited or active)."""
     account_id, _ = await _patient_account(conn, claims, ("invited", "active"))
     state = await portal_sql.account_state(conn, account_id)
-    return PortalMeOut(status=state["status"], bound_to_a_patient_record=state["bound"], consents=state["consents"])
+    return PortalMeOut(status=state["status"], bound_to_a_patient_record=state["bound"], consents=state["consents"], stage=portal_stage(state["status"]))
 
 
 @portal.get("/consents", response_model=NoticeList)
@@ -4076,6 +4082,7 @@ class ResultIn(_Body):
     valid_from: datetime
     valid_to: datetime | None = None
     supersedes_id: uuid.UUID | None = None
+    change: Literal["amendment", "correction"] | None = Field(default=None, description="Only with supersedes_id: a new measurement (amendment) or a correction of a wrong value. Left out, the database infers it: same test code and same effective date is a correction.")
 
 
 class ResultOut(_Out):
@@ -4161,13 +4168,13 @@ async def confirm_care_plan(plan_id: uuid.UUID, body: CarePlanConfirmIn, idempot
 async def record_result(body: ResultIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> ResultOut:
     """Record a result for a patient of the clinic (append-only; a correction names the result it supersedes) and queue the wake-up of any care plan whose open wait it matches (through the outbox; the worker wakes the plan). Idempotent on the key. 404 if the clinic or patient is not visible, 403 unless you are a nurse or doctor there, 422 for a malformed measure."""
     origin = await _console_clinic(conn, body.clinic_id, RESULT_WRITERS)
-    if any(not _MEASURE_KEY.match(k) or (v is not None and not math.isfinite(v)) for k, v in body.measures.items()) or (body.valid_to is not None and body.valid_to <= body.valid_from):
+    if any(not _MEASURE_KEY.match(k) or (v is not None and not math.isfinite(v)) for k, v in body.measures.items()) or (body.valid_to is not None and body.valid_to <= body.valid_from) or (body.change is not None and body.supersedes_id is None):
         raise HTTPException(status_code=422, detail="request rejected")
     actor = uuid.UUID(claims["sub"])
     try:
         result_id, created = await care_journey_sql.record_result(
             conn, clinic_id=body.clinic_id, origin=origin, patient_id=body.patient_id, code=body.code, measures=body.measures, verified=body.verified, valid_from=body.valid_from,
-            valid_to=body.valid_to, supersedes_id=body.supersedes_id, recorded_by=actor, idempotency_key=f"result:{idempotency_key}",
+            valid_to=body.valid_to, supersedes_id=body.supersedes_id, recorded_by=actor, idempotency_key=f"result:{idempotency_key}", change_kind=body.change,
         )
     except care_journey_sql.Refused:
         raise HTTPException(status_code=404, detail="not found") from None
@@ -4180,7 +4187,7 @@ async def record_result(body: ResultIn, idempotency_key: IdempotencyKey, request
     if created:
         await write_audit(
             conn, clinic_id=body.clinic_id, origin=origin, actor_id=actor, actor_role=await _acting_role(conn, claims, body.clinic_id, RESULT_WRITERS), action="result.record", resource_type="result", resource_id=result_id,
-            details={"verified": body.verified}, idempotency_key=f"audit:result-record:{result_id}",
+            details={"verified": body.verified, "supersedes": body.supersedes_id is not None, "declared": body.change}, idempotency_key=f"audit:result-record:{result_id}",
         )
         if components is not None and components.durable:
             # the producer side of the outbox (decision 11): the event is written in THIS transaction, next to the result; the tick's relay turns it into a job and the worker identity wakes the plans
@@ -4418,6 +4425,554 @@ async def purge_voice_transcripts(body: VoicePurgeIn, idempotency_key: Idempoten
     return VoicePurgeOut(deleted=deleted)
 
 
+# ---- Break-glass access (migration 0058; BUILD-SPEC.md 18.4) ------------------------------------------------------------------------------------------------------------------------------------------------
+#
+# A front-desk, nurse or doctor with a recent second factor opens a TIME-LIMITED grant for ONE patient of their clinic, naming a reason CODE from the clinic's list (iam.break_glass_reasons, kept by the owner; no free
+# text is stored). The window length is the required setting CAREFLOW_BREAK_GLASS_MINUTES. While it is open the holder can read that patient's messages (every topic) and every read is an audit
+# row. An admin of the clinic, a different person, reviews each grant afterwards. While the window length is unset the open route answers 503 and nothing is written; with no reason rows for the clinic every open is refused (422).
+
+staff_break_glass = APIRouter(prefix="/v1/staff/break-glass", tags=["staff break-glass"])
+BREAK_GLASS_OPENERS = ("front_desk", "nurse", "doctor")
+BREAK_GLASS_REVIEWERS = ("admin",)
+
+
+class BreakGlassOpenIn(_Body):
+    clinic_id: uuid.UUID
+    patient_id: uuid.UUID
+    reason_code: str = Field(pattern=r"^[a-z][a-z0-9_]{0,39}$")
+
+
+class BreakGlassOpenOut(_Out):
+    grant_id: uuid.UUID
+    expires_at: datetime
+    created: bool
+
+
+class BreakGlassMessageOut(_Out):
+    message_id: uuid.UUID
+    thread_id: uuid.UUID
+    topic: str
+    sender_kind: str
+    created_at: datetime
+    erased: bool
+    readable: bool
+    body: str | None
+
+
+class BreakGlassMessages(_Out):
+    messages: list[BreakGlassMessageOut]
+
+
+class BreakGlassReviewIn(_Body):
+    outcome: Literal["appropriate", "inappropriate"]
+
+
+class BreakGlassReviewOut(_Out):
+    result: Literal["reviewed", "already_reviewed", "same_person"]
+
+
+class BreakGlassRowOut(_Out):
+    grant_id: uuid.UUID
+    patient_id: uuid.UUID
+    opened_by: uuid.UUID
+    reason_code: str
+    opened_at: datetime
+    expires_at: datetime
+    reviewed_by: uuid.UUID | None
+    reviewed_at: datetime | None
+    review_outcome: Literal["appropriate", "inappropriate"] | None
+
+
+class BreakGlassList(_Out):
+    grants: list[BreakGlassRowOut]
+
+
+@staff_break_glass.post("", response_model=BreakGlassOpenOut, status_code=201)
+async def open_break_glass(body: BreakGlassOpenIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> BreakGlassOpenOut:
+    """Open a time-limited grant to read ONE patient's messages, with a reason code from the clinic's list (kept by the owner, not the application). 404 if the clinic or patient is not visible to you, 403 unless you are front desk, nurse or doctor there (with a recent second factor), 422 for a reason code that is not on the list, 503 while the window length is not configured."""
+    await _console_clinic(conn, body.clinic_id, BREAK_GLASS_OPENERS)
+    known = (await conn.execute(text("select 1 from mpi.patients where id = :p and clinic_id = :c"), {"p": body.patient_id, "c": body.clinic_id})).first()
+    if known is None:
+        raise HTTPException(status_code=404, detail="not found")
+    minutes = request.app.state.break_glass_minutes
+    if minutes is None:
+        raise HTTPException(status_code=503, detail="break-glass is unavailable: the window length is not configured")
+    try:
+        opened = await break_glass_sql.open_grant(conn, clinic_id=body.clinic_id, patient_id=body.patient_id, reason_code=body.reason_code, minutes=minutes, idempotency_key=f"break-glass:{idempotency_key}")
+    except break_glass_sql.UnknownReason:
+        raise HTTPException(status_code=422, detail="request rejected") from None
+    except break_glass_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return BreakGlassOpenOut(grant_id=opened.grant_id, expires_at=opened.expires_at, created=opened.created)
+
+
+@staff_break_glass.get("/{grant_id}/messages", response_model=BreakGlassMessages)
+async def read_break_glass_messages(grant_id: uuid.UUID, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> BreakGlassMessages:
+    """The patient's messages while YOUR grant is open (each read is an audit row). 404 if you cannot see the grant, 403 unless you are its holder and the window is still open, 503 while encryption keys are not configured."""
+    clinic_id = await break_glass_sql.grant_clinic(conn, grant_id)
+    if clinic_id is None:
+        raise HTTPException(status_code=404, detail="not found")
+    vault = _vault_or_503(request)
+    try:
+        rows = await break_glass_sql.read_messages(conn, grant_id=grant_id)
+    except break_glass_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    if rows is None:  # refused and audited: answer without raising, so the audit row commits with the request
+        return JSONResponse(status_code=403, content={"detail": "your role may not do this"})  # type: ignore[return-value]
+    out: list[BreakGlassMessageOut] = []
+    for r in rows:
+        body: str | None = None
+        if r.body_ct is not None and r.body_key_version is not None:
+            try:
+                body = messages_mod.decrypt_break_glass_message(vault, bytes(r.body_ct), clinic_id=clinic_id, thread_id=r.thread_id, message_id=r.message_id, key_version=r.body_key_version)
+            except CryptoError:  # an unreadable body is reported as such, never as an error that names it
+                body = None
+        out.append(BreakGlassMessageOut(message_id=r.message_id, thread_id=r.thread_id, topic=r.topic, sender_kind=r.sender_kind, created_at=r.created_at, erased=r.erased_at is not None, readable=body is not None, body=body))
+    return BreakGlassMessages(messages=out)
+
+
+@staff_break_glass.get("", response_model=BreakGlassList)
+async def list_break_glass(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), unreviewed_only: bool = True, limit: Limit = 100) -> BreakGlassList:
+    """The clinic's grants, newest first (unreviewed ones by default): ids, a reason code and times, never patient text. 404 if the clinic is not visible to you, 403 unless you are an admin there."""
+    await _console_clinic(conn, clinic_id, BREAK_GLASS_REVIEWERS)
+    rows = await break_glass_sql.list_grants(conn, clinic_id=clinic_id, unreviewed_only=unreviewed_only, limit=limit)
+    return BreakGlassList(
+        grants=[
+            BreakGlassRowOut(
+                grant_id=r.id, patient_id=r.patient_id, opened_by=r.opened_by, reason_code=r.reason_code, opened_at=r.opened_at, expires_at=r.expires_at, reviewed_by=r.reviewed_by, reviewed_at=r.reviewed_at,
+                review_outcome=r.review_outcome,
+            )
+            for r in rows
+        ]
+    )
+
+
+@staff_break_glass.post("/{grant_id}/review", response_model=BreakGlassReviewOut)
+async def review_break_glass(grant_id: uuid.UUID, body: BreakGlassReviewIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> BreakGlassReviewOut:
+    """Review a grant afterwards (appropriate or inappropriate) as an admin who did NOT open it; audited by the database. 404 if you cannot see the grant, 403 unless you are an admin of its clinic."""
+    clinic_id = await break_glass_sql.grant_clinic(conn, grant_id)
+    if clinic_id is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _clinic_role_held(conn, clinic_id, BREAK_GLASS_REVIEWERS):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    try:
+        result = await break_glass_sql.review(conn, grant_id=grant_id, outcome=body.outcome)
+    except break_glass_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return BreakGlassReviewOut(result=result)  # type: ignore[arg-type]
+
+
+def _minutes_in_range(raw: str | None, upper: int) -> int | None:
+    n = _positive_int(raw)
+    return n if n is not None and n <= upper else None
+
+
+# ---- Patient rights: grievances and "download my data" (migration 0059; BUILD-SPEC.md 19.3, 20.1, 17.5) ------------------------------------------------------------------------------------------------
+#
+# Consent withdrawal already exists (POST /v1/portal/consents with `withdrawn`). A patient account that is bound to a record files a grievance (a CATEGORY from the required setting
+# CAREFLOW_GRIEVANCE_CATEGORIES plus a text, stored encrypted); an admin of the clinic acknowledges and resolves it. The patient can download their own data. Account stage (spec 17.5): `registered`
+# (invited) and `new_patient` (active) are derived from the account; `pending_activation` and `active` need a clinic step that does not exist in this build, so no account reaches them and the care topic is
+# never exported. Features: consents need `registered`; grievances, the export and voice need `new_patient`.
+
+portal_rights = APIRouter(prefix="/v1/portal", tags=["patient rights"])
+staff_grievances = APIRouter(prefix="/v1/staff/grievances", tags=["staff grievances"])
+GRIEVANCE_ADMINS = ("admin",)
+GRIEVANCE_TEXT_MAX = 4000
+
+
+class GrievanceIn(_Body):
+    clinic_id: uuid.UUID
+    category: str = Field(pattern=r"^[a-z][a-z0-9_]{0,39}$")
+    text: str = Field(min_length=1, max_length=GRIEVANCE_TEXT_MAX)
+
+
+class GrievanceFiledOut(_Out):
+    grievance_id: uuid.UUID
+    created: bool
+
+
+class GrievanceOut(_Out):
+    grievance_id: uuid.UUID
+    clinic_id: uuid.UUID
+    category: str
+    status: Literal["open", "acknowledged", "resolved"]
+    created_at: datetime
+    erased: bool
+    text: str | None  # null when the text was erased or cannot be read
+
+
+class GrievanceList(_Out):
+    grievances: list[GrievanceOut]
+
+
+class GrievanceStatusIn(_Body):
+    status: Literal["acknowledged", "resolved"]
+
+
+class GrievanceStatusOut(_Out):
+    result: Literal["recorded", "replay", "invalid_transition"]
+
+
+class ExportRecordOut(_Out):
+    clinic_id: uuid.UUID
+    erased: bool
+    name: str | None
+    date_of_birth: str | None
+    phone: str | None
+
+
+class ExportConsentOut(_Out):
+    purpose: str
+    action: str
+    notice_version: int
+    occurred_at: datetime
+
+
+class ExportBookingOut(_Out):
+    clinic_id: uuid.UUID
+    booking_id: uuid.UUID
+    status: str
+    starts_at: datetime
+    ends_at: datetime
+    created_at: datetime
+    cancelled_at: datetime | None
+
+
+class ExportMessageOut(_Out):
+    clinic_id: uuid.UUID
+    message_id: uuid.UUID
+    topic: str
+    sender_kind: str
+    created_at: datetime
+    erased: bool
+    body: str | None
+
+
+class MyDataOut(_Out):
+    account_status: str
+    stage: Literal["registered", "new_patient", "pending_activation", "active"]
+    records: list[ExportRecordOut]
+    consents: list[ExportConsentOut]
+    bookings: list[ExportBookingOut]
+    messages: list[ExportMessageOut]
+    grievances: list[GrievanceOut]
+    truncated: bool  # true when the bookings or messages hit the 2000-row cap and the download is NOT complete
+
+
+def _grievance_out(r: Any, vault: DemographicVault | None) -> GrievanceOut:
+    body: str | None = None
+    if vault is not None and r.body_ct is not None and r.body_key_version is not None:
+        try:
+            body = messages_mod.decrypt_grievance_text(vault, bytes(r.body_ct), clinic_id=r.clinic_id, grievance_id=r.id, key_version=r.body_key_version)
+        except CryptoError:
+            body = None
+    return GrievanceOut(grievance_id=r.id, clinic_id=r.clinic_id, category=r.category, status=r.status, created_at=r.created_at, erased=r.erased_at is not None, text=body)
+
+
+def portal_stage(status: str) -> Literal["registered", "new_patient", "pending_activation", "active"]:
+    """The account stage of spec 17.5 that THIS build can know: an invited account is `registered`, an activated one `new_patient`. The later two need a clinic step (first visit, full-access grant) that has no table yet."""
+    return "registered" if status == "invited" else "new_patient"
+
+
+@portal_rights.post("/grievances", response_model=GrievanceFiledOut, status_code=201)
+async def file_grievance(body: GrievanceIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> GrievanceFiledOut:
+    """File a grievance (access, correction, erasure, nominee or any other request) with a category from the clinic's list; the text is stored encrypted. 403 unless you are an active patient account bound to a record of that clinic, 422 for a category not on the list, 503 while the category list or the encryption keys are not configured."""
+    account_id, _ = await _patient_account(conn, claims)
+    categories = request.app.state.grievance_categories
+    vault: DemographicVault | None = request.app.state.vault
+    key_version = _active_key_version(request)
+    if categories is None or vault is None or key_version is None:
+        raise HTTPException(status_code=503, detail="grievances are unavailable: the category list or the encryption keys are not configured")
+    if body.category not in categories:
+        raise HTTPException(status_code=422, detail="request rejected")
+    grievance_id = uuid.uuid5(uuid.NAMESPACE_URL, f"careflow-grievance:{account_id}:{idempotency_key}")
+    ct = messages_mod.encrypt_grievance_text(vault, body.text, clinic_id=body.clinic_id, grievance_id=grievance_id, key_version=key_version)
+    try:
+        filed_id, created = await rights_sql.file_grievance(conn, clinic_id=body.clinic_id, category=body.category, body_ct=ct, key_version=key_version, grievance_id=grievance_id, idempotency_key=f"grievance:{idempotency_key}")
+    except rights_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return GrievanceFiledOut(grievance_id=filed_id, created=created)
+
+
+@portal_rights.get("/grievances", response_model=GrievanceList)
+async def list_my_grievances(request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 100) -> GrievanceList:
+    """Your own grievances with their status, newest first. 403 unless you are an active patient account."""
+    account_id, _ = await _patient_account(conn, claims)
+    vault: DemographicVault | None = request.app.state.vault
+    return GrievanceList(grievances=[_grievance_out(r, vault) for r in await rights_sql.list_own(conn, account_id=account_id, limit=limit)])
+
+
+@portal_rights.get("/my-data", response_model=MyDataOut)
+async def download_my_data(request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> MyDataOut:
+    """Everything this build holds about you that you may see: your account state, your record, your consent history, your bookings, your appointment and safety messages, your grievances. The care topic is not included (it needs full access, which no step of this build grants). Each download is an audit row. 403 unless you are an active patient account."""
+    account_id, _ = await _patient_account(conn, claims)
+    vault: DemographicVault | None = request.app.state.vault
+    status = (await conn.execute(text("select status from iam.accounts where id = :a"), {"a": account_id})).scalar()
+    records: list[ExportRecordOut] = []
+    for r in await rights_sql.own_records(conn, account_id):
+        name = dob = phone = None
+        if r.erased_at is None and vault is not None and r.name_ct is not None:
+            try:
+                name = vault.decrypt(bytes(r.name_ct), field="name", key_version=r.name_key_version)
+                dob = vault.decrypt(bytes(r.dob_ct), field="dob", key_version=r.dob_key_version)
+                phone = vault.decrypt(bytes(r.phone_ct), field="phone", key_version=r.phone_key_version) if r.phone_ct is not None else None
+            except CryptoError:
+                name = dob = phone = None
+        records.append(ExportRecordOut(clinic_id=r.clinic_id, erased=r.erased_at is not None, name=name, date_of_birth=dob, phone=phone))
+    messages_out: list[ExportMessageOut] = []
+    message_rows = await rights_sql.export_messages(conn)
+    booking_rows = await rights_sql.export_bookings(conn)
+    for m in message_rows[:2000]:
+        text_: str | None = None
+        if vault is not None and m.body_ct is not None and m.body_key_version is not None:
+            try:
+                text_ = messages_mod.decrypt_break_glass_message(vault, bytes(m.body_ct), clinic_id=m.clinic_id, thread_id=m.thread_id, message_id=m.message_id, key_version=m.body_key_version)
+            except CryptoError:
+                text_ = None
+        messages_out.append(ExportMessageOut(clinic_id=m.clinic_id, message_id=m.message_id, topic=m.topic, sender_kind=m.sender_kind, created_at=m.created_at, erased=m.erased_at is not None, body=text_))
+    return MyDataOut(
+        account_status=str(status),
+        stage=portal_stage(str(status)),
+        records=records,
+        consents=[ExportConsentOut(purpose=c.purpose, action=c.action, notice_version=c.version, occurred_at=c.occurred_at) for c in await rights_sql.consent_history(conn, account_id)],
+        bookings=[
+            ExportBookingOut(clinic_id=b.clinic_id, booking_id=b.booking_id, status=b.status, starts_at=b.starts_at, ends_at=b.ends_at, created_at=b.created_at, cancelled_at=b.cancelled_at)
+            for b in booking_rows[:2000]
+        ],
+        messages=messages_out,
+        grievances=[_grievance_out(r, vault) for r in await rights_sql.list_own(conn, account_id=account_id, limit=500)],
+        truncated=len(message_rows) > 2000 or len(booking_rows) > 2000,
+    )
+
+
+@staff_grievances.get("", response_model=GrievanceList)
+async def list_clinic_grievances(clinic_id: uuid.UUID, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 100) -> GrievanceList:
+    """The clinic's grievances with their status, newest first (the text is shown only while the encryption keys are loaded and it has not been erased). 404 if the clinic is not visible to you, 403 unless you are an admin there."""
+    await _console_clinic(conn, clinic_id, GRIEVANCE_ADMINS)
+    vault: DemographicVault | None = request.app.state.vault
+    return GrievanceList(grievances=[_grievance_out(r, vault) for r in await rights_sql.list_clinic(conn, clinic_id=clinic_id, limit=limit)])
+
+
+@staff_grievances.post("/{grievance_id}/status", response_model=GrievanceStatusOut)
+async def set_grievance_status(grievance_id: uuid.UUID, body: GrievanceStatusIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> GrievanceStatusOut:
+    """Acknowledge or resolve a grievance as an admin of its clinic (a resolved grievance is final; a repeat is a replay); audited by the database. 404 if you cannot see it, 403 unless you are an admin there."""
+    clinic_id = await rights_sql.grievance_clinic(conn, grievance_id)
+    if clinic_id is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _clinic_role_held(conn, clinic_id, GRIEVANCE_ADMINS):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    try:
+        result = await rights_sql.update_status(conn, grievance_id=grievance_id, status=body.status)
+    except rights_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return GrievanceStatusOut(result=result)  # type: ignore[arg-type]
+
+
+def _word_list(raw: str | None) -> frozenset[str] | None:
+    """A required closed list of lowercase words (comma separated); unset, blank or any malformed entry is None (unset), never a default."""
+    words = [w.strip() for w in (raw or "").split(",") if w.strip()]
+    if not words or any(not re.fullmatch(r"[a-z][a-z0-9_]{0,39}", w) for w in words):
+        return None
+    return frozenset(words)
+
+
+# ---- Staff account recovery through two admins (migration 0060; BUILD-SPEC.md 18.1) ------------------------------------------------------------------------------------------------------------------------
+#
+# A staff member who lost their second factor cannot recover it themselves. One admin of the clinic requests recovery; a SECOND admin (not the requester, not the account) approves; the Auth admin PORT then
+# resets the account's factors and the completion is recorded. With no Auth admin adapter configured (the default) the complete route answers 503 and an approved request waits. Every step needs a recent
+# second factor (step-up) and is an audit row written by the database.
+
+staff_recovery = APIRouter(prefix="/v1/staff/recovery", tags=["staff recovery"])
+RECOVERY_ADMINS = ("admin",)
+
+
+class RecoveryRequestIn(_Body):
+    clinic_id: uuid.UUID
+    account_id: uuid.UUID
+
+
+class RecoveryRequestOut(_Out):
+    request_id: uuid.UUID
+    created: bool
+
+
+class RecoveryRowOut(_Out):
+    request_id: uuid.UUID
+    account_id: uuid.UUID
+    requested_by: uuid.UUID
+    approved_by: uuid.UUID | None
+    status: Literal["requested", "approved", "completed", "cancelled"]
+    created_at: datetime
+    decided_at: datetime | None
+
+
+class RecoveryList(_Out):
+    requests: list[RecoveryRowOut]
+
+
+class RecoveryResolveOut(_Out):
+    result: Literal["approved", "completed", "cancelled"]
+
+
+@staff_recovery.post("", response_model=RecoveryRequestOut, status_code=201, dependencies=[Depends(require_step_up)])
+async def request_staff_recovery(body: RecoveryRequestIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> RecoveryRequestOut:
+    """Ask for the second factor of a staff account of the clinic to be reset (you cannot ask for your own). A second admin must approve. 404 if the clinic is not visible to you, 403 unless you are an admin there or the account cannot be recovered by you (not staff of the clinic, or a recovery is already open)."""
+    await _console_clinic(conn, body.clinic_id, RECOVERY_ADMINS)
+    try:
+        request_id, created = await recovery_sql.request(conn, clinic_id=body.clinic_id, account_id=body.account_id, idempotency_key=f"recovery:{idempotency_key}")
+    except recovery_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return RecoveryRequestOut(request_id=request_id, created=created)
+
+
+@staff_recovery.get("", response_model=RecoveryList)
+async def list_staff_recovery(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), open_only: bool = True, limit: Limit = 100) -> RecoveryList:
+    """The clinic's recovery requests (the open ones by default), newest first: ids, status and times only. 404 if the clinic is not visible to you, 403 unless you are an admin there."""
+    await _console_clinic(conn, clinic_id, RECOVERY_ADMINS)
+    rows = await recovery_sql.list_requests(conn, clinic_id=clinic_id, open_only=open_only, limit=limit)
+    return RecoveryList(
+        requests=[RecoveryRowOut(request_id=r.id, account_id=r.target_account_id, requested_by=r.requested_by, approved_by=r.approved_by, status=r.status, created_at=r.created_at, decided_at=r.decided_at) for r in rows]
+    )
+
+
+async def _recovery_resolve(conn: AsyncConnection, request_id: uuid.UUID, action: str) -> str:
+    clinic_id = await recovery_sql.request_clinic(conn, request_id)
+    if clinic_id is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _clinic_role_held(conn, clinic_id, RECOVERY_ADMINS):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    try:
+        raw = await recovery_sql.resolve(conn, request_id=request_id, action=action)
+    except recovery_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    if raw == "same_person":
+        raise HTTPException(status_code=403, detail="your role may not do this")  # the requester or the account itself, not a second admin
+    if raw not in ("approved", "completed", "completed_now", "cancelled"):
+        raise HTTPException(status_code=409, detail="the request is not in a state that allows this")  # not_requested, not_approved, not_open, target_gone
+    return raw
+
+
+@staff_recovery.post("/{request_id}/approve", response_model=RecoveryResolveOut, dependencies=[Depends(require_step_up)])
+async def approve_staff_recovery(request_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> RecoveryResolveOut:
+    """Approve a pending recovery as a SECOND admin (not the requester, not the account being recovered). 404 if you cannot see it, 403 unless you are an admin of its clinic."""
+    return RecoveryResolveOut(result=await _recovery_resolve(conn, request_id, "approve"))  # type: ignore[arg-type]
+
+
+@staff_recovery.post("/{request_id}/cancel", response_model=RecoveryResolveOut, dependencies=[Depends(require_step_up)])
+async def cancel_staff_recovery(request_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> RecoveryResolveOut:
+    """Cancel an open recovery (requested or approved, not yet completed). 404 if you cannot see it, 403 unless you are an admin of its clinic."""
+    return RecoveryResolveOut(result=await _recovery_resolve(conn, request_id, "cancel"))  # type: ignore[arg-type]
+
+
+@staff_recovery.post("/{request_id}/complete", response_model=RecoveryResolveOut, dependencies=[Depends(require_step_up)])
+async def complete_staff_recovery(request_id: uuid.UUID, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> RecoveryResolveOut:
+    """Reset the account's second factor through the Auth admin port and record the completion, for an APPROVED request. 404 if you cannot see it, 403 unless you are an admin of its clinic, 503 while no Auth admin adapter is configured."""
+    clinic_id = await recovery_sql.request_clinic(conn, request_id)
+    if clinic_id is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _clinic_role_held(conn, clinic_id, RECOVERY_ADMINS):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    port: AuthAdminPort | None = request.app.state.auth_admin
+    if port is None:
+        log.error("staff recovery cannot complete: no Auth admin adapter is configured")
+        raise HTTPException(status_code=503, detail="recovery is unavailable: not configured")
+    state = await recovery_sql.request_state(conn, request_id)
+    if state is not None and state.target_account_id == uuid.UUID(claims["sub"]):
+        raise HTTPException(status_code=403, detail="your role may not do this")  # the account being recovered never completes its own recovery
+    # the DATABASE decides first (under the request's row lock): only a fresh completion ("completed_now") resets the factors, in this same transaction; if the port fails the exception rolls the completion back
+    raw = await _recovery_resolve(conn, request_id, "complete")
+    if raw == "completed_now":
+        if state is None:
+            raise HTTPException(status_code=500, detail="internal error")  # never commit a completion without resetting the factors (the raise rolls it back)
+        try:
+            await port.reset_factors(state.target_account_id)
+        except AuthAdminError:
+            raise HTTPException(status_code=503, detail="recovery is unavailable: the factor reset failed") from None  # (nothing about the exchange is kept)
+    return RecoveryResolveOut(result="completed")
+
+
+# ---- Clinical notes (migration 0061; BUILD-SPEC.md 9.6) ---------------------------------------------------------------------------------------------------------------------------------------------------
+#
+# Append-only notes by nurses and doctors; a correction is an ADDENDUM (a new note naming the one it adds to, same patient). The body is encrypted at rest. Reads and writes need a second factor in the database.
+
+staff_notes = APIRouter(prefix="/v1/staff/notes", tags=["staff notes"])
+NOTE_ROLES = ("nurse", "doctor")
+NOTE_TEXT_MAX = 8000
+
+
+class NoteIn(_Body):
+    clinic_id: uuid.UUID
+    patient_id: uuid.UUID
+    parent_id: uuid.UUID | None = None
+    text: str = Field(min_length=1, max_length=NOTE_TEXT_MAX)
+
+
+class NoteOut(_Out):
+    note_id: uuid.UUID
+    created: bool
+
+
+class NoteRowOut(_Out):
+    note_id: uuid.UUID
+    parent_id: uuid.UUID | None
+    author_id: uuid.UUID
+    created_at: datetime
+    erased: bool
+    text: str | None  # null when erased or unreadable (or while the encryption keys are not loaded)
+
+
+class NoteList(_Out):
+    notes: list[NoteRowOut]
+
+
+@staff_notes.post("", response_model=NoteOut, status_code=201)
+async def write_clinical_note(body: NoteIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> NoteOut:
+    """Write a clinical note for a patient of the clinic, or an addendum to an earlier note of the same patient (notes are never edited). 404 if the clinic, the patient or the note it adds to is not visible to you, 403 unless you are a nurse or doctor there (with a recent second factor), 503 while the encryption keys are not configured."""
+    origin = await _console_clinic(conn, body.clinic_id, NOTE_ROLES)
+    known = (await conn.execute(text("select 1 from mpi.patients where id = :p and clinic_id = :c and erased_at is null"), {"p": body.patient_id, "c": body.clinic_id})).first()
+    if known is None:
+        raise HTTPException(status_code=404, detail="not found")
+    vault: DemographicVault | None = request.app.state.vault
+    key_version = _active_key_version(request)
+    if vault is None or key_version is None:
+        raise HTTPException(status_code=503, detail="notes are unavailable: encryption keys are not configured")
+    author = uuid.UUID(claims["sub"])
+    note_id = uuid.uuid5(uuid.NAMESPACE_URL, f"careflow-note:{body.clinic_id}:{idempotency_key}")
+    ct = messages_mod.encrypt_note_text(vault, body.text, clinic_id=body.clinic_id, note_id=note_id, key_version=key_version)
+    try:
+        written, created = await notes_sql.write_note(
+            conn, note_id=note_id, clinic_id=body.clinic_id, origin=origin, patient_id=body.patient_id, author_id=author, parent_id=body.parent_id, body_ct=ct, key_version=key_version, idempotency_key=f"note:{idempotency_key}"
+        )
+    except notes_sql.Refused:
+        raise HTTPException(status_code=404, detail="not found") from None  # the note it adds to is not this patient's, or the key belongs to another note
+    if created:
+        await write_audit(
+            conn, clinic_id=body.clinic_id, origin=origin, actor_id=author, actor_role=await _acting_role(conn, claims, body.clinic_id, NOTE_ROLES), action="note.write", resource_type="note", resource_id=written,
+            details={"addendum": body.parent_id is not None}, idempotency_key=f"audit:note-write:{written}",
+        )
+    return NoteOut(note_id=written, created=created)
+
+
+@staff_notes.get("", response_model=NoteList)
+async def list_clinical_notes(clinic_id: uuid.UUID, patient_id: uuid.UUID, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 100) -> NoteList:
+    """A patient's notes, oldest first, with addenda naming the note they add to (the text is shown while the keys are loaded and the note is not erased). 404 if the clinic or patient is not visible to you, 403 unless you are a nurse or doctor there."""
+    await _console_clinic(conn, clinic_id, NOTE_ROLES)
+    known = (await conn.execute(text("select 1 from mpi.patients where id = :p and clinic_id = :c"), {"p": patient_id, "c": clinic_id})).first()
+    if known is None:
+        raise HTTPException(status_code=404, detail="not found")
+    vault: DemographicVault | None = request.app.state.vault
+    out: list[NoteRowOut] = []
+    for r in await notes_sql.list_notes(conn, clinic_id=clinic_id, patient_id=patient_id, limit=limit):
+        body: str | None = None
+        if vault is not None and r.body_ct is not None and r.body_key_version is not None:
+            try:
+                body = messages_mod.decrypt_note_text(vault, bytes(r.body_ct), clinic_id=clinic_id, note_id=r.id, key_version=r.body_key_version)
+            except CryptoError:
+                body = None
+        out.append(NoteRowOut(note_id=r.id, parent_id=r.parent_id, author_id=r.author_id, created_at=r.created_at, erased=r.erased_at is not None, text=body))
+    return NoteList(notes=out)
+
+
 def _positive_int(raw: str | None) -> int | None:
     """A required numeric setting: unset, blank, non-numeric or below 1 is None (unset), never a default."""
     try:
@@ -4458,6 +5013,8 @@ def create_app(
         app.state.voice_feature_on = voice_feature_on(os.environ)
         app.state.voice_engine = None  # no real voice engine exists (owner decision 2026-11-06): the session route answers 503
         app.state.voice_retention_days = _positive_int(p4env.get('CAREFLOW_VOICE_TRANSCRIPT_RETENTION_DAYS'))
+        app.state.grievance_categories = _word_list(p4env.get("CAREFLOW_GRIEVANCE_CATEGORIES"))
+        app.state.break_glass_minutes = _minutes_in_range(p4env.get("CAREFLOW_BREAK_GLASS_MINUTES"), 240)
         app.state.clinic_time_zone = clinic_time_zone(p4env.get("CAREFLOW_CLINIC_TIME_ZONE"))
         app.state.care_gap_alert_days = _positive_int(p4env.get('CAREFLOW_CARE_GAP_ALERT_DAYS'))
         try:
@@ -4613,8 +5170,13 @@ def create_app(
     app.include_router(staff_portal_claims)
     app.include_router(staff_care_plans)
     app.include_router(staff_results)
+    app.include_router(staff_break_glass)
+    app.include_router(portal_rights)
+    app.include_router(staff_grievances)
+    app.include_router(staff_recovery)
+    app.include_router(staff_notes)
     app.include_router(health)
-    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, portal, staff_voice, staff_care_plans, staff_results, staff_portal_claims, staff_visits])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
+    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, portal, staff_voice, staff_care_plans, staff_results, staff_portal_claims, staff_visits, staff_break_glass, portal_rights, staff_grievances, staff_recovery, staff_notes])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
     return app
 
 

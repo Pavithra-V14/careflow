@@ -78,7 +78,7 @@ class Fake:
             self.inserted.append(params)
             return _R(SimpleNamespace(delivered_at=NOW, channel="manual"))
         if "with o as" in sql:
-            return _R(rows=[SimpleNamespace(id=HOLD, clinic_id=CLINIC, slot_id=uuid.uuid4(), patient_id=None, created_at=NOW, expires_at=NOW, delivered_at=None, channel=None, state="awaiting_delivery")])
+            return _R(rows=[SimpleNamespace(id=HOLD, clinic_id=CLINIC, slot_id=uuid.uuid4(), patient_id=None, created_at=NOW, expires_at=NOW, delivered_at=None, channel=None, message_id=None, state="awaiting_delivery")])
         raise AssertionError(sql)
 
 
@@ -156,5 +156,5 @@ def test_the_key_is_required_and_the_list_carries_ids_times_and_closed_words_onl
         listed = c.get("/v1/staff/scheduling/offers")
         bad = c.get("/v1/staff/scheduling/offers?state=sent")
     assert listed.status_code == 200 and bad.status_code == 422
-    assert set(listed.json()["items"][0]) == {"hold_id", "clinic_id", "slot_id", "patient_id", "state", "created_at", "expires_at", "delivered_at", "channel"}
+    assert set(listed.json()["items"][0]) == {"hold_id", "clinic_id", "slot_id", "patient_id", "state", "created_at", "expires_at", "delivered_at", "channel", "message_id"}
     assert listed.json()["items"][0]["state"] == "awaiting_delivery"

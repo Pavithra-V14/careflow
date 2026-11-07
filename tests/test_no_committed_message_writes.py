@@ -23,6 +23,8 @@ NEVER_COMMITTED = {
     "test_rls_msg_live.py": "the `db` fixture: every test in a rolled-back transaction",
     "test_rls_screenings_live.py": "the `db` fixture: every test in a rolled-back transaction",
     "test_rules_live.py": "the `db` fixture: every test in a rolled-back transaction",
+    "test_patient_rights_db_live.py": "the `db` fixture: every test in a rolled-back savepoint of one never-committed outer transaction",
+    "test_break_glass_db_live.py": "the `db` fixture: every test in a rolled-back savepoint of one never-committed outer transaction",
     "test_plan_erasure_rotation_live.py": "the `db` fixture: every test in a rolled-back savepoint of one never-committed outer transaction",
     "test_visit_readiness_db_live.py": "the `db` fixture: every test in a rolled-back savepoint of one never-committed outer transaction",
     "test_rotation_live.py": "rolled-back transactions; its precondition requires an empty database of committed version-1 messages",

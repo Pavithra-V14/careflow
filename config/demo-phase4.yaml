@@ -76,3 +76,9 @@ settings:
   clinic_time_zone:
     value: "Asia/Calcutta"
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  break_glass_minutes:
+    value: "30"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  grievance_categories:
+    value: "demo_category"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
