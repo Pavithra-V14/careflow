@@ -3,7 +3,10 @@ import { createRoot } from 'react-dom/client';
 import '../shared/tokens/tokens.css';
 import '../shared/tokens/base.css';
 import './patient.css';
+import '../patient/portal/portal.css';
+import { readConfig } from '../shared/config';
 import { initI18n, i18n } from '../shared/i18n';
+import { createPortalAuth } from './portal/auth';
 import { App, type PatientPage } from './App';
 
 const PAGES: readonly PatientPage[] = ['landing', 'sign-in', 'sign-up', 'privacy'];
@@ -25,8 +28,10 @@ const setTitle = () => {
 setTitle();
 i18n.on('languageChanged', setTitle);
 
+const config = readConfig();
+
 createRoot(document.getElementById('root') as HTMLElement).render(
   <StrictMode>
-    <App page={page} />
+    <App page={page} portal={{ auth: config.configured ? createPortalAuth(config.supabaseUrl, config.supabasePublishableKey) : null, apiBaseUrl: config.apiBaseUrl }} />
   </StrictMode>,
 );

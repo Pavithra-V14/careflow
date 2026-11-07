@@ -9,7 +9,7 @@ for (const lang of LANGS) {
   test(`alerts [${lang}]`, async ({ page }) => {
     await openConsole(page, 'nurse', lang);
     await go(page, '#/alerts', /\S/);
-    await expect(page.locator('main table')).toBeVisible();
+    await expect(page.locator('main table').first()).toBeVisible();
     await sweep(page, 'f8-alerts', lang);
   });
 
@@ -24,7 +24,7 @@ for (const lang of LANGS) {
   test(`dashboard (admin) [${lang}]`, async ({ page }) => {
     await openConsole(page, 'admin', lang);
     await go(page, '#/dashboard', /\S/);
-    await expect(page.locator('main table')).toBeVisible();
+    await expect(page.locator('main table').first()).toBeVisible();
     await sweep(page, 'f8-dashboard', lang);
   });
 
@@ -38,7 +38,7 @@ for (const lang of LANGS) {
   test(`care plans (doctor) [${lang}]`, async ({ page }) => {
     await openConsole(page, 'doctor', lang);
     await go(page, '#/care/plans', /\S/);
-    await expect(page.locator('main table')).toBeVisible();
+    await expect(page.locator('main table').first()).toBeVisible();
     await sweep(page, 'f8-care-plans', lang);
   });
 

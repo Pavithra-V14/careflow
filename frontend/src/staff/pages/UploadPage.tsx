@@ -25,7 +25,7 @@ const isContentType = (v: string): v is ContentType => v in TYPE_LABEL;
  * origin (the only storage host this build is configured for; the CSP would also block any other). Anything else is
  * refused before a byte is sent.
  */
-export function isAllowedUploadUrl(url: string, allowedOrigin: string): boolean {
+function isAllowedUploadUrl(url: string, allowedOrigin: string): boolean {
   try {
     const u = new URL(url);
     return allowedOrigin !== '' && u.protocol === 'https:' && u.origin === allowedOrigin;
@@ -38,7 +38,7 @@ export function isAllowedUploadUrl(url: string, allowedOrigin: string): boolean 
  * Scan status, shown exactly as the server reports it. ONLY the word "clean" is shown as clean: "not scanned" and
  * "not checked" (and anything this build does not know) are shown as not scanned, never as fine.
  */
-export function ScanStatus({ scan }: { scan: string }) {
+function ScanStatus({ scan }: { scan: string }) {
   const { t } = useTranslation();
   if (scan === 'clean') return <Badge tone="ok">{t('upload.scan.clean')}</Badge>;
   return <Badge tone="warn">{scan === 'not_scanned' ? t('upload.scan.not_scanned') : t('upload.scan.not_checked')}</Badge>;

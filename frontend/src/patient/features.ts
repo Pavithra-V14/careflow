@@ -4,7 +4,7 @@ import { PATHS } from './paths';
 // only if a built page exists for it (`route`); everything else is `soon` and is shown with the
 // "Coming soon" label. tests/features.test.ts fails if a live feature has no built route or a
 // soon feature loses its label.
-export type FeatureStatus = { status: 'live'; route: string } | { status: 'soon' };
+type FeatureStatus = { status: 'live'; route: string } | { status: 'soon' };
 
 export const FEATURES = [
   { key: 'book', status: 'soon' },
@@ -20,14 +20,22 @@ export const FEATURES = [
 // above: anything that describes something not built yet carries the "Coming soon" label next to it, never alone.
 // tests/landing-unbuilt.test.tsx fails if a present-tense sentence about an unbuilt feature has no label.
 export const HOW_STEPS = [
-  { key: 'step1', status: 'soon' },
+  { key: 'step1', status: 'live', route: PATHS.signUp },
   { key: 'step2', status: 'soon' },
   { key: 'step3', status: 'soon' },
 ] as const satisfies readonly ({ key: string } & FeatureStatus)[];
 
-export const FAQ_ITEMS = [
-  { q: 'q1', a: 'a1', status: 'soon' },
+interface FaqItem {
+  q: string;
+  a?: string;
+  placeholder?: string;
+  status: 'live' | 'soon';
+  route?: string;
+}
+
+export const FAQ_ITEMS: readonly FaqItem[] = [
+  { q: 'q1', a: 'a1', status: 'live', route: PATHS.signUp },
   { q: 'q2', a: 'a2', status: 'live', route: PATHS.home },
   { q: 'q3', placeholder: 'faqGrievance', status: 'live', route: PATHS.privacy },
   { q: 'q4', placeholder: 'faqPrivacy', status: 'live', route: PATHS.privacy },
-] as const;
+];

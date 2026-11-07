@@ -29,7 +29,7 @@ function blank(value: unknown): string {
   return `<${typeof value}>`;
 }
 
-export type AmrShape = string | Record<string, string> | '<missing>';
+type AmrShape = string | Record<string, string> | '<missing>';
 
 export interface ClaimShape {
   aal: string;
@@ -43,7 +43,7 @@ export interface ClaimShape {
   enumValues?: { aal: unknown; amrMethods: unknown[] };
 }
 
-export interface DescribeOptions {
+interface DescribeOptions {
   /** The (hashed) fingerprint returned by an earlier capture, to compare amr timestamps across a refresh. */
   previousFingerprint?: string | undefined;
   /** Off by default: the instruction was values blanked. Method names such as the TOTP one are enum-like, not secret. */

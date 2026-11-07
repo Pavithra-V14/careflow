@@ -152,6 +152,27 @@ test('walk every screen, read-only, and record each call', async ({ page }) => {
         await settle(page);
       }
     });
+    // The screens added in F7: read-only visits. A role that may not use one gets a 403, which the report shows as an expected refusal.
+    for (const [name, hash] of [
+      ['slots', '#/scheduling/slots'],
+      ['bookings', '#/scheduling/bookings'],
+      ['waitlist', '#/scheduling/waitlist'],
+      ['alerts', '#/alerts'],
+      ['dashboard', '#/dashboard'],
+      ['care gaps', '#/care/gaps'],
+      ['care plans', '#/care/plans'],
+      ['claims', '#/claims'],
+      ['break-glass review', '#/access'],
+      ['admin accounts', '#/admin/accounts'],
+      ['admin autonomy', '#/admin/autonomy'],
+      ['admin reviewer statistics', '#/admin/reviewer'],
+      ['admin cost canvas', '#/admin/cost'],
+      ['admin voice sessions', '#/admin/voice'],
+      ['admin recovery', '#/admin/recovery'],
+      ['admin grievances', '#/admin/grievances'],
+    ] as const) {
+      await step(name, () => visit(name, hash));
+    }
     let patientLink: string | null = null;
     await step('identity merges', async () => {
       await visit('identity merges', '#/identity/merges');

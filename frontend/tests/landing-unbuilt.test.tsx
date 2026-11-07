@@ -70,10 +70,12 @@ describe('landing page text scan (English)', () => {
     expect(hit).toHaveLength(1);
   });
 
-  it('says plainly that sign-up is not available yet, in both languages, and in no present tense', () => {
-    expect(en.landing.faq.a1).toMatch(/not available yet/i);
-    expect(en.landing.faq.a1).not.toMatch(/^Choose Sign up/);
-    expect(ta.landing.faq.a1).toContain('இன்னும் கிடைக்கவில்லை');
+  it('describes sign-up as available now, because it is built: the sign-up page hosts the real sign-in form', () => {
+    expect(FAQ_ITEMS.find((f) => f.q === 'q1')).toMatchObject({ status: 'live', route: '/patient/sign-up/' });
+    expect(HOW_STEPS.find((s) => s.key === 'step1')).toMatchObject({ status: 'live', route: '/patient/sign-up/' });
+    expect(en.landing.faq.a1).toMatch(/^Choose Sign up/);
+    expect(en.landing.faq.a1).not.toMatch(/not available/i);
+    expect(ta.landing.faq.a1).not.toContain('இன்னும் கிடைக்கவில்லை');
   });
 
   it('keeps the data in step with the feature list: features, steps and FAQ never call something built that has no route', () => {

@@ -1,0 +1,118 @@
+{
+  "portal": {
+    "title": "Your account",
+    "notAvailable": "This is not available to you yet.",
+    "erased": "Erased",
+    "unreadable": "Not readable",
+    "clinicCode": "Clinic code",
+    "afterActivation": "Claiming a record, filing a grievance and downloading your data become available once your account is active.",
+    "signIn": {
+      "title": "Sign in or create an account",
+      "intro": "We send a one-time code to your mobile number. The same steps sign you in or create your sign-in account.",
+      "phone": "Mobile number",
+      "phoneHint": "With the country code, for example +91 followed by your number.",
+      "phoneBad": "Enter the number with a plus sign and the country code, using digits only.",
+      "send": "Send me a code",
+      "sendFailed": "The code could not be sent. Check the number and try again in a moment.",
+      "sent": "A code was sent if the number can receive one.",
+      "code": "6-digit code",
+      "verify": "Continue",
+      "codeFailed": "That code did not work. Check it and try again, or ask for a new one.",
+      "change": "Use a different number"
+    },
+    "register": {
+      "title": "Create your patient account",
+      "body": "You are signed in, but you do not have a patient account here yet. Creating it does not link you to any record.",
+      "create": "Create my account",
+      "refused": "This sign-in cannot be used for a patient account."
+    },
+    "stage": {
+      "label": "Where your account is",
+      "registered": "Created",
+      "new_patient": "New patient",
+      "pending_activation": "Waiting to be activated",
+      "active": "Active"
+    },
+    "linked": {
+      "label": "Linked to a record"
+    },
+    "consent": {
+      "title": "Notices and your decisions",
+      "none": "No notice has been published yet.",
+      "version": "version {{version}}",
+      "decision": "Your decision",
+      "granted": "Granted",
+      "withdrawn": "Withdrawn",
+      "noDecision": "No decision yet",
+      "grant": "Grant",
+      "withdraw": "Withdraw",
+      "grantTitle": "Grant this?",
+      "withdrawTitle": "Withdraw this?",
+      "confirmBody": "Your decision is recorded against the version shown above, with the time.",
+      "recorded": "Your decision was recorded.",
+      "changed": "The notice changed while you were reading. The page will refresh; please read the new version."
+    },
+    "activate": {
+      "title": "Activate your account",
+      "body": "You can activate your account once you have granted the care-delivery notice.",
+      "button": "Activate my account",
+      "confirmBody": "Activates your account if the required decision has been recorded.",
+      "activated": "Your account is active.",
+      "already_active": "Your account was already active.",
+      "consent_required": "The care-delivery notice has not been granted yet, so the account was not activated."
+    },
+    "claim": {
+      "title": "Link your record",
+      "body": "To see your own record, give the name and date of birth the hospital has for you. This also needs a verified mobile number.",
+      "alreadyLinked": "Your account is linked to a record.",
+      "name": "Full name",
+      "dob": "Date of birth",
+      "button": "Link my record",
+      "confirmBody": "We compare what you give with the record that matches your verified mobile number. If it does not match for certain, a person at the hospital decides.",
+      "refused": "This cannot be done for this account: it must be active and have a verified mobile number.",
+      "unavailable": "This is not available right now. Nothing was recorded.",
+      "invalid": "Check the name and date of birth. Nothing was recorded.",
+      "outcome": {
+        "claimed": "Your record is linked.",
+        "pending_review": "Your request was received. A person at the hospital will decide.",
+        "locked": "Too many attempts. Please try again later or contact the hospital.",
+        "already_bound": "Your account is already linked to a record.",
+        "consent_required": "Grant the care-delivery notice first."
+      }
+    },
+    "grievance": {
+      "title": "Send a request or a complaint",
+      "body": "Use this for access, correction, erasure, a nominee, or any other request. A person at the hospital reads it.",
+      "category": "Category",
+      "categoryHint": "A code from the hospital's list (lowercase letters, digits and underscores). The hospital tells you which codes exist.",
+      "text": "What you want to tell us",
+      "file": "Send",
+      "confirmBody": "This sends your message to the hospital. It is stored encrypted.",
+      "filed": "Your message was sent.",
+      "mine": "Your earlier messages",
+      "none": "You have not sent any.",
+      "status": {
+        "open": "Open",
+        "acknowledged": "Seen",
+        "resolved": "Resolved"
+      },
+      "refused": "This cannot be done for this account: it must be active and linked to a record of that clinic.",
+      "categoryRefused": "That category is not on the hospital's list. Nothing was sent.",
+      "unavailable": "This is not available right now (the category list or the encryption is not set up). Nothing was sent."
+    },
+    "myData": {
+      "title": "Download my data",
+      "body": "Downloads one file with everything the system holds about you that you may see. Each download is recorded.",
+      "button": "Download my data",
+      "done": "Your file was downloaded. It holds:",
+      "truncated": "The file does not hold everything: some lists were cut short.",
+      "count": {
+        "records": "records: {{count}}",
+        "bookings": "bookings: {{count}}",
+        "messages": "messages: {{count}}",
+        "consents": "consent decisions: {{count}}",
+        "grievances": "messages you sent to the hospital: {{count}}"
+      }
+    }
+  }
+}

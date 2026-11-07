@@ -1,151 +1,99 @@
 # Frontend status
 
-Updated 2026-11-03, branch `frontend-f5`. Scope: `frontend/` only. The backend, the database, CI and the design notes are not touched from
-this side; what the frontend needs from them is in `docs/frontend-backend-requests.md`.
+Updated 2026-11-10, branch `frontend-f6` (merged to `main` at the end of each batch). Scope: `frontend/` only. The backend, the database, CI
+and the design notes are not touched from this side; what the frontend needs from them is in `docs/frontend-backend-requests.md`.
 
-## 1. What is built (F0 to F5)
+Two flags are OFF and stay OFF until the owner says: merge approve and unmerge (`mergeActionsEnabled`), and sending the active-role header
+(`SEND_ACTIVE_ROLE_HEADER`). Accessibility is a goal we test toward (WCAG 2.2 AA), not a claim of conformance, in the docs and in the UI.
 
-| Phase | What | State |
-|---|---|---|
-| F0 | Scaffold: React, Vite, strict TypeScript, pinned dependencies, env allowlist (3 public names), bundle secret check, production CSP, generated API client with a freshness check | merged |
-| F1 | Landing page, English and Tamil, "Coming soon" for anything unbuilt | merged |
-| F2 | Staff sign-in, shell, role-aware navigation (convenience only), step-up handling, dev-only claim spike | merged |
-| F3 | Console screens: referrals, review tasks, patients (search, record), scheduling lists, holds, offers draft; LIVE / TEST badge | merged (PR #13) |
-| F4 | Referral decisions (approve, reject), identity revoke, merge and duplicate lists, merge actions behind a flag that is OFF | merged (PR #15) |
-| F5 | Live integration pass tooling (`npm run e2e:live`), schema checker, per-role reports, Tamil AI-review corrections, requests doc | merged (PR #17) |
-| F6 (part 1) | Error boundary (fixed message, no error text), offline banner and held-back writes, session-expiry tests, active-role plumbing behind the OFF flag (single-role users never send it; the fixed 403 falls back to the role picker without signing out), accessibility additions (200% zoom, focus order, picker and banner at every width) | this branch, PR pending |
-| F7 (batch 1) | Scheduling: slots (hold, book), bookings (cancel with a marked-placeholder confirmation), waitlist (join), offers (list, copy text, mark delivered; nothing is sent), setup (add provider, location, visit type, slot); reviewer view of a triage proposal (unknown shown as "Not recorded") and the clinic's reason list on a decision | on `main`, mock-only until a live pass |
-| F7 (batch 2) | Alerts (acknowledge; the audience role is the escalation state), admin dashboard (unreadable never shown as zero), care gaps panel (read-only), care plans (list, doctor approve/reject, doctor writes a plan), record a result; Scheduling for admin; all times in the clinic time zone (labelled demo placeholder) | on `main`, mock-only until a live pass |
-| F7 (batch 3) | Care-gap writes (record barrier, start episode, resolve, mark rule done, re-check), staff accounts (list, invite with its 503 state, suspend, reinstate, grant, revoke), autonomy (mode, the two-person switch), reviewer statistics, cost canvas, voice transcripts (read, purge); the clinic's own time zone from /v1/iam/me; offer text by message_id; patient id handed over from the open record or referral | on `main`, mock-only until a live pass |
-| F7 (batch 4) | Visit readiness (start, relay a reply, escalation task), portal claims (approve onto a confirmed record, reject), break-glass (open with a reason code, read, admin review), staff recovery, notes (append-only, addenda), grievances (admin), result-correction tasks and the result `change` kind | on `main`, mock-only until a live pass |
+## 1. What is built
 
-Working today in the console: 28 backend operations through one generated client. Every write carries an idempotency key, retried with
-the same key; a step-up challenge asks once and retries once. Messages shown for errors are fixed per problem kind, never backend text.
+| Phase | What |
+|---|---|
+| F0 to F2 | Scaffold, env allowlist, production CSP, generated API client with a freshness check; landing page; staff sign-in with a second factor, role-aware shell, step-up handling |
+| F3 | Referrals and upload, review tasks, patients (search, record), scheduling reference lists, holds, offer draft, LIVE / TEST badge |
+| F4 | Referral decisions, identity revoke, merge and duplicate lists, merge actions (flag OFF) |
+| F5 | Live-run tooling (`npm run e2e:live`), schema checker, per-role reports |
+| F6 | Error boundary, offline banner and held-back writes, session expiry, active-role plumbing (flag OFF), the clinic's own time zone |
+| F7 batch 1 | Scheduling: slots (hold, book), bookings (cancel), waitlist (join), offers (list, copy text by `message_id`, mark delivered; nothing is sent), setup; reviewer view of a triage proposal; the clinic's reason list on a decision |
+| F7 batch 2 | Alerts (acknowledge; the audience role is the escalation state), dashboard, care gaps panel, care plans, results |
+| F7 batch 3 | Care-gap writes, staff accounts, autonomy (mode, two-person switch, history), reviewer statistics, cost canvas, voice transcripts |
+| F7 batch 4 | Visit readiness, portal claims, break-glass, staff recovery, notes, grievances, result-correction tasks |
+| F8 (batch 5) | The patient portal on the sign-in and sign-up pages: phone-code sign-in, create the patient account, notices shown exactly as sent, grant or withdraw, activate, claim a record, file a grievance, download my data |
 
-Tests: 737 unit tests, 197 browser tests (against mocked hosts), typecheck, lint, API freshness check, Tamil list check, bundle secret check.
+Every write carries an idempotency key, reused on a retry. A step-up challenge asks once and retries once. Messages shown for errors are
+fixed per problem kind, never backend text. Every screen has loading, empty and error states (`tests/states.test.tsx` holds the table).
 
 ## 2. Mock-only versus checked against the real backend
 
-**Checked against the real dev backend (read-only, 2026-11-02/03, three roles, signed in by hand):**
-front desk 24 calls, nurse 26, doctor 26. No findings: every 200 answer matched the OpenAPI schema, no unexpected status, no 5xx,
-no write made, no active-role header sent. The shell showed role, the TEST badge and, as designed, "Operating profile unknown".
-Screens that showed rows: referral list (4) and detail, open review tasks (3) and, for nurse and doctor, the task detail,
-providers, locations, visit types, priority levels. The 403 answers on the offer draft and possible duplicates for nurse and doctor
-are by design (front desk only).
+**Checked against the real dev backend (read-only, 2026-11-02 to 11-03, three roles, signed in by hand):** front desk 24 calls, nurse 26,
+doctor 26. No findings: every 200 answer matched the schema, no unexpected status, no 5xx, no write made.
 
-**Everything else is mock-only evidence** (fake auth and fake API in unit and browser tests). That includes every write path,
-every empty-list row shape, and the whole Tamil interface (unreviewed by a native speaker).
+**Everything else is mock-only evidence:** fake sign-in and fake API in the unit and browser tests, written from `openapi.snapshot.json`.
+That includes every screen added since F5, every write, and the whole Tamil interface.
 
 ## 3. Still unchecked against the real backend
 
-- Merge detail and the patient record screen reached from it (no merges exist in the dev data).
-- Patient search and the three fields the console reads beyond the schema (`label`, `labels_withheld`, `truncated`): it needs personal
-  data, so it is done by hand.
-- Every write: acknowledge and resolve a task, release a hold, review a referral, confirm and revoke identity, upload and register
-  a document, merge propose, approve and unmerge.
-- Row shapes for lists that were empty: acknowledged and resolved tasks, all four hold statuses, merges, possible duplicates.
-- `GET /readyz` from the browser.
+Everything added in F7 and F8 (alerts, dashboard, care gaps and their writes, care plans, results, accounts, autonomy, reviewer statistics,
+cost canvas, voice, readiness, claims, break-glass, recovery, notes, grievances, the patient portal), every write, patient search and
+its `label` field, uploads, and `GET /readyz` from the browser. `docs/frontend-live-checklist.md` has one row per call and the order for
+the first live run.
 
 ## 4. Blocked, and on whom
 
-| Item | Blocked on | Note |
-|---|---|---|
-| Rows for holds, merges, possible duplicates, resolved tasks; then a front-desk re-run | backend session (seed extension) | request item 8 |
-| Reviewing seeded proposals in the dev app | backend session (demo-profile fake Front Door) | list works, review route needs the components |
-| Active-role header and a role picker | backend (active-role PR; backend does not enforce it yet) and the owner's go-ahead | header flag stays OFF; design note accepted |
-| `operating_profile` in the shell | backend (`/v1/iam/me` does not return it yet) | the shell already shows "unknown" |
-| Merge approve and unmerge switched on | the backend spike page being updated AND one live approve with step-up working | flag stays OFF |
-| Revoke reasons, "edit" referral decision hidden | clinician items (revoke reason wording, whether edit is for clinicians only) | placeholders in place, marked |
-| Clinical, consent and legal wording | clinician and legal sign-off | placeholders only |
-| Tamil strings (419, all unreviewed) | native-speaker review | AI-reviewed, labelled pending native review; `TAMIL-UNREVIEWED.md` lists them |
-| Privacy confirmation for the decrypted patient view | owner (recorded as a pre-launch blocker on the backend side) | affects what the record screen may show in `clinical` |
+| Item | Blocked on |
+|---|---|
+| Rows for holds, merges, duplicates, resolved tasks, and every new list, so row shapes can be checked | backend seed (request item 8) |
+| Enums still bare strings: `VoiceSessionRowOut.workflow` and `.status`, `ReviewerStatOut.verdict`, `CostCanvasOut.state` and `.reasons`, `GrievanceOut.category`, readiness `status`, message `sender_kind` and `topic`, review task `kind` | backend (request item 11); labels are added when they arrive |
+| A route to list break-glass reason codes (the field is limited to the code's shape for now) | backend (request item 13) |
+| A way to find a visit for readiness (the visit id is typed) | backend (request item 14) |
+| A clinic id for the patient claim and grievance forms (the patient types a "clinic code"), and the grievance category list (typed as a code) | backend (request item 15) |
+| Merge approve and unmerge switched on | the first live approve with step-up |
+| Active-role header switched on | the owner, after the dev backend has migration 0028 and a live check works |
+| Cancel confirmation wording, consent purpose wording | the clinic / counsel; marked placeholders are in place |
+| Tamil (all new strings) | native-speaker review; `TAMIL-UNREVIEWED.md` lists them |
+| Patient portal sign-in with a real phone code | Supabase phone sign-in being configured for the project (an SMS provider is Supabase configuration, not code) |
 
-## 5. F6: plan (F6.1, F6.2 and the plumbing half of F6.4 were approved and built; the rest is PLAN ONLY)
+## 5. The first live run
 
-Candidates are ordered by value to a clinic that already has the read side working. "Routes" are from the current
-`openapi.snapshot.json`; "exists" means the route is in the snapshot, not that it has been used against a live backend.
-
-### F6.1 Error boundary and session expiry / offline handling (frontend only)
-
-- Routes: none new. Uses `/v1/iam/me` for the session check.
-- What: a top-level error boundary with a fixed message and a way back to the home screen; a clear, fixed "session ended" state;
-  an offline banner that stops writes from being sent while offline and never claims a write succeeded.
-- Decision (owner, 2026-11-04): an unsent write is dropped with a fixed message that says nothing was saved; what the person typed or chose stays in the form so they can send it again; there is no hidden retry queue.
-- Tests: unit (boundary renders a fixed message, no error text shown), browser (token expiry mid-session returns to sign-in once;
-  offline blocks a write and sends nothing; the same idempotency key is reused on a real retry).
-
-### F6.2 Accessibility sweep (frontend only)
-
-- Routes: none.
-- What: keyboard-only pass over every screen, focus order, long Tamil text at 200% zoom, colour contrast, live-region announcements
-  for success and error banners; fix what the sweep finds.
-- Decision (owner, 2026-11-04): WCAG 2.2 AA is a goal, not a claim, in the docs and the UI. The UI makes no accessibility claim.
-- Tests: extend vitest-axe to every route; browser tests for keyboard paths on the write screens.
-
-### F6.3 Operating profile in the shell (small; after the backend returns it)
-
-- Routes: `/v1/iam/me` (exists; `operating_profile` is not in the snapshot yet).
-- What: show the profile only when it is one of the exact known words (`demo`, `clinical`); anything else shows "unknown".
-- Decisions: none beyond the wording of the label.
-- Tests: known words, unknown word, missing field, wrong type.
-
-### F6.4 Active-role header and role picker (after the backend PR merges; flag stays OFF until the owner says)
-
-- Routes: none new; the header `X-CareFlow-Active-Role` on existing routes. Needs CORS to allow it (requests item 1).
-- What: when a user holds more than one role, a picker in the shell; the header is sent only with the flag ON.
-- Decision (owner, 2026-11-04): the choice is remembered per tab only (sessionStorage) and forgotten at every sign-out and sign-in, so a role is picked again after each sign-in.
-- Tests: header present only with flag ON; flag-off pin test stays; switching role clears cached lists; a 403 after switching shows the fixed "not available to your role" message.
-
-### F6.5 Merge approve with step-up (after one live approve works against the dev backend)
-
-- Routes: `POST /v1/staff/merges/{merge_id}/approve`, `POST .../unmerge` (exist, flag OFF in all but the test build).
-- What: switch the flag on in dev only after the live approve; keep the two-person rule visible (the proposer cannot approve).
-- Decisions: the owner decides when the flag goes ON; confirmation wording is a placeholder until a clinician or owner signs it off.
-- Tests: the existing browser tests plus a live `--record` pass done by hand.
-
-### F6.6 Scheduling actions on the routes that exist but have no screen
-
-- Routes: `GET /v1/staff/scheduling/slots`, `GET .../bookings`, `GET .../waitlist`, `POST .../slots/{slot_id}/hold`, `POST .../slots/{slot_id}/book`, `POST .../bookings/{booking_id}/cancel`, `POST .../waitlist/join`, `POST .../offers/send` (all in the snapshot; none used by the console yet).
-- What: read-only slots, bookings and waitlist lists first; then hold, book and cancel with idempotency keys; offer send last.
-- Decisions: which of these the clinic wants in the first release; cancellation and offer wording are placeholders (not clinical content from this side).
-- Tests: role-matrix coverage is the backend's; here, unit and browser tests per screen, then a live read pass and a hand-driven write pass.
-
-### F6.7 Remaining staff routes with no screen yet
-
-- Routes: `GET /v1/staff/audit`, `POST /v1/staff/patients` (create), `POST /v1/staff/patients/labels`, `GET /v1/staff/patients/{id}/view` (decrypted view, audited, rate-limited), `GET /v1/staff/messages/{id}`, `POST .../screen`, `POST /v1/staff/referrals/{id}/run`.
-- What: not planned in detail. Each needs the owner to say whether the clinic wants it, and the patient view needs the privacy confirmation noted in section 4.
-
-### Not in F6
-
-The patient portal (no patient sign-in and no patient routes exist).
-
-### Suggested order
-
-F6.1 and F6.2 first (no backend dependency). F6.3 as soon as the backend returns the field. F6.4 and F6.5 when their backend gates clear.
-F6.6 when the clinic names what it wants. Each ends with a live read pass for the roles involved.
+See `docs/frontend-live-checklist.md`: prerequisites (accounts per role, seed rows, phone sign-in for a test patient), the read-only
+walk per role (`npm run e2e:live`, now covering every new list), then the writes in a fixed order, by hand, with `--record`.
 
 ## 6. For the privacy owner: what the console does with personal data it handles
 
 Owner-requested record (2026-11-09). These hold today and are pinned by tests:
 
-- **Invite e-mail addresses** are typed into the invite window, sent once, and never stored or shown again: the window clears on close, the account list shows only an id, a status and role words, and the address is not kept in the page, the query cache, or browser storage.
-- **Voice transcripts** are read only on a click, held only while their window is open, and dropped on close (never cached, never logged). Every read and purge is audited by the database.
-- **Message text** (the offer text) is read on a click, copied, and not left on the page.
-- **Patient search results** are not cached and are dropped on leaving the page; a result row shows a label or a short id.
-- The only thing kept in the browser is the Supabase session, the language choice, and (per tab) the chosen role.
+- **Invite e-mail addresses** are typed into the invite window, sent once, and never stored or shown again: the window clears on close, the
+  account list shows only an id, a status and role words, and the address is not kept in the page, the query cache, or browser storage.
+- **Voice transcripts** are read only on a click, held only while their window is open, and dropped on close (never cached, never logged).
+  Every read and purge is audited by the database.
+- **Message text** (the offer text, break-glass messages) is read on a click, held while shown, and dropped; the offer text is copied, not left
+  on the page.
+- **Patient search results** are not cached and are dropped on leaving the page.
+- **The patient portal** keeps nothing about the patient in the browser except the sign-in service's own session record: no phone number, name,
+  code, notice text or data. The language choice is the one other thing kept (a convenience, not patient data). Typed text (a grievance, a
+  claim) is dropped from the page once it is sent. "Download my data" builds one file from the answer and keeps nothing. No analytics, no
+  third-party scripts (`tests/source-guards.test.ts`).
+- The only things kept in the staff browser are the Supabase session, the language choice, and (per tab) the chosen role.
 
-## 7. Role gates checked against the schema descriptions (2026-11-09)
+## 7. Role gates checked against the schema descriptions
 
-The console's menu and buttons are conveniences; the backend decides. Compared with the route descriptions in `openapi.snapshot.json`:
+The console's menu and buttons are conveniences; the backend decides. Compared with the route descriptions in `openapi.snapshot.json`
+(2026-11-09; re-checked against the regenerated schema before this update):
 
 | Gate in the console | Schema description | Result |
 |---|---|---|
-| Hold, book, cancel, join waitlist: front desk only | no role stated | **not verifiable**: front desk only is the owner's decision; backend should state the roles |
+| Hold, book, cancel, join waitlist: front desk only | no role stated | **not verifiable**: front desk only is the owner's decision; the backend should state the roles |
 | Mark an offer delivered, release a hold: front desk | "403 unless you are front desk" | matches |
 | Add a provider, location, visit type, slot: front desk, admin | "front desk or admin" | matches |
-| Care-gap barrier and episode writes: nurse, doctor | barrier: "nurse, doctor or admin"; episode: "nurse or doctor" | **differs for barriers**: the schema also allows admin; the console follows the owner (nurse and doctor only) |
-| Care plans list and results: nurse, doctor; write and decide a plan: doctor | list "a nurse or doctor"; write/confirm "a doctor" | matches |
-| Accounts, reviewer statistics, cost canvas, voice: admin | "admin" | matches |
-| Autonomy mode: read by all four, set by admin; proposals: admin or doctor | same | matches |
-| Reason codes: nurse, doctor | "nurse or doctor somewhere" | matches |
-| Alerts: front desk, nurse, doctor, admin | same | matches |
+| Care-gap barrier writes: nurse, doctor | barrier: "nurse, doctor or admin"; episode: "nurse or doctor" | **differs for barriers**: the schema also allows admin; the console follows the owner (nurse and doctor only) |
+| Care plans list and results: nurse, doctor; write and decide a plan: doctor | list "a nurse or doctor"; write and confirm "a doctor" | matches |
+| Accounts, reviewer statistics, cost canvas, voice, recovery, grievances: admin | "admin" | matches |
+| Autonomy mode read by all four, set by admin; proposals and history: admin or doctor | same | matches |
+| Portal claims: front desk | "front desk" | matches |
+| Break-glass open: front desk, nurse, doctor; review: admin who did not open it | same | matches |
+| Notes, visit readiness: nurse, doctor | same | matches |
+
+## 8. Last full run
+
+The counts for the last full run are given in the report that accompanies each push.

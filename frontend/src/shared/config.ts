@@ -2,7 +2,7 @@ import type { ExposedEnv } from '../../env-allowlist';
 
 declare const __CAREFLOW_PUBLIC_CONFIG__: ExposedEnv;
 
-export interface PublicConfig {
+interface PublicConfig {
   supabaseUrl: string;
   supabasePublishableKey: string;
   /** Empty in development: calls go same-origin through the Vite proxy. */

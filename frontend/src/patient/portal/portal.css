@@ -1,0 +1,57 @@
+/* The patient portal: one column, mobile first. Colours come from tokens only. */
+.portal {
+  max-width: 36rem;
+  margin-inline: auto;
+}
+
+.portal label {
+  display: block;
+  margin-top: var(--space-3);
+  font-weight: 700;
+}
+
+.portal input[type='text'],
+.portal input[type='tel'],
+.portal input[type='date'],
+.portal textarea,
+.portal select {
+  display: block;
+  width: 100%;
+  min-height: var(--target-min);
+  margin-top: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.portal section {
+  margin-top: var(--space-4);
+}
+
+/* The notice exactly as sent: plain text, line breaks kept, nothing interpreted. */
+.notice {
+  margin-block: var(--space-3);
+  padding: var(--space-2);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.notice-text {
+  padding: var(--space-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--color-surface);
+  border-radius: var(--radius);
+}
+
+.plain-list {
+  padding-left: var(--space-3);
+}
+
+.portal .button {
+  min-height: var(--target-min);
+  margin-top: var(--space-2);
+}

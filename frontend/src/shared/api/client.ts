@@ -13,14 +13,17 @@ type DuplicateQuery = NonNullable<paths['/v1/staff/identity/possible-duplicates'
 export type MergeStatus = NonNullable<MergeQuery['status']>;
 export type DuplicateStatus = NonNullable<DuplicateQuery['status']>;
 type TaskQuery = NonNullable<paths['/v1/staff/review-tasks']['get']['parameters']['query']>;
-export type ReviewTaskStatus = TaskQuery['status'];
-export type TaskRole = NonNullable<TaskQuery['assigned_role']>;
+type ReviewTaskStatus = TaskQuery['status'];
+type TaskRole = NonNullable<TaskQuery['assigned_role']>;
+export type ConsentIn = components['schemas']['ConsentIn'];
+export type ClaimIn = components['schemas']['ClaimIn'];
+export type GrievanceIn = components['schemas']['GrievanceIn'];
 export type NoteIn = components['schemas']['NoteIn'];
 export type BreakGlassOpenIn = components['schemas']['BreakGlassOpenIn'];
 export type BreakGlassOutcome = components['schemas']['BreakGlassReviewIn']['outcome'];
 export type ClaimDecision = components['schemas']['ClaimResolveIn']['decision'];
 export type GrievanceStatus = components['schemas']['GrievanceStatusIn']['status'];
-export type ReadinessReplyIn = components['schemas']['ReadinessReplyIn'];
+type ReadinessReplyIn = components['schemas']['ReadinessReplyIn'];
 export type RecoveryRequestIn = components['schemas']['RecoveryRequestIn'];
 export type BarrierIn = components['schemas']['BarrierIn'];
 export type BarrierKind = BarrierIn['barrier'];
@@ -107,6 +110,16 @@ export const OPERATIONS = {
   createCarePlan: { method: 'post', path: '/v1/staff/care-plans' },
   confirmCarePlan: { method: 'post', path: '/v1/staff/care-plans/{plan_id}/confirm' },
   recordResult: { method: 'post', path: '/v1/staff/results' },
+  // ---- the patient portal (patient session only) ----
+  portalRegister: { method: 'post', path: '/v1/portal/register' },
+  portalMe: { method: 'get', path: '/v1/portal/me' },
+  portalConsents: { method: 'get', path: '/v1/portal/consents' },
+  recordConsent: { method: 'post', path: '/v1/portal/consents' },
+  portalActivate: { method: 'post', path: '/v1/portal/activate' },
+  portalClaim: { method: 'post', path: '/v1/portal/claims' },
+  listMyGrievances: { method: 'get', path: '/v1/portal/grievances' },
+  fileGrievance: { method: 'post', path: '/v1/portal/grievances' },
+  myData: { method: 'get', path: '/v1/portal/my-data' },
   // ---- visit readiness, portal claims, break-glass, recovery, notes, grievances ----
   readinessView: { method: 'get', path: '/v1/staff/visits/{visit_id}/readiness' },
   startReadiness: { method: 'post', path: '/v1/staff/visits/{visit_id}/readiness/start' },
@@ -155,7 +168,7 @@ export const OPERATIONS = {
   reasonCodes: { method: 'get', path: '/v1/staff/console/reason-codes' },
 } as const satisfies Record<string, { method: 'get' | 'post'; path: keyof paths }>;
 
-export interface ApiOptions {
+interface ApiOptions {
   baseUrl: string;
   /** Supplies the current access token, or null when signed out. Never logged. */
   getAccessToken: () => Promise<string | null> | string | null;
@@ -354,6 +367,18 @@ export function createApi(options: ApiOptions) {
     confirmCarePlan: (planId: string, action: CarePlanAction, o?: WriteOptions) =>
       client.POST('/v1/staff/care-plans/{plan_id}/confirm', { params: { path: { plan_id: planId }, header: { 'X-Idempotency-Key': key(o) } }, body: { action } }),
     recordResult: (body: ResultIn, o?: WriteOptions) => client.POST('/v1/staff/results', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+
+    // ---- the patient portal ---------------------------------------------------------------------------------------------------
+    portalRegister: (o?: WriteOptions) => client.POST('/v1/portal/register', { params: { header: { 'X-Idempotency-Key': key(o) } } }),
+    portalMe: () => client.GET('/v1/portal/me'),
+    portalConsents: () => client.GET('/v1/portal/consents'),
+    recordConsent: (body: ConsentIn, o?: WriteOptions) => client.POST('/v1/portal/consents', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    portalActivate: (o?: WriteOptions) => client.POST('/v1/portal/activate', { params: { header: { 'X-Idempotency-Key': key(o) } } }),
+    portalClaim: (body: ClaimIn, o?: WriteOptions) => client.POST('/v1/portal/claims', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    listMyGrievances: () => client.GET('/v1/portal/grievances'),
+    fileGrievance: (body: GrievanceIn, o?: WriteOptions) => client.POST('/v1/portal/grievances', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    // Everything held about the person: only on their click, saved as one file, never cached.
+    myData: () => client.GET('/v1/portal/my-data'),
 
     // ---- visit readiness, portal claims, break-glass, recovery, notes, grievances ---------------------------------------------
     readinessView: (visitId: string) => client.GET('/v1/staff/visits/{visit_id}/readiness', { params: { path: { visit_id: visitId } } }),

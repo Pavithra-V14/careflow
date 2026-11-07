@@ -1,7 +1,6 @@
 {
   "app": {
     "hospitalName": "[PLACEHOLDER: hospital name]",
-    "patientTitle": "Patient portal",
     "staffTitle": "Staff console"
   },
   "common": {
@@ -12,7 +11,6 @@
     "language": "Language",
     "loading": "Loading…",
     "retry": "Try again",
-    "genericError": "Something went wrong.",
     "notConfigured": "This site is not configured yet.",
     "skipToContent": "Skip to main content",
     "emergencyBanner": "In an emergency call 108",
@@ -74,7 +72,7 @@
     "faq": {
       "heading": "Frequently asked questions",
       "q1": "How do I create an account?",
-      "a1": "Patient sign-up is not available yet. When it opens, you will enter your mobile number and we will send a one-time code to confirm it.",
+      "a1": "Choose Sign up, enter your mobile number, and we will send a one-time code to confirm it.",
       "q2": "Can I use the portal in Tamil?",
       "a2": "Yes. Use the language menu at the top of any page to switch between English and Tamil.",
       "q3": "How do I raise a concern about my data or my care?",
@@ -90,8 +88,6 @@
     "signInTitle": "Sign in",
     "signUpTitle": "Sign up",
     "privacyTitle": "Privacy notice",
-    "notAvailableSignIn": "Patient sign-in is not available yet.",
-    "notAvailableSignUp": "Patient sign-up is not available yet.",
     "backHome": "Back to the home page"
   },
   "staff": {

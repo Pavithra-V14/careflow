@@ -11,7 +11,7 @@ import { Badge, PageHeading, ShortId, Time, useWord } from '../ui/bits';
 import { QueryView } from '../ui/states';
 import { NotFoundPage } from './NotFoundPage';
 
-export const IDENTITY_LISTS = ['duplicates', 'merges'] as const;
+const IDENTITY_LISTS = ['duplicates', 'merges'] as const;
 type ListId = (typeof IDENTITY_LISTS)[number];
 const isListId = (v: string): v is ListId => (IDENTITY_LISTS as readonly string[]).includes(v);
 

@@ -108,8 +108,6 @@
     "confidence": "Confidence",
     "rule": "Rule that triggered review",
     "notRecorded": "Not recorded",
-    "none": "None",
-    "proposal": "Proposal",
     "abstained": "Abstained",
     "mode": "Mode",
     "candidateCount": "Candidates",
@@ -129,7 +127,6 @@
     "reasonRequired": "Choose a reason. A reject needs one.",
     "reasonOptional": "Reason (optional for approve)",
     "reasonChoose": "Choose a reason",
-    "reasonsNotConfigured": "The clinic has not set a list of reasons yet.",
     "viewMissing": "There is no proposal to show for this referral."
   },
   "time": {

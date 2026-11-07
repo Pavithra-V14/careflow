@@ -45,4 +45,3 @@ export const grantKey = (g: Grant): string => `${g.clinicId}|${g.role}`;
 /** First 8 characters of the id, until the backend supplies a clinic name. */
 export const shortClinicId = (id: string): string => `${id.slice(0, 8)}…`;
 
-export const KNOWN_ROLES = ['patient', 'guardian', 'front_desk', 'nurse', 'doctor', 'admin', 'business_owner', 'auditor'] as const;

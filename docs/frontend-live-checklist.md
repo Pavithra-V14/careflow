@@ -1,10 +1,34 @@
-# Live integration checklist (F5)
+# Live integration checklist (the first live run)
 
 Every call each console screen makes, and what to check against a RUNNING backend. Until now everything was proven against
 mocks written from `openapi.snapshot.json`; this list is how we find where the backend differs from them.
 
-**Not started.** The live pass needs the backend running and a signed-in dev staff account (see "What I need" at the end).
-Nothing here has been run against a live backend.
+**State (2026-11-10).** The read-only walk has been run against the dev backend three times (front desk 24 calls, nurse 26, doctor 26, no
+findings). Everything added since (alerts, dashboard, care gaps, care plans, results, accounts, autonomy, reviewer statistics, cost canvas,
+voice, readiness, claims, break-glass, recovery, notes, grievances, the patient portal) and every write has NOT been run against a live
+backend. The walk now visits every new read-only list; the writes are done by hand, in the order below.
+
+## The first live run, in order
+
+1. **Seed** (see "Data the pass needs"). Without rows, a clean report proves nothing about row shapes: the report lists every empty list as
+   "no rows to check".
+2. **Read-only walk, once per role** (front desk, nurse, doctor, admin): `LIVE_LABEL=<role> npm run e2e:live`. You sign in yourself. Read the
+   four reports: any finding (unknown route, unexpected status, schema error, 5xx) is a mismatch to report to the backend session.
+3. **Writes by hand with the recorder** (`npm run e2e:live -- --record`), one role at a time, in this order. Each write changes dev data, so
+   this step is your call. Stop at the first surprise and report it before going on.
+   1. Front desk: add a provider, location, visit type, slot; hold, book, cancel a booking; join the waitlist; mark an offer delivered.
+   2. Nurse / doctor: record a barrier, start an episode, resolve a barrier, re-check a sample (as a different person from the decider),
+      record a result (and one that corrects another), write a note and an addendum, relay a readiness reply.
+   3. Doctor: write a care plan, approve it; propose switching to autonomous (expect the 503 state until the switch is enabled).
+   4. Admin: invite (expect the 503 state if no sign-in administration is configured), grant and revoke a role, suspend and reinstate,
+      request a recovery and approve it as a second admin, acknowledge and resolve a grievance, read and purge a voice transcript,
+      review a break-glass grant as an admin who did not open it.
+   5. Front desk: approve and reject a portal claim.
+   6. Break-glass: open a grant with a reason code from the clinic's list and read under it (each read is an audit row).
+4. **The patient portal** (needs Supabase phone sign-in configured and a test patient number you can receive codes on): sign in, create the
+   account, read the notice and compare it character by character with what the API sends, grant, activate, claim by phone + name +
+   date of birth + the clinic id, file a grievance (a category from the clinic's list), download the data file.
+5. **Only after one live approve with step-up works:** ask for the merge approve flag to be turned on.
 
 ## How to run it (by hand, never in CI)
 
@@ -77,6 +101,7 @@ no workflow can start it.
 | Staff recovery | `GET /v1/staff/recovery`, `POST /v1/staff/recovery`, `POST .../recovery/{request_id}/approve`, `.../cancel`, `.../complete` | `clinic_id`; key + account | `result` words; complete 503 when no sign-in administration is set | not run live yet: writes |
 | Notes | `GET /v1/staff/notes`, `POST /v1/staff/notes` | `clinic_id`, `patient_id`; key + text + optional parent | 503 keys not configured; erased or null text says so | not run live yet: the write |
 | Grievances | `GET /v1/staff/grievances`, `POST /v1/staff/grievances/{grievance_id}/status` | `clinic_id`; key + status | `result` words recorded, replay, invalid_transition | `category` words; not run live yet: the write |
+| Patient portal | `GET /v1/portal/me`, `POST /v1/portal/register`, `GET /v1/portal/consents`, `POST /v1/portal/consents`, `POST /v1/portal/activate`, `POST /v1/portal/claims`, `GET /v1/portal/grievances`, `POST /v1/portal/grievances`, `GET /v1/portal/my-data` | patient session only; key + the typed fields | me 403 = no patient account yet (the page offers to create it); consent 409 = notice changed; activate / claim `outcome` words; grievance 422 category not on the list, 503 not set up; my-data is audited | the sign-in itself (Supabase phone code) is not run live yet; the clinic id the patient types (no route gives it); the grievance category list (no route gives it) |
 | Offer draft | `GET /v1/staff/scheduling/offers/draft` | `clinic_id`, `visit_type_id` | 200 shows only `status`; 403; 5xx | `status` words; `reason` and `data` shapes (requests item 6) |
 | Possible duplicates | `GET /v1/staff/identity/possible-duplicates?status=` | `status` (default pending) | 200; 403 (non front desk) | `reason`, `matched_kinds` words |
 | Merges | `GET /v1/staff/identity/merges?status=` | `status` only when filtered | 200; 403 | status words |
@@ -98,6 +123,11 @@ uses them yet.
 
 ## Data the pass needs in the dev project (ask the backend session for a seed)
 
+Beyond the list below, for the F7 screens: a slot (open) and a held slot, a booking, a waitlist entry, an offer in each state, an alert
+(open and acknowledged), a care gap row from each of the three sources, a care plan awaiting confirmation, a pending portal claim, a
+staff account in each status, a recovery request, a break-glass grant to review, a grievance in each status, a voice session with expired
+and unexpired chunks, a visit with a readiness run, a note with an addendum, a result-correction review task.
+
 At least one of each, in a single clinic the test account can read: a referral document (and one with an open hold), a review task
 that is open, one acknowledged and one resolved, a `referral_hold` task, a `red_flag` task (nurse or doctor account), a patient
 record that is verified and one that is not, a pending possible duplicate, a merge awaiting second approval proposed by ANOTHER
@@ -110,3 +140,5 @@ and a front-desk account, to see both sides of every role-dependent screen.
 2. A dev staff account for you to sign in with; I will not see credentials. A second account with another role is better.
 3. The seed above (or tell me which rows exist).
 4. Your OK to open the headed browser window on your machine, and to leave the dev server running.
+5. For the portal: the project's Supabase phone sign-in configured, and a test number that can receive a code. The code is yours to type; it
+   never reaches a script or a log.

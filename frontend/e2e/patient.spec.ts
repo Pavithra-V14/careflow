@@ -79,8 +79,9 @@ test('landing: keyboard only - skip link, sign in link, language switch, FAQ tog
   await signIn.focus();
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/\/patient\/sign-in\/$/);
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Sign in');
-  await expect(page.getByRole('status')).toContainText('not available yet');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Your account');
+  // The page is the real sign-in form (a number, then a code); it is the portal, not a placeholder.
+  await expect(page.getByLabel('Mobile number')).toBeVisible();
 });
 
 test('landing: the emergency banner is present and dialable even with JavaScript disabled', async ({ browser }) => {
