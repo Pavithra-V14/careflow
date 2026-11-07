@@ -52,7 +52,8 @@ the first live run.
 | Active-role header switched on | the owner, after the dev backend has migration 0028 and a live check works |
 | Cancel confirmation wording, consent purpose wording | the clinic / counsel; marked placeholders are in place |
 | Tamil (all new strings) | native-speaker review; `TAMIL-UNREVIEWED.md` lists them |
-| Patient portal sign-in with a real phone code | Supabase phone sign-in being configured for the project (an SMS provider is Supabase configuration, not code) |
+| Patient portal sign-in | Supabase phone sign-in with test numbers and fixed codes for the demo (steps in `docs/frontend-live-checklist.md`, to be verified in the dashboard); no SMS provider |
+| Routes the backend is adding: public clinic id and name, grievance categories, break-glass reason codes and open grants, upcoming bookings for nurse and doctor, a patient-facing consent purpose label, the remaining enums | backend; each is switched over when it is in the snapshot (decided 2026-11-11), until then the current behaviour stays |
 
 ## 5. The first live run
 

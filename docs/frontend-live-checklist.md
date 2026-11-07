@@ -30,6 +30,27 @@ backend. The walk now visits every new read-only list; the writes are done by ha
    date of birth + the clinic id, file a grievance (a category from the clinic's list), download the data file.
 5. **Only after one live approve with step-up works:** ask for the merge approve flag to be turned on.
 
+## Patient sign-in for the demo: Supabase phone sign-in with test numbers (VERIFY IN THE DASHBOARD)
+
+The patient portal signs in with a one-time code sent to a mobile number. For the demo this needs no SMS provider and no external service:
+Supabase can be given test phone numbers with fixed codes, and a test number never receives a text. These steps are from memory of the
+dashboard and **must be verified in the dashboard** before relying on them; the labels and where they sit may differ.
+
+1. Open the dev Supabase project's dashboard, then **Authentication**, then the sign-in **Providers** list, then **Phone**.
+2. Turn the **Phone** provider on. Check whether the dashboard insists on choosing an SMS provider before it lets you save; if it does, that
+   is a blocker to report (do not add one: no SMS or other service is to be added). Leave "confirm phone" (the one-time code) on.
+3. Find the setting for **test phone numbers** (named something like "Test Phone Numbers and OTPs"). Add one or two numbers with a fixed
+   six-digit code each, in the format the dashboard shows (the number without or with the plus sign: check), and set how long the fixed
+   codes stay valid. A number listed here is sent no text; the portal's code box accepts its fixed code.
+4. In the portal (`/patient/sign-in/`) type the test number WITH a plus sign and country code, ask for a code, and enter the fixed code.
+   If the dashboard stores the number without a plus sign, the portal sends the plus form; check the two match, or the code is refused.
+5. Use only test numbers on the demo project. A real number needs an SMS provider, which is a separate decision and is not part of this
+   run. The fixed codes are demo values: write them down only in the dashboard, never in this repository.
+6. Rate limits and CAPTCHA on repeated failures are Supabase settings on the same screens: check they are on before a demo others can reach.
+
+What to confirm after setting it up: the code request returns without an error, a wrong code is refused with the one fixed message, the
+right fixed code opens a session, `GET /v1/portal/me` then answers 403 (no patient account yet) and the page offers "Create my account".
+
 ## How to run it (by hand, never in CI)
 
 1. Start the backend, then the dev server (`npm run dev` in `frontend/`; it proxies `/v1` and `/readyz` to `CAREFLOW_API_BASE_URL`).
