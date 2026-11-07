@@ -4483,8 +4483,8 @@ async def purge_voice_transcripts(body: VoicePurgeIn, idempotency_key: Idempoten
 # ---- Break-glass access (migration 0058; BUILD-SPEC.md 18.4) ------------------------------------------------------------------------------------------------------------------------------------------------
 #
 # A front-desk, nurse or doctor with a recent second factor opens a TIME-LIMITED grant for ONE patient of their clinic, naming a reason CODE from the clinic's list (iam.break_glass_reasons, kept by the owner; no free
-# text is stored). The window length and the cap on re-opens (per person, per patient, per 24 hours) are the required settings CAREFLOW_BREAK_GLASS_MINUTES and CAREFLOW_BREAK_GLASS_MAX_REOPENS. While it is open the holder can read that patient's messages (every topic) and every read is an audit
-# row. An admin of the clinic, a different person, reviews each grant afterwards. While the window length is unset the open route answers 503 and nothing is written; with no reason rows for the clinic every open is refused (422).
+# text is stored). The window length and the cap on re-opens (per person, per patient, per 24 hours) are the clinic's limits in iam.break_glass_settings (owner-managed, migration 0066; the owner-run seed writes them from CAREFLOW_BREAK_GLASS_MINUTES and CAREFLOW_BREAK_GLASS_MAX_REOPENS). While it is open the holder can read that patient's messages (every topic) and every read is an audit
+# row. An admin of the clinic, a different person, reviews each grant afterwards. While the clinic has no limits row the open route answers 503 and nothing is written; with no reason rows for the clinic every open is refused (422).
 
 staff_break_glass = APIRouter(prefix="/v1/staff/break-glass", tags=["staff break-glass"])
 BREAK_GLASS_OPENERS = ("front_desk", "nurse", "doctor")
@@ -4544,18 +4544,17 @@ class BreakGlassList(_Out):
 
 @staff_break_glass.post("", response_model=BreakGlassOpenOut, status_code=201)
 async def open_break_glass(body: BreakGlassOpenIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> BreakGlassOpenOut:
-    """Open a time-limited grant to read ONE patient's messages, with a reason code from the clinic's list (kept by the owner, not the application). 404 if the clinic or patient is not visible to you, 403 unless you are front desk, nurse or doctor there (with a recent second factor), 422 for a reason code that is not on the list, 409 past the re-open cap, 503 while the window length or the cap is not configured."""
+    """Open a time-limited grant to read ONE patient's messages, with a reason code from the clinic's list (kept by the owner, not the application). 404 if the clinic or patient is not visible to you, 403 unless you are front desk, nurse or doctor there (with a recent second factor), 422 for a reason code that is not on the list, 409 past the re-open cap, 503 while the clinic has no limits row."""
     await _console_clinic(conn, body.clinic_id, BREAK_GLASS_OPENERS)
     known = (await conn.execute(text("select 1 from mpi.patients where id = :p and clinic_id = :c"), {"p": body.patient_id, "c": body.clinic_id})).first()
     if known is None:
         raise HTTPException(status_code=404, detail="not found")
-    minutes, max_reopens = request.app.state.break_glass_minutes, request.app.state.break_glass_max_reopens
-    if minutes is None or max_reopens is None:
-        raise HTTPException(status_code=503, detail="break-glass is unavailable: the window length and the re-open cap are not configured")
     try:
-        opened = await break_glass_sql.open_grant(conn, clinic_id=body.clinic_id, patient_id=body.patient_id, reason_code=body.reason_code, minutes=minutes, max_reopens=max_reopens, idempotency_key=f"break-glass:{idempotency_key}")
+        opened = await break_glass_sql.open_grant(conn, clinic_id=body.clinic_id, patient_id=body.patient_id, reason_code=body.reason_code, idempotency_key=f"break-glass:{idempotency_key}")
     except break_glass_sql.UnknownReason:
         raise HTTPException(status_code=422, detail="request rejected") from None
+    except break_glass_sql.NotConfigured:
+        raise HTTPException(status_code=503, detail="break-glass is unavailable: the clinic's limits are not configured") from None
     except break_glass_sql.LimitReached:
         raise HTTPException(status_code=409, detail="too many grants for this patient in the last 24 hours") from None
     except break_glass_sql.Refused:
@@ -5073,8 +5072,6 @@ def create_app(
         app.state.voice_engine = None  # no real voice engine exists (owner decision 2026-11-06): the session route answers 503
         app.state.voice_retention_days = _positive_int(p4env.get('CAREFLOW_VOICE_TRANSCRIPT_RETENTION_DAYS'))
         app.state.grievance_categories = _word_list(p4env.get("CAREFLOW_GRIEVANCE_CATEGORIES"))
-        app.state.break_glass_minutes = _minutes_in_range(p4env.get("CAREFLOW_BREAK_GLASS_MINUTES"), 240)
-        app.state.break_glass_max_reopens = _minutes_in_range(p4env.get("CAREFLOW_BREAK_GLASS_MAX_REOPENS"), 50)
         app.state.clinic_time_zone = clinic_time_zone(p4env.get("CAREFLOW_CLINIC_TIME_ZONE"))
         app.state.care_gap_alert_days = _positive_int(p4env.get('CAREFLOW_CARE_GAP_ALERT_DAYS'))
         try:

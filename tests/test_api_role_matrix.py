@@ -143,6 +143,7 @@ async def _seed() -> Identities:
         await conn.execute("insert into ops.care_episodes (id, clinic_id, origin, patient_id, episode_code, started_on, idempotency_key) values ($1, $2, 'test', $3, 'matrix_seed_episode', current_date - 60, $4)", episode, ids.clinic_a, ids.patients_a[42], f"mx-e-{episode}")
         await conn.execute("insert into ops.care_episode_rules (id, clinic_id, origin, episode_id, rule_id, idempotency_key) values ($1, $2, 'test', $3, $4, $5)", ids.episode_rule, ids.clinic_a, episode, rule, f"mx-er-{ids.episode_rule}")
         await conn.execute("insert into iam.break_glass_reasons (clinic_id, code) values ($1, 'demo_reason')", ids.clinic_a)
+        await conn.execute("insert into iam.break_glass_settings (clinic_id, max_minutes, max_reopens) values ($1, 240, 5)", ids.clinic_a)  # owner-managed limits (migration 0066)
         ids.bg_grants = []
         for n in range(2):  # grants held by nurse_a: one the read cases use, one the review cases use (append-only: they stay behind with their clinic)
             ids.bg_grants.append(
@@ -271,6 +272,7 @@ async def _cleanup(ids, conn=None):
                 continue
             await conn.execute(f"delete from {table} where clinic_id = any($1)", clinics)
         await conn.execute("delete from iam.break_glass_reasons where clinic_id = any($1)", clinics)
+        await conn.execute("delete from iam.break_glass_settings where clinic_id = any($1)", clinics)
         await conn.execute("delete from msg.voice_preferences where account_id = any($1)", accounts)
         await conn.execute("delete from iam.staff_roles where clinic_id = any($1)", [ids.clinic_a, ids.clinic_b])
         for statement, args in (("delete from iam.accounts where id = any($1)", accounts), ("delete from iam.clinics where id = any($1)", [ids.clinic_a, ids.clinic_b])):
@@ -2092,7 +2094,7 @@ def test_a_completed_erasure_clears_the_identity_columns_and_leaves_exactly_the_
     assert _run(_fetch("select status from ops.care_plans where id = $1", plan_id))[0]["status"] == "erased"
     assert str(plan_id) not in {p["plan_id"] for p in client.get(f"{CARE_PLANS}?clinic_id={ids.clinic_a}&limit=200", headers=stepped(doctor)).json()["plans"]}  # hidden from the staff list
     care = _run(_fetch("select details::text as d from audit.log where action = 'care_record.erased' and idempotency_key = $1", f"sys:erase-care-record:{request_id}"))
-    assert len(care) == 1 and json.loads(care[0]["d"]) == {"care_plans": 1, "results": 1, "messages": 0, "voice_chunks": 0, "grievances": 0, "notes": 0}  # counts only, in a row of its own
+    assert len(care) == 1 and json.loads(care[0]["d"]) == {"care_plans": 1, "results": 1, "messages": 0, "voice_chunks": 0, "grievances": 0, "notes": 0, "visit_readiness": 0}  # counts only, in a row of its own
     request = _run(_fetch("select status, requested_by, approved_by from mpi.erasure_requests where id = $1::uuid", request_id))[0]
     assert (request["status"], request["requested_by"], request["approved_by"]) == ("erased", fd1, fd2)
 
@@ -3187,8 +3189,6 @@ def autonomy_resolve_cases(ids) -> list[tuple]:
 # read answers 503 after the grant is found; the decrypting path and the database behaviour are in tests/test_break_glass_db_live.py); an admin of the clinic who did not open it reviews. Opening writes
 # a grant and an audit row that stay behind with the clinic (append-only).
 
-os.environ.setdefault("CAREFLOW_BREAK_GLASS_MINUTES", "30")
-os.environ.setdefault("CAREFLOW_BREAK_GLASS_MAX_REOPENS", "5")
 BREAK_GLASS = "/v1/staff/break-glass"
 BG_OPENERS = ("front_desk_a", "nurse_a", "doctor_a", "multi")
 BG_VISIBLE_REFUSED = ("admin_a", "business_owner_a", "auditor_a")

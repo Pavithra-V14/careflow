@@ -173,6 +173,36 @@ async def test_only_the_missing_fact_is_asked_then_the_checklist_is_walked_and_a
         assert again.finished  # a second start is the same run
 
 
+async def test_the_audited_erasure_deletes_the_patients_visit_readiness_rows_and_counts_them(db, monkeypatch):
+    w = await world(db)
+    h = (await db.get_raw_connection()).driver_connection
+    comps = components(monkeypatch, Scripted())
+    async with as_user(db, w["nurse"]) as c:
+        await (await runner_for(c, comps, w, w["nurse"])).start()
+        for _ in range(3):
+            await reply(c, comps, w, w["nurse"])
+    before = 0
+    for table in ("visit_facts", "visit_readiness_answers", "visit_briefs"):
+        before += (await db.execute(text(f"select count(*) from ops.{table} where patient_id = :p"), {"p": w["patient"]})).scalar()
+    assert before >= 3
+    fd2 = uuid.uuid4()
+    await h.execute("insert into iam.accounts (id, account_type, status, origin) values ($1, 'staff', 'active', 'test')", fd2)
+    await h.execute("insert into iam.staff_roles (account_id, clinic_id, role, origin) values ($1, $2, 'front_desk', 'test')", fd2, w["clinic"])
+    for table in ("visit_facts", "visit_readiness_answers", "visit_briefs"):
+        with pytest.raises(DBAPIError, match="append-only"):
+            async with db.begin_nested():
+                await db.execute(text(f"delete from ops.{table} where patient_id = :p"), {"p": w["patient"]})  # a live patient's rows cannot be deleted, even by the owner
+    request = (await state_of(db, w["front_desk"], "select mpi.request_patient_erasure(:p, 'entered_in_error', 'vr-rq')", p=w["patient"]))[0][0]
+    assert await state_of(db, fd2, "select mpi.approve_patient_erasure(:q, 'vr-ap')", q=request) == [(True,)]
+    for table in ("visit_facts", "visit_readiness_answers", "visit_briefs"):
+        assert (await db.execute(text(f"select count(*) from ops.{table} where patient_id = :p"), {"p": w["patient"]})).scalar() == 0
+    audit = (await db.execute(text("select details from audit.log where action = 'care_record.erased' and idempotency_key = :k"), {"k": f"sys:erase-care-record:{request}"})).scalar()
+    assert audit["visit_readiness"] == before  # counts only
+    with pytest.raises(DBAPIError, match="append-only"):
+        async with db.begin_nested():
+            await db.execute(text("truncate ops.visit_facts"))
+
+
 async def test_a_checklist_item_that_is_not_confirmed_raises_a_nurse_task_in_every_mode(db, monkeypatch):
     w = await world(db)
     comps = components(monkeypatch, Scripted({"demo_item_two": "not_done"}))

@@ -22,6 +22,10 @@ class UnknownReason(Exception):
     """The reason code is not on the clinic list (the database answered 22023)."""
 
 
+class NotConfigured(Exception):
+    """The clinic has no break-glass limits row (owner-managed, migration 0066): no grant can be opened (the database answered 55000)."""
+
+
 class LimitReached(Exception):
     """The person already opened the allowed number of grants for this patient in the last 24 hours (the database answered 54000)."""
 
@@ -37,10 +41,10 @@ class Opened:
     created: bool
 
 
-async def open_grant(conn: AsyncConnection, *, clinic_id: uuid.UUID, patient_id: uuid.UUID, reason_code: str, minutes: int, max_reopens: int, idempotency_key: str) -> Opened:
+async def open_grant(conn: AsyncConnection, *, clinic_id: uuid.UUID, patient_id: uuid.UUID, reason_code: str, minutes: int | None = None, idempotency_key: str) -> Opened:
     try:
         async with conn.begin_nested():
-            row = (await conn.execute(text("select grant_id, expires_at, created from iam.open_break_glass(:c, :p, :r, :m, :x, :k)"), {"c": clinic_id, "p": patient_id, "r": reason_code, "m": minutes, "x": max_reopens, "k": idempotency_key})).one()
+            row = (await conn.execute(text("select grant_id, expires_at, created from iam.open_break_glass(:c, :p, :r, cast(:m as integer), :k)"), {"c": clinic_id, "p": patient_id, "r": reason_code, "m": minutes, "k": idempotency_key})).one()
     except DBAPIError as exc:
         if sqlstate(exc) == "42501":
             raise Refused from None
@@ -48,6 +52,8 @@ async def open_grant(conn: AsyncConnection, *, clinic_id: uuid.UUID, patient_id:
             raise UnknownReason from None
         if sqlstate(exc) == "54000":
             raise LimitReached from None
+        if sqlstate(exc) == "55000":
+            raise NotConfigured from None
         raise
     return Opened(row.grant_id, row.expires_at, bool(row.created))
 
