@@ -1,4 +1,5 @@
-"""Insert the break-glass reason codes of ONE clinic from the setting CAREFLOW_BREAK_GLASS_REASONS (comma separated lowercase words). NOT run by anything; a person (the owner) runs it by hand, with the migrator connection.
+"""Insert the break-glass reason codes AND the limits of ONE clinic: the codes from the setting CAREFLOW_BREAK_GLASS_REASONS (comma separated lowercase words), the window from CAREFLOW_BREAK_GLASS_MINUTES (1 to
+240) and the re-open cap from CAREFLOW_BREAK_GLASS_MAX_REOPENS (1 to 50), written to iam.break_glass_settings (migration 0066: owner-managed, the application cannot read or change it; without a row no grant can be opened). NOT run by anything; a person (the owner) runs it by hand, with the migrator connection.
 
     python scripts/seed_break_glass_reasons.py --clinic-id <uuid> [--env-file .env] [--dry-run]
 
@@ -32,6 +33,14 @@ async def run(env: dict, clinic_id: uuid.UUID, dry_run: bool) -> int:
     if not codes or any(not CODE.match(c) for c in codes):
         print("refusing: CAREFLOW_BREAK_GLASS_REASONS is not set, or a code is not a lowercase word (letters, digits, underscore)")
         return 2
+    try:
+        minutes, reopens = int(str(effective.get("CAREFLOW_BREAK_GLASS_MINUTES") or "").strip()), int(str(effective.get("CAREFLOW_BREAK_GLASS_MAX_REOPENS") or "").strip())
+    except ValueError:
+        print("refusing: CAREFLOW_BREAK_GLASS_MINUTES and CAREFLOW_BREAK_GLASS_MAX_REOPENS must both be set to whole numbers")
+        return 2
+    if not (1 <= minutes <= 240 and 1 <= reopens <= 50):
+        print("refusing: the window must be 1 to 240 minutes and the re-open cap 1 to 50")
+        return 2
     dsn = (env.get("DATABASE_URL_MIGRATOR") or "").replace("postgresql+asyncpg://", "postgresql://", 1)
     if not dsn:
         print("refusing: DATABASE_URL_MIGRATOR is not set")
@@ -44,6 +53,7 @@ async def run(env: dict, clinic_id: uuid.UUID, dry_run: bool) -> int:
         have = {r["code"] for r in await conn.fetch("select code from iam.break_glass_reasons where clinic_id = $1", clinic_id)}
         for code in codes:
             print(f"{code}: {'already listed' if code in have else 'add'}")
+        print(f"limits: window {minutes} minutes, at most {reopens} grants per person and patient in 24 hours")
         if dry_run:
             print("dry run: nothing was written")
             return 0
@@ -51,6 +61,10 @@ async def run(env: dict, clinic_id: uuid.UUID, dry_run: bool) -> int:
             for code in codes:
                 if code not in have:
                     await conn.execute("insert into iam.break_glass_reasons (clinic_id, code) values ($1, $2)", clinic_id, code)
+            await conn.execute(
+                "insert into iam.break_glass_settings (clinic_id, max_minutes, max_reopens) values ($1, $2, $3) on conflict (clinic_id) do update set max_minutes = excluded.max_minutes, max_reopens = excluded.max_reopens",
+                clinic_id, minutes, reopens,
+            )
         return 0
     finally:
         await conn.close()

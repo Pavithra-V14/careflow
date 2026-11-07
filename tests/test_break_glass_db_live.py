@@ -23,7 +23,7 @@ from tests.db_helpers import ensure_app_role_sa
 ROOT = Path(__file__).resolve().parent.parent
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or dotenv_values(ROOT / ".env").get("DATABASE_URL_MIGRATOR")
 pytestmark = [pytest.mark.asyncio(loop_scope="module"), pytest.mark.skipif(not MIGRATOR, reason="DATABASE_URL_MIGRATOR not configured")]
-OPEN = "select grant_id, expires_at, created from iam.open_break_glass(:c, :p, :r, :m, cast(:x as integer), :k)"
+OPEN = "select grant_id, expires_at, created from iam.open_break_glass(:c, :p, :r, cast(:m as integer), :k)"
 READ = "select status, message_id, body_key_version from msg.break_glass_messages(:g)"
 REVIEW = "select iam.review_break_glass(:g, :o)"
 
@@ -99,6 +99,7 @@ async def world(db):
             ids[k], ids["clinic"], f"bg-{ids[k]}",
         )
     await h.execute("insert into iam.break_glass_reasons (clinic_id, code) values ($1, 'demo_reason')", ids["clinic"])
+    await h.execute("insert into iam.break_glass_settings (clinic_id, max_minutes, max_reopens) values ($1, 120, 50)", ids["clinic"])  # owner-managed limits (migration 0066)
     # threads and messages are written by the doctor under row-level security (the owner connection is subject to those policies too)
     thread = (await as_app(db, ids["doctor"], "insert into msg.threads (clinic_id, patient_id, topic, created_by, origin, idempotency_key) values (:c, :p, 'care', :u, 'test', :k) returning id", c=ids["clinic"], p=ids["patient"], u=ids["doctor"], k=f"th-{ids['patient']}"))[0][0]
     for k in ("m1", "m2"):
@@ -110,8 +111,8 @@ async def world(db):
     return ids
 
 
-async def open_grant(db, w, who="nurse", key=None, minutes=30, patient=None, reason="demo_reason", cap=50):
-    return await as_app(db, w[who], OPEN, c=w["clinic"], p=patient or w["patient"], r=reason, m=minutes, x=cap, k=key or f"k-{uuid.uuid4()}")
+async def open_grant(db, w, who="nurse", key=None, minutes=30, patient=None, reason="demo_reason"):
+    return await as_app(db, w[who], OPEN, c=w["clinic"], p=patient or w["patient"], r=reason, m=minutes, k=key or f"k-{uuid.uuid4()}")
 
 
 async def test_a_staff_member_opens_a_grant_reads_the_messages_and_every_step_is_audited(db):
@@ -137,11 +138,11 @@ async def test_who_may_open_and_what_the_database_refuses(db):
         assert (await open_grant(db, w, who=who))[0][2] is True, who
     assert await open_grant(db, w, who="admin") == "42501"  # an admin reviews, never opens
     assert await open_grant(db, w, who="outsider") == "42501"  # staff of another clinic
-    assert await as_app(db, w["nurse"], OPEN, aal2=False, c=w["clinic"], p=w["patient"], r="demo_reason", m=30, x=50, k="k-x") == "42501"
+    assert await as_app(db, w["nurse"], OPEN, aal2=False, c=w["clinic"], p=w["patient"], r="demo_reason", m=30, k="k-x") == "42501"
     assert await open_grant(db, w, reason="not_on_the_list") == "22023"  # unknown is not a value
     assert await open_grant(db, w, minutes=0) == "42501" and await open_grant(db, w, minutes=241) == "42501"
     assert await open_grant(db, w, patient=uuid.uuid4()) == "42501"  # a patient that is not in the clinic
-    assert await as_app(db, w["nurse"], OPEN, c=w["clinic"], p=w["patient"], r="Free text here", m=30, x=50, k="k-y") == "42501"  # a reason is a code, never text
+    assert await as_app(db, w["nurse"], OPEN, c=w["clinic"], p=w["patient"], r="Free text here", m=30, k="k-y") == "42501"  # a reason is a code, never text
 
 
 async def test_the_window_is_enforced_by_the_database_and_an_expired_or_reviewed_grant_reads_nothing_and_is_audited(db):
@@ -174,7 +175,7 @@ async def test_review_is_by_an_admin_who_did_not_open_it_once(db):
     # an admin who opened a grant (granted a second role in the test) cannot review their own
     h = await pg(db)
     await h.execute("insert into iam.staff_roles (account_id, clinic_id, role, origin) values ($1, $2, 'nurse', 'test')", w["admin"], w["clinic"])
-    own = await as_app(db, w["admin"], OPEN, c=w["clinic"], p=w["patient"], r="demo_reason", m=30, x=50, k="admin-own")
+    own = await as_app(db, w["admin"], OPEN, c=w["clinic"], p=w["patient"], r="demo_reason", m=30, k="admin-own")
     if isinstance(own, list):  # (the active-role narrowing may hide the second role; when it does not, the self review is refused as same_person)
         assert await as_app(db, w["admin"], REVIEW, g=own[0][0], o="appropriate") == [("same_person",)]
 
@@ -216,12 +217,30 @@ async def test_a_holder_who_loses_the_role_or_whose_patient_is_erased_is_cut_off
     assert await as_app(db, w["doctor"], READ, g=grant2) == [("refused", None, None)]  # the patient is erased: nothing to read, and the attempt is audited
 
 
-async def test_one_person_cannot_chain_grants_for_the_same_patient_past_the_cap(db):
+async def test_the_limits_are_the_clinics_own_and_the_database_enforces_them_whatever_the_application_passes(db):
     w = await world(db)
+    h = await pg(db)
+    await h.execute("update iam.break_glass_settings set max_reopens = 3, max_minutes = 60 where clinic_id = $1", w["clinic"])
     for n in range(3):
-        assert isinstance(await open_grant(db, w, who="nurse", cap=3, key=f"chain-{n}"), list)
-    assert await open_grant(db, w, who="nurse", cap=3, key="chain-3") == "54000"  # past the cap: the database says so
-    assert isinstance(await open_grant(db, w, who="nurse", cap=3, key="chain-0"), list)  # a replay is still the same grant
-    assert isinstance(await open_grant(db, w, who="doctor", cap=3, key="d0"), list)  # the cap is per person
-    assert isinstance(await open_grant(db, w, who="nurse", cap=3, key="other-patient", patient=w["other_patient"]), list)  # and per patient
-    assert await open_grant(db, w, cap=0) == "42501" and await open_grant(db, w, cap=51) == "42501"
+        assert isinstance(await open_grant(db, w, who="nurse", key=f"chain-{n}"), list)
+    assert await open_grant(db, w, who="nurse", key="chain-3") == "54000"  # past the clinic's cap: the database says so
+    assert isinstance(await open_grant(db, w, who="nurse", key="chain-0"), list)  # a replay is still the same grant
+    assert isinstance(await open_grant(db, w, who="doctor", key="d0"), list)  # the cap is per person
+    assert isinstance(await open_grant(db, w, who="nurse", key="other-patient", patient=w["other_patient"]), list)  # and per patient
+    assert await open_grant(db, w, who="fd", minutes=61) == "22003"  # a window above the clinic's maximum is refused (the trigger is the backstop)
+    shorter = await open_grant(db, w, who="fd", minutes=5)
+    assert isinstance(shorter, list)
+    assert await open_grant(db, w, minutes=0) == "42501" and await open_grant(db, w, minutes=241) == "42501"
+    assert isinstance(await as_app(db, w["fd"], "select grant_id from iam.open_break_glass(:c, :p, :r, null, 'null-minutes')", c=w["clinic"], p=w["patient"], r="demo_reason"), list)  # null means the clinic's maximum
+
+
+async def test_with_no_settings_row_no_grant_can_be_opened_and_the_application_cannot_touch_the_limits(db):
+    w = await world(db)
+    h = await pg(db)
+    await h.execute("delete from iam.break_glass_settings where clinic_id = $1", w["clinic"])
+    assert await open_grant(db, w) == "55000"  # unknown is not a value
+    assert await owner(db, "insert into iam.break_glass_grants (clinic_id, origin, patient_id, opened_by, reason_code, expires_at, idempotency_key) values (:c, 'test', :p, :u, 'demo_reason', now() + interval '1 hour', 'direct')", c=w["clinic"], p=w["patient"], u=w["nurse"]) == "55000"  # not even the owner's direct insert
+    await h.execute("insert into iam.break_glass_settings (clinic_id, max_minutes, max_reopens) values ($1, 60, 2)", w["clinic"])
+    assert await owner(db, "insert into iam.break_glass_grants (clinic_id, origin, patient_id, opened_by, reason_code, expires_at, idempotency_key) values (:c, 'test', :p, :u, 'demo_reason', now() + interval '3 hours', 'long')", c=w["clinic"], p=w["patient"], u=w["nurse"]) == "54000"
+    for sql in ("select count(*) from iam.break_glass_settings where true", "insert into iam.break_glass_settings (clinic_id, max_minutes, max_reopens) values (gen_random_uuid(), 240, 50)", "update iam.break_glass_settings set max_reopens = 50", "delete from iam.break_glass_settings"):
+        assert await as_app(db, w["nurse"], sql) == "42501", sql
