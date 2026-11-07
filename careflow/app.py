@@ -93,6 +93,7 @@ from careflow import (
 )
 from careflow import messages as messages_mod
 from careflow.adapters.storage import DOCUMENT_BUCKET, SupabaseUploadAdapter
+from careflow.api_enums import AlertClass, CarePlanProgress, CarePlanStatus, MetricId
 from careflow.audit import write_audit
 from careflow.auth import (
     AuthError,
@@ -3237,7 +3238,7 @@ ALERT_READERS = ("front_desk", "nurse", "doctor", "admin")
 class AlertOut(_Out):
     alert_id: uuid.UUID
     clinic_id: uuid.UUID
-    alert_class: str
+    alert_class: AlertClass
     audience_role: str
     count: int
     ref: str | None
@@ -3788,7 +3789,7 @@ async def recheck_care_sample(sample_id: uuid.UUID, idempotency_key: Idempotency
 
 
 class DashboardMetricOut(_Out):
-    metric_id: str
+    metric_id: MetricId
     state: Literal["measured", "unreadable"]
     value: float | None  # null whenever the state is not `measured`: never a made-up zero
 
@@ -3796,7 +3797,7 @@ class DashboardMetricOut(_Out):
 class DashboardOut(_Out):
     clinic_id: uuid.UUID
     metrics: list[DashboardMetricOut]
-    not_measured: list[str]  # catalog metric ids with no query behind them yet (the catalog is the only list of metrics)
+    not_measured: list[MetricId]  # catalog metric ids with no query behind them yet (the catalog is the only list of metrics)
 
 
 async def _scalar_or_none(conn: AsyncConnection, sql: str, params: dict) -> float | None:
@@ -3921,7 +3922,7 @@ class PortalMeOut(_Out):
     status: str
     bound_to_a_patient_record: bool
     consents: dict[str, bool | None]  # purpose -> granted / withdrawn / never decided (or decided against an older notice text)
-    stage: Literal["registered", "new_patient", "pending_activation", "active"]  # spec 17.5, as far as this build can know it (see portal_stage)
+    stage: Literal["registered", "new_patient", "pending_activation", "active"]  # spec 17.5, as far as this build can know it (see iam.patient_stage, migration 0062)
 
 
 class NoticeOut(_Out):
@@ -3976,7 +3977,7 @@ async def portal_me(conn: TxConnAllGrants, claims: dict[str, Any] = Depends(veri
     """Your account state and consent decisions. 403 unless you are a patient account (invited or active)."""
     account_id, _ = await _patient_account(conn, claims, ("invited", "active"))
     state = await portal_sql.account_state(conn, account_id)
-    return PortalMeOut(status=state["status"], bound_to_a_patient_record=state["bound"], consents=state["consents"], stage=portal_stage(state["status"]))
+    return PortalMeOut(status=state["status"], bound_to_a_patient_record=state["bound"], consents=state["consents"], stage=await _stage(conn))
 
 
 @portal.get("/consents", response_model=NoticeList)
@@ -4053,7 +4054,7 @@ class CarePlanIn(_Body):
 class CarePlanOut(_Out):
     plan_id: uuid.UUID
     created: bool
-    status: str
+    status: CarePlanProgress
     waiting_for: Literal["confirmation", "result", "none"]
     task_id: uuid.UUID | None
 
@@ -4061,7 +4062,7 @@ class CarePlanOut(_Out):
 class CarePlanRowOut(_Out):
     plan_id: uuid.UUID
     patient_id: uuid.UUID
-    status: str
+    status: CarePlanStatus
     created_at: datetime
 
 
@@ -4428,7 +4429,7 @@ async def purge_voice_transcripts(body: VoicePurgeIn, idempotency_key: Idempoten
 # ---- Break-glass access (migration 0058; BUILD-SPEC.md 18.4) ------------------------------------------------------------------------------------------------------------------------------------------------
 #
 # A front-desk, nurse or doctor with a recent second factor opens a TIME-LIMITED grant for ONE patient of their clinic, naming a reason CODE from the clinic's list (iam.break_glass_reasons, kept by the owner; no free
-# text is stored). The window length is the required setting CAREFLOW_BREAK_GLASS_MINUTES. While it is open the holder can read that patient's messages (every topic) and every read is an audit
+# text is stored). The window length and the cap on re-opens (per person, per patient, per 24 hours) are the required settings CAREFLOW_BREAK_GLASS_MINUTES and CAREFLOW_BREAK_GLASS_MAX_REOPENS. While it is open the holder can read that patient's messages (every topic) and every read is an audit
 # row. An admin of the clinic, a different person, reviews each grant afterwards. While the window length is unset the open route answers 503 and nothing is written; with no reason rows for the clinic every open is refused (422).
 
 staff_break_glass = APIRouter(prefix="/v1/staff/break-glass", tags=["staff break-glass"])
@@ -4489,18 +4490,20 @@ class BreakGlassList(_Out):
 
 @staff_break_glass.post("", response_model=BreakGlassOpenOut, status_code=201)
 async def open_break_glass(body: BreakGlassOpenIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> BreakGlassOpenOut:
-    """Open a time-limited grant to read ONE patient's messages, with a reason code from the clinic's list (kept by the owner, not the application). 404 if the clinic or patient is not visible to you, 403 unless you are front desk, nurse or doctor there (with a recent second factor), 422 for a reason code that is not on the list, 503 while the window length is not configured."""
+    """Open a time-limited grant to read ONE patient's messages, with a reason code from the clinic's list (kept by the owner, not the application). 404 if the clinic or patient is not visible to you, 403 unless you are front desk, nurse or doctor there (with a recent second factor), 422 for a reason code that is not on the list, 409 past the re-open cap, 503 while the window length or the cap is not configured."""
     await _console_clinic(conn, body.clinic_id, BREAK_GLASS_OPENERS)
     known = (await conn.execute(text("select 1 from mpi.patients where id = :p and clinic_id = :c"), {"p": body.patient_id, "c": body.clinic_id})).first()
     if known is None:
         raise HTTPException(status_code=404, detail="not found")
-    minutes = request.app.state.break_glass_minutes
-    if minutes is None:
-        raise HTTPException(status_code=503, detail="break-glass is unavailable: the window length is not configured")
+    minutes, max_reopens = request.app.state.break_glass_minutes, request.app.state.break_glass_max_reopens
+    if minutes is None or max_reopens is None:
+        raise HTTPException(status_code=503, detail="break-glass is unavailable: the window length and the re-open cap are not configured")
     try:
-        opened = await break_glass_sql.open_grant(conn, clinic_id=body.clinic_id, patient_id=body.patient_id, reason_code=body.reason_code, minutes=minutes, idempotency_key=f"break-glass:{idempotency_key}")
+        opened = await break_glass_sql.open_grant(conn, clinic_id=body.clinic_id, patient_id=body.patient_id, reason_code=body.reason_code, minutes=minutes, max_reopens=max_reopens, idempotency_key=f"break-glass:{idempotency_key}")
     except break_glass_sql.UnknownReason:
         raise HTTPException(status_code=422, detail="request rejected") from None
+    except break_glass_sql.LimitReached:
+        raise HTTPException(status_code=409, detail="too many grants for this patient in the last 24 hours") from None
     except break_glass_sql.Refused:
         raise HTTPException(status_code=403, detail="your role may not do this") from None
     return BreakGlassOpenOut(grant_id=opened.grant_id, expires_at=opened.expires_at, created=opened.created)
@@ -4570,9 +4573,9 @@ def _minutes_in_range(raw: str | None, upper: int) -> int | None:
 # ---- Patient rights: grievances and "download my data" (migration 0059; BUILD-SPEC.md 19.3, 20.1, 17.5) ------------------------------------------------------------------------------------------------
 #
 # Consent withdrawal already exists (POST /v1/portal/consents with `withdrawn`). A patient account that is bound to a record files a grievance (a CATEGORY from the required setting
-# CAREFLOW_GRIEVANCE_CATEGORIES plus a text, stored encrypted); an admin of the clinic acknowledges and resolves it. The patient can download their own data. Account stage (spec 17.5): `registered`
-# (invited) and `new_patient` (active) are derived from the account; `pending_activation` and `active` need a clinic step that does not exist in this build, so no account reaches them and the care topic is
-# never exported. Features: consents need `registered`; grievances, the export and voice need `new_patient`.
+# CAREFLOW_GRIEVANCE_CATEGORIES plus a text, stored encrypted); an admin of the clinic acknowledges and resolves it. The patient can download their own data (never clinical notes). Account stage (spec 17.5),
+# derived by the database (iam.patient_stage, migration 0062): `registered` (invited), `new_patient` (active), `pending_activation` (a portal claim is pending), `active` (a record is bound through a claim a
+# front-desk person approved). The care topic is exported only at `active`. Features: consents need `registered`; grievances, the export and voice need an active account.
 
 portal_rights = APIRouter(prefix="/v1/portal", tags=["patient rights"])
 staff_grievances = APIRouter(prefix="/v1/staff/grievances", tags=["staff grievances"])
@@ -4669,9 +4672,11 @@ def _grievance_out(r: Any, vault: DemographicVault | None) -> GrievanceOut:
     return GrievanceOut(grievance_id=r.id, clinic_id=r.clinic_id, category=r.category, status=r.status, created_at=r.created_at, erased=r.erased_at is not None, text=body)
 
 
-def portal_stage(status: str) -> Literal["registered", "new_patient", "pending_activation", "active"]:
-    """The account stage of spec 17.5 that THIS build can know: an invited account is `registered`, an activated one `new_patient`. The later two need a clinic step (first visit, full-access grant) that has no table yet."""
-    return "registered" if status == "invited" else "new_patient"
+async def _stage(conn: AsyncConnection) -> Literal["registered", "new_patient", "pending_activation", "active"]:
+    try:
+        return await rights_sql.patient_stage(conn)  # type: ignore[return-value]
+    except rights_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
 
 
 @portal_rights.post("/grievances", response_model=GrievanceFiledOut, status_code=201)
@@ -4704,7 +4709,7 @@ async def list_my_grievances(request: Request, conn: TxConnAllGrants, claims: di
 
 @portal_rights.get("/my-data", response_model=MyDataOut)
 async def download_my_data(request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> MyDataOut:
-    """Everything this build holds about you that you may see: your account state, your record, your consent history, your bookings, your appointment and safety messages, your grievances. The care topic is not included (it needs full access, which no step of this build grants). Each download is an audit row. 403 unless you are an active patient account."""
+    """Everything this build holds about you that you may see: your account state, your record, your consent history, your bookings, your appointment and safety messages, your grievances. The care topic is included only at the `active` stage; clinical notes are never included. Each download is an audit row. 403 unless you are an active patient account."""
     account_id, _ = await _patient_account(conn, claims)
     vault: DemographicVault | None = request.app.state.vault
     status = (await conn.execute(text("select status from iam.accounts where id = :a"), {"a": account_id})).scalar()
@@ -4732,7 +4737,7 @@ async def download_my_data(request: Request, conn: TxConnAllGrants, claims: dict
         messages_out.append(ExportMessageOut(clinic_id=m.clinic_id, message_id=m.message_id, topic=m.topic, sender_kind=m.sender_kind, created_at=m.created_at, erased=m.erased_at is not None, body=text_))
     return MyDataOut(
         account_status=str(status),
-        stage=portal_stage(str(status)),
+        stage=await _stage(conn),
         records=records,
         consents=[ExportConsentOut(purpose=c.purpose, action=c.action, notice_version=c.version, occurred_at=c.occurred_at) for c in await rights_sql.consent_history(conn, account_id)],
         bookings=[
@@ -5015,6 +5020,7 @@ def create_app(
         app.state.voice_retention_days = _positive_int(p4env.get('CAREFLOW_VOICE_TRANSCRIPT_RETENTION_DAYS'))
         app.state.grievance_categories = _word_list(p4env.get("CAREFLOW_GRIEVANCE_CATEGORIES"))
         app.state.break_glass_minutes = _minutes_in_range(p4env.get("CAREFLOW_BREAK_GLASS_MINUTES"), 240)
+        app.state.break_glass_max_reopens = _minutes_in_range(p4env.get("CAREFLOW_BREAK_GLASS_MAX_REOPENS"), 50)
         app.state.clinic_time_zone = clinic_time_zone(p4env.get("CAREFLOW_CLINIC_TIME_ZONE"))
         app.state.care_gap_alert_days = _positive_int(p4env.get('CAREFLOW_CARE_GAP_ALERT_DAYS'))
         try:

@@ -113,3 +113,13 @@ async def consent_history(conn: AsyncConnection, account_id: uuid.UUID) -> list[
             )
         ).all()
     )
+
+
+async def patient_stage(conn: AsyncConnection) -> str:
+    """The caller's account stage, derived by the database (migration 0062): registered, new_patient, pending_activation or active."""
+    try:
+        async with conn.begin_nested():
+            return str((await conn.execute(text("select iam.patient_stage()"))).scalar())
+    except DBAPIError as exc:
+        _refuse_on_42501(exc)
+        raise
