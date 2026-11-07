@@ -32,5 +32,11 @@ def test_every_progress_word_the_graph_returns_is_in_the_enum():
     assert used <= set(get_args(api_enums.CarePlanProgress)), used - set(get_args(api_enums.CarePlanProgress))
 
 
+def test_the_care_gap_sources_are_the_panels_sources():
+    from careflow import care_gaps
+
+    assert tuple(get_args(api_enums.CareGapSource)) == tuple(care_gaps.SOURCES) or set(get_args(api_enums.CareGapSource)) == set(care_gaps.SOURCES)
+
+
 def test_the_metric_ids_are_the_catalog_ids():
     assert set(get_args(api_enums.MetricId)) == {m["id"] for m in metrics_catalog.load()["metrics"]}

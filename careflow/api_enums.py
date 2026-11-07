@@ -16,6 +16,9 @@ CarePlanProgress = Literal[
     "overdue", "condition_met", "condition_not_met", "referral_proposed", "step_closed", "needs_doctor", "no_more_waits", "completed",
 ]
 
+# the three places a care gap comes from (careflow/care_gaps.py SOURCES)
+CareGapSource = Literal["overdue_recurrence", "after_the_fact_review", "unresolved_barrier"]
+
 # ops.alerts.class (migration 0039)
 AlertClass = Literal["red_flag_overdue", "task_overdue", "task_escalated", "dead_letters", "queue_age", "canary_approved", "spend_runaway", "delivery_failed", "fallback_spike", "tracing_cap"]
 

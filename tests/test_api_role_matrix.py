@@ -3456,6 +3456,22 @@ def clinical_note_list_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(), None)[:4]
 
 
+# ---- autonomy history (read-only) ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+AUTONOMY_HISTORY = "/v1/staff/console/autonomy/history"
+
+
+def autonomy_history_cases(ids) -> list[tuple]:
+    path = lambda **o: AUTONOMY_HISTORY + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
+    ok = lambda b: set(b) == {"items"} and isinstance(b["items"], list) and all(set(i) == {"kind", "at", "by", "mode", "proposer_role", "outcome", "decided_by", "decided_at"} for i in b["items"])
+    cases = _console_clinic_cases(ids, path, allowed=("admin_a", "doctor_a"), ok_status=200, ok_body=ok, visible_refused=PROPOSAL_VISIBLE_REFUSED)
+    cases += [
+        _case(ids, "an unknown clinic is not found", "admin_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "limit=0 is rejected", "admin_a", 422, path(limit=0), key=None, body=_fixed(422)),
+        _case(ids, "a clinic id that is not a uuid is rejected", "admin_a", 422, path(clinic_id="nope"), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
     ("POST", HOLD): lambda ids: slot_write_cases(ids, "hold"),
@@ -3515,6 +3531,7 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", CARE_PLANS): care_plan_list_cases,
     ("POST", CARE_PLAN_CONFIRM): care_plan_confirm_cases,
     ("POST", RESULTS): result_record_cases,
+    ("GET", AUTONOMY_HISTORY): autonomy_history_cases,
     ("POST", NOTES): clinical_note_write_cases,
     ("GET", NOTES): clinical_note_list_cases,
     ("POST", RECOVERY): staff_recovery_request_cases,
