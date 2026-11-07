@@ -18,6 +18,9 @@ import { PatientRecordPage } from '../pages/PatientRecordPage';
 import { SchedulingPage } from '../pages/SchedulingPage';
 import { IdentityPage } from '../pages/IdentityPage';
 import { MergeDetailPage } from '../pages/MergeDetailPage';
+import { AlertsPage } from '../pages/AlertsPage';
+import { DashboardPage } from '../pages/DashboardPage';
+import { CarePage } from '../pages/CarePage';
 
 /**
  * The signed-in console: a persistent session bar (role, clinic, LIVE / TEST badge) above every screen, a role-aware
@@ -93,6 +96,10 @@ export function Shell() {
           {/* The bare section opens its first list, so the sub-navigation always shows where you are. */}
           <Route path="/scheduling" element={<Navigate to="/scheduling/slots" replace />} />
           <Route path="/scheduling/:list" element={<SchedulingPage />} />
+          <Route path="/alerts" element={<AlertsPage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/care" element={<Navigate to="/care/gaps" replace />} />
+          <Route path="/care/:tab" element={<CarePage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </GuardedRoutes>

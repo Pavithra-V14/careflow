@@ -174,15 +174,15 @@ test('release a hold with the keyboard; a second release answers 409 as a normal
 
 test('roles: the navigation shows only what the role may use, and typing an address by hand still gets "not available"', async ({ page }) => {
   await openConsole(page, 'doctor', 'en');
-  await expect(page.locator('.main-nav a')).toHaveText(['Home', 'Referrals', 'Tasks', 'Patients', 'Identity', 'Scheduling']);
+  await expect(page.locator('.main-nav a')).toHaveText(['Home', 'Referrals', 'Tasks', 'Patients', 'Identity', 'Scheduling', 'Alerts', 'Care']);
   await go(page, '#/referrals/upload', 'This is not available to your role.');
   await go(page, '#/scheduling/holds', /\S/);
   await expect(page.getByRole('button', { name: /^Release\s/ })).toHaveCount(0);
 });
 
-test('roles: an admin sees only Tasks, and a role with no section gets an explanation', async ({ page }) => {
+test('roles: an admin sees Tasks, Scheduling, Alerts, Dashboard and Care but not Patients, and a role with no section gets an explanation', async ({ page }) => {
   await openConsole(page, 'admin', 'en');
-  await expect(page.locator('.main-nav a')).toHaveText(['Home', 'Tasks']);
+  await expect(page.locator('.main-nav a')).toHaveText(['Home', 'Tasks', 'Scheduling', 'Alerts', 'Dashboard', 'Care']);
   await go(page, '#/patients', /\S/);
   await expect(page.locator('main')).toContainText('This is not available to your role.');
 });

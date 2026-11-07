@@ -6,7 +6,7 @@
 // backend disagree, the backend wins and this list is the thing to fix. Roles below follow the route docstrings in
 // openapi.snapshot.json and docs/design/review-task-routes.md.
 
-export type SectionId = 'referrals' | 'tasks' | 'patients' | 'identity' | 'scheduling';
+export type SectionId = 'referrals' | 'tasks' | 'patients' | 'identity' | 'scheduling' | 'alerts' | 'dashboard' | 'care';
 
 export interface Section {
   id: SectionId;
@@ -21,7 +21,10 @@ export const SECTIONS: readonly Section[] = [
   { id: 'tasks', path: '/tasks', labelKey: 'nav.tasks', roles: ['front_desk', 'nurse', 'doctor', 'admin'] },
   { id: 'patients', path: '/patients', labelKey: 'nav.patients', roles: ['front_desk', 'nurse', 'doctor'] },
   { id: 'identity', path: '/identity', labelKey: 'nav.identity', roles: ['front_desk', 'nurse', 'doctor'] },
-  { id: 'scheduling', path: '/scheduling', labelKey: 'nav.scheduling', roles: ['front_desk', 'nurse', 'doctor'] },
+  { id: 'scheduling', path: '/scheduling', labelKey: 'nav.scheduling', roles: ['front_desk', 'nurse', 'doctor', 'admin'] },
+  { id: 'alerts', path: '/alerts', labelKey: 'nav.alerts', roles: ['front_desk', 'nurse', 'doctor', 'admin'] },
+  { id: 'dashboard', path: '/dashboard', labelKey: 'nav.dashboard', roles: ['admin'] },
+  { id: 'care', path: '/care', labelKey: 'nav.care', roles: ['nurse', 'doctor', 'admin'] },
 ];
 
 export const sectionsFor = (role: string): Section[] => SECTIONS.filter((s) => s.roles.includes(role));
@@ -30,6 +33,10 @@ export const sectionsFor = (role: string): Section[] => SECTIONS.filter((s) => s
 export const CAN_UPLOAD = ['front_desk', 'nurse'] as const;
 export const CAN_SEARCH_PATIENTS = ['front_desk'] as const;
 export const CAN_CONFIRM_IDENTITY = ['front_desk'] as const;
+/** Write a care plan, and approve or reject a proposed one (a doctor, per the route docs). */
+export const CAN_DECIDE_CARE_PLAN = ['doctor'] as const;
+/** Record a result (nurse or doctor). */
+export const CAN_RECORD_RESULT = ['nurse', 'doctor'] as const;
 export const CAN_RELEASE_HOLD = ['front_desk'] as const;
 /** Hold, book, cancel and join the waitlist, and mark an offer delivered (the routes say front desk; the backend decides). */
 export const CAN_SCHEDULE = ['front_desk'] as const;

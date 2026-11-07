@@ -1,4 +1,5 @@
 import type { Language } from './index';
+import { getClinicTimeZone } from '../clinicTime';
 
 // Intl locales per UI language. Indian conventions for both (lakh grouping, day-first dates).
 const LOCALE: Record<Language, string> = { en: 'en-IN', ta: 'ta-IN' };
@@ -10,7 +11,7 @@ export function formatNumber(value: number, lng: Language, options?: Intl.Number
 export function formatDate(value: Date | string, lng: Language, options: Intl.DateTimeFormatOptions = { dateStyle: 'medium' }): string {
   const date = typeof value === 'string' ? new Date(value) : value;
   if (Number.isNaN(date.getTime())) return '';
-  return new Intl.DateTimeFormat(LOCALE[lng], { timeZone: 'Asia/Kolkata', ...options }).format(date);
+  return new Intl.DateTimeFormat(LOCALE[lng], { timeZone: getClinicTimeZone(), ...options }).format(date);
 }
 
 export function formatDateTime(value: Date | string, lng: Language): string {

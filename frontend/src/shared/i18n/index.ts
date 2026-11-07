@@ -10,6 +10,8 @@ import f6En from './f6.en.json';
 import f6Ta from './f6.ta.json';
 import f7En from './f7.en.json';
 import f7Ta from './f7.ta.json';
+import f8En from './f8.en.json';
+import f8Ta from './f8.ta.json';
 
 type Tree = { [key: string]: string | Tree };
 
@@ -24,8 +26,8 @@ export function mergeTrees(base: Tree, extra: Tree): Tree {
 }
 
 export const RESOURCES = {
-  en: mergeTrees(mergeTrees(mergeTrees(mergeTrees(en as Tree, consoleEn as Tree), f4En as Tree), f6En as Tree), f7En as Tree),
-  ta: mergeTrees(mergeTrees(mergeTrees(mergeTrees(ta as Tree, consoleTa as Tree), f4Ta as Tree), f6Ta as Tree), f7Ta as Tree),
+  en: mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(en as Tree, consoleEn as Tree), f4En as Tree), f6En as Tree), f7En as Tree), f8En as Tree),
+  ta: mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(ta as Tree, consoleTa as Tree), f4Ta as Tree), f6Ta as Tree), f7Ta as Tree), f8Ta as Tree),
 };
 
 export const LANGUAGES = ['en', 'ta'] as const;

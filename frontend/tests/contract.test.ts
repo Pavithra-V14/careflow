@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { OPERATIONS, createApi, type Api, type WriteOptions, type ProposeMergeIn, type BeginUploadIn, type RegisterIn, type PatientSearchIn, type SlotIn, type HoldIn, type WaitlistJoinIn, type LocationIn, type ProviderIn, type VisitTypeIn } from '../src/shared/api/client';
+import { OPERATIONS, createApi, type Api, type WriteOptions, type ProposeMergeIn, type BeginUploadIn, type RegisterIn, type PatientSearchIn, type SlotIn, type HoldIn, type WaitlistJoinIn, type LocationIn, type ProviderIn, type VisitTypeIn, type CarePlanIn, type ResultIn } from '../src/shared/api/client';
 
 // Contract test (BUILD-SPEC 21): the client is driven for real; only the network transport is captured.
 // It asserts every method targets an endpoint that exists in the backend's schema, with its required
@@ -113,6 +113,14 @@ const INVOCATIONS: Record<keyof typeof OPERATIONS, (api: Api, o?: WriteOptions) 
   listThreads: (api) => api.listThreads(ID, 'appointments'),
   listThreadMessages: (api) => api.listThreadMessages(ID),
   readMessage: (api) => api.readMessage(ID),
+  listAlerts: (api) => api.listAlerts(ID),
+  acknowledgeAlert: (api, o) => api.acknowledgeAlert(ID, o),
+  dashboard: (api) => api.dashboard(ID),
+  careGaps: (api) => api.careGaps(ID),
+  listCarePlans: (api) => api.listCarePlans(ID),
+  createCarePlan: (api, o) => api.createCarePlan(body<CarePlanIn>('CarePlanIn'), o),
+  confirmCarePlan: (api, o) => api.confirmCarePlan(ID, 'approve', o),
+  recordResult: (api, o) => api.recordResult(body<ResultIn>('ResultIn'), o),
   reviewView: (api) => api.reviewView(ID),
   reasonCodes: (api) => api.reasonCodes(),
 };

@@ -155,6 +155,18 @@ The seed already there has 5 fictional patients, 2 locations, 2 providers, 2 vis
 documents, with no human decisions. Once the seed gives each of these lists at least one row, the front-desk pass is re-run to cover
 the referral queue, tasks, holds, merges and duplicates. Until then the nurse and doctor passes report these lists as "no rows to check".
 
+### 9. The clinic time zone
+
+Owner decision (2026-11-07): every time the console shows or takes is in the CLINIC's time zone, from a clinic setting, not the browser's.
+The backend sends no such setting yet, so the console uses a labelled demo placeholder (`Asia/Calcutta`, `frontend/src/shared/clinicTime.ts`).
+Please expose the zone (an IANA name) on `GET /v1/iam/me` per grant, or on a clinic read, and the console will use it
+(`setClinicTimeZone`). Until then the slot form, the result form and every time shown say "demo placeholder".
+
+### 10. `message_id` on an offer row
+
+`OfferRowOut` has no message id, so "Copy offer text" finds the message created with the offer by time (within a minute). When the
+snapshot has `message_id`, the console switches to it and deletes the guess (owner decision 2026-11-07).
+
 ## Decisions recorded here for later readers
 
 - **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;

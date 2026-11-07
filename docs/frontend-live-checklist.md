@@ -58,6 +58,12 @@ no workflow can start it.
 | Copy an offer's text | `GET /v1/staff/messages/threads`, `GET /v1/staff/messages/threads/{thread_id}/messages`, `GET /v1/staff/messages/{message_id}` | patient, topic `appointments` | the message nearest the offer in time (within a minute); the read is audited | that the offer's message is found; 410 erased; the text is never stored in the page |
 | Reviewer view | `GET /v1/staff/referrals/{document_id}/review-view` | no query | 200; 404 no proposal; 403 | `proposal`, `evidence`, `alternatives` key names; null `confidence` and `probability` |
 | Reason codes | `GET /v1/staff/console/reason-codes` | no query | 200 `configured` + `codes` | whether the clinic has set the list |
+| Alerts | `GET /v1/staff/console/alerts` | `clinic_id`, optional `include_acknowledged` | 200; 403/404 fixed messages | `alert_class` words seen; `audience_role` as the escalation state; `ref` null or an id |
+| Acknowledge an alert | `POST /v1/staff/console/alerts/{alert_id}/acknowledge` | key | 200; 409 already acknowledged | not run live yet: a write |
+| Dashboard | `GET /v1/staff/console/dashboard` | `clinic_id` | 200 metrics + `not_measured`; 403 unless admin | `metric_id` list; `unreadable` with null value |
+| Care gaps | `GET /v1/staff/care-gaps` | `clinic_id` | 200 summaries, rows, `unreadable`; 403 unless nurse, doctor or admin | `source` words; null counts shown as not readable |
+| Care plans | `GET /v1/staff/care-plans`, `POST /v1/staff/care-plans`, `POST /v1/staff/care-plans/{plan_id}/confirm` | `clinic_id`; key + patient + text; key + action | list never has plan text; 503 not configured; 409 not waiting | `status` words (the console offers approve/reject on `confirmation_requested`); `waiting_for` |
+| Record a result | `POST /v1/staff/results` | key, patient, code, measures, times, verified | 201; 422 malformed measure | not run live yet: a write |
 | Offer draft | `GET /v1/staff/scheduling/offers/draft` | `clinic_id`, `visit_type_id` | 200 shows only `status`; 403; 5xx | `status` words; `reason` and `data` shapes (requests item 6) |
 | Possible duplicates | `GET /v1/staff/identity/possible-duplicates?status=` | `status` (default pending) | 200; 403 (non front desk) | `reason`, `matched_kinds` words |
 | Merges | `GET /v1/staff/identity/merges?status=` | `status` only when filtered | 200; 403 | status words |

@@ -17,7 +17,7 @@ function flatten(tree, prefix = '') {
   return Object.entries(tree).flatMap(([k, v]) => (typeof v === 'string' ? [[prefix + k, v]] : flatten(v, `${prefix}${k}.`)));
 }
 
-const all = (lang) => merge(merge(merge(merge(read(`${lang}.json`), read(`console.${lang}.json`)), read(`f4.${lang}.json`)), read(`f6.${lang}.json`)), read(`f7.${lang}.json`));
+const all = (lang) => merge(merge(merge(merge(merge(read(`${lang}.json`), read(`console.${lang}.json`)), read(`f4.${lang}.json`)), read(`f6.${lang}.json`)), read(`f7.${lang}.json`)), read(`f8.${lang}.json`));
 const en = Object.fromEntries(flatten(all('en')));
 const ta = Object.fromEntries(flatten(all('ta')));
 const reviewed = new Set(read('ta-reviewed.json').reviewed);
