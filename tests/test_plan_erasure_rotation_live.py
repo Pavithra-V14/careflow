@@ -20,7 +20,7 @@ from careflow.care_gap_sql import sqlstate
 from careflow.crypto import DemographicVault
 from careflow.messages import decrypt_plan_text, encrypt_plan_text
 from careflow.rotation import plan_version_usage, rotate_plan_texts, verify_plan_texts
-from tests.db_helpers import ensure_app_role_sa
+from tests.db_helpers import aal2_claims, ensure_app_role_sa
 
 ROOT = Path(__file__).resolve().parent.parent
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or dotenv_values(ROOT / ".env").get("DATABASE_URL_MIGRATOR")
@@ -62,7 +62,7 @@ async def as_app(db, person, sql, **params):
     try:
         async with db.begin_nested():
             await db.exec_driver_sql("set local role careflow_app")
-            await db.execute(text("select set_config('request.jwt.claims', :c, true)"), {"c": json.dumps({"sub": str(person), "role": "authenticated"})})
+            await db.execute(text("select set_config('request.jwt.claims', :c, true)"), {"c": json.dumps(aal2_claims(person))})
             result = await db.execute(text(sql), params)
             value = [tuple(r) for r in result.all()] if result.returns_rows else result.rowcount
             await db.exec_driver_sql("reset role")

@@ -1,4 +1,4 @@
-# Threat model (2026-11-04): worker, step-up routes, storage, model gateway, patient view
+# Threat model (2026-11-04, extended 2026-11-08): worker, step-up routes, storage, model gateway, patient view; break-glass, patient rights, staff recovery, the erasure path, the clinical record
 
 Scope: the five places where the system holds the most power or touches the most sensitive data. Method: for each, what is protected, who could attack it, how, what stops them today (with the file that does), and what is left (residual, with the pre-launch item in `pre-launch-checklist.md`). **This is an engineering note, not a clinical or legal document; it was written from the code and the design notes, and every "control" below names the test or file so it can be checked.** Out of scope: the frontend, hosting and the network (not built), the breach runbook.
 
@@ -60,6 +60,47 @@ Actors considered: a curious or malicious staff member; a staff member of anothe
 | An account without a front-desk, nurse or doctor role (admin, auditor, owner, worker, patient) reads | 403 for every other identity (matrix) | none |
 | Keys: a key version that is not loaded, or a tampered ciphertext | Fixed 503, never a partial answer; rotation drill exists (`docs/runbooks/key_rotation.md`) | item 12 (keys in `.env.cli` were exposed in an upload and must be rotated) |
 | The view is turned on with real data | Off unless profile `demo` AND data policy `synthetic_only`; otherwise 503 | the privacy owner's written confirmation of the field list is required first (item 17) |
+
+## 6. Break-glass access (migrations 0058, 0062)
+**Protects:** a patient's messages from staff whose role does not normally reach them (front desk cannot read the care topic), while still allowing an emergency read.
+**Shape:** a time-limited grant for ONE patient, opened with a reason CODE from an owner-kept list; reads return ciphertext the application decrypts; an admin reviews afterwards.
+| Threat | Control | Residual |
+|---|---|---|
+| A staff member opens grants for curiosity | A reason code from the owner-kept table (no free text), a window of at most 4 hours, a cap on re-opens per person and patient in 24 hours, every read an audit row (refusals too), review by an admin who did not open it | the cap and window are numbers the application passes in; a bug that runs SQL as the application role could pass larger ones |
+| A reviewer is the opener | `reviewed_by <> opened_by` as a table check and in the function | one human holding two accounts |
+| Reads after the window, after review, after the patient is erased, or by a colleague | The read function checks holder, window, review state, erased patient and a live staff role on every call | none known |
+| The second factor is old | The database checks `aal2` is present, not how old it is | the read route does not ask for step-up (gap audit) |
+
+## 7. The patient portal: rights, grievances, download (0049, 0051, 0059, 0062)
+**Protects:** the patient's own data and the clinic's grievance trail.
+| Threat | Control | Residual |
+|---|---|---|
+| A patient reads another patient's grievance, messages or bookings | Every read function filters by the caller's own bound record; policies compare `account_id = auth.uid()`; the export never includes the care topic below the `active` stage nor clinical notes | an automatically claimed account never reaches `active` (owner question) |
+| A staff member forges a stage | `iam.patient_stage()` is derived from claim rows only a front-desk definer function can resolve | none known |
+| Grievance text leaks through a log or an audit row | Stored encrypted (bound to clinic and id); audit rows carry the category only | the admin who reads the list sees the text (by design) |
+| A download is silently cut | The functions return one row more than the cap and the route sets `truncated` | none |
+
+## 8. Staff recovery (0060)
+**Protects:** the second factor of a staff account.
+| Threat | Control | Residual |
+|---|---|---|
+| One person resets a factor alone | Request by one admin, approval by a DIFFERENT admin who is not the account; checks repeated in the table constraints | one human holding two admin accounts (checklist 58) |
+| An admin of clinic A weakens an account that also works at clinic B | A request is refused for an account with a live role in any other clinic, at request AND at approval | recovery of multi-clinic accounts is outside this path |
+| The factor is reset before the database agrees | The route calls the Auth port only after the database returned a fresh completion in the same transaction; a port failure rolls it back | the real Auth call is unverified and unwired |
+
+## 9. The audited erasure path (0032, 0056, 0057, 0059, 0061)
+**Protects:** the right to erasure without breaking the append-only ledgers.
+| Threat | Control | Residual |
+|---|---|---|
+| One person erases a patient | Two different front-desk people; the function is the only path, with column-level grants that give the application role no update on the erased columns | none known |
+| Erased text survives in a later table | Each new table that holds patient text (messages, voice chunks, plan text, results, grievances, notes) is added to the same function in the migration that creates it, with a live test; the guards allow only the erase and rotation transitions, for the owner too | tokens, result codes/times, audit rows and message headers are kept by decision (checklist 61) |
+
+## 10. The clinical record and the scheduled purge (0050, 0061, 0063)
+| Threat | Control | Residual |
+|---|---|---|
+| A wrong result is silently acted on | A correction (declared, or inferred; a declared amendment cannot hide a same-instant correction) raises a doctor review task per step that used it | an in-flight run is not stopped; no 30-day window |
+| Expired voice words stay in the database | The worker tick deletes expired chunks through a worker-only definer function (one audit row per run that deleted something) | the purge needs the retention setting; other agent working state has no scheduled purge yet |
+| A note is edited | Append-only, an addendum is a new row; the guard allows only erase and re-encryption | none |
 
 ## What this note does NOT claim
 That the system is secure against a compromised API process, a stolen database password or a hostile operator. Those depend on hosting, secrets management and monitoring that do not exist yet (items 26 to 28). The review of all migrations (`rls-security-reviewer`) and the spec review are separate passes; their findings are recorded where they are reported, not here.

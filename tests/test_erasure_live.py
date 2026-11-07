@@ -13,7 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from tests.db_helpers import ensure_app_role_sa
+from tests.db_helpers import aal2_claims, ensure_app_role_sa
 
 ROOT = Path(__file__).resolve().parent.parent
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or dotenv_values(ROOT / ".env").get("DATABASE_URL_MIGRATOR")
@@ -79,7 +79,7 @@ async def world(conn) -> World:
 async def call(db, uid, sql, **params):
     async with db.begin_nested():
         await db.exec_driver_sql("set local role careflow_app")
-        await db.execute(text("select set_config('request.jwt.claims', :c, true)"), {"c": json.dumps({"sub": str(uid), "role": "authenticated"})})
+        await db.execute(text("select set_config('request.jwt.claims', :c, true)"), {"c": json.dumps(aal2_claims(uid))})
         value = (await db.execute(text(sql), params)).scalar()
         await db.exec_driver_sql("reset role")
         return value
@@ -156,7 +156,7 @@ async def test_the_application_role_can_neither_write_the_ledger_nor_update_the_
         with pytest.raises(Exception, match="permission denied"):
             async with db.begin_nested():
                 await db.exec_driver_sql("set local role careflow_app")
-                await db.execute(text("select set_config('request.jwt.claims', :c, true)"), {"c": json.dumps({"sub": str(w.people["fd1"]), "role": "authenticated"})})
+                await db.execute(text("select set_config('request.jwt.claims', :c, true)"), {"c": json.dumps(aal2_claims(w.people["fd1"]))})
                 await db.exec_driver_sql(statement)
     async with db.begin_nested():  # and a row lock still works (lock_version is the one updatable column)
         await db.exec_driver_sql("set local role careflow_app")

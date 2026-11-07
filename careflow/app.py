@@ -165,7 +165,11 @@ from careflow.phase4_sql import (
     reviewer_stats_rows,
     watchdog_sweep,
 )
-from careflow.producer_sweeps import care_gap_overdue_sweep, sampler_sweep
+from careflow.producer_sweeps import (
+    care_gap_overdue_sweep,
+    sampler_sweep,
+    voice_purge_sweep,
+)
 from careflow.queue import NotPermitted as QueueNotPermitted
 from careflow.queue import PostgresQueue
 from careflow.readiness import check_readiness, parse_required_roles
@@ -3864,6 +3868,11 @@ async def dashboard_data(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, A
         "dead_letter_count": "select count(*) from ops.queue where clinic_id = :c and state = 'dead_lettered'",
         "review_queue_age": "select coalesce(extract(epoch from clock_timestamp() - min(created_at)), 0) from agents.review_tasks where clinic_id = :c and status = 'open'",
         "care_gap_open_count": "select (select count(*) from ops.care_barriers where clinic_id = :c and status = 'open') + (select count(*) from ops.care_review_samples where clinic_id = :c and rechecked_at is null)",
+        # median age in DAYS of the open barriers and the samples awaiting a re-check (overdue recurrences are computed from rule definitions in code and are not in this number); no open item is a median of 0
+        "care_gap_median_age": (
+            "select coalesce(percentile_cont(0.5) within group (order by extract(epoch from clock_timestamp() - x.t) / 86400.0), 0) from ("
+            "select opened_at as t from ops.care_barriers where clinic_id = :c and status = 'open' union all select sampled_at from ops.care_review_samples where clinic_id = :c and rechecked_at is null) x"
+        ),
     }
     metrics: list[DashboardMetricOut] = []
     for metric_id, sql in queries.items():
@@ -5140,6 +5149,7 @@ def create_app(
         watchdog_limits = limits_from(p4env.get("CAREFLOW_WATCHDOG_LIMITS"))
         sign_in_url = p4env.get("CAREFLOW_SIGN_IN_URL") or "(sign-in link not configured)"
         sweeps.append(lambda conn: watchdog_sweep(conn, AlertRouter(SqlAlertSink(conn), {}, sign_in_url), deadlines, watchdog_limits))
+        sweeps.append(lambda conn: voice_purge_sweep(conn, app.state.voice_retention_days))  # deletes EXPIRED voice transcript chunks (migration 0063); nothing while the retention setting is unset
         sweeps.append(lambda conn: care_gap_overdue_sweep(conn, app.state.care_gap_alert_days))  # raises nothing while the alert age is unset
         try:
             review_sample_rate = learning_labels.sample_rate_from(p4env)
