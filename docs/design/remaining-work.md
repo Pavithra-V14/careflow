@@ -1,4 +1,6 @@
-# Remaining work (2026-10-30)
+# Remaining work (2026-10-30; HISTORICAL)
+
+**Superseded 2026-11-08:** the current list of what is still fake, unbuilt, undecided or unmeasured is `docs/gap-audit.md`; the launch conditions are `docs/design/pre-launch-checklist.md` (rows 1 to 62). This file keeps the 2026-10-30 engineering plan for history only; rows marked DONE here were not re-verified.
 
 Written from BUILD-SPEC.md Appendix D (phases 0 to 10), the Phase 2 and Phase 3 acceptance criteria, `phase2-status.md`'s checklist, `frontend-contract.md`, and the decisions recorded in the design notes. "Blocked" means exactly what it says: the item cannot be done without the named person or thing, and nothing in it may be worked around.
 
