@@ -43,6 +43,7 @@ VARIABLES: Final = {
     "visit_readiness_content": "CAREFLOW_VISIT_READINESS_CONTENT",
     "visit_readiness_task_priority": "CAREFLOW_VISIT_READINESS_TASK_PRIORITY",
     "voice_transcript_retention_days": "CAREFLOW_VOICE_TRANSCRIPT_RETENTION_DAYS",
+    "clinic_time_zone": "CAREFLOW_CLINIC_TIME_ZONE",
 }
 
 

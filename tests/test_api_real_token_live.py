@@ -99,7 +99,8 @@ def test_the_app_accepts_a_real_token_and_rejects_a_tampered_copy(real_user):
     with TestClient(app, raise_server_exceptions=False) as client:
         ok = client.get("/v1/iam/me", headers={"Authorization": f"Bearer {token}"})
         assert ok.status_code == 200, ok.text
-        assert ok.json() == {"account_id": str(user_id), "account_type": "staff", "status": "active", "roles": [{"clinic_id": str(clinic), "role": "nurse", "clinic_name": "Real Token Clinic", "clinic_origin": "test"}], "operating_profile": ok.json()["operating_profile"]}
+        assert ok.json() == {"account_id": str(user_id), "account_type": "staff", "status": "active", "roles": [{"clinic_id": str(clinic), "role": "nurse", "clinic_name": "Real Token Clinic", "clinic_origin": "test"}], "operating_profile": ok.json()["operating_profile"], "clinic_time_zone": ok.json()["clinic_time_zone"]}
+        assert ok.json()["clinic_time_zone"] in ("Asia/Calcutta", None)
         assert ok.json()["operating_profile"] in ("demo", "clinical", None)
         header, payload, signature = token.split(".")
         flipped = signature[:-2] + ("AA" if signature[-2:] != "AA" else "BB")

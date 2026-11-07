@@ -2758,6 +2758,17 @@
             "title": "Account Type",
             "type": "string"
           },
+          "clinic_time_zone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clinic Time Zone"
+          },
           "operating_profile": {
             "anyOf": [
               {
@@ -2790,7 +2801,8 @@
           "account_type",
           "status",
           "roles",
-          "operating_profile"
+          "operating_profile",
+          "clinic_time_zone"
         ],
         "title": "Me",
         "type": "object"
@@ -3232,6 +3244,18 @@
             "title": "Hold Id",
             "type": "string"
           },
+          "message_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
           "patient_id": {
             "anyOf": [
               {
@@ -3270,7 +3294,8 @@
           "created_at",
           "expires_at",
           "delivered_at",
-          "channel"
+          "channel",
+          "message_id"
         ],
         "title": "OfferRowOut",
         "type": "object"

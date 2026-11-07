@@ -371,16 +371,27 @@ def operating_profile() -> Literal["demo", "clinical"] | None:
     return raw if raw in OPERATING_PROFILES else None  # type: ignore[return-value]
 
 
+_TIME_ZONE_SHAPE: Final = re.compile(r"^[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+){0,2}$")
+
+
+def clinic_time_zone(value: str | None) -> str | None:
+    """The clinic's IANA time zone name from the REQUIRED setting CAREFLOW_CLINIC_TIME_ZONE, or None when unset or not shaped like a zone name (never a guess; the frontend resolves the name). The demo pack carries
+    the labelled placeholder Asia/Calcutta."""
+    v = (value or "").strip()
+    return v if 0 < len(v) <= 64 and _TIME_ZONE_SHAPE.match(v) else None
+
+
 class Me(BaseModel):
     account_id: uuid.UUID
     account_type: str
     status: str
     roles: list[RoleGrant]
     operating_profile: Literal["demo", "clinical"] | None  # the deployment's profile (demo or clinical); null when unset or unrecognised
+    clinic_time_zone: str | None  # the required setting CAREFLOW_CLINIC_TIME_ZONE (an IANA name); null while unset. Under the demo pack: the labelled placeholder Asia/Calcutta
 
 
 @router.get("/v1/iam/me", response_model=Me)
-async def me(conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> Me:
+async def me(request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> Me:
     # EVERY live grant, whatever X-CareFlow-Active-Role says: the header is ignored here on purpose (TxConnAllGrants). Kept out of the docstring so the OpenAPI snapshot is unchanged.
     """The caller's own active profile: account type, status, and live staff role grants.
 
@@ -410,6 +421,7 @@ async def me(conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_cl
         status=account.status,
         roles=[RoleGrant(clinic_id=g.clinic_id, role=g.role, clinic_name=g.clinic_name, clinic_origin=g.clinic_origin) for g in grants],
         operating_profile=operating_profile(),
+        clinic_time_zone=getattr(request.app.state, "clinic_time_zone", None),
     )
 
 
@@ -1405,6 +1417,7 @@ class OfferRowOut(_Out):
     expires_at: datetime
     delivered_at: datetime | None
     channel: Literal["manual"] | None
+    message_id: uuid.UUID | None  # the offer's own message (null when you may not see it)
 
 
 class OfferRowList(_Out):
@@ -1422,6 +1435,7 @@ class MarkDeliveredOut(_Out):
 
 _OFFERS_SQL = (
     "with o as (select h.id, h.clinic_id, h.slot_id, h.patient_id, h.created_at, h.expires_at, d.delivered_at, d.channel, "
+    "(select m.id from msg.messages m where m.clinic_id = h.clinic_id and m.idempotency_key = 'offer-message:' || substr(h.idempotency_key, 12) limit 1) as message_id, "
     "case when h.status = 'converted' then 'booked' when h.status = 'released' then 'released' "
     "when h.status <> 'active' or h.expires_at <= clock_timestamp() then 'expired' when d.delivered_at is not null then 'delivered' else 'awaiting_delivery' end as state "
     "from sched.holds h left join sched.offer_deliveries d on d.hold_id = h.id "
@@ -1438,7 +1452,7 @@ async def list_offers(conn: TxConn, claims: dict[str, Any] = Depends(verified_cl
     items = [
         OfferRowOut(
             hold_id=r.id, clinic_id=r.clinic_id, slot_id=r.slot_id, patient_id=r.patient_id, state=r.state, created_at=r.created_at, expires_at=r.expires_at, delivered_at=r.delivered_at,
-            channel=r.channel,
+            channel=r.channel, message_id=r.message_id,
         )
         for r in rows[:limit]
     ]
@@ -4444,6 +4458,7 @@ def create_app(
         app.state.voice_feature_on = voice_feature_on(os.environ)
         app.state.voice_engine = None  # no real voice engine exists (owner decision 2026-11-06): the session route answers 503
         app.state.voice_retention_days = _positive_int(p4env.get('CAREFLOW_VOICE_TRANSCRIPT_RETENTION_DAYS'))
+        app.state.clinic_time_zone = clinic_time_zone(p4env.get("CAREFLOW_CLINIC_TIME_ZONE"))
         app.state.care_gap_alert_days = _positive_int(p4env.get('CAREFLOW_CARE_GAP_ALERT_DAYS'))
         try:
             app.state.care_gap_rules = care_gap_rules.parse(p4env.get("CAREFLOW_CARE_GAP_RULES"))
