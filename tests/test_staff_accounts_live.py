@@ -76,7 +76,7 @@ async def call(db, uid, sql, aal=None, **params):
     """Run one SELECT of a function as `uid` (claims set, optionally with a verified second factor). A refusal raises and rolls the savepoint back."""
     async with db.begin_nested():
         await db.exec_driver_sql("set local role careflow_app")
-        claims = {"sub": str(uid), "role": "authenticated", "aal": aal} if aal == "aal1" else aal2_claims(uid)  # (aal1 is the one weak claim a test passes; everything else carries a verified factor)
+        claims = {"sub": str(uid), "role": "authenticated", "aal": aal} if aal == "aal1" else {"sub": str(uid), "role": "authenticated"} if aal == "none" else aal2_claims(uid)  # (aal1 and "none" are the weak claims a test passes; everything else carries a verified factor)
         await db.execute(text("select set_config('request.jwt.claims', :c, true)"), {"c": json.dumps(claims)})
         value = (await db.execute(text(sql), params)).scalar()
         await db.exec_driver_sql("reset role")
@@ -166,7 +166,7 @@ async def test_an_admin_cannot_activate_an_invited_account_only_the_person_with_
     with pytest.raises(Exception, match=REFUSED):
         await call(db, w.people["admin1"], STATUS, a=new, s="active", k="s-act")  # invited is not reinstated by an admin
     with pytest.raises(Exception, match=REFUSED):
-        await call(db, new, "select iam.activate_own_account()")  # no second factor in the token
+        await call(db, new, "select iam.activate_own_account()", aal="none")  # no second factor in the token
     with pytest.raises(Exception, match=REFUSED):
         await call(db, new, "select iam.activate_own_account()", aal="aal1")
     assert await call(db, new, "select iam.activate_own_account()", aal="aal2") is True
