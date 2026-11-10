@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/public/clinic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public Clinic
+         * @description The hospital's clinic id and name, for the forms of a patient who is not signed in yet (a claim or a grievance needs the clinic id). 404 while the owner has marked no clinic public. Nothing else is returned.
+         */
+        get: operations["public_clinic_public_clinic_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/readyz": {
         parameters: {
             query?: never;
@@ -103,6 +123,26 @@ export interface paths {
          * @description Grant or withdraw one consent purpose against the CURRENT notice of that purpose. Idempotent on the key. 403 unless you are a patient account (invited or active); 409 if the notice is not the current one for that purpose.
          */
         post: operations["portal_record_consent_v1_portal_consents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/portal/grievance-categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Grievance Categories
+         * @description The category words a grievance may use (the required setting CAREFLOW_GRIEVANCE_CATEGORIES), sorted. 403 unless you are an active patient account, 503 while the list is not configured.
+         */
+        get: operations["grievance_categories_v1_portal_grievance_categories_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -415,6 +455,46 @@ export interface paths {
          * @description Open a time-limited grant to read ONE patient's messages, with a reason code from the clinic's list (kept by the owner, not the application). 404 if the clinic or patient is not visible to you, 403 unless you are front desk, nurse or doctor there (with a recent second factor), 422 for a reason code that is not on the list, 409 past the re-open cap, 503 while the clinic has no limits row.
          */
         post: operations["open_break_glass_v1_staff_break_glass_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/break-glass/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My Open Break Glass Grants
+         * @description YOUR grants that are still open (not expired, not reviewed), soonest to expire first, so a page reload can pick one up again. 404 if the clinic is not visible to you, 403 unless you are front desk, nurse or doctor there.
+         */
+        get: operations["my_open_break_glass_grants_v1_staff_break_glass_mine_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/break-glass/reasons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Break Glass Reasons
+         * @description The reason codes the clinic accepts for a break-glass grant (the owner-kept list), sorted. 404 if the clinic is not visible to you, 403 unless you are front desk, nurse, doctor or admin there.
+         */
+        get: operations["break_glass_reasons_v1_staff_break_glass_reasons_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2161,6 +2241,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/visits/upcoming": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Upcoming Visits
+         * @description Confirmed visits that have not started yet, soonest first: ids and times only (never a name). It gives visit readiness the visit id to work with. 404 if the clinic is not visible to you, 403 unless you are a nurse or doctor there.
+         */
+        get: operations["upcoming_visits_v1_staff_visits_upcoming_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/visits/{visit_id}/readiness": {
         parameters: {
             query?: never;
@@ -2784,20 +2884,56 @@ export interface components {
             message_id: string;
             /** Readable */
             readable: boolean;
-            /** Sender Kind */
-            sender_kind: string;
+            /**
+             * Sender Kind
+             * @enum {string}
+             */
+            sender_kind: "patient" | "staff" | "system";
             /**
              * Thread Id
              * Format: uuid
              */
             thread_id: string;
-            /** Topic */
-            topic: string;
+            /**
+             * Topic
+             * @enum {string}
+             */
+            topic: "care" | "appointments" | "safety" | "readiness";
         };
         /** BreakGlassMessages */
         BreakGlassMessages: {
             /** Messages */
             messages: components["schemas"]["BreakGlassMessageOut"][];
+        };
+        /** BreakGlassMine */
+        BreakGlassMine: {
+            /** Grants */
+            grants: components["schemas"]["BreakGlassMineRowOut"][];
+        };
+        /** BreakGlassMineRowOut */
+        BreakGlassMineRowOut: {
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /**
+             * Grant Id
+             * Format: uuid
+             */
+            grant_id: string;
+            /**
+             * Opened At
+             * Format: date-time
+             */
+            opened_at: string;
+            /**
+             * Patient Id
+             * Format: uuid
+             */
+            patient_id: string;
+            /** Reason Code */
+            reason_code: string;
         };
         /** BreakGlassOpenIn */
         BreakGlassOpenIn: {
@@ -2828,6 +2964,11 @@ export interface components {
              * Format: uuid
              */
             grant_id: string;
+        };
+        /** BreakGlassReasonsOut */
+        BreakGlassReasonsOut: {
+            /** Reasons */
+            reasons: string[];
         };
         /** BreakGlassReviewIn */
         BreakGlassReviewIn: {
@@ -3154,10 +3295,13 @@ export interface components {
              */
             clinic_id: string;
             /** Reasons */
-            reasons: string[];
+            reasons: ("fewer than seven days of measured traffic" | "no completed workflows" | "platform floor (P) is not configured" | "reviewer rates are not configured" | "a reviewer role has no configured rate" | "reviewer minutes are not measured yet" | "retry cost is not measured yet")[];
             shadow: components["schemas"]["CostColumnOut"] | null;
-            /** State */
-            state: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "insufficient_data" | "unconfigured" | "ok";
         };
         /** CostColumnOut */
         CostColumnOut: {
@@ -3456,10 +3600,16 @@ export interface components {
              * Format: uuid
              */
             message_id: string;
-            /** Sender Kind */
-            sender_kind: string;
-            /** Topic */
-            topic: string;
+            /**
+             * Sender Kind
+             * @enum {string}
+             */
+            sender_kind: "patient" | "staff" | "system";
+            /**
+             * Topic
+             * @enum {string}
+             */
+            topic: "care" | "appointments" | "safety" | "readiness";
         };
         /** ExportRecordOut */
         ExportRecordOut: {
@@ -3476,6 +3626,11 @@ export interface components {
             name: string | null;
             /** Phone */
             phone: string | null;
+        };
+        /** GrievanceCategoriesOut */
+        GrievanceCategoriesOut: {
+            /** Categories */
+            categories: string[];
         };
         /** GrievanceFiledOut */
         GrievanceFiledOut: {
@@ -3961,8 +4116,11 @@ export interface components {
              * Format: uuid
              */
             message_id: string;
-            /** Sender Kind */
-            sender_kind: string;
+            /**
+             * Sender Kind
+             * @enum {string}
+             */
+            sender_kind: "patient" | "staff" | "system";
             /**
              * Thread Id
              * Format: uuid
@@ -4063,6 +4221,8 @@ export interface components {
             body: string;
             /** Decision */
             decision: boolean | null;
+            /** Label */
+            label: string | null;
             /**
              * Notice Id
              * Format: uuid
@@ -4393,6 +4553,16 @@ export interface components {
              */
             provider_id: string;
         };
+        /** PublicClinicOut */
+        PublicClinicOut: {
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /** Name */
+            name: string;
+        };
         /** ReadinessReplyIn */
         ReadinessReplyIn: {
             /** Body */
@@ -4409,8 +4579,11 @@ export interface components {
             current_item: string | null;
             /** Finished */
             finished: boolean;
-            /** Status */
-            status: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "started" | "nothing_to_ask" | "asked" | "reply_in" | "screened" | "red_flag_escalated" | "held_unassessable" | "classified" | "fact_written" | "fact_not_grounded" | "next" | "readiness_recorded" | "nurse_escalated" | "incomplete_flagged" | "brief_stored" | "brief_unavailable" | "no_reply" | "barrier_classified" | "barrier_unknown" | "rebooking_handed_off";
             /** Task Id */
             task_id: string | null;
             /**
@@ -4921,8 +5094,11 @@ export interface components {
             rejections: number;
             /** Reviewer */
             reviewer: string;
-            /** Verdict */
-            verdict: string;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "not_configured" | "too_few" | "ok" | "review";
         };
         /** ReviewerStatsOut */
         ReviewerStatsOut: {
@@ -5335,6 +5511,39 @@ export interface components {
              */
             status: "unmerged";
         };
+        /** UpcomingVisitList */
+        UpcomingVisitList: {
+            /** Visits */
+            visits: components["schemas"]["UpcomingVisitOut"][];
+        };
+        /** UpcomingVisitOut */
+        UpcomingVisitOut: {
+            /**
+             * Ends At
+             * Format: date-time
+             */
+            ends_at: string;
+            /**
+             * Patient Id
+             * Format: uuid
+             */
+            patient_id: string;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+            /**
+             * Visit Id
+             * Format: uuid
+             */
+            visit_id: string;
+            /**
+             * Visit Type Id
+             * Format: uuid
+             */
+            visit_type_id: string;
+        };
         /** ValidationErrorBody */
         ValidationErrorBody: {
             /** Detail */
@@ -5472,10 +5681,16 @@ export interface components {
              * Format: date-time
              */
             started_at: string;
-            /** Status */
-            status: string;
-            /** Workflow */
-            workflow: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "ended";
+            /**
+             * Workflow
+             * @enum {string}
+             */
+            workflow: "slot_offer" | "intake_question" | "readiness_item";
         };
         /** VoiceTranscriptOut */
         VoiceTranscriptOut: {
@@ -5574,6 +5789,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    public_clinic_public_clinic_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicClinicOut"];
+                };
+            };
+        };
+    };
     readyz_readyz_get: {
         parameters: {
             query?: never;
@@ -5842,6 +6077,53 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+        };
+    };
+    grievance_categories_v1_portal_grievance_categories_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GrievanceCategoriesOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -6853,6 +7135,122 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    my_open_break_glass_grants_v1_staff_break_glass_mine_get: {
+        parameters: {
+            query: {
+                clinic_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BreakGlassMine"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+        };
+    };
+    break_glass_reasons_v1_staff_break_glass_reasons_get: {
+        parameters: {
+            query: {
+                clinic_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BreakGlassReasonsOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
                 };
             };
         };
@@ -12614,6 +13012,65 @@ export interface operations {
             };
             /** @description Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+        };
+    };
+    upcoming_visits_v1_staff_visits_upcoming_get: {
+        parameters: {
+            query: {
+                clinic_id: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpcomingVisitList"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

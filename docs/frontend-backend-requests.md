@@ -199,6 +199,13 @@ either the hospital's id on a public configuration route, or the clinic implied 
 be on the clinic's list but no route returns the list, so the form takes a code limited to its shape and the backend answers 422 if it is
 not on the list. A route that lists the categories (with labels) would let the form show a picklist.
 
+### 16. A route to store the patient's typed reply
+
+The offer run's reply step takes the id of a STORED message (`POST .../backfills/{slot_id}/reply` and `POST .../offers/interpret-reply` both
+need `message_id`), but no route in the snapshot creates one, so the front desk cannot type in what a patient said. The console lets the
+person pick a stored reply from the patient's appointments thread, read it, see a suggested reading and enter it; it cannot store new text.
+A route to record a staff-entered reply (topic appointments, sender recorded, audited) would complete the step.
+
 ## Decisions recorded here for later readers
 
 - **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;

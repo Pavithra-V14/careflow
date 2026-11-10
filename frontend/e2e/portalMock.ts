@@ -63,6 +63,8 @@ export async function installPortalMock(page: Page, scenario: PortalScenario = {
     calls.push({ method, path, key: req.headers()['x-idempotency-key'] ?? null, body });
     if (!req.headers()['authorization']?.startsWith('Bearer ')) return reply(route, 401, { detail: 'not authenticated' });
 
+    if (method === 'GET' && path === '/public/clinic') return reply(route, 200, { clinic_id: '3f2b8c1e-6a4d-4e1b-9d0a-1c2d3e4f5a6b', name: 'Placeholder Hospital' });
+    if (method === 'GET' && path === '/v1/portal/grievance-categories') return reply(route, 200, { categories: ['access', 'service_quality'] });
     if (method === 'GET' && path === '/v1/portal/me') {
       if (stage === 'none') return refuse(route, 403);
       return reply(route, 200, { bound_to_a_patient_record: bound, consents: { care_delivery: granted ? true : null }, stage, status: stage === 'active' ? 'active' : 'invited' });
@@ -73,7 +75,7 @@ export async function installPortalMock(page: Page, scenario: PortalScenario = {
       return reply(route, 201, { result: exists ? 'exists' : 'registered' });
     }
     if (method === 'GET' && path === '/v1/portal/consents') {
-      return reply(route, 200, { notices: [{ body: 'Notice line one.\nNotice line two <b>not markup</b>.', decision: granted ? true : null, notice_id: '11111111-1111-4111-8111-111111111111', purpose: 'care_delivery', version: 3 }] });
+      return reply(route, 200, { notices: [{ body: 'Notice line one.\nNotice line two <b>not markup</b>.', decision: granted ? true : null, notice_id: '11111111-1111-4111-8111-111111111111', label: 'Placeholder label', purpose: 'care_delivery', version: 3 }] });
     }
     if (method === 'POST' && path === '/v1/portal/consents') {
       const b = body as { action?: string };

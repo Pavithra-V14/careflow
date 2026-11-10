@@ -15,6 +15,10 @@ export type DuplicateStatus = NonNullable<DuplicateQuery['status']>;
 type TaskQuery = NonNullable<paths['/v1/staff/review-tasks']['get']['parameters']['query']>;
 type ReviewTaskStatus = TaskQuery['status'];
 type TaskRole = NonNullable<TaskQuery['assigned_role']>;
+export type BackfillAction = components['schemas']['BackfillDecideIn']['action'];
+type BackfillReplyIn = components['schemas']['BackfillReplyIn'];
+type ThreadQuery = NonNullable<paths['/v1/staff/messages/threads']['get']['parameters']['query']>;
+type ThreadTopic = NonNullable<ThreadQuery['topic']>;
 export type ConsentIn = components['schemas']['ConsentIn'];
 export type ClaimIn = components['schemas']['ClaimIn'];
 export type GrievanceIn = components['schemas']['GrievanceIn'];
@@ -110,6 +114,20 @@ export const OPERATIONS = {
   createCarePlan: { method: 'post', path: '/v1/staff/care-plans' },
   confirmCarePlan: { method: 'post', path: '/v1/staff/care-plans/{plan_id}/confirm' },
   recordResult: { method: 'post', path: '/v1/staff/results' },
+  // ---- backfill: an offer run for a freed slot (nothing is sent to a patient) ----
+  startBackfill: { method: 'post', path: '/v1/staff/scheduling/backfills' },
+  backfillState: { method: 'get', path: '/v1/staff/scheduling/backfills/{slot_id}' },
+  decideBackfill: { method: 'post', path: '/v1/staff/scheduling/backfills/{slot_id}/decide' },
+  replyBackfill: { method: 'post', path: '/v1/staff/scheduling/backfills/{slot_id}/reply' },
+  interpretReply: { method: 'post', path: '/v1/staff/scheduling/offers/interpret-reply' },
+  listThreads: { method: 'get', path: '/v1/staff/messages/threads' },
+  listThreadMessages: { method: 'get', path: '/v1/staff/messages/threads/{thread_id}/messages' },
+  // ---- lists that replace typing: clinic, grievance categories, break-glass reasons and grants, upcoming visits ----
+  publicClinic: { method: 'get', path: '/public/clinic' },
+  grievanceCategories: { method: 'get', path: '/v1/portal/grievance-categories' },
+  breakGlassReasons: { method: 'get', path: '/v1/staff/break-glass/reasons' },
+  breakGlassMine: { method: 'get', path: '/v1/staff/break-glass/mine' },
+  upcomingVisits: { method: 'get', path: '/v1/staff/visits/upcoming' },
   // ---- the patient portal (patient session only) ----
   portalRegister: { method: 'post', path: '/v1/portal/register' },
   portalMe: { method: 'get', path: '/v1/portal/me' },
@@ -367,6 +385,26 @@ export function createApi(options: ApiOptions) {
     confirmCarePlan: (planId: string, action: CarePlanAction, o?: WriteOptions) =>
       client.POST('/v1/staff/care-plans/{plan_id}/confirm', { params: { path: { plan_id: planId }, header: { 'X-Idempotency-Key': key(o) } }, body: { action } }),
     recordResult: (body: ResultIn, o?: WriteOptions) => client.POST('/v1/staff/results', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+
+    // ---- backfill: an offer run for a freed slot. Nothing here sends anything to a patient. -----------------------------------
+    startBackfill: (body: { clinic_id: string; slot_id: string; visit_type_id: string }, o?: WriteOptions) =>
+      client.POST('/v1/staff/scheduling/backfills', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    backfillState: (slotId: string) => client.GET('/v1/staff/scheduling/backfills/{slot_id}', { params: { path: { slot_id: slotId } } }),
+    decideBackfill: (slotId: string, action: BackfillAction, o?: WriteOptions) =>
+      client.POST('/v1/staff/scheduling/backfills/{slot_id}/decide', { params: { path: { slot_id: slotId }, header: { 'X-Idempotency-Key': key(o) } }, body: { action } }),
+    replyBackfill: (slotId: string, body: BackfillReplyIn, o?: WriteOptions) =>
+      client.POST('/v1/staff/scheduling/backfills/{slot_id}/reply', { params: { path: { slot_id: slotId }, header: { 'X-Idempotency-Key': key(o) } }, body }),
+    interpretReply: (messageId: string, o?: WriteOptions) =>
+      client.POST('/v1/staff/scheduling/offers/interpret-reply', { params: { header: { 'X-Idempotency-Key': key(o) } }, body: { message_id: messageId } }),
+    listThreads: (patientId: string, topic: ThreadTopic) => client.GET('/v1/staff/messages/threads', { params: { query: { patient_id: patientId, topic } } }),
+    listThreadMessages: (threadId: string) => client.GET('/v1/staff/messages/threads/{thread_id}/messages', { params: { path: { thread_id: threadId } } }),
+
+    // ---- lists that replace typing ------------------------------------------------------------------------------------------------
+    publicClinic: () => client.GET('/public/clinic'),
+    grievanceCategories: () => client.GET('/v1/portal/grievance-categories'),
+    breakGlassReasons: (clinicId: string) => client.GET('/v1/staff/break-glass/reasons', { params: { query: { clinic_id: clinicId } } }),
+    breakGlassMine: (clinicId: string) => client.GET('/v1/staff/break-glass/mine', { params: { query: { clinic_id: clinicId } } }),
+    upcomingVisits: (clinicId: string) => client.GET('/v1/staff/visits/upcoming', { params: { query: { clinic_id: clinicId } } }),
 
     // ---- the patient portal ---------------------------------------------------------------------------------------------------
     portalRegister: (o?: WriteOptions) => client.POST('/v1/portal/register', { params: { header: { 'X-Idempotency-Key': key(o) } } }),

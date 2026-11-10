@@ -44,6 +44,8 @@ function OpenGrant() {
   const id = useId();
   const [opening, setOpening] = useState(false);
   const [grant, setGrant] = useState<Grant | null>(null);
+  // My own grants that are still open, so a reload (or a second look) can pick one up again.
+  const mine = useApiQuery(['break-glass-mine'], () => unwrap(api.breakGlassMine(active.clinicId)));
   return (
     <>
       <h2>{t('access.openTitle')}</h2>
@@ -52,6 +54,44 @@ function OpenGrant() {
           {t('access.open')}
         </button>
       </p>
+      <h3>{t('access.mineTitle')}</h3>
+      <QueryView query={mine} isEmpty={(d) => d.grants.length === 0} empty={t('access.mineEmpty')}>
+        {(d) => (
+          <table>
+            <caption className="visually-hidden">{t('access.mineTitle')}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{t('access.col.grant')}</th>
+                <th scope="col">{t('access.col.patient')}</th>
+                <th scope="col">{t('access.col.reason')}</th>
+                <th scope="col">{t('access.col.expires')}</th>
+                <th scope="col">{t('access.col.action')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.grants.map((g) => (
+                <tr key={g.grant_id}>
+                  <th scope="row">
+                    <ShortId id={g.grant_id} />
+                  </th>
+                  <td>
+                    <ShortId id={g.patient_id} />
+                  </td>
+                  <td>{g.reason_code.replaceAll('_', ' ')}</td>
+                  <td>
+                    <Time value={g.expires_at} />
+                  </td>
+                  <td>
+                    <button type="button" aria-label={`${t('access.use')} ${g.grant_id.slice(0, 8)}`} onClick={() => setGrant({ grantId: g.grant_id, expiresAt: g.expires_at })}>
+                      {t('access.use')}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </QueryView>
       {grant && <Reading grant={grant} onClosed={() => setGrant(null)} />}
       {opening && (
         <OpenDialog
@@ -59,7 +99,10 @@ function OpenGrant() {
           canSearch={hasRole(CAN_SEARCH_PATIENTS)}
           onClose={(g) => {
             setOpening(false);
-            if (g) setGrant(g);
+            if (g) {
+              setGrant(g);
+              void mine.refetch();
+            }
           }}
           clinicId={active.clinicId}
           api={api}
@@ -75,6 +118,10 @@ function OpenDialog({ clinicId, api, canSearch, labelId, onClose }: { clinicId: 
   const [typed, setTyped] = useState('');
   const [reason, setReason] = useState('');
   const patientId = canSearch ? patient : UUID.test(typed.trim()) ? typed.trim() : null;
+  // The clinic's own list of reason codes. Nothing is pre-chosen. If the list cannot be read, the code is typed instead (its shape is checked,
+  // and the backend refuses a code that is not on the list).
+  const reasons = useApiQuery(['break-glass-reasons'], () => unwrap(api.breakGlassReasons(clinicId)));
+  const listed = reasons.data?.reasons ?? null;
   const valid = patientId !== null && REASON.test(reason.trim());
   const write = useIdempotentWrite(
     (_: void, key) => unwrap(api.openBreakGlass({ clinic_id: clinicId, patient_id: patientId as string, reason_code: reason.trim() }, { idempotencyKey: key })),
@@ -108,8 +155,25 @@ function OpenDialog({ clinicId, api, canSearch, labelId, onClose }: { clinicId: 
         </>
       )}
       <label htmlFor={`${labelId}-reason`}>{t('access.reasonCode')}</label>
-      <input id={`${labelId}-reason`} type="text" autoComplete="off" spellCheck={false} value={reason} onChange={(e) => touch(setReason)(e.target.value)} />
-      <p className="hint">{t('access.reasonHint')}</p>
+      {listed ? (
+        <select id={`${labelId}-reason`} value={reason} onChange={(e) => touch(setReason)(e.target.value)}>
+          <option value="">{t('access.chooseReason')}</option>
+          {listed.map((r) => (
+            <option key={r} value={r}>
+              {r.replaceAll('_', ' ')}
+            </option>
+          ))}
+        </select>
+      ) : reasons.isPending ? (
+        <p role="status" className="loading">
+          {t('common.loading')}
+        </p>
+      ) : (
+        <>
+          <input id={`${labelId}-reason`} type="text" autoComplete="off" spellCheck={false} value={reason} onChange={(e) => touch(setReason)(e.target.value)} />
+          <p className="hint">{t('access.reasonHint')}</p>
+        </>
+      )}
     </ConfirmDialog>
   );
 }

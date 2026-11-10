@@ -286,12 +286,12 @@ describe('admin: reviewer statistics and cost canvas', () => {
     const row = (await screen.findAllByRole('row'))[1] as HTMLElement;
     expect(within(row).getAllByText('Not recorded')).toHaveLength(2);
     expect(screen.getByText(/policy that judges rubber-stamping is not set/)).toBeInTheDocument();
-    expect(within(row).getByText('not configured')).toBeInTheDocument();
+    expect(within(row).getByText('Policy not set')).toBeInTheDocument();
   });
 
   it('keeps a null column and a null term null, with the reasons the backend gives', async () => {
     const column = { calls_per_workflow: null, failure_tax_per_month: null, platform_floor_per_month: 100, total_per_month: null, usd_per_call: null, workflows_per_day: 12, workload_x_amplification_x_unit_per_month: null };
-    const canvas = { actual: column, shadow: null, amplification_over_ceiling: false, clinic_id: CLINIC_A, reasons: ['insufficient_data'], state: 'insufficient_data' };
+    const canvas = { actual: column, shadow: null, amplification_over_ceiling: false, clinic_id: CLINIC_A, reasons: ['fewer than seven days of measured traffic', 'a sentence the console does not know yet'], state: 'insufficient_data' };
     await openConsole({ role: 'admin', hash: '/admin/cost', routes: [['get', '/v1/staff/console/cost-canvas', () => json(canvas)]] });
     const table = await screen.findByRole('table');
     const rows = within(table).getAllByRole('row').slice(1);
@@ -299,7 +299,9 @@ describe('admin: reviewer statistics and cost canvas', () => {
     expect(within(total).getByText('Not measured')).toBeInTheDocument();
     expect(within(total).getByText('No column')).toBeInTheDocument();
     expect(within(total).queryByText('0')).toBeNull();
-    expect(screen.getAllByText('insufficient data').length).toBeGreaterThan(0);
+    expect(screen.getByText('Not enough data')).toBeInTheDocument(); // the state, as a label
+    expect(screen.getByText('Fewer than seven days of measured traffic')).toBeInTheDocument(); // a known reason, labelled
+    expect(screen.getByText('a sentence the console does not know yet')).toBeInTheDocument(); // an unknown one is shown as sent, never hidden
   });
 
   it('is not available to a role the backend refuses', async () => {

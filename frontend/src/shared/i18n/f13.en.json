@@ -1,0 +1,76 @@
+{
+  "readiness": {
+    "statuses": {
+      "started": "Started",
+      "nothing_to_ask": "Nothing to ask",
+      "asked": "Question asked",
+      "reply_in": "Reply received",
+      "screened": "Reply screened",
+      "red_flag_escalated": "Red flag: escalated to a nurse",
+      "held_unassessable": "Held: could not be assessed",
+      "classified": "Reply classified",
+      "fact_written": "Fact recorded",
+      "fact_not_grounded": "Fact not grounded in the reply",
+      "next": "Moving to the next item",
+      "readiness_recorded": "Readiness recorded",
+      "nurse_escalated": "Escalated to a nurse",
+      "incomplete_flagged": "Flagged as incomplete",
+      "brief_stored": "Brief stored",
+      "brief_unavailable": "Brief unavailable",
+      "no_reply": "No reply",
+      "barrier_classified": "Barrier classified",
+      "barrier_unknown": "Barrier not known",
+      "rebooking_handed_off": "Handed off for rebooking"
+    }
+  },
+  "access": {
+    "sender": {
+      "patient": "Patient",
+      "staff": "Staff",
+      "system": "System"
+    },
+    "topic": {
+      "care": "Care",
+      "appointments": "Appointments",
+      "safety": "Safety",
+      "readiness": "Readiness"
+    }
+  },
+  "admin": {
+    "voice": {
+      "workflows": {
+        "slot_offer": "Slot offer",
+        "intake_question": "Intake question",
+        "readiness_item": "Readiness item"
+      },
+      "statuses": {
+        "open": "Open",
+        "ended": "Ended"
+      }
+    },
+    "reviewer": {
+      "verdicts": {
+        "not_configured": "Policy not set",
+        "too_few": "Too few decisions",
+        "ok": "OK",
+        "review": "Needs a look"
+      }
+    },
+    "cost": {
+      "states": {
+        "insufficient_data": "Not enough data",
+        "unconfigured": "Not configured",
+        "ok": "OK"
+      },
+      "reasonText": {
+        "fewerThanSevenDays": "Fewer than seven days of measured traffic",
+        "noCompleted": "No completed workflows",
+        "floorNotSet": "The platform floor (P) is not configured",
+        "ratesNotSet": "Reviewer rates are not configured",
+        "roleNoRate": "A reviewer role has no configured rate",
+        "minutesNotMeasured": "Reviewer minutes are not measured yet",
+        "retryNotMeasured": "Retry cost is not measured yet"
+      }
+    }
+  }
+}

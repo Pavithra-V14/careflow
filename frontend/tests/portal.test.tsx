@@ -10,6 +10,7 @@ import { CLINIC_A, fakeJwt, json, stubApi, type FakeApiRequest } from './helpers
 // backend's or Supabase's. Every error body carries LEAK, and a test asserts it never reaches the page.
 const LEAK = 'LEAK-SENTINEL-backend-text';
 const NOTICE = '11111111-1111-4111-8111-111111111111';
+const ID_2 = '22222222-2222-4222-8222-222222222222';
 const NOTICE_TEXT = 'Line one.\nLine two <b>not markup</b>.';
 
 function fakeAuth(options: { signedIn?: boolean } = {}) {
@@ -40,6 +41,8 @@ function backend(state: { stage: Stage | null; granted?: boolean | null; bound?:
     const special = extra(req);
     if (special) return special;
     const key = `${req.method} ${req.path}`;
+    if (key === 'get /public/clinic') return json({ clinic_id: CLINIC_A, name: 'Placeholder Hospital' });
+    if (key === 'get /v1/portal/grievance-categories') return json({ categories: ['access', 'service_quality'] });
     if (key === 'get /v1/portal/me') return state.stage === null ? json({ detail: LEAK }, 403) : json({ bound_to_a_patient_record: state.bound ?? false, consents: {}, stage: state.stage, status: 'x' });
     if (key === 'post /v1/portal/register') {
       state.stage = 'registered';
@@ -197,7 +200,8 @@ describe('an active account', () => {
     await mount(auth);
     const button = await screen.findByRole('button', { name: 'Link my record' });
     expect(button).toBeDisabled();
-    await user.type(screen.getByLabelText('Clinic code', { selector: '#claim-clinic' }), CLINIC_A);
+    expect((await screen.findAllByText('Hospital: Placeholder Hospital')).length).toBeGreaterThan(0); // the patient does not type a clinic id
+    expect(screen.queryByLabelText('Clinic code')).toBeNull();
     await user.type(screen.getByLabelText('Full name'), 'Test Person');
     await user.type(screen.getByLabelText('Date of birth'), '1990-02-03');
     await user.click(button);
@@ -217,12 +221,12 @@ describe('an active account', () => {
     const calls = stubApi(backend({ stage: 'active', granted: true, bound: true }, (req) => (req.method === 'post' && req.path === '/v1/portal/grievances' && status !== 201 ? json({ detail: LEAK }, status) : undefined)));
     await mount(auth);
     const send = await screen.findByRole('button', { name: 'Send' });
-    await user.type(screen.getByLabelText('Clinic code', { selector: '#gr-clinic' }), CLINIC_A);
-    await user.type(screen.getByLabelText('Category'), 'Not a code!');
     await user.type(screen.getByLabelText('What you want to tell us'), 'Typed words');
-    expect(send).toBeDisabled();
-    await user.clear(screen.getByLabelText('Category'));
-    await user.type(screen.getByLabelText('Category'), 'access');
+    expect(send).toBeDisabled(); // no category chosen yet: nothing is chosen for the person
+    const category = screen.getByLabelText('Category') as HTMLSelectElement;
+    expect(category.value).toBe('');
+    expect(within(category).getAllByRole('option').map((o) => o.textContent)).toEqual(['Choose a category', 'access', 'service quality']);
+    await user.selectOptions(category, 'access');
     await user.click(send);
     const dialog = screen.getByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Send' }));
@@ -251,6 +255,48 @@ describe('an active account', () => {
     expect(saved.truncated).toBe(true);
     expect(screen.getByText('The file does not hold everything: some lists were cut short.')).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('care_delivery'.concat('', '') === '' ? '' : 'granted'); // the contents are not rendered
+  });
+});
+
+describe('lists replace typing', () => {
+  it('asks for the clinic code only when the hospital has marked none public (404)', async () => {
+    const user = userEvent.setup();
+    const { auth } = fakeAuth({ signedIn: true });
+    const calls = stubApi(backend({ stage: 'active', granted: true }, (req) => (req.path === '/public/clinic' ? json({ detail: LEAK }, 404) : undefined)));
+    await mount(auth);
+    const field = await screen.findByLabelText('Clinic code', { selector: '#claim-clinic' });
+    await user.type(field, CLINIC_A);
+    await user.type(screen.getByLabelText('Full name'), 'Test Person');
+    await user.type(screen.getByLabelText('Date of birth'), '1990-02-03');
+    await user.click(screen.getByRole('button', { name: 'Link my record' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Link my record' }));
+    await screen.findByText('Your request was received. A person at the hospital will decide.');
+    expect(calls.find((c) => c.path === '/v1/portal/claims')?.body).toMatchObject({ clinic_id: CLINIC_A });
+    expect(document.body.textContent).not.toContain(LEAK);
+  });
+
+  it('takes the grievance category from the hospital list; a list that is not set up (503) blocks sending and says so; another failure falls back to a typed code', async () => {
+    const a = fakeAuth({ signedIn: true });
+    stubApi(backend({ stage: 'active', granted: true, bound: true }, (req) => (req.path === '/v1/portal/grievance-categories' ? json({ detail: LEAK }, 503) : undefined)));
+    const first = await mount(a.auth);
+    expect(await screen.findByText(/the category list or the encryption is not set up/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Category')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    first.unmount();
+    const b = fakeAuth({ signedIn: true });
+    stubApi(backend({ stage: 'active', granted: true, bound: true }, (req) => (req.path === '/v1/portal/grievance-categories' ? json({ detail: LEAK }, 500) : undefined)));
+    await mount(b.auth);
+    const typed = await screen.findByLabelText('Category');
+    expect(typed.tagName).toBe('INPUT');
+  });
+
+  it('shows the notice by its patient-facing label when it has one, and by its code when it has none', async () => {
+    const { auth } = fakeAuth({ signedIn: true });
+    stubApi(backend({ stage: 'registered' }, (req) => (req.path === '/v1/portal/consents' && req.method === 'get' ? json({ notices: [{ body: NOTICE_TEXT, decision: null, label: 'Placeholder label', notice_id: NOTICE, purpose: 'care_delivery', version: 3 }, { body: 'Second', decision: null, label: null, notice_id: ID_2, purpose: 'ai_processing', version: 1 }] }) : undefined)));
+    await mount(auth);
+    expect(await screen.findByText(/Placeholder label/)).toBeInTheDocument();
+    expect(screen.queryByText('care_delivery')).toBeNull();
+    expect(screen.getByText('ai_processing')).toBeInTheDocument();
   });
 });
 

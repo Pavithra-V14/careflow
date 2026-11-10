@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-1166 of 1166 strings are unreviewed.
+1304 of 1304 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -61,8 +61,10 @@ Terms standardised: proposal, resolve / resolved.
 | Key | English | Tamil | AI review |
 |---|---|---|---|
 | `access.appropriate` | Appropriate | பொருத்தமானது | ok |
+| `access.chooseReason` | Choose a reason | ஒரு காரணத்தைத் தேர்ந்தெடுங்கள் | ok |
 | `access.close` | Close | மூடு | ok |
 | `access.col.action` | Action | செயல் | ok |
+| `access.col.expires` | Expires | காலாவதி | ok |
 | `access.col.grant` | Grant | அனுமதி | ok |
 | `access.col.opened` | Opened | திறந்தது | ok |
 | `access.col.openedBy` | Opened by | திறந்தவர் | ok |
@@ -73,6 +75,8 @@ Terms standardised: proposal, resolve / resolved.
 | `access.inappropriate` | Inappropriate | பொருத்தமற்றது | ok |
 | `access.keysMissing` | Encryption keys are not configured, so the messages cannot be read. | குறியாக்க விசைகள் அமைக்கப்படவில்லை; எனவே செய்திகளைப் படிக்க முடியாது. | ok |
 | `access.messages` | Messages | செய்திகள் | ok |
+| `access.mineEmpty` | You have no open access right now. | இப்போது உங்களிடம் திறந்த அணுகல் இல்லை. | ok |
+| `access.mineTitle` | Your open access | உங்கள் திறந்த அணுகல் | ok |
 | `access.noGrants` | There are no grants to review. | மதிப்பாய்வு செய்ய அனுமதிகள் இல்லை. | ok |
 | `access.noMessages` | There are no messages. | செய்திகள் இல்லை. | ok |
 | `access.notConfigured` | Break-glass access is not set up yet (the window length is not configured). Nothing was opened. | அவசரகால அணுகல் இன்னும் அமைக்கப்படவில்லை (சாளர நீளம் அமைக்கப்படவில்லை). எதுவும் திறக்கப்படவில்லை. | ok |
@@ -96,9 +100,17 @@ Terms standardised: proposal, resolve / resolved.
 | `access.reviewResult.reviewed` | The review was recorded. | மதிப்பாய்வு பதிவானது. | ok |
 | `access.reviewResult.same_person` | You opened this access, so someone else must review it. | இந்த அணுகலை நீங்களே திறந்தீர்கள்; எனவே வேறொருவர் மதிப்பாய்வு செய்ய வேண்டும். | ok |
 | `access.reviewTitle` | Review afterwards | பின்னர் மதிப்பாய்வு | ok |
+| `access.sender.patient` | Patient | நோயாளி | ok |
+| `access.sender.staff` | Staff | பணியாளர் | ok |
+| `access.sender.system` | System | அமைப்பு | ok |
 | `access.title` | Break-glass access | அவசரகால அணுகல் | ok |
+| `access.topic.appointments` | Appointments | சந்திப்புகள் | ok |
+| `access.topic.care` | Care | பராமரிப்பு | ok |
+| `access.topic.readiness` | Readiness | தயார்நிலை | ok |
+| `access.topic.safety` | Safety | பாதுகாப்பு | ok |
 | `access.unreadable` | Not readable | படிக்க இயலவில்லை | ok |
 | `access.unreviewed` | Not reviewed | மதிப்பாய்வு செய்யப்படவில்லை | ok |
+| `access.use` | Use | பயன்படுத்து | ok |
 | `access.windowClosed` | The access window has closed, or this access is not yours. | அணுகல் சாளரம் மூடப்பட்டது, அல்லது இந்த அணுகல் உங்களுடையது அல்ல. | ok |
 | `admin.accounts.cannotChange` | You cannot change this account: it is your own, or you are not an administrator of every clinic where it holds a role. | இந்தக் கணக்கை உங்களால் மாற்ற முடியாது: இது உங்களுடையது, அல்லது இது பங்கு வகிக்கும் ஒவ்வொரு மருத்துவமனையிலும் நீங்கள் நிர்வாகி அல்ல. | ok |
 | `admin.accounts.col.account` | Account | கணக்கு | ok |
@@ -191,8 +203,18 @@ Terms standardised: proposal, resolve / resolved.
 | `admin.cost.noColumn` | No column | பத்தி இல்லை | ok |
 | `admin.cost.notMeasured` | Not measured | அளக்கப்படவில்லை | ok |
 | `admin.cost.note` | Monthly cost from the spend ledger and completed jobs, in two columns: actual, and at the scale you plan for. A term that is not configured or not measured stays empty. | செலவுப் பேரேடு மற்றும் முடிந்த பணிகளிலிருந்து மாதாந்திரச் செலவு, இரண்டு பத்திகளில்: உண்மையானது, மற்றும் நீங்கள் திட்டமிடும் அளவில். அமைக்கப்படாத அல்லது அளக்கப்படாத உறுப்பு காலியாகவே இருக்கும். | ok |
+| `admin.cost.reasonText.fewerThanSevenDays` | Fewer than seven days of measured traffic | அளக்கப்பட்ட போக்குவரத்து ஏழு நாட்களுக்கும் குறைவு | ok |
+| `admin.cost.reasonText.floorNotSet` | The platform floor (P) is not configured | தளத்தின் அடிப்படைச் செலவு (P) அமைக்கப்படவில்லை | ok |
+| `admin.cost.reasonText.minutesNotMeasured` | Reviewer minutes are not measured yet | மதிப்பாய்வாளர் நிமிடங்கள் இன்னும் அளக்கப்படவில்லை | ok |
+| `admin.cost.reasonText.noCompleted` | No completed workflows | முடிந்த பணிப்பாய்வுகள் இல்லை | ok |
+| `admin.cost.reasonText.ratesNotSet` | Reviewer rates are not configured | மதிப்பாய்வாளர் கட்டணங்கள் அமைக்கப்படவில்லை | ok |
+| `admin.cost.reasonText.retryNotMeasured` | Retry cost is not measured yet | மறுமுயற்சிச் செலவு இன்னும் அளக்கப்படவில்லை | ok |
+| `admin.cost.reasonText.roleNoRate` | A reviewer role has no configured rate | ஒரு மதிப்பாய்வாளர் பங்குக்கு அமைக்கப்பட்ட கட்டணம் இல்லை | ok |
 | `admin.cost.reasons` | Reasons | காரணங்கள் | ok |
 | `admin.cost.state` | State | நிலை | ok |
+| `admin.cost.states.insufficient_data` | Not enough data | போதுமான தரவு இல்லை | ok |
+| `admin.cost.states.ok` | OK | சரி | ok |
+| `admin.cost.states.unconfigured` | Not configured | அமைக்கப்படவில்லை | ok |
 | `admin.cost.term.calls` | Calls per workflow | பணிப்பாய்வுக்கு அழைப்புகள் | ok |
 | `admin.cost.term.failure` | Failure tax per month | மாதத்திற்கு தோல்வி வரி | ok |
 | `admin.cost.term.floor` | Platform floor per month | மாதத்திற்கு தள அடிப்படைச் செலவு | ok |
@@ -268,6 +290,10 @@ Terms standardised: proposal, resolve / resolved.
 | `admin.reviewer.col.verdict` | Verdict | தீர்ப்பு | ok |
 | `admin.reviewer.empty` | There are no reviewer decisions in this period. | இந்தக் காலத்தில் மதிப்பாய்வாளர் முடிவுகள் இல்லை. | ok |
 | `admin.reviewer.noPolicy` | The policy that judges rubber-stamping is not set, so no verdict is given. | கண்மூடித்தனமான ஒப்புதலை மதிப்பிடும் கொள்கை அமைக்கப்படவில்லை; எனவே தீர்ப்பு வழங்கப்படவில்லை. | ok |
+| `admin.reviewer.verdicts.not_configured` | Policy not set | கொள்கை அமைக்கப்படவில்லை | ok |
+| `admin.reviewer.verdicts.ok` | OK | சரி | ok |
+| `admin.reviewer.verdicts.review` | Needs a look | பார்க்க வேண்டும் | ok |
+| `admin.reviewer.verdicts.too_few` | Too few decisions | முடிவுகள் மிகக் குறைவு | ok |
 | `admin.reviewer.window` | The last {{days}} days. | கடந்த {{days}} நாட்கள். | ok |
 | `admin.stepUp` | This needs a fresh authenticator code. You will be asked for it. | இதற்குப் புதிய அங்கீகார குறியீடு தேவை. அது உங்களிடம் கேட்கப்படும். | ok |
 | `admin.tab.accounts` | Staff accounts | பணியாளர் கணக்குகள் | ok |
@@ -299,7 +325,12 @@ Terms standardised: proposal, resolve / resolved.
 | `admin.voice.read` | Read transcript | பதிவைப் படி | ok |
 | `admin.voice.readBody` | The text is shown only while this window is open, and the read is audited. | இந்த சாளரம் திறந்திருக்கும் வரை மட்டுமே உரை காட்டப்படும்; படிப்பு தணிக்கை செய்யப்படும். | ok |
 | `admin.voice.readTitle` | Read this transcript? | இந்தப் பதிவைப் படிக்கவா? | ok |
+| `admin.voice.statuses.ended` | Ended | முடிந்தது | ok |
+| `admin.voice.statuses.open` | Open | திறந்தது | ok |
 | `admin.voice.transcript` | Transcript | பதிவு | ok |
+| `admin.voice.workflows.intake_question` | Intake question | உள்வாங்கல் கேள்வி | ok |
+| `admin.voice.workflows.readiness_item` | Readiness item | தயார்நிலை உருப்படி | ok |
+| `admin.voice.workflows.slot_offer` | Slot offer | நேர இட வாய்ப்பு | ok |
 | `alerts.acknowledge` | Acknowledge | ஏற்றுக்கொள் | ok |
 | `alerts.acknowledged` | The alert was acknowledged. | எச்சரிக்கை ஏற்கப்பட்டது. | ok |
 | `alerts.already` | This alert was already acknowledged. The list will refresh. | இந்த எச்சரிக்கை ஏற்கனவே ஏற்கப்பட்டது. பட்டியல் புதுப்பிக்கப்படும். | ok |
@@ -330,6 +361,84 @@ Terms standardised: proposal, resolve / resolved.
 | `alerts.title` | Alerts | எச்சரிக்கைகள் | ok |
 | `app.hospitalName` | [PLACEHOLDER: hospital name] | [PLACEHOLDER: மருத்துவமனையின் பெயர்] | ok |
 | `app.staffTitle` | Staff console | பணியாளர் தளம் | ok |
+| `backfill.action.send` | Send | அனுப்பு | ok |
+| `backfill.action.skip` | Skip | தவிர் | ok |
+| `backfill.action.stop` | Stop | நிறுத்து | ok |
+| `backfill.candidate` | Current candidate | தற்போதைய வேட்பாளர் | ok |
+| `backfill.close` | Close | மூடு | ok |
+| `backfill.confirm.send.body` | Holds the slot for the current candidate and records the offer. The system sends nothing to the patient: you deliver the offer yourself from the Offers tab. | தற்போதைய வேட்பாளருக்கு இடத்தை நிறுத்தி வாய்ப்பைப் பதிவு செய்கிறது. கணினி நோயாளிக்கு எதுவும் அனுப்பாது: வாய்ப்புகள் தாவலிலிருந்து நீங்களே வாய்ப்பை வழங்குவீர்கள். | ok |
+| `backfill.confirm.send.title` | Send the offer to this candidate? | இந்த வேட்பாளருக்கு வாய்ப்பை அனுப்பவா? | ok |
+| `backfill.confirm.skip.body` | Passes over the current candidate and moves to the next one on the waitlist. Nothing is sent. | தற்போதைய வேட்பாளரைத் தாண்டி, காத்திருப்புப் பட்டியலில் அடுத்தவருக்குச் செல்கிறது. எதுவும் அனுப்பப்படாது. | ok |
+| `backfill.confirm.skip.title` | Skip this candidate? | இந்த வேட்பாளரைத் தவிர்க்கவா? | ok |
+| `backfill.confirm.stop.body` | Ends the run for this slot. No offer is made and nobody else is considered. | இந்த நேர இடத்திற்கான ஓட்டத்தை முடிக்கிறது. வாய்ப்பு எதுவும் வழங்கப்படாது; வேறு யாரும் பரிசீலிக்கப்படமாட்டார்கள். | ok |
+| `backfill.confirm.stop.title` | Stop the run? | ஓட்டத்தை நிறுத்தவா? | ok |
+| `backfill.current` | Current | தற்போதையவர் | ok |
+| `backfill.currentYes` | Current candidate | தற்போதைய வேட்பாளர் | ok |
+| `backfill.decided.send` | The offer was recorded for the candidate. Finished: {{finished}}. | வேட்பாளருக்கான வாய்ப்பு பதிவானது. முடிந்ததா: {{finished}}. | ok |
+| `backfill.decided.skip` | The candidate was skipped. Finished: {{finished}}. | வேட்பாளர் தவிர்க்கப்பட்டார். முடிந்ததா: {{finished}}. | ok |
+| `backfill.decided.stop` | The run was stopped. Finished: {{finished}}. | ஓட்டம் நிறுத்தப்பட்டது. முடிந்ததா: {{finished}}. | ok |
+| `backfill.finished` | Finished | முடிந்தது | ok |
+| `backfill.hold` | Hold | நிறுத்தம் | ok |
+| `backfill.noRun` | There is no offer run for this slot yet. | இந்த நேர இடத்திற்கு இன்னும் வாய்ப்பு ஓட்டம் இல்லை. | ok |
+| `backfill.noTask` | None raised | எதுவும் எழுப்பப்படவில்லை | ok |
+| `backfill.noWaiting` | Nobody on the waitlist matches this slot. | இந்த இடத்திற்குப் பொருந்தும் யாரும் காத்திருப்புப் பட்டியலில் இல்லை. | ok |
+| `backfill.notConfigured` | Offer runs are not set up yet. Nothing was started or changed. | வாய்ப்பு ஓட்டங்கள் இன்னும் அமைக்கப்படவில்லை. எதுவும் தொடங்கப்படவில்லை அல்லது மாற்றப்படவில்லை. | ok |
+| `backfill.notWaitingForThis` | The run is not waiting for that. Refresh and look again. | ஓட்டம் அதற்காகக் காத்திருக்கவில்லை. புதுப்பித்து மீண்டும் பாருங்கள். | ok |
+| `backfill.note` | Nothing is sent to a patient from here. Send holds the slot for the current candidate and records the offer; you deliver it yourself from the Offers tab. | இங்கிருந்து நோயாளிக்கு எதுவும் அனுப்பப்படாது. அனுப்பு என்பது தற்போதைய வேட்பாளருக்கு இடத்தை நிறுத்தி வாய்ப்பைப் பதிவு செய்யும்; வாய்ப்புகள் தாவலிலிருந்து நீங்களே அதை வழங்குவீர்கள். | ok |
+| `backfill.prepare` | Prepare offer for this slot | இந்த நேர இடத்திற்கு வாய்ப்பைத் தயார் செய் | ok |
+| `backfill.prepareBody` | Starts the run for this slot: the waitlist is ranked by clinical priority and the run stops at the first candidate for you to decide. Nothing is sent to anyone. | இந்த நேர இடத்திற்கான ஓட்டத்தைத் தொடங்குகிறது: காத்திருப்புப் பட்டியல் மருத்துவ முன்னுரிமைப்படி வரிசைப்படுத்தப்பட்டு, நீங்கள் முடிவு செய்ய முதல் வேட்பாளரிடம் ஓட்டம் நிற்கும். யாருக்கும் எதுவும் அனுப்பப்படாது. | ok |
+| `backfill.prepareShort` | Prepare offer | வாய்ப்பைத் தயார் செய் | ok |
+| `backfill.rank` | rank {{rank}} | தரவரிசை {{rank}} | ok |
+| `backfill.ranked` | Ranked waitlist | வரிசைப்படுத்தப்பட்ட காத்திருப்புப் பட்டியல் | ok |
+| `backfill.reply.confidence` | Confidence | நம்பிக்கை | ok |
+| `backfill.reply.engine` | Engine | இயந்திரம் | ok |
+| `backfill.reply.enter` | Enter this reply | இந்தப் பதிலை உள்ளிடு | ok |
+| `backfill.reply.enterBody` | Records the stored message you picked as the patient's reply. The red-flag rules screen it first; a red flag or a reply they cannot assess raises the nurse task and ends the run. | நீங்கள் தேர்ந்தெடுத்த சேமிக்கப்பட்ட செய்தியை நோயாளியின் பதிலாகப் பதிவு செய்கிறது. சிவப்புக் கொடி விதிகள் முதலில் பரிசோதிக்கும்; சிவப்புக் கொடி அல்லது மதிப்பிட முடியாத பதில் செவிலியர் பணியை எழுப்பி ஓட்டத்தை முடிக்கும். | ok |
+| `backfill.reply.enterTitle` | Enter this reply? | இந்தப் பதிலை உள்ளிடவா? | ok |
+| `backfill.reply.erased` | That message was erased and cannot be read. | அந்தச் செய்தி அழிக்கப்பட்டது; படிக்க முடியாது. | ok |
+| `backfill.reply.hide` | Hide | மறை | ok |
+| `backfill.reply.needsPerson` | A person must read it | ஒருவர் படிக்க வேண்டும் | ok |
+| `backfill.reply.noReply` | No reply came | பதில் வரவில்லை | ok |
+| `backfill.reply.noReplyBody` | Records that the patient did not reply in time. The run moves on. | நோயாளி நேரத்திற்குள் பதிலளிக்கவில்லை என்று பதிவு செய்கிறது. ஓட்டம் தொடரும். | ok |
+| `backfill.reply.noReplyTitle` | Record that no reply came? | பதில் வரவில்லை என்று பதிவு செய்யவா? | ok |
+| `backfill.reply.noSuggestion` | No suggestion: a person must read the reply. | பரிந்துரை இல்லை: ஒருவர் பதிலைப் படிக்க வேண்டும். | ok |
+| `backfill.reply.none` | No stored reply was found for this patient. The reply has to be stored first; this console cannot store one yet. If none came, choose No reply came. | இந்த நோயாளிக்கு சேமிக்கப்பட்ட பதில் எதுவும் கிடைக்கவில்லை. பதில் முதலில் சேமிக்கப்பட வேண்டும்; இந்தக் கணினியால் இன்னும் ஒன்றைச் சேமிக்க முடியாது. பதில் வரவில்லை என்றால், பதில் வரவில்லை என்பதைத் தேர்ந்தெடுங்கள். | ok |
+| `backfill.reply.notConfigured` | Reply reading is not set up yet. Read the message yourself. | பதிலைப் படித்தறிதல் இன்னும் அமைக்கப்படவில்லை. செய்தியை நீங்களே படியுங்கள். | ok |
+| `backfill.reply.notWaiting` | The run is not waiting for a reply. Refresh and look again. | ஓட்டம் பதிலுக்காகக் காத்திருக்கவில்லை. புதுப்பித்து மீண்டும் பாருங்கள். | ok |
+| `backfill.reply.note` | Pick the stored reply, read it, and confirm what to enter. A suggested reading is only a suggestion: you decide. The red-flag rules read the reply first. | சேமிக்கப்பட்ட பதிலைத் தேர்ந்தெடுத்து, படித்து, எதை உள்ளிடுவது என்பதை உறுதிசெய்யுங்கள். பரிந்துரைக்கப்பட்ட புரிதல் ஒரு பரிந்துரை மட்டுமே: நீங்களே முடிவு செய்கிறீர்கள். சிவப்புக் கொடி விதிகள் முதலில் பதிலைப் படிக்கும். | ok |
+| `backfill.reply.outcome.clear` | Clear | தெளிவு | ok |
+| `backfill.reply.outcome.red_flag` | Red flag | சிவப்புக் கொடி | ok |
+| `backfill.reply.outcome.unassessable` | Could not be assessed | மதிப்பிட முடியவில்லை | ok |
+| `backfill.reply.pick` | Stored messages from this patient's appointments thread | இந்த நோயாளியின் சந்திப்புகள் இழையிலிருந்து சேமிக்கப்பட்ட செய்திகள் | ok |
+| `backfill.reply.read` | Read this message | இந்தச் செய்தியைப் படி | ok |
+| `backfill.reply.reasons.engine_failed` | The reading engine failed | படித்தறியும் இயந்திரம் தோல்வியடைந்தது | ok |
+| `backfill.reply.reasons.no_route` | No reading engine is available | படித்தறியும் இயந்திரம் எதுவும் இல்லை | ok |
+| `backfill.reply.reasons.not_a_patient_reply` | It is not a patient's reply | இது நோயாளியின் பதில் அல்ல | ok |
+| `backfill.reply.reasons.red_flag` | The rules found a red flag | விதிகள் சிவப்புக் கொடியைக் கண்டன | ok |
+| `backfill.reply.reasons.spend_ceiling` | The spend ceiling was reached | செலவு உச்சவரம்பு எட்டப்பட்டது | ok |
+| `backfill.reply.reasons.unassessable` | The rules could not assess it | விதிகளால் மதிப்பிட முடியவில்லை | ok |
+| `backfill.reply.screenedNote` | The rules did not clear this reply. Entering it raises the nurse task and ends the run. | விதிகள் இந்தப் பதிலைத் தெளிவானது எனக் குறிக்கவில்லை. இதை உள்ளிட்டால் செவிலியர் பணி எழுப்பப்பட்டு ஓட்டம் முடியும். | ok |
+| `backfill.reply.screening` | Rules screening | விதிகள் பரிசோதனை | ok |
+| `backfill.reply.suggest` | Suggest a reading | ஒரு புரிதலைப் பரிந்துரை | ok |
+| `backfill.reply.suggested` | Suggested reading (a person confirms) | பரிந்துரைக்கப்பட்ட புரிதல் (ஒருவர் உறுதிசெய்வார்) | ok |
+| `backfill.reply.suggestion` | Suggested meaning | பரிந்துரைக்கப்பட்ட பொருள் | ok |
+| `backfill.reply.suggestions.accept` | Accepts | ஏற்கிறார் | ok |
+| `backfill.reply.suggestions.decline` | Declines | மறுக்கிறார் | ok |
+| `backfill.reply.suggestions.other_time` | Asks for another time | வேறு நேரம் கேட்கிறார் | ok |
+| `backfill.reply.suggestions.question` | Asks a question | கேள்வி கேட்கிறார் | ok |
+| `backfill.reply.suggestions.unclear` | Unclear | தெளிவில்லை | ok |
+| `backfill.reply.title` | The patient's reply | நோயாளியின் பதில் | ok |
+| `backfill.reply.why` | Why there is no suggestion | பரிந்துரை ஏன் இல்லை | ok |
+| `backfill.reply.yourCall` | Entering the reply records it as stored. What it means is your decision. | பதிலை உள்ளிடுவது அதைச் சேமிக்கப்பட்டதாகப் பதிவு செய்யும். அதன் பொருள் உங்கள் முடிவு. | ok |
+| `backfill.replyEntered` | The reply was entered. Finished: {{finished}}. | பதில் உள்ளிடப்பட்டது. முடிந்ததா: {{finished}}. | ok |
+| `backfill.started` | The run is started. Decide what to do with the first candidate. | ஓட்டம் தொடங்கப்பட்டது. முதல் வேட்பாளரைப் பற்றி முடிவு செய்யுங்கள். | ok |
+| `backfill.status` | Status | நிலை | ok |
+| `backfill.task` | Review task | மதிப்பாய்வுப் பணி | ok |
+| `backfill.title` | Offer run for slot | நேர இடத்திற்கான வாய்ப்பு ஓட்டம் | ok |
+| `backfill.waiting.none` | Nothing | எதுவுமில்லை | ok |
+| `backfill.waiting.reply_entry` | The patient's reply to be entered | நோயாளியின் பதிலை உள்ளிட வேண்டும் | ok |
+| `backfill.waiting.send_decision` | Your decision to send, skip or stop | அனுப்ப, தவிர்க்க அல்லது நிறுத்த உங்கள் முடிவு | ok |
+| `backfill.waitingFor` | Waiting for | காத்திருப்பது | ok |
 | `care.changed` | That changed in the meantime. Refresh and look again. | இடைப்பட்ட நேரத்தில் இது மாறிவிட்டது. புதுப்பித்து மீண்டும் பாருங்கள். | ok |
 | `care.gaps.ageNotSet` | The age at which an item is flagged overdue is not set, so nothing is flagged. | ஒரு உருப்படி தாமதமானது எனக் குறிக்கும் வயது அமைக்கப்படவில்லை; எனவே எதுவும் குறிக்கப்படாது. | ok |
 | `care.gaps.ageUnknown` | Unknown | தெரியாது | ok |
@@ -807,6 +916,7 @@ Terms standardised: proposal, resolve / resolved.
 | `portal.grievance.category` | Category | வகை | ok |
 | `portal.grievance.categoryHint` | A code from the hospital's list (lowercase letters, digits and underscores). The hospital tells you which codes exist. | மருத்துவமனையின் பட்டியலிலிருந்து ஒரு குறியீடு (சிற்றெழுத்துகள், எண்கள், அடிக்கோடுகள்). எந்தக் குறியீடுகள் உள்ளன என்பதை மருத்துவமனை உங்களுக்குச் சொல்லும். | ok |
 | `portal.grievance.categoryRefused` | That category is not on the hospital's list. Nothing was sent. | அந்த வகை மருத்துவமனையின் பட்டியலில் இல்லை. எதுவும் அனுப்பப்படவில்லை. | ok |
+| `portal.grievance.chooseCategory` | Choose a category | ஒரு வகையைத் தேர்ந்தெடுங்கள் | ok |
 | `portal.grievance.confirmBody` | This sends your message to the hospital. It is stored encrypted. | இது உங்கள் செய்தியை மருத்துவமனைக்கு அனுப்புகிறது. அது குறியாக்கம் செய்து சேமிக்கப்படும். | ok |
 | `portal.grievance.file` | Send | அனுப்பு | ok |
 | `portal.grievance.filed` | Your message was sent. | உங்கள் செய்தி அனுப்பப்பட்டது. | ok |
@@ -819,6 +929,7 @@ Terms standardised: proposal, resolve / resolved.
 | `portal.grievance.text` | What you want to tell us | எங்களிடம் நீங்கள் சொல்ல விரும்புவது | ok |
 | `portal.grievance.title` | Send a request or a complaint | கோரிக்கை அல்லது புகாரை அனுப்புங்கள் | ok |
 | `portal.grievance.unavailable` | This is not available right now (the category list or the encryption is not set up). Nothing was sent. | இது இப்போது கிடைக்கவில்லை (வகைப் பட்டியல் அல்லது குறியாக்கம் அமைக்கப்படவில்லை). எதுவும் அனுப்பப்படவில்லை. | ok |
+| `portal.hospital` | Hospital: {{name}} | மருத்துவமனை: {{name}} | ok |
 | `portal.linked.label` | Linked to a record | ஒரு பதிவுடன் இணைக்கப்பட்டுள்ளது | ok |
 | `portal.myData.body` | Downloads one file with everything the system holds about you that you may see. Each download is recorded. | நீங்கள் பார்க்க அனுமதிக்கப்பட்ட, அமைப்பு உங்களைப் பற்றி வைத்திருக்கும் அனைத்தையும் ஒரே கோப்பாகப் பதிவிறக்குகிறது. ஒவ்வொரு பதிவிறக்கமும் பதிவு செய்யப்படும். | ok |
 | `portal.myData.button` | Download my data | என் தரவைப் பதிவிறக்கு | ok |
@@ -868,6 +979,11 @@ Terms standardised: proposal, resolve / resolved.
 | `problem.unknown` | Something went wrong. Try again. | ஏதோ தவறு ஏற்பட்டது. மீண்டும் முயற்சிக்கவும். | ok |
 | `profiles.clinical` | Clinical | மருத்துவப் பயன்பாடு | minor drift |
 | `profiles.demo` | Demo | டெமோ | ok |
+| `readiness.col.action` | Action | செயல் | ok |
+| `readiness.col.ends` | Ends | முடிவு | ok |
+| `readiness.col.patient` | Patient | நோயாளி | ok |
+| `readiness.col.starts` | Starts | தொடக்கம் | ok |
+| `readiness.col.visitType` | Visit type | வருகை வகை | ok |
 | `readiness.currentItem` | Current item | தற்போதைய உருப்படி | ok |
 | `readiness.escalation` | Review task | மதிப்பாய்வுப் பணி | ok |
 | `readiness.finished` | Finished | முடிந்தது | ok |
@@ -893,7 +1009,29 @@ Terms standardised: proposal, resolve / resolved.
 | `readiness.startTitle` | Start readiness for this visit? | இந்த வருகைக்கான தயார்நிலையைத் தொடங்கவா? | ok |
 | `readiness.started` | The run is started. | ஓட்டம் தொடங்கப்பட்டது. | ok |
 | `readiness.status` | Status | நிலை | ok |
+| `readiness.statuses.asked` | Question asked | கேள்வி கேட்கப்பட்டது | ok |
+| `readiness.statuses.barrier_classified` | Barrier classified | தடை வகைப்படுத்தப்பட்டது | ok |
+| `readiness.statuses.barrier_unknown` | Barrier not known | தடை தெரியவில்லை | ok |
+| `readiness.statuses.brief_stored` | Brief stored | சுருக்கம் சேமிக்கப்பட்டது | ok |
+| `readiness.statuses.brief_unavailable` | Brief unavailable | சுருக்கம் கிடைக்கவில்லை | ok |
+| `readiness.statuses.classified` | Reply classified | பதில் வகைப்படுத்தப்பட்டது | ok |
+| `readiness.statuses.fact_not_grounded` | Fact not grounded in the reply | தகவல் பதிலில் அடிப்படையற்றது | ok |
+| `readiness.statuses.fact_written` | Fact recorded | தகவல் பதிவானது | ok |
+| `readiness.statuses.held_unassessable` | Held: could not be assessed | நிறுத்தப்பட்டது: மதிப்பிட முடியவில்லை | ok |
+| `readiness.statuses.incomplete_flagged` | Flagged as incomplete | முழுமையற்றது எனக் குறிக்கப்பட்டது | ok |
+| `readiness.statuses.next` | Moving to the next item | அடுத்த உருப்படிக்குச் செல்கிறது | ok |
+| `readiness.statuses.no_reply` | No reply | பதில் இல்லை | ok |
+| `readiness.statuses.nothing_to_ask` | Nothing to ask | கேட்க எதுவுமில்லை | ok |
+| `readiness.statuses.nurse_escalated` | Escalated to a nurse | செவிலியருக்கு அனுப்பப்பட்டது | ok |
+| `readiness.statuses.readiness_recorded` | Readiness recorded | தயார்நிலை பதிவானது | ok |
+| `readiness.statuses.rebooking_handed_off` | Handed off for rebooking | மறுமுன்பதிவுக்கு ஒப்படைக்கப்பட்டது | ok |
+| `readiness.statuses.red_flag_escalated` | Red flag: escalated to a nurse | சிவப்புக் கொடி: செவிலியருக்கு அனுப்பப்பட்டது | ok |
+| `readiness.statuses.reply_in` | Reply received | பதில் பெறப்பட்டது | ok |
+| `readiness.statuses.screened` | Reply screened | பதில் பரிசோதிக்கப்பட்டது | ok |
+| `readiness.statuses.started` | Started | தொடங்கியது | ok |
 | `readiness.title` | Visit readiness | வருகைத் தயார்நிலை | ok |
+| `readiness.upcomingEmpty` | There are no upcoming visits. | வரவிருக்கும் வருகைகள் இல்லை. | ok |
+| `readiness.upcomingTitle` | Upcoming visits | வரவிருக்கும் வருகைகள் | ok |
 | `readiness.visitId` | Visit id | வருகை அடையாளம் | ok |
 | `readiness.visitIdBad` | That is not a visit id. | இது வருகை அடையாளம் அல்ல. | ok |
 | `readiness.waiting.none` | Nothing | எதுவுமில்லை | ok |

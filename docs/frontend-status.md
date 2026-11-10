@@ -19,6 +19,7 @@ Two flags are OFF and stay OFF until the owner says: merge approve and unmerge (
 | F7 batch 2 | Alerts (acknowledge; the audience role is the escalation state), dashboard, care gaps panel, care plans, results |
 | F7 batch 3 | Care-gap writes, staff accounts, autonomy (mode, two-person switch, history), reviewer statistics, cost canvas, voice transcripts |
 | F7 batch 4 | Visit readiness, portal claims, break-glass, staff recovery, notes, grievances, result-correction tasks |
+| F8 follow-up (2026-11-11) | The clinic id comes from `GET /public/clinic` and the grievance category from `GET /v1/portal/grievance-categories` (a typed code is the fallback); consent notices show the patient-facing `label`; break-glass uses the reason list and my open grants; visit readiness picks from `GET /v1/staff/visits/upcoming`; labels for the readiness status, message sender and topic, voice workflow and status, reviewer verdict, cost state and reasons; the offer run after a cancel (prepare, send, skip, stop, enter the reply) |
 | F8 (batch 5) | The patient portal on the sign-in and sign-up pages: phone-code sign-in, create the patient account, notices shown exactly as sent, grant or withdraw, activate, claim a record, file a grievance, download my data |
 
 Every write carries an idempotency key, reused on a retry. A step-up challenge asks once and retries once. Messages shown for errors are
@@ -43,17 +44,14 @@ the first live run.
 
 | Item | Blocked on |
 |---|---|
+| A route to store a typed patient reply for the offer run (the console can only pick a stored one) | backend (request item 16) |
 | Rows for holds, merges, duplicates, resolved tasks, and every new list, so row shapes can be checked | backend seed (request item 8) |
-| Enums still bare strings: `VoiceSessionRowOut.workflow` and `.status`, `ReviewerStatOut.verdict`, `CostCanvasOut.state` and `.reasons`, `GrievanceOut.category`, readiness `status`, message `sender_kind` and `topic`, review task `kind` | backend (request item 11); labels are added when they arrive |
-| A route to list break-glass reason codes (the field is limited to the code's shape for now) | backend (request item 13) |
-| A way to find a visit for readiness (the visit id is typed) | backend (request item 14) |
-| A clinic id for the patient claim and grievance forms (the patient types a "clinic code"), and the grievance category list (typed as a code) | backend (request item 15) |
+| Enums that stay open-ended by design (shown humanised, never hidden): grievance `category`, review task `kind`, a run's `status` word | not blocked: the console labels what it knows and shows the rest as sent |
 | Merge approve and unmerge switched on | the first live approve with step-up |
 | Active-role header switched on | the owner, after the dev backend has migration 0028 and a live check works |
 | Cancel confirmation wording, consent purpose wording | the clinic / counsel; marked placeholders are in place |
 | Tamil (all new strings) | native-speaker review; `TAMIL-UNREVIEWED.md` lists them |
 | Patient portal sign-in | Supabase phone sign-in with test numbers and fixed codes for the demo (steps in `docs/frontend-live-checklist.md`, to be verified in the dashboard); no SMS provider |
-| Routes the backend is adding: public clinic id and name, grievance categories, break-glass reason codes and open grants, upcoming bookings for nurse and doctor, a patient-facing consent purpose label, the remaining enums | backend; each is switched over when it is in the snapshot (decided 2026-11-11), until then the current behaviour stays |
 
 ## 5. The first live run
 

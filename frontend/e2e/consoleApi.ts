@@ -53,6 +53,7 @@ export function createConsoleApi(role: string, options: ConsoleOptions = {}, ses
   const taskStatus: Record<string, 'open' | 'acknowledged' | 'resolved'> = { [ID.task]: 'open', [ID.taskRed]: 'open' };
   let holds = [{ clinic_id: ID.clinic, created_at: '2026-10-30T05:00:00Z', expires_at: '2026-10-30T06:00:00Z', hold_id: ID.hold, patient_id: null, slot_id: ID.slot, status: 'active' }];
   let verified = options.patientVerified ?? false;
+  let backfillWaiting: 'send_decision' | 'reply_entry' | 'none' = 'send_decision';
   let reviewed: string | null = null;
   let mergeStatus: 'awaiting_second_approval' | 'active' | 'unmerged' = 'awaiting_second_approval';
 
@@ -160,6 +161,18 @@ export function createConsoleApi(role: string, options: ConsoleOptions = {}, ses
       return ok({ decisions_flagged: wasActive ? 1 : 0, merge_id: ID.merge, replayed: false, review_task_id: null, status: 'unmerged' });
     }
 
+    // ---- the lists that replace typing, and the offer run for a freed slot (MOCK ONLY) ----
+    if (method === 'GET' && path === '/v1/staff/break-glass/reasons') return [...READERS, 'admin'].includes(role) ? ok({ reasons: ['reason_a', 'reason_b'] }) : no(403);
+    if (method === 'GET' && path === '/v1/staff/break-glass/mine') return READERS.includes(role) ? ok({ grants: [{ expires_at: '2026-11-10T06:00:00Z', grant_id: ID.merge, opened_at: '2026-11-09T05:00:00Z', patient_id: ID.patient, reason_code: 'reason_a' }] }) : no(403);
+    if (method === 'GET' && path === '/v1/staff/visits/upcoming') return CLINICAL.includes(role) ? ok({ visits: [{ ends_at: '2026-11-10T04:30:00Z', patient_id: ID.patient, starts_at: '2026-11-10T04:00:00Z', visit_id: ID.merge, visit_type_id: ID.visitType }] }) : no(403);
+    const run = (over: Record<string, unknown> = {}) => ({ candidate_patient_id: ID.patient2, candidate_rank: 1, finished: false, hold_id: null, slot_id: ID.slot, status: 'awaiting_send', task_id: null, waiting_for: 'send_decision', ...over });
+    if (method === 'GET' && /^\/v1\/staff\/scheduling\/backfills\/[^/]+$/.test(path)) return SCHEDULE_READERS.includes(role) ? ok(run({ waiting_for: backfillWaiting, status: backfillWaiting === 'reply_entry' ? 'awaiting_reply' : 'awaiting_send', finished: backfillWaiting === 'none', hold_id: backfillWaiting === 'send_decision' ? null : ID.hold })) : no(403);
+    if (method === 'POST' && path === '/v1/staff/scheduling/backfills') return role === 'front_desk' ? ok(run()) : no(403);
+    if (method === 'POST' && /^\/v1\/staff\/scheduling\/backfills\/[^/]+\/decide$/.test(path)) return role === 'front_desk' ? ((backfillWaiting = 'reply_entry'), ok(run({ waiting_for: 'reply_entry', status: 'awaiting_reply', hold_id: ID.hold }))) : no(403);
+    if (method === 'POST' && /^\/v1\/staff\/scheduling\/backfills\/[^/]+\/reply$/.test(path)) return role === 'front_desk' ? ((backfillWaiting = 'none'), ok(run({ waiting_for: 'none', finished: true }))) : no(403);
+    if (method === 'POST' && path === '/v1/staff/scheduling/offers/interpret-reply') return role === 'front_desk' ? ok({ calibrated: null, confidence: null, engine: null, message_id: ID.candidate, needs_person: false, outcome: 'clear', reason: null, replayed: false, screening_id: ID.doc, suggestion: 'accept' }) : no(403);
+    if (method === 'GET' && path === '/v1/staff/messages/threads') return READERS.includes(role) ? ok({ items: [{ clinic_id: ID.clinic, created_at: '2026-11-09T05:00:00Z', last_message_at: null, message_count: 1, patient_id: ID.patient2, status: 'open', thread_id: ID.hold, topic: 'appointments' }], limit: 100, has_more: false }) : no(403);
+    if (method === 'GET' && /^\/v1\/staff\/messages\/threads\/[^/]+\/messages$/.test(path)) return READERS.includes(role) ? ok({ items: [{ created_at: '2026-11-09T06:00:00Z', erased: false, message_id: ID.candidate, sender_kind: 'staff', thread_id: ID.hold, topic: 'appointments' }], limit: 100, has_more: false }) : no(403);
     // ---- F7: slots, bookings, waitlist, offers; the reviewer view and reason codes (MOCK ONLY) ----
     if (method === 'GET' && path === '/v1/staff/scheduling/slots') return SCHEDULE_READERS.includes(role) ? page([{ clinic_id: ID.clinic, slot_id: ID.slot, provider_id: ID.doc, location_id: ID.slot, visit_type_id: ID.visitType, starts_at: '2026-11-10T04:00:00Z', ends_at: '2026-11-10T04:30:00Z', status: 'open', hold_expires_at: null }]) : no(403);
     if (method === 'GET' && path === '/v1/staff/scheduling/bookings') return SCHEDULE_READERS.includes(role) ? page([{ booking_id: ID.merge, clinic_id: ID.clinic, created_at: '2026-11-09T04:00:00Z', ends_at: '2026-11-10T04:30:00Z', location_id: ID.slot, patient_id: ID.patient, provider_id: ID.doc, slot_id: ID.slot, starts_at: '2026-11-10T04:00:00Z', visit_type_id: ID.visitType }]) : no(403);
