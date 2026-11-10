@@ -177,6 +177,7 @@ from careflow.phase4_sql import (
 )
 from careflow.producer_sweeps import (
     care_gap_overdue_sweep,
+    retention_report_sweep,
     sampler_sweep,
     voice_purge_sweep,
 )
@@ -5196,6 +5197,8 @@ def create_app(
         app.state.voice_feature_on = voice_feature_on(os.environ)
         app.state.voice_engine = None  # no real voice engine exists (owner decision 2026-11-06): the session route answers 503
         app.state.voice_retention_days = _positive_int(p4env.get('CAREFLOW_VOICE_TRANSCRIPT_RETENTION_DAYS'))
+        app.state.retention_checkpoint_days = _positive_int(p4env.get("CAREFLOW_RETENTION_CHECKPOINT_DAYS"))  # required settings, no defaults: an unset period is not assessed
+        app.state.retention_clinical_record_days = _positive_int(p4env.get("CAREFLOW_RETENTION_CLINICAL_RECORD_DAYS"))
         app.state.grievance_categories = _word_list(p4env.get("CAREFLOW_GRIEVANCE_CATEGORIES"))
         app.state.consent_labels = consent_settings.parse_labels(p4env.get("CAREFLOW_CONSENT_LABELS"))
         app.state.clinic_time_zone = clinic_time_zone(p4env.get("CAREFLOW_CLINIC_TIME_ZONE"))
@@ -5273,6 +5276,7 @@ def create_app(
         sign_in_url = p4env.get("CAREFLOW_SIGN_IN_URL") or "(sign-in link not configured)"
         sweeps.append(lambda conn: watchdog_sweep(conn, AlertRouter(SqlAlertSink(conn), {}, sign_in_url), deadlines, watchdog_limits))
         sweeps.append(lambda conn: voice_purge_sweep(conn, app.state.voice_retention_days))  # deletes EXPIRED voice transcript chunks (migration 0063); nothing while the retention setting is unset
+        sweeps.append(lambda conn: retention_report_sweep(conn, app.state.retention_checkpoint_days, app.state.retention_clinical_record_days))  # REPORT-ONLY (migration 0071): counts what is past each period, deletes nothing
         sweeps.append(lambda conn: care_gap_overdue_sweep(conn, app.state.care_gap_alert_days))  # raises nothing while the alert age is unset
         try:
             review_sample_rate = learning_labels.sample_rate_from(p4env)
