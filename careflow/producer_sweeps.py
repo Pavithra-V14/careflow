@@ -11,7 +11,7 @@ import logging
 import random
 import uuid
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 from sqlalchemy import text
@@ -79,6 +79,37 @@ async def sampler_sweep(conn: AsyncConnection, rate: float | None, *, source: Ca
         except Exception as exc:  # noqa: BLE001
             log.error("sampler sweep failed for one clinic: %s", type(exc).__name__)
     return made
+
+
+_reported_on: dict[uuid.UUID, str] = {}  # clinic -> the UTC day its retention report was last written by this process (the database also writes at most one a day)
+
+
+async def retention_report_sweep(conn: AsyncConnection, checkpoint_days: int | None, clinical_record_days: int | None, *, origin: str = "live", now: datetime | None = None) -> int:
+    """The scheduled RETENTION REPORT (migration 0071; owner decision 2026-11-10: report-only). It COUNTS what is past each configured period and writes one audit row per clinic per day; it deletes nothing,
+    because everything it would delete is append-only by design (the sanctioned removal of a clinical record stays the two-person audited erasure). Each period is a required setting with no default: a period
+    that is unset is not assessed, and with neither set the sweep does nothing. One clinic failing never stops the others. Returns the number of reports written."""
+    ok = lambda d: d is not None and d >= 1
+    if not ok(checkpoint_days) and not ok(clinical_record_days):
+        return 0
+    moment = now or datetime.now(UTC)
+    day = moment.strftime("%Y-%m-%d")
+    written = 0
+    for clinic in await _clinics(conn, origin):
+        if _reported_on.get(clinic) == day:
+            continue
+        try:
+            async with conn.begin_nested():
+                row = (
+                    await conn.execute(
+                        text("select created from ops.retention_report_as_worker(:c, :a, :b)"),
+                        {"c": clinic, "a": moment - timedelta(days=checkpoint_days) if ok(checkpoint_days) else None, "b": moment - timedelta(days=clinical_record_days) if ok(clinical_record_days) else None},
+                    )
+                ).one()
+            _reported_on[clinic] = day
+            written += 1 if row.created else 0
+        except Exception:
+            log.exception("retention report failed for one clinic")
+    return written
 
 
 async def voice_purge_sweep(conn: AsyncConnection, retention_days: int | None, *, origin: str = "live", batch: int = 500) -> int:

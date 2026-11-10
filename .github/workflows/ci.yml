@@ -252,6 +252,7 @@ jobs:
               tests/test_staff_recovery_db_live.py
               tests/test_clinical_record_db_live.py
               tests/test_voice_purge_db_live.py
+              tests/test_retention_report_db_live.py
               tests/test_hardening_0065_db_live.py
               tests/test_guards_replica_mode_db_live.py
               tests/test_clinic_origin_oracle_db_live.py
