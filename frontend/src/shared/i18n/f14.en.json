@@ -1,0 +1,130 @@
+{
+  "portal": {
+    "hospital": "Hospital: {{name}}",
+    "grievance": {
+      "chooseCategory": "Choose a category"
+    }
+  },
+  "access": {
+    "mineTitle": "Your open access",
+    "mineEmpty": "You have no open access right now.",
+    "use": "Use",
+    "col": {
+      "expires": "Expires"
+    },
+    "chooseReason": "Choose a reason"
+  },
+  "readiness": {
+    "upcomingTitle": "Upcoming visits",
+    "upcomingEmpty": "There are no upcoming visits.",
+    "col": {
+      "starts": "Starts",
+      "ends": "Ends",
+      "visitType": "Visit type",
+      "patient": "Patient",
+      "action": "Action"
+    }
+  },
+  "backfill": {
+    "title": "Offer run for slot",
+    "note": "Nothing is sent to a patient from here. Send holds the slot for the current candidate and records the offer; you deliver it yourself from the Offers tab.",
+    "prepare": "Prepare offer for this slot",
+    "prepareShort": "Prepare offer",
+    "prepareBody": "Starts the run for this slot: the waitlist is ranked by clinical priority and the run stops at the first candidate for you to decide. Nothing is sent to anyone.",
+    "started": "The run is started. Decide what to do with the first candidate.",
+    "noRun": "There is no offer run for this slot yet.",
+    "notConfigured": "Offer runs are not set up yet. Nothing was started or changed.",
+    "status": "Status",
+    "waitingFor": "Waiting for",
+    "waiting": {
+      "send_decision": "Your decision to send, skip or stop",
+      "reply_entry": "The patient's reply to be entered",
+      "none": "Nothing"
+    },
+    "candidate": "Current candidate",
+    "rank": "rank {{rank}}",
+    "hold": "Hold",
+    "task": "Review task",
+    "noTask": "None raised",
+    "finished": "Finished",
+    "ranked": "Ranked waitlist",
+    "noWaiting": "Nobody on the waitlist matches this slot.",
+    "current": "Current",
+    "currentYes": "Current candidate",
+    "action": {
+      "send": "Send",
+      "skip": "Skip",
+      "stop": "Stop"
+    },
+    "confirm": {
+      "send": {
+        "title": "Send the offer to this candidate?",
+        "body": "Holds the slot for the current candidate and records the offer. The system sends nothing to the patient: you deliver the offer yourself from the Offers tab."
+      },
+      "skip": {
+        "title": "Skip this candidate?",
+        "body": "Passes over the current candidate and moves to the next one on the waitlist. Nothing is sent."
+      },
+      "stop": {
+        "title": "Stop the run?",
+        "body": "Ends the run for this slot. No offer is made and nobody else is considered."
+      }
+    },
+    "decided": {
+      "send": "The offer was recorded for the candidate. Finished: {{finished}}.",
+      "skip": "The candidate was skipped. Finished: {{finished}}.",
+      "stop": "The run was stopped. Finished: {{finished}}."
+    },
+    "notWaitingForThis": "The run is not waiting for that. Refresh and look again.",
+    "replyEntered": "The reply was entered. Finished: {{finished}}.",
+    "close": "Close",
+    "reply": {
+      "title": "The patient's reply",
+      "note": "Pick the stored reply, read it, and confirm what to enter. A suggested reading is only a suggestion: you decide. The red-flag rules read the reply first.",
+      "none": "No stored reply was found for this patient. The reply has to be stored first; this console cannot store one yet. If none came, choose No reply came.",
+      "pick": "Stored messages from this patient's appointments thread",
+      "read": "Read this message",
+      "hide": "Hide",
+      "suggest": "Suggest a reading",
+      "notConfigured": "Reply reading is not set up yet. Read the message yourself.",
+      "erased": "That message was erased and cannot be read.",
+      "suggested": "Suggested reading (a person confirms)",
+      "screening": "Rules screening",
+      "outcome": {
+        "clear": "Clear",
+        "red_flag": "Red flag",
+        "unassessable": "Could not be assessed"
+      },
+      "suggestion": "Suggested meaning",
+      "suggestions": {
+        "accept": "Accepts",
+        "decline": "Declines",
+        "other_time": "Asks for another time",
+        "question": "Asks a question",
+        "unclear": "Unclear"
+      },
+      "noSuggestion": "No suggestion: a person must read the reply.",
+      "why": "Why there is no suggestion",
+      "reasons": {
+        "red_flag": "The rules found a red flag",
+        "unassessable": "The rules could not assess it",
+        "not_a_patient_reply": "It is not a patient's reply",
+        "no_route": "No reading engine is available",
+        "spend_ceiling": "The spend ceiling was reached",
+        "engine_failed": "The reading engine failed"
+      },
+      "needsPerson": "A person must read it",
+      "confidence": "Confidence",
+      "engine": "Engine",
+      "screenedNote": "The rules did not clear this reply. Entering it raises the nurse task and ends the run.",
+      "yourCall": "Entering the reply records it as stored. What it means is your decision.",
+      "enter": "Enter this reply",
+      "enterTitle": "Enter this reply?",
+      "enterBody": "Records the stored message you picked as the patient's reply. The red-flag rules screen it first; a red flag or a reply they cannot assess raises the nurse task and ends the run.",
+      "noReply": "No reply came",
+      "noReplyTitle": "Record that no reply came?",
+      "noReplyBody": "Records that the patient did not reply in time. The run moves on.",
+      "notWaiting": "The run is not waiting for a reply. Refresh and look again."
+    }
+  }
+}

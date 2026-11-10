@@ -13,6 +13,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Badge, PlaceholderNote, ShortId, Time, useLang, useWord } from '../ui/bits';
 import { NotAvailableToRole, ProblemText, QueryView } from '../ui/states';
 import { formatNumber } from '../../shared/i18n/format';
+import { BackfillPanel } from './BackfillPanel';
 import { clinicLocalToIso } from '../../shared/clinicTime';
 import { ZoneNote } from '../components/ZoneNote';
 
@@ -91,6 +92,7 @@ export function SlotsList() {
   const [locationId, setLocationId] = useState('');
   const [acting, setActing] = useState<{ kind: 'hold' | 'book'; slot: Slot } | null>(null);
   const [adding, setAdding] = useState(false);
+  const [offerFor, setOfferFor] = useState<Slot | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const query = useApiQuery(['slots', providerId, locationId], () => unwrap(api.listSlots({ providerId, locationId })));
 
@@ -158,6 +160,9 @@ export function SlotsList() {
                         </button>{' '}
                         <button type="button" onClick={() => setActing({ kind: 'book', slot: s })}>
                           {t('scheduling.book')}
+                        </button>{' '}
+                        <button type="button" disabled={s.status !== 'open'} aria-label={`${t('backfill.prepareShort')} ${s.slot_id.slice(0, 8)}`} onClick={() => setOfferFor(s)}>
+                          {t('backfill.prepareShort')}
                         </button>
                       </>
                     ) : (
@@ -171,6 +176,7 @@ export function SlotsList() {
           </>
         )}
       </QueryView>
+      {offerFor && <BackfillPanel key={offerFor.slot_id} slotId={offerFor.slot_id} visitTypeId={offerFor.visit_type_id} onClose={() => setOfferFor(null)} />}
       {acting?.kind === 'hold' && (
         <HoldDialog
           slot={acting.slot}
@@ -484,12 +490,15 @@ export function BookingsList() {
   const queryClient = useQueryClient();
   const refs = useReferences();
   const [cancelling, setCancelling] = useState<string | null>(null);
-  const [outcome, setOutcome] = useState<components['schemas']['CancelOut'] | null>(null);
+  const [outcome, setOutcome] = useState<(components['schemas']['CancelOut'] & { visitTypeId: string | null }) | null>(null);
+  const [preparing, setPreparing] = useState(false);
   const query = useApiQuery(['bookings'], () => unwrap(api.listBookings()));
   const cancel = useIdempotentWrite(
     (bookingId: string, key) => unwrap(api.cancelBooking(bookingId, { idempotencyKey: key })),
     (result) => {
-      setOutcome(result);
+      // Remember the freed slot's visit type: the offer run for that slot needs it, and the cancelled booking leaves the list.
+      setOutcome({ ...result, visitTypeId: query.data?.items.find((b) => b.booking_id === result.booking_id)?.visit_type_id ?? null });
+      setPreparing(false);
       setCancelling(null);
       void queryClient.invalidateQueries();
     },
@@ -515,6 +524,14 @@ export function BookingsList() {
               ))}
             </ol>
           )}
+          {hasRole(CAN_SCHEDULE) && outcome.visitTypeId && !preparing && (
+            <p>
+              <button type="button" className="primary" onClick={() => setPreparing(true)}>
+                {t('backfill.prepare')}
+              </button>
+            </p>
+          )}
+          {preparing && outcome.visitTypeId && <BackfillPanel slotId={outcome.slot_id} visitTypeId={outcome.visitTypeId} onClose={() => setPreparing(false)} />}
         </div>
       )}
       <QueryView query={query} isEmpty={(d) => d.items.length === 0} empty={t('scheduling.noBookings')}>

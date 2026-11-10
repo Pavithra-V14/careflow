@@ -5,15 +5,13 @@ import { LANGS, go, openConsole, sweep } from './helpers';
 // staff recovery and grievances. Per screen: axe (WCAG 2.2 AA is the goal we test toward) at 320 / 768 / 1280, no horizontal scroll,
 // English and Tamil. One test per screen keeps each short: the cost is axe at three widths.
 
-const VISIT = 'abababab-abab-4bab-8bab-abababababab';
 const PATIENT = '66666666-6666-4666-8666-666666666666';
 
 for (const lang of LANGS) {
   test(`visit readiness [${lang}]`, async ({ page }) => {
     await openConsole(page, 'nurse', lang);
     await go(page, '#/readiness', /\S/);
-    await page.locator('main input[type=text]').fill(VISIT);
-    await page.locator('main form button[type=submit]').click();
+    await page.locator('main tbody tr').first().getByRole('button').click();
     await expect(page.locator('main dl.facts')).toBeVisible();
     await sweep(page, 'f10-readiness', lang);
   });
@@ -21,8 +19,7 @@ for (const lang of LANGS) {
   test(`the relay a reply dialog [${lang}]`, async ({ page }) => {
     await openConsole(page, 'nurse', lang);
     await go(page, '#/readiness', /\S/);
-    await page.locator('main input[type=text]').fill(VISIT);
-    await page.locator('main form button[type=submit]').click();
+    await page.locator('main tbody tr').first().getByRole('button').click();
     await expect(page.locator('main dl.facts')).toBeVisible();
     await page.locator('main .toolbar button').nth(1).click();
     await expect(page.getByRole('dialog')).toBeVisible();
@@ -99,7 +96,7 @@ test('keyboard only: open a break-glass grant and read under it with the keyboar
   await page.keyboard.press('Enter');
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Patient id').fill(PATIENT);
-  await dialog.getByLabel('Reason code').fill('reason_a');
+  await dialog.getByLabel('Reason code').selectOption('reason_a');
   await dialog.getByRole('button', { name: 'Open access' }).focus();
   await page.keyboard.press('Enter');
   await page.getByRole('button', { name: 'Read the messages' }).focus();

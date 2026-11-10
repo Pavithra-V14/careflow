@@ -6,8 +6,9 @@ import { unwrap } from '../apiState';
 import { useAuth } from '../auth/AuthProvider';
 import { useApiQuery, useIdempotentWrite } from '../hooks';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import { Badge, PageHeading, ShortId, UUID, useWord } from '../ui/bits';
-import { NotAvailableToRole, ProblemText } from '../ui/states';
+import { Badge, PageHeading, ShortId, Time, UUID, useWord } from '../ui/bits';
+import { NotAvailableToRole, ProblemText, QueryView } from '../ui/states';
+import { useSession } from '../session/SessionContext';
 import { WriteProblem } from '../ui/WriteProblem';
 
 type View = components['schemas']['ReadinessViewOut'];
@@ -19,7 +20,11 @@ type View = components['schemas']['ReadinessViewOut'];
  */
 export function ReadinessPage() {
   const { t } = useTranslation();
+  const { api } = useAuth();
+  const { active } = useSession();
   const id = useId();
+  const upcoming = useApiQuery(['upcoming-visits'], () => unwrap(api.upcomingVisits(active.clinicId)));
+  const types = useApiQuery(['visitTypes', false], () => unwrap(api.listVisitTypes(false)));
   const [text, setText] = useState('');
   const [visitId, setVisitId] = useState<string | null>(null);
   const bad = text.trim() !== '' && !UUID.test(text.trim());
@@ -27,6 +32,46 @@ export function ReadinessPage() {
     <section aria-labelledby="ready-title">
       <PageHeading id="ready-title">{t('readiness.title')}</PageHeading>
       <p className="hint">{t('readiness.note')}</p>
+      <h2>{t('readiness.upcomingTitle')}</h2>
+      <QueryView query={upcoming} isEmpty={(d) => d.visits.length === 0} empty={t('readiness.upcomingEmpty')}>
+        {(d) => (
+          <table>
+            <caption className="visually-hidden">{t('readiness.upcomingTitle')}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{t('readiness.col.starts')}</th>
+                <th scope="col">{t('readiness.col.ends')}</th>
+                <th scope="col">{t('readiness.col.visitType')}</th>
+                <th scope="col">{t('readiness.col.patient')}</th>
+                <th scope="col">{t('readiness.col.action')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.visits.map((v) => (
+                <tr key={v.visit_id}>
+                  <th scope="row">
+                    <Time value={v.starts_at} />
+                  </th>
+                  <td>
+                    <Time value={v.ends_at} />
+                  </td>
+                  <td>{types.data?.items.find((x) => x.visit_type_id === v.visit_type_id)?.name ?? <ShortId id={v.visit_type_id} />}</td>
+                  <td>
+                    <ShortId id={v.patient_id} />
+                  </td>
+                  <td>
+                    <button type="button" aria-label={`${t('readiness.open')} ${v.visit_id.slice(0, 8)}`} onClick={() => setVisitId(v.visit_id)}>
+                      {t('readiness.open')}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </QueryView>
+      {/* If the list cannot be read, the visit id can still be entered by hand. */}
+      {upcoming.isError && (
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -40,6 +85,7 @@ export function ReadinessPage() {
           {t('readiness.open')}
         </button>
       </form>
+      )}
       {visitId && <Run key={visitId} visitId={visitId} />}
     </section>
   );

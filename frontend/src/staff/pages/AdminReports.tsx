@@ -11,6 +11,7 @@ import { Badge, ShortId, Time, useLang, useWord } from '../ui/bits';
 import { NotAvailableToRole, ProblemText, QueryView } from '../ui/states';
 import { WriteProblem } from '../ui/WriteProblem';
 import { formatNumber } from '../../shared/i18n/format';
+import { COST_REASON_KEYS } from './costReasons';
 
 const notRecorded = (t: (k: string) => string): ReactNode => <span className="not-recorded">{t('admin.notRecorded')}</span>;
 
@@ -132,7 +133,7 @@ export function CostCanvas() {
                 <h3>{t('admin.cost.reasons')}</h3>
                 <ul>
                   {d.reasons.map((r) => (
-                    <li key={r}>{word('admin.cost.reason', r)}</li>
+                    <li key={r}>{COST_REASON_KEYS[r] ? t(`admin.cost.reasonText.${COST_REASON_KEYS[r]}`) : r}</li>
                   ))}
                 </ul>
               </>

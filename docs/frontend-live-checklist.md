@@ -30,6 +30,33 @@ backend. The walk now visits every new read-only list; the writes are done by ha
    date of birth + the clinic id, file a grievance (a category from the clinic's list), download the data file.
 5. **Only after one live approve with step-up works:** ask for the merge approve flag to be turned on.
 
+## Offer run after a cancel (front desk; nothing is sent to a patient)
+
+Why this exists: after a booking is cancelled, an offer only appears in **Offers** once an offer run has been started for the freed slot and
+a person has decided **Send**. Cancelling alone starts nothing. Steps, each with what you should see:
+
+1. **Scheduling, Bookings:** cancel a booking (confirm). *You should see:* "The booking was cancelled and the slot is free", the ranked
+   waitlist for the freed slot (or "Nobody on the waitlist matches this slot"), and a button **Prepare offer for this slot**.
+2. **Prepare offer for this slot, then confirm.** *You should see:* the confirmation says "Nothing is sent to anyone"; after it, "The run is
+   started", a status word, **Waiting for: Your decision to send, skip or stop**, the current candidate (a short id and a rank), and the
+   ranked waitlist with that candidate marked "Current candidate". If the backend answers 503 you should see "Offer runs are not set up
+   yet. Nothing was started or changed", calmly and not as an error.
+3. **Skip** (confirm). *You should see:* "The candidate was skipped", and the run moves to the next candidate (a new candidate and rank),
+   or finishes with "Finished: Yes" if nobody is left. A 409 reads "The run is not waiting for that".
+4. **Send** (confirm). *You should see:* "The offer was recorded for the candidate", a hold id on the run, and **Waiting for: The patient's
+   reply to be entered**. Open **Scheduling, Offers**: the offer is there as "Awaiting delivery". The system has sent nothing: you deliver it
+   by hand (Copy offer text, then Mark delivered).
+5. **Stop** (on another run, confirm). *You should see:* "The run was stopped" and "Finished: Yes".
+6. **Enter the reply** (a run waiting for the reply): the patient's stored reply is listed by time and sender, never by text. Pick it.
+   *You should see:* the message is NOT read until you click **Read this message**; then its text appears (that read is audited) with a
+   Hide button. If no stored reply exists the page says so, and **No reply came** is still available. (This console cannot store a typed
+   reply yet: request item 16.)
+7. **Suggest a reading.** *You should see:* a rules screening word (Clear, Red flag, Could not be assessed), a suggested meaning or "No
+   suggestion: a person must read the reply" with the reason, "Not recorded" for a missing confidence or engine, and the line that what it
+   means is your decision. A red flag shows "The rules did not clear this reply".
+8. **Enter this reply** (confirm). *You should see:* "The reply was entered", and, for a red flag or a reply the rules could not assess,
+   a nurse review task in **Tasks** and the run finished. **No reply came** (confirm) moves the run on.
+
 ## Patient sign-in for the demo: Supabase phone sign-in with test numbers (VERIFY IN THE DASHBOARD)
 
 The patient portal signs in with a one-time code sent to a mobile number. For the demo this needs no SMS provider and no external service:
@@ -123,6 +150,8 @@ no workflow can start it.
 | Notes | `GET /v1/staff/notes`, `POST /v1/staff/notes` | `clinic_id`, `patient_id`; key + text + optional parent | 503 keys not configured; erased or null text says so | not run live yet: the write |
 | Grievances | `GET /v1/staff/grievances`, `POST /v1/staff/grievances/{grievance_id}/status` | `clinic_id`; key + status | `result` words recorded, replay, invalid_transition | `category` words; not run live yet: the write |
 | Patient portal | `GET /v1/portal/me`, `POST /v1/portal/register`, `GET /v1/portal/consents`, `POST /v1/portal/consents`, `POST /v1/portal/activate`, `POST /v1/portal/claims`, `GET /v1/portal/grievances`, `POST /v1/portal/grievances`, `GET /v1/portal/my-data` | patient session only; key + the typed fields | me 403 = no patient account yet (the page offers to create it); consent 409 = notice changed; activate / claim `outcome` words; grievance 422 category not on the list, 503 not set up; my-data is audited | the sign-in itself (Supabase phone code) is not run live yet; the clinic id the patient types (no route gives it); the grievance category list (no route gives it) |
+| Offer run after a cancel | `POST /v1/staff/scheduling/backfills`, `GET .../backfills/{slot_id}`, `POST .../backfills/{slot_id}/decide`, `POST .../backfills/{slot_id}/reply`, `POST /v1/staff/scheduling/offers/interpret-reply`, `GET /v1/staff/messages/threads`, `GET /v1/staff/messages/threads/{thread_id}/messages` | key + clinic, slot, visit type; action send / skip / stop; outcome + stored message id | 404 no run yet; 409 not waiting for that; 503 not set up; nothing is sent to a patient | the `status` words of a run; whether Send records an offer that then appears in Offers; the suggested reading is only a suggestion; not run live yet: writes |
+| Lists that replace typing | `GET /public/clinic`, `GET /v1/portal/grievance-categories`, `GET /v1/staff/break-glass/reasons`, `GET /v1/staff/break-glass/mine`, `GET /v1/staff/visits/upcoming` | `clinic_id` where the route takes one | 404 on /public/clinic = no clinic marked public (the form then asks for a clinic code); 503 on categories = not set up | that each list has rows; that the patient never types a clinic id |
 | Offer draft | `GET /v1/staff/scheduling/offers/draft` | `clinic_id`, `visit_type_id` | 200 shows only `status`; 403; 5xx | `status` words; `reason` and `data` shapes (requests item 6) |
 | Possible duplicates | `GET /v1/staff/identity/possible-duplicates?status=` | `status` (default pending) | 200; 403 (non front desk) | `reason`, `matched_kinds` words |
 | Merges | `GET /v1/staff/identity/merges?status=` | `status` only when filtered | 200; 403 | status words |

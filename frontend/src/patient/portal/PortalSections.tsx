@@ -64,9 +64,9 @@ export function ConsentSection({ api, stage }: { api: Api; stage: Stage }) {
       {notices.isSuccess && notices.data.notices.length === 0 && <p>{t('portal.consent.none')}</p>}
       {notices.isSuccess &&
         notices.data.notices.map((n) => (
-          <article key={n.notice_id} className="notice" aria-label={n.purpose}>
+          <article key={n.notice_id} className="notice" aria-label={n.label ?? n.purpose}>
             <h3>
-              <code>{n.purpose}</code> · {t('portal.consent.version', { version: n.version })}
+              {n.label ?? <code>{n.purpose}</code>} · {t('portal.consent.version', { version: n.version })}
             </h3>
             {/* The notice text exactly as sent, as plain text. */}
             <div className="notice-text">{n.body}</div>
@@ -96,7 +96,7 @@ export function ConsentSection({ api, stage }: { api: Api; stage: Stage }) {
           status={<WriteProblem problem={record.error} calm={{ conflict: t('portal.consent.changed') }} />}
         >
           <p>
-            <code>{acting.notice.purpose}</code> · {t('portal.consent.version', { version: acting.notice.version })}
+            {acting.notice.label ?? <code>{acting.notice.purpose}</code>} · {t('portal.consent.version', { version: acting.notice.version })}
           </p>
           <p>{t('portal.consent.confirmBody')}</p>
         </ConfirmDialog>
@@ -147,6 +147,27 @@ function Activate({ api }: { api: Api }) {
   );
 }
 
+/**
+ * The hospital the patient is dealing with, from the public clinic route (its id and name), so the patient never types an id. If the owner
+ * has marked no clinic public (404) or the read fails, the form falls back to asking for the clinic code the hospital gave the patient.
+ */
+function useClinicField(api: Api, idPrefix: string, typed: string, setTyped: (v: string) => void) {
+  const { t } = useTranslation();
+  const clinic = usePortalQuery(['public-clinic'], () => unwrap(api.publicClinic()));
+  const clinicId = clinic.data ? clinic.data.clinic_id : typed.trim();
+  const node = clinic.isPending ? (
+    <Loading />
+  ) : clinic.data ? (
+    <p>{t('portal.hospital', { name: clinic.data.name })}</p>
+  ) : (
+    <>
+      <label htmlFor={`${idPrefix}-clinic`}>{t('portal.clinicCode')}</label>
+      <input id={`${idPrefix}-clinic`} type="text" autoComplete="off" spellCheck={false} value={typed} onChange={(e) => setTyped(e.target.value)} />
+    </>
+  );
+  return { clinicId, node, ready: !clinic.isPending };
+}
+
 // ---- claim a record: your verified phone, plus name and date of birth ---------------------------------------------------------------
 
 export function ClaimSection({ api, bound }: { api: Api; bound: boolean }) {
@@ -157,9 +178,8 @@ export function ClaimSection({ api, bound }: { api: Api; bound: boolean }) {
   const [dob, setDob] = useState('');
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  const valid = UUID.test(clinic.trim()) && name.trim() !== '' && dob !== '';
   const claim = useIdempotentWrite(
-    (_: void, key) => unwrap(api.portalClaim({ clinic_id: clinic.trim(), name: name.trim(), dob }, { idempotencyKey: key })),
+    (clinicId: string, key) => unwrap(api.portalClaim({ clinic_id: clinicId, name: name.trim(), dob }, { idempotencyKey: key })),
     (r) => {
       setOpen(false);
       setNote(t(`portal.claim.outcome.${r.outcome}`));
@@ -168,6 +188,11 @@ export function ClaimSection({ api, bound }: { api: Api; bound: boolean }) {
       void queryClient.invalidateQueries();
     },
   );
+  const clinicField = useClinicField(api, 'claim', clinic, (v) => {
+    setClinic(v);
+    claim.reset();
+  });
+  const valid = UUID.test(clinicField.clinicId) && name.trim() !== '' && dob !== '';
   const touch = (set: (v: string) => void) => (v: string) => {
     set(v);
     claim.reset(); // a different request never reuses the old key
@@ -188,8 +213,7 @@ export function ClaimSection({ api, bound }: { api: Api; bound: boolean }) {
         >
           <p>{t('portal.claim.body')}</p>
           {note && <p role="status">{note}</p>}
-          <label htmlFor="claim-clinic">{t('portal.clinicCode')}</label>
-          <input id="claim-clinic" type="text" autoComplete="off" spellCheck={false} value={clinic} onChange={(e) => touch(setClinic)(e.target.value)} />
+          {clinicField.node}
           <label htmlFor="claim-name">{t('portal.claim.name')}</label>
           <input id="claim-name" type="text" autoComplete="off" value={name} onChange={(e) => touch(setName)(e.target.value)} />
           <label htmlFor="claim-dob">{t('portal.claim.dob')}</label>
@@ -204,7 +228,7 @@ export function ClaimSection({ api, bound }: { api: Api; bound: boolean }) {
           title={t('portal.claim.title')}
           confirmLabel={t('portal.claim.button')}
           busy={claim.isPending}
-          onConfirm={() => claim.mutate()}
+          onConfirm={() => claim.mutate(clinicField.clinicId)}
           onCancel={() => {
             claim.reset();
             setOpen(false);
@@ -230,9 +254,8 @@ export function GrievanceSection({ api }: { api: Api }) {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const mine = usePortalQuery(['portal-grievances'], () => unwrap(api.listMyGrievances()));
-  const valid = UUID.test(clinic.trim()) && /^[a-z][a-z0-9_]{0,59}$/.test(category.trim()) && text.trim() !== '' && text.length <= 4000;
   const file = useIdempotentWrite(
-    (_: void, key) => unwrap(api.fileGrievance({ clinic_id: clinic.trim(), category: category.trim(), text }, { idempotencyKey: key })),
+    (clinicId: string, key) => unwrap(api.fileGrievance({ clinic_id: clinicId, category: category.trim(), text }, { idempotencyKey: key })),
     () => {
       setOpen(false);
       setNote(t('portal.grievance.filed'));
@@ -240,6 +263,16 @@ export function GrievanceSection({ api }: { api: Api }) {
       void queryClient.invalidateQueries();
     },
   );
+  const clinicField = useClinicField(api, 'gr', clinic, (v) => {
+    setClinic(v);
+    file.reset();
+  });
+  // The category words come from the hospital's own list. The words stay open-ended (a new one may appear), so each is shown humanised.
+  // If the list is not set up (503) nothing can be filed; if it cannot be read for another reason, a typed code is the fallback.
+  const categories = usePortalQuery(['grievance-categories'], () => unwrap(api.grievanceCategories()));
+  const listed = categories.data?.categories ?? null;
+  const notSetUp = categories.isError && categories.error.kind === 'unavailable';
+  const valid = UUID.test(clinicField.clinicId) && /^[a-z][a-z0-9_]{0,39}$/.test(category.trim()) && !notSetUp && text.trim() !== '' && text.length <= 4000;
   const touch = (set: (v: string) => void) => (v: string) => {
     set(v);
     file.reset();
@@ -257,13 +290,30 @@ export function GrievanceSection({ api }: { api: Api }) {
         autoComplete="off"
         noValidate
       >
-        <label htmlFor="gr-clinic">{t('portal.clinicCode')}</label>
-        <input id="gr-clinic" type="text" autoComplete="off" spellCheck={false} value={clinic} onChange={(e) => touch(setClinic)(e.target.value)} />
+        {clinicField.node}
         <label htmlFor="gr-category">{t('portal.grievance.category')}</label>
-        <input id="gr-category" type="text" autoComplete="off" spellCheck={false} value={category} onChange={(e) => touch(setCategory)(e.target.value)} aria-describedby="gr-category-hint" />
-        <p id="gr-category-hint" className="hint">
-          {t('portal.grievance.categoryHint')}
-        </p>
+        {listed ? (
+          // Nothing is pre-chosen: the person picks the category that fits.
+          <select id="gr-category" value={category} onChange={(e) => touch(setCategory)(e.target.value)}>
+            <option value="">{t('portal.grievance.chooseCategory')}</option>
+            {listed.map((c) => (
+              <option key={c} value={c}>
+                {c.replaceAll('_', ' ')}
+              </option>
+            ))}
+          </select>
+        ) : notSetUp ? (
+          <p role="status">{t('portal.grievance.unavailable')}</p>
+        ) : categories.isPending ? (
+          <Loading />
+        ) : (
+          <>
+            <input id="gr-category" type="text" autoComplete="off" spellCheck={false} value={category} onChange={(e) => touch(setCategory)(e.target.value)} aria-describedby="gr-category-hint" />
+            <p id="gr-category-hint" className="hint">
+              {t('portal.grievance.categoryHint')}
+            </p>
+          </>
+        )}
         <label htmlFor="gr-text">{t('portal.grievance.text')}</label>
         <textarea id="gr-text" rows={6} maxLength={4000} value={text} onChange={(e) => touch(setText)(e.target.value)} />
         <button type="submit" className="button button-primary" disabled={!valid}>
@@ -297,7 +347,7 @@ export function GrievanceSection({ api }: { api: Api }) {
           title={t('portal.grievance.file')}
           confirmLabel={t('portal.grievance.file')}
           busy={file.isPending}
-          onConfirm={() => file.mutate()}
+          onConfirm={() => file.mutate(clinicField.clinicId)}
           onCancel={() => {
             file.reset();
             setOpen(false);
