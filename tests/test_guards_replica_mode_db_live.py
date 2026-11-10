@@ -19,7 +19,7 @@ MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or dotenv_values(ROOT / ".env
 pytestmark = [pytest.mark.asyncio(loop_scope="module"), pytest.mark.skipif(not MIGRATOR, reason="DATABASE_URL_MIGRATOR not configured")]
 SCHEMAS = ("iam", "mpi", "sched", "clinical", "docs", "msg", "kb", "agents", "ai", "ops", "audit")
 GUARDS = """
-select c.relnamespace::regnamespace::text || '.' || c.relname as tbl, tg.tgname, tg.tgenabled
+select c.relnamespace::regnamespace::text || '.' || c.relname as tbl, tg.tgname, tg.tgenabled::text as tgenabled
   from pg_trigger tg join pg_class c on c.oid = tg.tgrelid join pg_proc p on p.oid = tg.tgfoid
  where not tg.tgisinternal and c.relnamespace::regnamespace::text = any(:schemas)
    and (tg.tgtype & 4) = 0 and (tg.tgtype & (8 | 16 | 32)) <> 0 and p.proname not like '%touch%' and p.proname <> 'alerts_ack_once'
@@ -51,7 +51,7 @@ async def test_the_functional_triggers_that_fire_on_insert_are_left_alone(_conn)
     rows = (
         await _conn.execute(
             text(
-                "select tg.tgname, tg.tgenabled from pg_trigger tg join pg_class c on c.oid = tg.tgrelid "
+                "select tg.tgname, tg.tgenabled::text as tgenabled from pg_trigger tg join pg_class c on c.oid = tg.tgrelid "
                 "where not tg.tgisinternal and c.relnamespace::regnamespace::text = any(:s) and tg.tgname in ('results_fan_out', 'voice_chunks_guard', 'results_infer_kind', 'voice_preferences_touch')"
             ),
             {"s": list(SCHEMAS)},

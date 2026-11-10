@@ -51,10 +51,9 @@ async def _as_app(conn, account, sql, params=None, *, aal2=True):
     await conn.execute(text("set local role careflow_app"))
     claims = aal2_claims(str(account)) if aal2 else {"sub": str(account), "role": "authenticated", "aal": "aal1"}
     await conn.execute(text("select set_config('request.jwt.claims', :c, true)"), {"c": json.dumps(claims)})
-    try:
-        return (await conn.execute(text(sql), params or {})).all()
-    finally:
-        await conn.execute(text("reset role"))
+    rows = (await conn.execute(text(sql), params or {})).all()
+    await conn.execute(text("reset role"))  # (after a refusal the caller's savepoint is rolled back, which restores the role)
+    return rows
 
 
 async def test_the_application_role_has_no_grant_on_the_public_clinic_table(_conn):

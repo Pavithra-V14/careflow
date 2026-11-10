@@ -1468,7 +1468,7 @@ def document_register_cases(ids) -> list[tuple]:
         "document_id": str(doc), "kind": "referral", "content_type": "application/pdf", "size_bytes": len(PDF_BYTES), "replayed": replayed, "scan": "not_checked"})
     cases = [
         _case(ids, "front desk registers an uploaded file", "front_desk_a", 200, DOC_REGISTER, json=body(), key=k_ok, body=registered(doc_ok, False)),
-        _case(ids, "replaying the same key is a replay", "front_desk_a", 200, DOC_REGISTER, json=body(), key=k_ok, body=registered(doc_ok, True)),
+        _case(ids, "replaying the same key is a replay of the uploaded file", "front_desk_a", 200, DOC_REGISTER, json=body(), key=k_ok, body=registered(doc_ok, True)),
         _case(ids, "the same key for a different kind is a conflict", "front_desk_a", 409, DOC_REGISTER, json=body(kind="report"), key=k_ok,
               body=lambda b: b == {"detail": "this idempotency key was already used by a different request"}),
         _case(ids, "a nurse registers an uploaded file", "nurse_a", 200, DOC_REGISTER, json=body(), key=k_nurse, body=registered(doc_nurse, False)),

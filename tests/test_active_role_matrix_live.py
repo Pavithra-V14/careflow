@@ -103,7 +103,7 @@ def single_role_identities(ids):  # noqa: F811
 
 
 # Cases whose expectation depends on WHICH PERSON acts, not on the role: an identity swap cannot reproduce them (the proposal's proposer is a fixed database row).
-IDENTITY_BOUND = ("SAME person", "cannot approve their own", "last administrator", "cannot suspend themselves", "cannot ask for their own", "the holder reads")  # (the all-roles accounts are administrators and second approvers too, which changes who counts as "the last" or "the other" person)
+IDENTITY_BOUND = ("SAME person", "cannot approve their own", "last administrator", "cannot suspend themselves", "cannot ask for their own", "the holder reads", "the holder sees", "uploaded file")  # (the all-roles accounts are administrators and second approvers too, which changes who counts as "the last" or "the other" person)
 
 
 def fresh(ids, method, path):  # noqa: F811

@@ -128,7 +128,7 @@ async def test_the_two_listings_need_a_verified_second_factor_and_the_claimant_r
 
 async def test_a_barrier_and_a_voice_row_cannot_hide_under_another_origin(db):
     w = await world(db)
-    ins = "insert into ops.care_barriers (clinic_id, origin, patient_id, barrier, status, idempotency_key) values (:c, :o, :p, 'transport', 'open', :k)"
+    ins = "insert into ops.care_barriers (clinic_id, origin, patient_id, barrier, idempotency_key) values (:c, :o, :p, 'transport', :k)"
     assert await as_app(db, w["nurse"], ins, c=w["clinic"], o="live", p=w["patient"], k="b-live") == "42501"  # the clinic is `test`: a row tagged `live` is refused
     assert await as_app(db, w["nurse"], ins, c=w["clinic"], o="test", p=w["patient"], k="b-test") == 1
     assert await as_app(db, w["patient_acct"], "insert into msg.voice_preferences (account_id, origin, voice_enabled) values (:a, 'live', true)", aal2=False, a=w["patient_acct"]) == "42501"
