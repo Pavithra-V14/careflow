@@ -88,3 +88,6 @@ settings:
   break_glass_max_reopens:
     value: "3"
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  consent_labels:
+    value: '{"care_delivery": "DEMO ONLY - Care", "ai_processing": "DEMO ONLY - AI-assisted processing", "service_improvement": "DEMO ONLY - Service improvement"}'
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"

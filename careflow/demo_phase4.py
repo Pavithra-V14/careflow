@@ -38,6 +38,7 @@ VARIABLES: Final = {
     "care_gap_alert_days": "CAREFLOW_CARE_GAP_ALERT_DAYS",
     "care_gap_rules": "CAREFLOW_CARE_GAP_RULES",
     "consent_notices": "CAREFLOW_CONSENT_NOTICES",
+    "consent_labels": "CAREFLOW_CONSENT_LABELS",
     "care_plan_task_priority": "CAREFLOW_CARE_PLAN_TASK_PRIORITY",
     "care_plan_task_role": "CAREFLOW_CARE_PLAN_TASK_ROLE",
     "visit_readiness_content": "CAREFLOW_VISIT_READINESS_CONTENT",

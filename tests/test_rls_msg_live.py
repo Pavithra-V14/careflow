@@ -291,7 +291,7 @@ async def test_erasure_guard_and_trigger_functions_are_not_executable_by_the_app
     fns = await db.fetch("select oid::regprocedure::text as f from pg_proc where pronamespace = 'msg'::regnamespace")
     assert len(fns) >= 5
     for fn in fns:
-        if fn["f"].startswith(("msg.record_screening(", "msg.voice_sessions_for_admin(", "msg.read_voice_transcript(", "msg.purge_expired_voice_chunks(", "msg.break_glass_messages(")):
+        if fn["f"].startswith(("msg.record_screening(", "msg.voice_sessions_for_admin(", "msg.read_voice_transcript(", "msg.purge_expired_voice_chunks(", "msg.break_glass_messages(", "msg.purge_expired_voice_chunks_as_worker(")):
             continue  # the functions the application role may call: record_screening (0013) and the admin-only audited voice transcript functions (0047, each checks admin + aal2 inside); everything else here is internal
         assert not await db.fetchval("select has_function_privilege('careflow_app', $1, 'EXECUTE')", fn["f"]), fn["f"]
     assert await db.fetchval("select has_function_privilege('careflow_app', 'msg.record_screening(uuid,text,text,integer,text,jsonb,text)', 'EXECUTE')")

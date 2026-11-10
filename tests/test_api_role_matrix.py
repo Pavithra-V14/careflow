@@ -38,7 +38,7 @@ from fastapi import FastAPI
 from starlette.testclient import TestClient
 
 from careflow.adapters.fake import FakeUpload
-from careflow.app import Settings, create_app
+from careflow.app import Settings, create_app, key_scope
 from careflow.auth import JWKSClient
 from careflow.auth_admin import FakeAuthAdmin
 from careflow.crypto import DemographicVault
@@ -1406,10 +1406,15 @@ UPLOAD_ALLOWED = ("front_desk_a", "nurse_a", "multi")
 UPLOAD_VISIBLE_NOT_ALLOWED = {r: 403 for r in ("doctor_a", "admin_a", "business_owner_a", "auditor_a")}
 
 
-def _put_object(ids, key, content=PDF_BYTES, content_type="application/pdf", *, clinic=None):
-    """The browser's half of an upload: take a ticket from the real intake for (clinic, key) and PUT the bytes at the server-chosen path."""
+def scoped_key(ids, who, key):
+    """The key as the app stores it: behind the caller's own account prefix (careflow/app.py key_scope)."""
+    return f"{key_scope(str(ids.people[who][0]))}:{key}"
+
+
+def _put_object(ids, key, content=PDF_BYTES, content_type="application/pdf", *, clinic=None, who="front_desk_a"):
+    """The browser's half of an upload: take a ticket from the real intake for (clinic, the caller's scoped key) and PUT the bytes at the server-chosen path."""
     clinic = clinic or ids.clinic_a
-    ticket = _run(DocumentIntake(UPLOADS, profile="demo").begin(clinic, "referral", content_type if content_type in ALLOWED_DOC_TYPES else "application/pdf", key))
+    ticket = _run(DocumentIntake(UPLOADS, profile="demo").begin(clinic, "referral", content_type if content_type in ALLOWED_DOC_TYPES else "application/pdf", scoped_key(ids, who, key)))
     UPLOADS.client_put(ticket.path, content, content_type)
     return ticket.document_id
 
@@ -1437,7 +1442,7 @@ def document_begin_cases(ids) -> list[tuple]:
     cases = [
         _case(ids, "front desk begins an upload", "front_desk_a", 200, DOC_BEGIN, json=body(), key=key, body=ticket),
         _case(ids, "the same key gets the same document id back", "front_desk_a", 200, DOC_BEGIN, json=body(), key=key,
-              body=lambda b: b["document_id"] == str(document_id_for(ids.clinic_a, key))),
+              body=lambda b: b["document_id"] == str(document_id_for(ids.clinic_a, scoped_key(ids, "front_desk_a", key)))),
         _case(ids, "a nurse begins an upload", "nurse_a", 200, DOC_BEGIN, json=body(kind="report", content_type="image/png"), body=ticket),
         _case(ids, "a size hint above the bound is refused with a fixed word", "front_desk_a", 422, DOC_BEGIN, json=body(size_hint=21 * 1024 * 1024), body=lambda b: b == {"detail": "too_large"}),
         _case(ids, "a content type that is not allowed is rejected", "front_desk_a", 422, DOC_BEGIN, json=body(content_type="text/html"), body=_fixed(422)),
@@ -1456,7 +1461,7 @@ def document_register_cases(ids) -> list[tuple]:
     body = lambda **o: {"clinic_id": str(ids.clinic_a), "kind": "referral", **o}
     k_ok, k_nurse, k_mismatch, k_empty = _new_key(), _new_key(), _new_key(), _new_key()
     doc_ok = _put_object(ids, k_ok)
-    doc_nurse = _put_object(ids, k_nurse)
+    doc_nurse = _put_object(ids, k_nurse, who="nurse_a")
     _put_object(ids, k_mismatch, b"this is not a pdf at all", "application/pdf")
     _put_object(ids, k_empty, b"", "application/pdf")
     registered = lambda doc, replayed: (lambda b: b == {
@@ -3475,6 +3480,53 @@ def autonomy_history_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(), None)[:4]
 
 
+# ---- pick-lists and the upcoming visits (migration 0070) ---------------------------------------------------------------------------------------------------------------------------------------------------
+PORTAL_GRIEVANCE_CATEGORIES = PORTAL + "/grievance-categories"
+BG_REASONS = BREAK_GLASS + "/reasons"
+BG_MINE = BREAK_GLASS + "/mine"
+VISITS_UPCOMING = VISITS + "/upcoming"
+
+
+def portal_grievance_categories_cases(ids) -> list[tuple]:
+    cases = [_case(ids, "an active patient account reads the list", "patient", 200, PORTAL_GRIEVANCE_CATEGORIES, key=None, body=lambda b: b == {"categories": ["demo_category"]})]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, PORTAL_GRIEVANCE_CATEGORIES, key=None, body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, PORTAL_GRIEVANCE_CATEGORIES, key=None, body=NOT_A_PATIENT))
+    return cases + _unauthenticated(ids, PORTAL_GRIEVANCE_CATEGORIES, None)[:4]
+
+
+def break_glass_reasons_cases(ids) -> list[tuple]:
+    path = lambda **o: BG_REASONS + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
+    cases = _console_clinic_cases(ids, path, allowed=("front_desk_a", "nurse_a", "doctor_a", "admin_a", "multi"), ok_status=200, ok_body=lambda b: b == {"reasons": ["demo_reason"]}, visible_refused=("business_owner_a", "auditor_a"))
+    cases += [
+        _case(ids, "an unknown clinic is not found", "admin_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "a clinic id that is not a uuid is rejected", "admin_a", 422, path(clinic_id="nope"), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
+def break_glass_mine_cases(ids) -> list[tuple]:
+    path = lambda **o: BG_MINE + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
+    ok = lambda b: set(b) == {"grants"} and all(set(g) == {"grant_id", "patient_id", "reason_code", "opened_at", "expires_at"} for g in b["grants"])
+    cases = _console_clinic_cases(ids, path, allowed=("front_desk_a", "nurse_a", "doctor_a", "multi"), ok_status=200, ok_body=ok, visible_refused=("admin_a", "business_owner_a", "auditor_a"))
+    cases += [
+        _case(ids, "the holder sees the seeded open grants", "nurse_a", 200, path(), key=None, body=lambda b: len(b["grants"]) >= 2),
+        _case(ids, "someone else sees none of them", "doctor_a", 200, path(), key=None, body=lambda b: b == {"grants": []}),
+        _case(ids, "an unknown clinic is not found", "nurse_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
+def visits_upcoming_cases(ids) -> list[tuple]:
+    path = lambda **o: VISITS_UPCOMING + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
+    ok = lambda b: set(b) == {"visits"} and all(set(v) == {"visit_id", "patient_id", "visit_type_id", "starts_at", "ends_at"} for v in b["visits"])
+    cases = _console_clinic_cases(ids, path, allowed=("nurse_a", "doctor_a", "multi"), ok_status=200, ok_body=ok, visible_refused=("front_desk_a", "admin_a", "business_owner_a", "auditor_a"))
+    cases += [
+        _case(ids, "an unknown clinic is not found", "nurse_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "limit=0 is rejected", "nurse_a", 422, path(limit=0), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
 MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", "/v1/iam/me"): me_cases,
     ("POST", HOLD): lambda ids: slot_write_cases(ids, "hold"),
@@ -3550,6 +3602,10 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", BREAK_GLASS): break_glass_open_cases,
     ("GET", BREAK_GLASS + "/{grant_id}/messages"): break_glass_read_cases,
     ("GET", BREAK_GLASS): break_glass_list_cases,
+    ("GET", PORTAL_GRIEVANCE_CATEGORIES): portal_grievance_categories_cases,
+    ("GET", BG_REASONS): break_glass_reasons_cases,
+    ("GET", BG_MINE): break_glass_mine_cases,
+    ("GET", VISITS_UPCOMING): visits_upcoming_cases,
     ("POST", BREAK_GLASS + "/{grant_id}/review"): break_glass_review_cases,
     ("GET", PORTAL_CLAIM_LIST): portal_claim_list_cases,
     ("POST", PORTAL_CLAIM_RESOLVE): portal_claim_resolve_cases,
@@ -4086,7 +4142,7 @@ def test_a_replay_returns_the_original_patient_and_writes_nothing_more(client, i
     person, key = _person(), _new_key()
     first, again = _register(client, ids, person, key=key).json(), _register(client, ids, person, key=key).json()
     assert (first["outcome"], again["outcome"]) == ("created", "replayed") and first["patient_id"] == again["patient_id"]
-    assert _run(_fetch("select count(*) as n from mpi.patients where idempotency_key = $1", key))[0]["n"] == 1
+    assert _run(_fetch("select count(*) as n from mpi.patients where idempotency_key = $1", scoped_key(ids, "front_desk_a", key)))[0]["n"] == 1
 
 
 def test_a_matched_person_creates_no_new_record_and_a_near_match_queues_a_pending_review(client, ids):

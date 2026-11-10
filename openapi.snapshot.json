@@ -1154,6 +1154,11 @@
             "type": "boolean"
           },
           "sender_kind": {
+            "enum": [
+              "patient",
+              "staff",
+              "system"
+            ],
             "title": "Sender Kind",
             "type": "string"
           },
@@ -1163,6 +1168,12 @@
             "type": "string"
           },
           "topic": {
+            "enum": [
+              "care",
+              "appointments",
+              "safety",
+              "readiness"
+            ],
             "title": "Topic",
             "type": "string"
           }
@@ -1195,6 +1206,61 @@
           "messages"
         ],
         "title": "BreakGlassMessages",
+        "type": "object"
+      },
+      "BreakGlassMine": {
+        "additionalProperties": false,
+        "properties": {
+          "grants": {
+            "items": {
+              "$ref": "#/components/schemas/BreakGlassMineRowOut"
+            },
+            "title": "Grants",
+            "type": "array"
+          }
+        },
+        "required": [
+          "grants"
+        ],
+        "title": "BreakGlassMine",
+        "type": "object"
+      },
+      "BreakGlassMineRowOut": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "grant_id": {
+            "format": "uuid",
+            "title": "Grant Id",
+            "type": "string"
+          },
+          "opened_at": {
+            "format": "date-time",
+            "title": "Opened At",
+            "type": "string"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "reason_code": {
+            "title": "Reason Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "grant_id",
+          "patient_id",
+          "reason_code",
+          "opened_at",
+          "expires_at"
+        ],
+        "title": "BreakGlassMineRowOut",
         "type": "object"
       },
       "BreakGlassOpenIn": {
@@ -1248,6 +1314,23 @@
           "created"
         ],
         "title": "BreakGlassOpenOut",
+        "type": "object"
+      },
+      "BreakGlassReasonsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          }
+        },
+        "required": [
+          "reasons"
+        ],
+        "title": "BreakGlassReasonsOut",
         "type": "object"
       },
       "BreakGlassReviewIn": {
@@ -2011,6 +2094,15 @@
           },
           "reasons": {
             "items": {
+              "enum": [
+                "fewer than seven days of measured traffic",
+                "no completed workflows",
+                "platform floor (P) is not configured",
+                "reviewer rates are not configured",
+                "a reviewer role has no configured rate",
+                "reviewer minutes are not measured yet",
+                "retry cost is not measured yet"
+              ],
               "type": "string"
             },
             "title": "Reasons",
@@ -2027,6 +2119,11 @@
             ]
           },
           "state": {
+            "enum": [
+              "insufficient_data",
+              "unconfigured",
+              "ok"
+            ],
             "title": "State",
             "type": "string"
           }
@@ -2843,10 +2940,21 @@
             "type": "string"
           },
           "sender_kind": {
+            "enum": [
+              "patient",
+              "staff",
+              "system"
+            ],
             "title": "Sender Kind",
             "type": "string"
           },
           "topic": {
+            "enum": [
+              "care",
+              "appointments",
+              "safety",
+              "readiness"
+            ],
             "title": "Topic",
             "type": "string"
           }
@@ -2917,6 +3025,23 @@
           "phone"
         ],
         "title": "ExportRecordOut",
+        "type": "object"
+      },
+      "GrievanceCategoriesOut": {
+        "additionalProperties": false,
+        "properties": {
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Categories",
+            "type": "array"
+          }
+        },
+        "required": [
+          "categories"
+        ],
+        "title": "GrievanceCategoriesOut",
         "type": "object"
       },
       "GrievanceFiledOut": {
@@ -4008,6 +4133,11 @@
             "type": "string"
           },
           "sender_kind": {
+            "enum": [
+              "patient",
+              "staff",
+              "system"
+            ],
             "title": "Sender Kind",
             "type": "string"
           },
@@ -4275,6 +4405,17 @@
             ],
             "title": "Decision"
           },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
           "notice_id": {
             "format": "uuid",
             "title": "Notice Id",
@@ -4292,6 +4433,7 @@
         "required": [
           "notice_id",
           "purpose",
+          "label",
           "version",
           "body",
           "decision"
@@ -5052,6 +5194,26 @@
         "title": "ProviderOut",
         "type": "object"
       },
+      "PublicClinicOut": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "name"
+        ],
+        "title": "PublicClinicOut",
+        "type": "object"
+      },
       "ReadinessReplyIn": {
         "additionalProperties": false,
         "properties": {
@@ -5102,6 +5264,28 @@
             "type": "boolean"
           },
           "status": {
+            "enum": [
+              "started",
+              "nothing_to_ask",
+              "asked",
+              "reply_in",
+              "screened",
+              "red_flag_escalated",
+              "held_unassessable",
+              "classified",
+              "fact_written",
+              "fact_not_grounded",
+              "next",
+              "readiness_recorded",
+              "nurse_escalated",
+              "incomplete_flagged",
+              "brief_stored",
+              "brief_unavailable",
+              "no_reply",
+              "barrier_classified",
+              "barrier_unknown",
+              "rebooking_handed_off"
+            ],
             "title": "Status",
             "type": "string"
           },
@@ -6331,6 +6515,12 @@
             "type": "string"
           },
           "verdict": {
+            "enum": [
+              "not_configured",
+              "too_few",
+              "ok",
+              "review"
+            ],
             "title": "Verdict",
             "type": "string"
           }
@@ -7139,6 +7329,62 @@
         "title": "UnmergeOut",
         "type": "object"
       },
+      "UpcomingVisitList": {
+        "additionalProperties": false,
+        "properties": {
+          "visits": {
+            "items": {
+              "$ref": "#/components/schemas/UpcomingVisitOut"
+            },
+            "title": "Visits",
+            "type": "array"
+          }
+        },
+        "required": [
+          "visits"
+        ],
+        "title": "UpcomingVisitList",
+        "type": "object"
+      },
+      "UpcomingVisitOut": {
+        "additionalProperties": false,
+        "properties": {
+          "ends_at": {
+            "format": "date-time",
+            "title": "Ends At",
+            "type": "string"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "starts_at": {
+            "format": "date-time",
+            "title": "Starts At",
+            "type": "string"
+          },
+          "visit_id": {
+            "format": "uuid",
+            "title": "Visit Id",
+            "type": "string"
+          },
+          "visit_type_id": {
+            "format": "uuid",
+            "title": "Visit Type Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "visit_id",
+          "patient_id",
+          "visit_type_id",
+          "starts_at",
+          "ends_at"
+        ],
+        "title": "UpcomingVisitOut",
+        "type": "object"
+      },
       "ValidationErrorBody": {
         "additionalProperties": false,
         "properties": {
@@ -7458,10 +7704,19 @@
             "type": "string"
           },
           "status": {
+            "enum": [
+              "open",
+              "ended"
+            ],
             "title": "Status",
             "type": "string"
           },
           "workflow": {
+            "enum": [
+              "slot_offer",
+              "intake_question",
+              "readiness_item"
+            ],
             "title": "Workflow",
             "type": "string"
           }
@@ -7656,6 +7911,28 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/public/clinic": {
+      "get": {
+        "description": "The hospital's clinic id and name, for the forms of a patient who is not signed in yet (a claim or a grievance needs the clinic id). 404 while the owner has marked no clinic public. Nothing else is returned.",
+        "operationId": "public_clinic_public_clinic_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicClinicOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Public Clinic",
+        "tags": [
+          "public"
+        ]
+      }
+    },
     "/readyz": {
       "get": {
         "operationId": "readyz_readyz_get",
@@ -8020,6 +8297,63 @@
         "summary": "Portal Record Consent",
         "tags": [
           "patient portal"
+        ]
+      }
+    },
+    "/v1/portal/grievance-categories": {
+      "get": {
+        "description": "The category words a grievance may use (the required setting CAREFLOW_GRIEVANCE_CATEGORIES), sorted. 403 unless you are an active patient account, 503 while the list is not configured.",
+        "operationId": "grievance_categories_v1_portal_grievance_categories_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GrievanceCategoriesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Grievance Categories",
+        "tags": [
+          "patient rights"
         ]
       }
     },
@@ -9604,6 +9938,164 @@
           }
         ],
         "summary": "Open Break Glass",
+        "tags": [
+          "staff break-glass"
+        ]
+      }
+    },
+    "/v1/staff/break-glass/mine": {
+      "get": {
+        "description": "YOUR grants that are still open (not expired, not reviewed), soonest to expire first, so a page reload can pick one up again. 404 if the clinic is not visible to you, 403 unless you are front desk, nurse or doctor there.",
+        "operationId": "my_open_break_glass_grants_v1_staff_break_glass_mine_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Clinic Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BreakGlassMine"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "My Open Break Glass Grants",
+        "tags": [
+          "staff break-glass"
+        ]
+      }
+    },
+    "/v1/staff/break-glass/reasons": {
+      "get": {
+        "description": "The reason codes the clinic accepts for a break-glass grant (the owner-kept list), sorted. 404 if the clinic is not visible to you, 403 unless you are front desk, nurse, doctor or admin there.",
+        "operationId": "break_glass_reasons_v1_staff_break_glass_reasons_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Clinic Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BreakGlassReasonsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Break Glass Reasons",
         "tags": [
           "staff break-glass"
         ]
@@ -18412,6 +18904,97 @@
         "summary": "Join Waitlist",
         "tags": [
           "staff scheduling"
+        ]
+      }
+    },
+    "/v1/staff/visits/upcoming": {
+      "get": {
+        "description": "Confirmed visits that have not started yet, soonest first: ids and times only (never a name). It gives visit readiness the visit id to work with. 404 if the clinic is not visible to you, 403 unless you are a nurse or doctor there.",
+        "operationId": "upcoming_visits_v1_staff_visits_upcoming_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Clinic Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpcomingVisitList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Upcoming Visits",
+        "tags": [
+          "staff visit readiness"
         ]
       }
     },

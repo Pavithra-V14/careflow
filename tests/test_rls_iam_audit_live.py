@@ -134,7 +134,7 @@ async def test_every_table_has_forced_rls(db):
            join pg_namespace n on n.oid = c.relnamespace
            where n.nspname in ('iam', 'audit') and c.relkind = 'r'"""
     )
-    assert {r["relname"] for r in rows} == {"clinics", "accounts", "staff_roles", "log", "consent_notices", "consent_events", "break_glass_grants", "break_glass_reasons", "grievances", "grievance_updates", "grievance_rotation_batches", "recovery_requests"}  # (consent_*: migration 0049)
+    assert {r["relname"] for r in rows} == {"clinics", "accounts", "staff_roles", "log", "consent_notices", "consent_events", "break_glass_grants", "break_glass_reasons", "break_glass_settings", "grievances", "grievance_updates", "grievance_rotation_batches", "recovery_requests"}  # (consent_*: migration 0049)
     assert all(r["relrowsecurity"] and r["relforcerowsecurity"] for r in rows)
 
 

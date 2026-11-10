@@ -71,6 +71,7 @@ from careflow import (
     care_gap_sql,
     care_gaps,
     care_journey_sql,
+    consent_settings,
     demo_front_door,
     demo_phase3,
     demo_phase4,
@@ -99,7 +100,15 @@ from careflow.api_enums import (
     CareGapSource,
     CarePlanProgress,
     CarePlanStatus,
+    CostReason,
+    CostState,
+    MessageTopic,
     MetricId,
+    ReadinessStatus,
+    ReviewerVerdict,
+    SenderKind,
+    VoiceSessionStatus,
+    VoiceWorkflow,
 )
 from careflow.audit import write_audit
 from careflow.auth import (
@@ -1020,7 +1029,7 @@ class MessageReadOut(_Out):
     message_id: uuid.UUID
     thread_id: uuid.UUID
     topic: Literal["care", "appointments", "safety"]
-    sender_kind: str
+    sender_kind: SenderKind
     body: str
 
 
@@ -3293,7 +3302,7 @@ class ReviewerStatOut(_Out):
     median_seconds: float | None
     canaries_seen: int
     canaries_approved: int
-    verdict: str
+    verdict: ReviewerVerdict
     reasons: list[str]
 
 
@@ -3316,8 +3325,8 @@ class CostColumnOut(_Out):
 
 class CostCanvasOut(_Out):
     clinic_id: uuid.UUID
-    state: str
-    reasons: list[str]
+    state: CostState
+    reasons: list[CostReason]
     actual: CostColumnOut | None
     shadow: CostColumnOut | None
     amplification_over_ceiling: bool
@@ -3998,6 +4007,7 @@ class PortalMeOut(_Out):
 class NoticeOut(_Out):
     notice_id: uuid.UUID
     purpose: str
+    label: str | None  # the patient-facing name of the purpose (the required setting CAREFLOW_CONSENT_LABELS); null while counsel has supplied none
     version: int
     body: str
     decision: bool | None
@@ -4051,11 +4061,11 @@ async def portal_me(conn: TxConnAllGrants, claims: dict[str, Any] = Depends(veri
 
 
 @portal.get("/consents", response_model=NoticeList)
-async def portal_consents(conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> NoticeList:
+async def portal_consents(request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> NoticeList:
     """The current notice for each purpose (exact text and version) with your decision on it. With no notice published the list is empty. 403 unless you are a patient account (invited or active)."""
     account_id, _ = await _patient_account(conn, claims, ("invited", "active"))
     decided = await portal_sql.latest_decisions(conn, account_id)
-    return NoticeList(notices=[NoticeOut(notice_id=n.id, purpose=n.purpose, version=n.version, body=n.body, decision=decided.get(n.purpose)) for n in await portal_sql.current_notices(conn)])
+    return NoticeList(notices=[NoticeOut(notice_id=n.id, purpose=n.purpose, label=request.app.state.consent_labels.get(n.purpose), version=n.version, body=n.body, decision=decided.get(n.purpose)) for n in await portal_sql.current_notices(conn)])
 
 
 @portal.post("/consents", response_model=ConsentOut, status_code=201)
@@ -4332,7 +4342,7 @@ READINESS_ROLES = ("nurse", "doctor")
 
 class ReadinessViewOut(_Out):
     visit_id: uuid.UUID
-    status: str
+    status: ReadinessStatus
     waiting_for: Literal["reply", "none"]
     current_item: str | None  # an item id (never the wording)
     task_id: uuid.UUID | None
@@ -4427,8 +4437,8 @@ staff_voice = APIRouter(prefix="/v1/staff/voice", tags=["staff voice transcripts
 
 class VoiceSessionRowOut(_Out):
     session_id: uuid.UUID
-    workflow: str
-    status: str
+    workflow: VoiceWorkflow
+    status: VoiceSessionStatus
     started_at: datetime
     retention_days: int
     chunk_count: int
@@ -4522,8 +4532,8 @@ class BreakGlassOpenOut(_Out):
 class BreakGlassMessageOut(_Out):
     message_id: uuid.UUID
     thread_id: uuid.UUID
-    topic: str
-    sender_kind: str
+    topic: MessageTopic
+    sender_kind: SenderKind
     created_at: datetime
     erased: bool
     readable: bool
@@ -4713,8 +4723,8 @@ class ExportBookingOut(_Out):
 class ExportMessageOut(_Out):
     clinic_id: uuid.UUID
     message_id: uuid.UUID
-    topic: str
-    sender_kind: str
+    topic: MessageTopic
+    sender_kind: SenderKind
     created_at: datetime
     erased: bool
     body: str | None
@@ -5047,6 +5057,105 @@ async def list_clinical_notes(clinic_id: uuid.UUID, patient_id: uuid.UUID, reque
     return NoteList(notes=out)
 
 
+# ---- Public clinic, grievance categories, break-glass pick-lists, upcoming visits (migration 0070; the frontend requests 13 to 15) ---------------------------------------------------------------------------
+#
+# `GET /public/clinic` needs no sign-in: the hospital's id and name for the patient forms (the owner marks WHICH clinic is public in an owner-managed table; with none marked the route answers 404). It is
+# outside /v1 because it has no identity. The other routes are signed-in and role-checked like their neighbours.
+
+public_config = APIRouter(tags=["public"])
+
+
+class PublicClinicOut(_Out):
+    clinic_id: uuid.UUID
+    name: str
+
+
+@public_config.get("/public/clinic", response_model=PublicClinicOut)
+async def public_clinic(request: Request) -> PublicClinicOut:
+    """The hospital's clinic id and name, for the forms of a patient who is not signed in yet (a claim or a grievance needs the clinic id). 404 while the owner has marked no clinic public. Nothing else is returned."""
+    async with request.app.state.engine.connect() as conn:
+        row = (await conn.execute(text("select clinic_id, name from iam.public_clinic()"))).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return PublicClinicOut(clinic_id=row.clinic_id, name=row.name)
+
+
+class GrievanceCategoriesOut(_Out):
+    categories: list[str]
+
+
+@portal_rights.get("/grievance-categories", response_model=GrievanceCategoriesOut)
+async def grievance_categories(request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> GrievanceCategoriesOut:
+    """The category words a grievance may use (the required setting CAREFLOW_GRIEVANCE_CATEGORIES), sorted. 403 unless you are an active patient account, 503 while the list is not configured."""
+    await _patient_account(conn, claims)
+    categories = request.app.state.grievance_categories
+    if categories is None:
+        raise HTTPException(status_code=503, detail="grievances are unavailable: the category list is not configured")
+    return GrievanceCategoriesOut(categories=sorted(categories))
+
+
+class BreakGlassReasonsOut(_Out):
+    reasons: list[str]
+
+
+class BreakGlassMineRowOut(_Out):
+    grant_id: uuid.UUID
+    patient_id: uuid.UUID
+    reason_code: str
+    opened_at: datetime
+    expires_at: datetime
+
+
+class BreakGlassMine(_Out):
+    grants: list[BreakGlassMineRowOut]
+
+
+@staff_break_glass.get("/reasons", response_model=BreakGlassReasonsOut)
+async def break_glass_reasons(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> BreakGlassReasonsOut:
+    """The reason codes the clinic accepts for a break-glass grant (the owner-kept list), sorted. 404 if the clinic is not visible to you, 403 unless you are front desk, nurse, doctor or admin there."""
+    await _console_clinic(conn, clinic_id, (*BREAK_GLASS_OPENERS, "admin"))
+    try:
+        return BreakGlassReasonsOut(reasons=await break_glass_sql.reason_codes(conn, clinic_id))
+    except break_glass_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+
+
+@staff_break_glass.get("/mine", response_model=BreakGlassMine)
+async def my_open_break_glass_grants(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> BreakGlassMine:
+    """YOUR grants that are still open (not expired, not reviewed), soonest to expire first, so a page reload can pick one up again. 404 if the clinic is not visible to you, 403 unless you are front desk, nurse or doctor there."""
+    await _console_clinic(conn, clinic_id, BREAK_GLASS_OPENERS)
+    rows = await break_glass_sql.my_open_grants(conn, clinic_id=clinic_id, account_id=uuid.UUID(claims["sub"]))
+    return BreakGlassMine(grants=[BreakGlassMineRowOut(grant_id=r.id, patient_id=r.patient_id, reason_code=r.reason_code, opened_at=r.opened_at, expires_at=r.expires_at) for r in rows])
+
+
+class UpcomingVisitOut(_Out):
+    visit_id: uuid.UUID  # the booking id: what the readiness routes call a visit id
+    patient_id: uuid.UUID
+    visit_type_id: uuid.UUID
+    starts_at: datetime
+    ends_at: datetime
+
+
+class UpcomingVisitList(_Out):
+    visits: list[UpcomingVisitOut]
+
+
+@staff_visits.get("/upcoming", response_model=UpcomingVisitList)
+async def upcoming_visits(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 50) -> UpcomingVisitList:
+    """Confirmed visits that have not started yet, soonest first: ids and times only (never a name). It gives visit readiness the visit id to work with. 404 if the clinic is not visible to you, 403 unless you are a nurse or doctor there."""
+    await _console_clinic(conn, clinic_id, READINESS_ROLES)
+    rows = (
+        await conn.execute(
+            text(
+                "select b.id, b.patient_id, s.visit_type_id, s.starts_at, s.ends_at from sched.bookings b join sched.slots s on s.id = b.slot_id and s.clinic_id = b.clinic_id "
+                "where b.clinic_id = :c and b.status = 'confirmed' and s.starts_at >= clock_timestamp() order by s.starts_at, b.id limit :n"
+            ),
+            {"c": clinic_id, "n": limit},
+        )
+    ).all()
+    return UpcomingVisitList(visits=[UpcomingVisitOut(visit_id=r.id, patient_id=r.patient_id, visit_type_id=r.visit_type_id, starts_at=r.starts_at, ends_at=r.ends_at) for r in rows])
+
+
 def _positive_int(raw: str | None) -> int | None:
     """A required numeric setting: unset, blank, non-numeric or below 1 is None (unset), never a default."""
     try:
@@ -5088,6 +5197,7 @@ def create_app(
         app.state.voice_engine = None  # no real voice engine exists (owner decision 2026-11-06): the session route answers 503
         app.state.voice_retention_days = _positive_int(p4env.get('CAREFLOW_VOICE_TRANSCRIPT_RETENTION_DAYS'))
         app.state.grievance_categories = _word_list(p4env.get("CAREFLOW_GRIEVANCE_CATEGORIES"))
+        app.state.consent_labels = consent_settings.parse_labels(p4env.get("CAREFLOW_CONSENT_LABELS"))
         app.state.clinic_time_zone = clinic_time_zone(p4env.get("CAREFLOW_CLINIC_TIME_ZONE"))
         app.state.care_gap_alert_days = _positive_int(p4env.get('CAREFLOW_CARE_GAP_ALERT_DAYS'))
         try:
@@ -5250,6 +5360,7 @@ def create_app(
     app.include_router(staff_recovery)
     app.include_router(staff_notes)
     app.include_router(health)
+    app.include_router(public_config)
     openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, portal, staff_voice, staff_care_plans, staff_results, staff_portal_claims, staff_visits, staff_break_glass, portal_rights, staff_grievances, staff_recovery, staff_notes])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
     return app
 
