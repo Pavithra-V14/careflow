@@ -42,6 +42,20 @@ def parse(raw: str | None) -> dict[str, NoticeDef] | None:
     return out
 
 
+def parse_labels(raw: str | None) -> dict[str, str]:
+    """`CAREFLOW_CONSENT_LABELS`: the short, patient-facing NAME of each consent purpose (for example the heading above its notice), a JSON object keyed by purpose. Counsel's wording, a required setting with no
+    default: unset, blank or malformed gives no labels (the portal then shows none), never a guess. The demo pack carries labelled placeholders."""
+    if raw is None or not raw.strip():
+        return {}
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return {}
+    if not isinstance(data, dict) or not set(data) <= set(PURPOSES):
+        return {}
+    return {k: v.strip() for k, v in data.items() if isinstance(v, str) and 1 <= len(v.strip()) <= 80}
+
+
 def plan_publication(existing: dict[str, list[tuple[int, str]]], wanted: dict[str, NoticeDef]) -> list[tuple[str, str, int]]:
     """What the owner-run seed script would do, as [(action, purpose, version)]. `existing` maps a purpose to its published (version, body) pairs. Notices are append-only and versions run 1, 2, 3 in order:
     the same version with the same text is `exists`; the same version with DIFFERENT text is `conflict` (never overwritten, the script stops); a version that skips ahead is `version_gap` (the script stops);

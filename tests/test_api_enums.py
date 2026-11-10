@@ -38,5 +38,26 @@ def test_the_care_gap_sources_are_the_panels_sources():
     assert tuple(get_args(api_enums.CareGapSource)) == tuple(care_gaps.SOURCES) or set(get_args(api_enums.CareGapSource)) == set(care_gaps.SOURCES)
 
 
+def test_the_message_voice_reviewer_and_cost_words_match_their_sources():
+    from careflow import reviewer_stats
+
+    migrations = ROOT / "db" / "migrations"
+    assert set(get_args(api_enums.ReviewerVerdict)) == set(get_args(reviewer_stats.Verdict))
+    voice = (migrations / "0045_voice_preference_sessions_transcripts.sql").read_text(encoding="utf8")
+    assert set(get_args(api_enums.VoiceWorkflow)) == set(re.findall(r"'([a-z_]+)'", re.search(r"workflow\s+text not null check \(workflow in \(([^)]*)\)\)", voice).group(1)))
+    assert set(get_args(api_enums.VoiceSessionStatus)) == {"open", "ended"}
+    messages = (migrations / "0011_msg_threads_messages.sql").read_text(encoding="utf8")
+    assert set(get_args(api_enums.SenderKind)) == set(re.findall(r"'([a-z_]+)'", re.search(r"sender_kind\s+text not null check \(sender_kind in \(([^)]*)\)\)", messages).group(1)))
+    cost = (ROOT / "careflow" / "cost_canvas.py").read_text(encoding="utf8")
+    used = set(re.findall(r'reasons\.append\("([^"]+)"\)', cost)) | {"fewer than seven days of measured traffic", "no completed workflows"}
+    assert used <= set(get_args(api_enums.CostReason)) and "fewer than seven days of measured traffic" in cost, used - set(get_args(api_enums.CostReason))
+
+
+def test_every_readiness_status_word_the_run_reports_is_in_the_enum():
+    source = (ROOT / "careflow" / "visit_readiness.py").read_text(encoding="utf8")
+    used = set(re.findall(r'"status": "([a-z_]+)"', source))
+    assert used <= set(get_args(api_enums.ReadinessStatus)), used - set(get_args(api_enums.ReadinessStatus))
+
+
 def test_the_metric_ids_are_the_catalog_ids():
     assert set(get_args(api_enums.MetricId)) == {m["id"] for m in metrics_catalog.load()["metrics"]}

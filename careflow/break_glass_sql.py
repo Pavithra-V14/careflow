@@ -84,6 +84,32 @@ async def review(conn: AsyncConnection, *, grant_id: uuid.UUID, outcome: str) ->
         raise
 
 
+async def reason_codes(conn: AsyncConnection, clinic_id: uuid.UUID) -> list[str]:
+    """The clinic's break-glass reason codes (owner-kept list), through the definer function that checks the caller."""
+    try:
+        async with conn.begin_nested():
+            return [r.code for r in (await conn.execute(text("select code from iam.break_glass_reason_codes(:c)"), {"c": clinic_id})).all()]
+    except DBAPIError as exc:
+        if sqlstate(exc) == "42501":
+            raise Refused from None
+        raise
+
+
+async def my_open_grants(conn: AsyncConnection, *, clinic_id: uuid.UUID, account_id: uuid.UUID) -> list[Any]:
+    """The caller's own grants that are neither expired nor reviewed (row-level security shows a holder their own)."""
+    return list(
+        (
+            await conn.execute(
+                text(
+                    "select id, patient_id, reason_code, opened_at, expires_at from iam.break_glass_grants "
+                    "where clinic_id = :c and opened_by = :a and reviewed_at is null and expires_at > clock_timestamp() order by expires_at, id"
+                ),
+                {"c": clinic_id, "a": account_id},
+            )
+        ).all()
+    )
+
+
 async def grant_clinic(conn: AsyncConnection, grant_id: uuid.UUID) -> uuid.UUID | None:
     """The clinic of a grant you may see (row-level security decides), or None."""
     row = (await conn.execute(text("select clinic_id from iam.break_glass_grants where id = :g"), {"g": grant_id})).first()

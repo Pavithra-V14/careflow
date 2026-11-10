@@ -22,6 +22,30 @@ CareGapSource = Literal["overdue_recurrence", "after_the_fact_review", "unresolv
 # ops.alerts.class (migration 0039)
 AlertClass = Literal["red_flag_overdue", "task_overdue", "task_escalated", "dead_letters", "queue_age", "canary_approved", "spend_runaway", "delivery_failed", "fallback_spike", "tracing_cap"]
 
+# msg.messages.sender_kind and topic (migrations 0011, 0050)
+SenderKind = Literal["patient", "staff", "system"]
+MessageTopic = Literal["care", "appointments", "safety", "readiness"]
+
+# msg.voice_sessions.workflow and status (migration 0045)
+VoiceWorkflow = Literal["slot_offer", "intake_question", "readiness_item"]
+VoiceSessionStatus = Literal["open", "ended"]
+
+# careflow/reviewer_stats.py Verdict
+ReviewerVerdict = Literal["not_configured", "too_few", "ok", "review"]
+
+# careflow/cost_canvas.py: the state of the canvas and every reason it can give for being unconfigured or short of data
+CostState = Literal["insufficient_data", "unconfigured", "ok"]
+CostReason = Literal[
+    "fewer than seven days of measured traffic", "no completed workflows", "platform floor (P) is not configured", "reviewer rates are not configured", "a reviewer role has no configured rate",
+    "reviewer minutes are not measured yet", "retry cost is not measured yet",
+]
+
+# careflow/visit_readiness.py: the words a readiness run reports as its status
+ReadinessStatus = Literal[
+    "started", "nothing_to_ask", "asked", "reply_in", "screened", "red_flag_escalated", "held_unassessable", "classified", "fact_written", "fact_not_grounded", "next", "readiness_recorded", "nurse_escalated",
+    "incomplete_flagged", "brief_stored", "brief_unavailable", "no_reply", "barrier_classified", "barrier_unknown", "rebooking_handed_off",
+]
+
 # metrics-catalog.yaml: the ids, read once at import (the catalog is the only list of metrics)
 METRIC_IDS: tuple[str, ...] = tuple(m["id"] for m in metrics_catalog.load()["metrics"])
 MetricId = Literal[METRIC_IDS]  # type: ignore[valid-type]  # built from the catalog; the OpenAPI document carries the enum
