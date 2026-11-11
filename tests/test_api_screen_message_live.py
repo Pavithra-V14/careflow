@@ -164,7 +164,7 @@ async def world():
             InMemoryDecisionRecorder(),
         )
         app = create_app(
-            Settings(_env_file=None, supabase_url=PROJECT, database_url_app="postgresql://unused"), jwks=fake_jwks_client(), engine=object(),  # type: ignore[arg-type]
+            Settings(_env_file=None, supabase_url=PROJECT, database_url_app="postgresql://unused", active_key_version=1), jwks=fake_jwks_client(), engine=object(),  # type: ignore[arg-type]
             vault=vault, reply_interpreter=interpreter,
         )
 
