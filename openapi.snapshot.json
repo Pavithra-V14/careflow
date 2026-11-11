@@ -17386,7 +17386,7 @@
     },
     "/v1/staff/scheduling/locations": {
       "get": {
-        "description": "Locations (rooms, sites) of the clinics you may read, by name.",
+        "description": "Locations (rooms, sites) of the clinics you may read, by name; `clinic_id` narrows to one clinic. 404 if you give a clinic you cannot read.",
         "operationId": "list_locations_v1_staff_scheduling_locations_get",
         "parameters": [
           {
@@ -17410,6 +17410,23 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Clinic Id"
+            }
           }
         ],
         "responses": {
@@ -17432,6 +17449,16 @@
               }
             },
             "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
           },
           "422": {
             "content": {
@@ -17558,7 +17585,7 @@
     },
     "/v1/staff/scheduling/offers": {
       "get": {
-        "description": "Offers of the clinics you may read, newest first (`state` filters). An offer is `delivered` only if a person marked it; `expired` once its hold ran out. Ids, times and closed words only.",
+        "description": "Offers of the clinics you may read, newest first (`state` filters, `clinic_id` narrows to one clinic). An offer is `delivered` only if a person marked it; `expired` once its hold ran out. Ids, times and closed words only. 404 if you give a clinic you cannot read.",
         "operationId": "list_offers_v1_staff_scheduling_offers_get",
         "parameters": [
           {
@@ -17595,6 +17622,23 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Clinic Id"
+            }
           }
         ],
         "responses": {
@@ -17617,6 +17661,16 @@
               }
             },
             "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
           },
           "422": {
             "content": {
@@ -18173,7 +18227,7 @@
     },
     "/v1/staff/scheduling/priority-levels": {
       "get": {
-        "description": "The clinic's clinical priority levels, rank 1 first. The levels themselves are clinician-approved data (sched.priority_levels); this only reads them.",
+        "description": "The clinical priority levels, rank 1 first; `clinic_id` narrows to one clinic. The levels themselves are clinician-approved data (sched.priority_levels); this only reads them. 404 if you give a clinic you cannot read.",
         "operationId": "list_priority_levels_v1_staff_scheduling_priority_levels_get",
         "parameters": [
           {
@@ -18197,6 +18251,23 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Clinic Id"
+            }
           }
         ],
         "responses": {
@@ -18219,6 +18290,16 @@
               }
             },
             "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
           },
           "422": {
             "content": {
@@ -18244,7 +18325,7 @@
     },
     "/v1/staff/scheduling/providers": {
       "get": {
-        "description": "Providers of the clinics you may read, by display name.",
+        "description": "Providers of the clinics you may read, by display name; `clinic_id` narrows to one clinic. 404 if you give a clinic you cannot read.",
         "operationId": "list_providers_v1_staff_scheduling_providers_get",
         "parameters": [
           {
@@ -18268,6 +18349,23 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Clinic Id"
+            }
           }
         ],
         "responses": {
@@ -18290,6 +18388,16 @@
               }
             },
             "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
           },
           "422": {
             "content": {
@@ -18842,7 +18950,7 @@
     },
     "/v1/staff/scheduling/visit-types": {
       "get": {
-        "description": "Visit types of the clinics you may read, by name, with their scheduling length.",
+        "description": "Visit types of the clinics you may read, by name, with their scheduling length; `clinic_id` narrows to one clinic. 404 if you give a clinic you cannot read.",
         "operationId": "list_visit_types_v1_staff_scheduling_visit_types_get",
         "parameters": [
           {
@@ -18866,6 +18974,23 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Clinic Id"
+            }
           }
         ],
         "responses": {
@@ -18888,6 +19013,16 @@
               }
             },
             "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
           },
           "422": {
             "content": {
