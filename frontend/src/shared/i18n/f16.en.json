@@ -93,7 +93,7 @@
   },
   "erasure": {
     "title": "Erasure requests",
-    "note": "Erasing a patient's identity takes two front desk people: one asks and a different one approves. Each step needs a fresh authenticator code.",
+    "note": "Erasing a patient's identity takes two front desk people: one asks and a different one approves. Each step needs a recent authenticator code.",
     "actionsOff": "Asking, approving and cancelling are switched off until the second-factor check is confirmed. The list below is read-only.",
     "listTitle": "Requests",
     "statusFilter": "Show",
@@ -139,7 +139,7 @@
     "cancelTitle": "Cancel this request?",
     "approveBody": "Approving erases the identity now.",
     "cancelBody": "Cancelling closes the request. Nothing is erased.",
-    "codeHint": "You will be asked for a fresh authenticator code.",
+    "codeHint": "You may be asked for a recent authenticator code.",
     "approveConflict": "This cannot be approved now (the patient may be part of a live merge, or the request changed). Nothing was erased.",
     "cancelConflict": "This request cannot be cancelled now. Nothing was changed.",
     "approveForbidden": "You cannot approve this request (you may be the person who asked, or not front desk of this clinic). Nothing was erased.",

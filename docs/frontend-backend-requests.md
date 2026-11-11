@@ -245,7 +245,11 @@ locations, visit types, priority levels), and says "This patient is not register
 legal decision). Please add a read route like `GET /v1/staff/console/reason-codes` (`{configured, codes[]}`) for front desk of the clinic. Until then the
 console's "Ask for an erasure" shows "not set up" and cannot be submitted. The seam is `src/staff/pages/erasureReasons.ts`.
 
-### 19. Questions from the F9 screens
+### 19. Decided (2026-11-12)
+
+The audit log stays auditor only. Run stays offered to front desk, nurse and doctor. Erasure screens say "a recent authenticator code" (the backend's 300-second window stands). When the erasure reasons route is in the snapshot, the ask form switches to it; when `GET /v1/staff/audit` takes `clinic_id`, the console sends the active clinic and keeps the clinic column. The erased/kept wording stays a placeholder for the privacy owner and counsel.
+
+### 19 (original questions). Questions from the F9 screens
 
 - The audit route says "an auditor of some clinic" and not admin, so the audit reader is shown to auditors only. Should an admin read it too?
 - `POST /v1/staff/referrals/{document_id}/run` says only "403 if you may not start a run". The console offers Run to front desk, nurse and doctor

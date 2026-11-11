@@ -732,7 +732,7 @@ Terms standardised: proposal, resolve / resolved.
 | `erasure.cancelForbidden` | You cannot cancel this request (it may no longer be open). Nothing was changed. | இந்தக் கோரிக்கையை நீங்கள் ரத்து செய்ய முடியாது (அது இனி திறந்ததாக இல்லாமல் இருக்கலாம்). எதுவும் மாற்றப்படவில்லை. | ok |
 | `erasure.cancelTitle` | Cancel this request? | இந்தக் கோரிக்கையை ரத்து செய்யவா? | ok |
 | `erasure.cancelled` | The request was cancelled. | கோரிக்கை ரத்து செய்யப்பட்டது. | ok |
-| `erasure.codeHint` | You will be asked for a fresh authenticator code. | புதிய அங்கீகார குறியீடு கேட்கப்படும். | ok |
+| `erasure.codeHint` | You may be asked for a recent authenticator code. | சமீபத்திய அங்கீகார குறியீடு கேட்கப்படலாம். | ok |
 | `erasure.col.action` | Action | செயல் | ok |
 | `erasure.col.created` | Asked | கேட்கப்பட்டது | ok |
 | `erasure.col.decided` | Decided | முடிவு | ok |
@@ -746,7 +746,7 @@ Terms standardised: proposal, resolve / resolved.
 | `erasure.hasMore` | There are more requests than are shown. | காட்டப்பட்டதை விட அதிகமான கோரிக்கைகள் உள்ளன. | ok |
 | `erasure.keepsBody` | It keeps the request and its audit rows (they are never deleted), the patient's record number, and the keyed fingerprints used for matching, which ignore an erased record. Messages are not erased by this step. | இது கோரிக்கையையும் அதன் தணிக்கை வரிகளையும் (அவை ஒருபோதும் நீக்கப்படாது), நோயாளியின் பதிவு எண்ணையும், பொருத்தத்துக்கான சாவி கைரேகைகளையும் வைத்திருக்கும்; பொருத்தம் அழிக்கப்பட்ட பதிவைப் புறக்கணிக்கும். இந்தப் படியில் செய்திகள் அழிக்கப்படாது. | ok |
 | `erasure.listTitle` | Requests | கோரிக்கைகள் | ok |
-| `erasure.note` | Erasing a patient's identity takes two front desk people: one asks and a different one approves. Each step needs a fresh authenticator code. | ஒரு நோயாளியின் அடையாளத்தை அழிக்க இரண்டு முன்பணியாளர்கள் தேவை: ஒருவர் கேட்கிறார், வேறொருவர் ஒப்புக்கொள்கிறார். ஒவ்வொரு படிக்கும் புதிய அங்கீகார குறியீடு தேவை. | ok |
+| `erasure.note` | Erasing a patient's identity takes two front desk people: one asks and a different one approves. Each step needs a recent authenticator code. | ஒரு நோயாளியின் அடையாளத்தை அழிக்க இரண்டு முன்பணியாளர்கள் தேவை: ஒருவர் கேட்கிறார், வேறொருவர் ஒப்புக்கொள்கிறார். ஒவ்வொரு படிக்கும் சமீபத்திய அங்கீகார குறியீடு தேவை. | ok |
 | `erasure.nothingNew` | Nothing new was done: the request was already decided or is no longer open. | புதிதாக எதுவும் செய்யப்படவில்லை: கோரிக்கை ஏற்கனவே முடிவு செய்யப்பட்டது அல்லது இனி திறந்ததாக இல்லை. | ok |
 | `erasure.off` | Switched off | அணைக்கப்பட்டது | ok |
 | `erasure.openRequests` | Open requests | திறந்த கோரிக்கைகள் | ok |
