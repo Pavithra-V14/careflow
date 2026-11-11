@@ -1720,6 +1720,12 @@ def reference_cases(ids, route) -> list[tuple]:
         _case(ids, "limit=0 is rejected", "front_desk_a", 422, path + "?limit=0", key=None, body=_fixed(422)),
         _case(ids, "limit=501 is rejected", "front_desk_a", 422, path + "?limit=501", key=None, body=_fixed(422)),
         _case(ids, "include_inactive that is not a boolean is rejected", "front_desk_a", 422, path + "?include_inactive=maybe", key=None, body=_fixed(422)),
+        _case(ids, "clinic_id of the reader's own clinic returns that clinic's rows", "front_desk_a", 200, f"{path}?clinic_id={ids.clinic_a}", key=None, body=_page(ids, clinic_only=ids.clinic_a, non_empty=True, check=seeded)),
+        _case(ids, "clinic_id of a clinic the reader cannot read is the one not-found", "front_desk_a", 404, f"{path}?clinic_id={ids.clinic_b}", key=None, body=_fixed(404)),
+        _case(ids, "clinic_id of a clinic that does not exist is the same not-found", "front_desk_a", 404, f"{path}?clinic_id={uuid.uuid4()}", key=None, body=_fixed(404)),
+        _case(ids, "a reader of the other clinic who names this clinic gets the same not-found", "front_desk_b", 404, f"{path}?clinic_id={ids.clinic_a}", key=None, body=_fixed(404)),
+        _case(ids, "a clinic_id that is not a uuid is rejected", "front_desk_a", 422, f"{path}?clinic_id=nope", key=None, body=_fixed(422)),
+        _case(ids, "a non-reader who names a clinic is still refused first", "admin_a", 403, f"{path}?clinic_id={ids.clinic_a}", key=None, body=lambda b: b == {"detail": "your role may not read this"}),
     ]
     denied = [p for p in ids.people if p not in (*readers, "front_desk_b")]
     cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path, key=None, body=lambda b: b == {"detail": "your role may not read this"}) for p in denied]
@@ -1931,6 +1937,11 @@ def offer_list_cases(ids) -> list[tuple]:
               body=_page(ids, check=lambda items: all(set(i) == {"hold_id", "clinic_id", "slot_id", "patient_id", "state", "created_at", "expires_at", "delivered_at", "channel", "message_id"} for i in items))),
         _case(ids, "a reader of another clinic sees none of this clinic's offers", "front_desk_b", 200, OFFERS, key=None, body=_page(ids, check=lambda items: items == [])),
         _case(ids, "an unknown state is rejected", "front_desk_a", 422, OFFERS + "?state=sent", key=None, body=_fixed(422)),
+        _case(ids, "clinic_id of the reader's own clinic lists that clinic's offers", "front_desk_a", 200, f"{OFFERS}?clinic_id={ids.clinic_a}", key=None,
+              body=_page(ids, clinic_only=ids.clinic_a, non_empty=True, check=lambda items: state_of(waiting, items) == "awaiting_delivery")),
+        _case(ids, "clinic_id of a clinic the reader cannot read is the one not-found", "front_desk_a", 404, f"{OFFERS}?clinic_id={ids.clinic_b}", key=None, body=_fixed(404)),
+        _case(ids, "a clinic_id that does not exist is the same not-found", "front_desk_a", 404, f"{OFFERS}?clinic_id={uuid.uuid4()}", key=None, body=_fixed(404)),
+        _case(ids, "a clinic_id that is not a uuid is rejected", "front_desk_a", 422, f"{OFFERS}?clinic_id=nope", key=None, body=_fixed(422)),
         _case(ids, "limit=0 is rejected", "front_desk_a", 422, OFFERS + "?limit=0", key=None, body=_fixed(422)),
     ]
     denied = [p for p in ids.people if p not in (*readers, "front_desk_b")]

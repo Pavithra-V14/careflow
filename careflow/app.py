@@ -827,32 +827,32 @@ class PriorityLevelList(_Out):
     has_more: bool
 
 
-async def _reference_rows(conn: AsyncConnection, claims: dict[str, Any], sql: str, include_inactive: bool, limit: int):
-    clinics = await _readable_clinics(conn, claims)
+async def _reference_rows(conn: AsyncConnection, claims: dict[str, Any], sql: str, include_inactive: bool, limit: int, clinic_id: uuid.UUID | None = None):
+    clinics = await _readable_clinics(conn, claims, clinic_id)
     return (await conn.execute(text(sql.format(active="" if include_inactive else " and active")), {"c": clinics, "n": limit + 1})).all()
 
 
 @scheduling.get("/providers", response_model=ProviderList)
-async def list_providers(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), include_inactive: bool = False, limit: Limit = 100) -> ProviderList:
-    """Providers of the clinics you may read, by display name."""
+async def list_providers(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), include_inactive: bool = False, limit: Limit = 100, clinic_id: uuid.UUID | None = None) -> ProviderList:
+    """Providers of the clinics you may read, by display name; `clinic_id` narrows to one clinic. 404 if you give a clinic you cannot read."""
     rows = await _reference_rows(
-        conn, claims, "select id, clinic_id, display_name, active from sched.providers where clinic_id = any(cast(:c as uuid[])){active} order by display_name, id limit :n", include_inactive, limit
+        conn, claims, "select id, clinic_id, display_name, active from sched.providers where clinic_id = any(cast(:c as uuid[])){active} order by display_name, id limit :n", include_inactive, limit, clinic_id
     )
     return ProviderList(items=[ProviderOut(provider_id=r.id, clinic_id=r.clinic_id, display_name=r.display_name, active=r.active) for r in rows[:limit]], limit=limit, has_more=len(rows) > limit)
 
 
 @scheduling.get("/locations", response_model=LocationList)
-async def list_locations(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), include_inactive: bool = False, limit: Limit = 100) -> LocationList:
-    """Locations (rooms, sites) of the clinics you may read, by name."""
-    rows = await _reference_rows(conn, claims, "select id, clinic_id, name, active from sched.locations where clinic_id = any(cast(:c as uuid[])){active} order by name, id limit :n", include_inactive, limit)
+async def list_locations(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), include_inactive: bool = False, limit: Limit = 100, clinic_id: uuid.UUID | None = None) -> LocationList:
+    """Locations (rooms, sites) of the clinics you may read, by name; `clinic_id` narrows to one clinic. 404 if you give a clinic you cannot read."""
+    rows = await _reference_rows(conn, claims, "select id, clinic_id, name, active from sched.locations where clinic_id = any(cast(:c as uuid[])){active} order by name, id limit :n", include_inactive, limit, clinic_id)
     return LocationList(items=[LocationOut(location_id=r.id, clinic_id=r.clinic_id, name=r.name, active=r.active) for r in rows[:limit]], limit=limit, has_more=len(rows) > limit)
 
 
 @scheduling.get("/visit-types", response_model=VisitTypeList)
-async def list_visit_types(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), include_inactive: bool = False, limit: Limit = 100) -> VisitTypeList:
-    """Visit types of the clinics you may read, by name, with their scheduling length."""
+async def list_visit_types(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), include_inactive: bool = False, limit: Limit = 100, clinic_id: uuid.UUID | None = None) -> VisitTypeList:
+    """Visit types of the clinics you may read, by name, with their scheduling length; `clinic_id` narrows to one clinic. 404 if you give a clinic you cannot read."""
     rows = await _reference_rows(
-        conn, claims, "select id, clinic_id, name, duration_minutes, active from sched.visit_types where clinic_id = any(cast(:c as uuid[])){active} order by name, id limit :n", include_inactive, limit
+        conn, claims, "select id, clinic_id, name, duration_minutes, active from sched.visit_types where clinic_id = any(cast(:c as uuid[])){active} order by name, id limit :n", include_inactive, limit, clinic_id
     )
     return VisitTypeList(
         items=[VisitTypeOut(visit_type_id=r.id, clinic_id=r.clinic_id, name=r.name, duration_minutes=r.duration_minutes, active=r.active) for r in rows[:limit]], limit=limit, has_more=len(rows) > limit
@@ -860,10 +860,10 @@ async def list_visit_types(conn: TxConn, claims: dict[str, Any] = Depends(verifi
 
 
 @scheduling.get("/priority-levels", response_model=PriorityLevelList)
-async def list_priority_levels(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), include_inactive: bool = False, limit: Limit = 100) -> PriorityLevelList:
-    """The clinic's clinical priority levels, rank 1 first. The levels themselves are clinician-approved data (sched.priority_levels); this only reads them."""
+async def list_priority_levels(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), include_inactive: bool = False, limit: Limit = 100, clinic_id: uuid.UUID | None = None) -> PriorityLevelList:
+    """The clinical priority levels, rank 1 first; `clinic_id` narrows to one clinic. The levels themselves are clinician-approved data (sched.priority_levels); this only reads them. 404 if you give a clinic you cannot read."""
     rows = await _reference_rows(
-        conn, claims, "select clinic_id, code, label, rank, active from sched.priority_levels where clinic_id = any(cast(:c as uuid[])){active} order by clinic_id, rank, code limit :n", include_inactive, limit
+        conn, claims, "select clinic_id, code, label, rank, active from sched.priority_levels where clinic_id = any(cast(:c as uuid[])){active} order by clinic_id, rank, code limit :n", include_inactive, limit, clinic_id
     )
     return PriorityLevelList(items=[PriorityLevelOut(clinic_id=r.clinic_id, code=r.code, label=r.label, rank=r.rank, active=r.active) for r in rows[:limit]], limit=limit, has_more=len(rows) > limit)
 
@@ -1493,9 +1493,9 @@ _OFFERS_SQL = (
 
 
 @scheduling.get("/offers", response_model=OfferRowList)
-async def list_offers(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), state: OfferState | None = None, limit: Limit = 100) -> OfferRowList:
-    """Offers of the clinics you may read, newest first (`state` filters). An offer is `delivered` only if a person marked it; `expired` once its hold ran out. Ids, times and closed words only."""
-    clinics = await _readable_clinics(conn, claims)
+async def list_offers(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), state: OfferState | None = None, limit: Limit = 100, clinic_id: uuid.UUID | None = None) -> OfferRowList:
+    """Offers of the clinics you may read, newest first (`state` filters, `clinic_id` narrows to one clinic). An offer is `delivered` only if a person marked it; `expired` once its hold ran out. Ids, times and closed words only. 404 if you give a clinic you cannot read."""
+    clinics = await _readable_clinics(conn, claims, clinic_id)
     rows = (await conn.execute(text(_OFFERS_SQL), {"c": clinics, "s": state, "n": limit + 1})).all()
     items = [
         OfferRowOut(
