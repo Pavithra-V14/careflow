@@ -1,0 +1,26 @@
+{
+  "scheduling": {
+    "unknownPatient": "This patient is not registered at the clinic that owns this slot."
+  },
+  "backfill": {
+    "reply": {
+      "note": "Type what the patient told you, or pick a reply that was stored earlier. A suggested reading is only a suggestion: you decide. The red-flag rules read the reply first.",
+      "typeTitle": "Type what the patient told you",
+      "typeLabel": "The patient's reply, as they gave it (by phone or in person)",
+      "save": "Save the reply",
+      "saveTitle": "Save this reply?",
+      "saveBody": "Stores what you typed as a message from the patient, encrypted, in their appointments thread. The red-flag rules read it first. Nothing is sent to the patient. Saving it does not yet enter it into the offer run.",
+      "saved": "The reply was saved and picked below. The rules' reading:",
+      "savedOutcome": {
+        "clear": "clear",
+        "red_flag": "a red flag was found; a nurse task was raised",
+        "unassessable": "it could not be assessed; a nurse task was raised"
+      },
+      "saveUnavailable": "Replies cannot be stored yet (encryption is not set up). Nothing was saved.",
+      "saveConflict": "A different reply was already saved with this request. Check what you typed and save again.",
+      "saveInvalid": "The reply is blank or too long. Nothing was saved.",
+      "saveNotFound": "This patient is not registered at this clinic. Nothing was saved.",
+      "storedTitle": "Or pick a reply that was stored earlier"
+    }
+  }
+}

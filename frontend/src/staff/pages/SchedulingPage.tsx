@@ -13,6 +13,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Badge, ComingSoon, PageHeading, ShortId, Time, useLang, useWord } from '../ui/bits';
 import { NotAvailableToRole, ProblemText, QueryView } from '../ui/states';
 import { formatNumber } from '../../shared/i18n/format';
+import { inClinic } from '../ui/clinic';
 import { NotFoundPage } from './NotFoundPage';
 import { AddReference, BookingsList, OffersList, SlotsList, WaitlistList } from './SchedulingMore';
 
@@ -133,12 +134,13 @@ function RefList<T extends { active: boolean }>({
 
 function ProvidersList() {
   const { api } = useAuth();
+  const { active } = useSession();
   return (
     <>
     <AddReference kind="provider" />
     <RefList<components['schemas']['ProviderOut']>
       keyName="providers"
-      load={(i) => unwrap(api.listProviders(i))}
+      load={async (i) => inClinic(await unwrap(api.listProviders(i)), active.clinicId)}
       columns={['scheduling.col.name', 'scheduling.col.status']}
       row={(p) => [p.display_name, <ActiveBadge key="a" active={p.active} />]}
       rowKey={(p) => p.provider_id}
@@ -149,12 +151,13 @@ function ProvidersList() {
 
 function LocationsList() {
   const { api } = useAuth();
+  const { active } = useSession();
   return (
     <>
     <AddReference kind="location" />
     <RefList<components['schemas']['LocationOut']>
       keyName="locations"
-      load={(i) => unwrap(api.listLocations(i))}
+      load={async (i) => inClinic(await unwrap(api.listLocations(i)), active.clinicId)}
       columns={['scheduling.col.name', 'scheduling.col.status']}
       row={(l) => [l.name, <ActiveBadge key="a" active={l.active} />]}
       rowKey={(l) => l.location_id}
@@ -165,6 +168,7 @@ function LocationsList() {
 
 function VisitTypesList() {
   const { api } = useAuth();
+  const { active } = useSession();
   const lang = useLang();
   const { t } = useTranslation();
   return (
@@ -172,7 +176,7 @@ function VisitTypesList() {
     <AddReference kind="visitType" />
     <RefList<components['schemas']['VisitTypeOut']>
       keyName="visitTypes"
-      load={(i) => unwrap(api.listVisitTypes(i))}
+      load={async (i) => inClinic(await unwrap(api.listVisitTypes(i)), active.clinicId)}
       columns={['scheduling.col.name', 'scheduling.col.duration', 'scheduling.col.status']}
       row={(v) => [v.name, `${formatNumber(v.duration_minutes, lang)} ${t('scheduling.minutes')}`, <ActiveBadge key="a" active={v.active} />]}
       rowKey={(v) => v.visit_type_id}
@@ -183,11 +187,12 @@ function VisitTypesList() {
 
 function PriorityLevelsList() {
   const { api } = useAuth();
+  const { active } = useSession();
   const lang = useLang();
   return (
     <RefList<components['schemas']['PriorityLevelOut']>
       keyName="priorityLevels"
-      load={(i) => unwrap(api.listPriorityLevels(i))}
+      load={async (i) => inClinic(await unwrap(api.listPriorityLevels(i)), active.clinicId)}
       columns={['scheduling.col.rank', 'scheduling.col.code', 'scheduling.col.label', 'scheduling.col.status']}
       row={(p) => [formatNumber(p.rank, lang), <code key="c">{p.code}</code>, p.label, <ActiveBadge key="a" active={p.active} />]}
       rowKey={(p) => p.code}
@@ -200,12 +205,12 @@ const HOLD_STATUSES: readonly NonNullable<HoldStatus>[] = ['active', 'released',
 function HoldsList() {
   const { t } = useTranslation();
   const { api } = useAuth();
-  const { hasRole } = useSession();
+  const { active, hasRole } = useSession();
   const word = useWord();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<NonNullable<HoldStatus>>('active');
   const [releasing, setReleasing] = useState<string | null>(null);
-  const query = useApiQuery(['holds', status], () => unwrap(api.listHolds(status)));
+  const query = useApiQuery(['holds', status], async () => inClinic(await unwrap(api.listHolds(status)), active.clinicId));
 
   const release = useIdempotentWrite(
     (holdId: string, key) => unwrap(api.releaseHold(holdId, { idempotencyKey: key })),

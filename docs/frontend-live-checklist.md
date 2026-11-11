@@ -47,15 +47,35 @@ a person has decided **Send**. Cancelling alone starts nothing. Steps, each with
    reply to be entered**. Open **Scheduling, Offers**: the offer is there as "Awaiting delivery". The system has sent nothing: you deliver it
    by hand (Copy offer text, then Mark delivered).
 5. **Stop** (on another run, confirm). *You should see:* "The run was stopped" and "Finished: Yes".
-6. **Enter the reply** (a run waiting for the reply): the patient's stored reply is listed by time and sender, never by text. Pick it.
-   *You should see:* the message is NOT read until you click **Read this message**; then its text appears (that read is audited) with a
-   Hide button. If no stored reply exists the page says so, and **No reply came** is still available. (This console cannot store a typed
-   reply yet: request item 16.)
+6. **Type the patient's reply** (a run waiting for the reply): in "Type what the patient told you", type what they said (by phone or in
+   person) and press **Save the reply**. *You should see:* a confirmation that says it is stored as a message from the patient, encrypted,
+   that the rules read it first, and "Nothing is sent to the patient"; after you confirm, the box is EMPTY again (the text has left the
+   page), "The reply was saved and picked below. The rules' reading: clear" (or "a red flag was found; a nurse task was raised" / "it could
+   not be assessed; a nurse task was raised", and then a review task in **Tasks**), and the saved message is already picked. A 503 reads
+   "Replies cannot be stored yet (encryption is not set up). Nothing was saved", a 422 "The reply is blank or too long", a 409 "A different
+   reply was already saved with this request"; each is a calm message, and what you typed stays in the box so you can correct it.
+   Saving does NOT yet enter the reply into the run.
+6b. **A reply stored earlier** (after a reload, say): under "Or pick a reply that was stored earlier" the stored replies are listed by
+   time and sender, never by text. *You should see:* the message is NOT read until you click **Read this message**; then its text appears
+   (that read is audited) with a Hide button. If none exists the page says so, and **No reply came** is still available.
 7. **Suggest a reading.** *You should see:* a rules screening word (Clear, Red flag, Could not be assessed), a suggested meaning or "No
    suggestion: a person must read the reply" with the reason, "Not recorded" for a missing confidence or engine, and the line that what it
    means is your decision. A red flag shows "The rules did not clear this reply".
 8. **Enter this reply** (confirm). *You should see:* "The reply was entered", and, for a red flag or a reply the rules could not assess,
    a nurse review task in **Tasks** and the run finished. **No reply came** (confirm) moves the run on.
+
+## Hold and Book across clinics (item 17)
+
+The scheduling lists show the ACTIVE clinic's rows only (the routes return every clinic the account can read; the console filters by each row's
+`clinic_id` until the routes take a `clinic_id` parameter). If the account can read two clinics, check:
+
+1. **Scheduling, Slots**, with the two clinics seeded. *You should see:* only the slots of the clinic in the session bar. The provider and
+   visit-type choices in the filters and in "Add a slot" are that clinic's too.
+2. **Hold, then Book**, with a patient found by the search. *You should see:* "The slot is held" / "The slot is booked", not "That could not
+   be found". If the patient is not registered at the slot's clinic you should see "This patient is not registered at the clinic that owns this
+   slot", in plain words, as a calm status and not an alert.
+3. **Bookings, Holds, Waitlist, Offers** show the same clinic only. In the browser's network tab a refused Hold or Book answers 404 with
+   `{"detail":"unknown patient for this clinic"}`; if it ever reads `{"detail":"not found"}` the slot itself is not visible: tell the backend.
 
 ## Patient sign-in for the demo: Supabase phone sign-in with test numbers (VERIFY IN THE DASHBOARD)
 

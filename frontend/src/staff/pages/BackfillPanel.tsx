@@ -12,6 +12,7 @@ import { Badge, ShortId, Time, useLang, useWord } from '../ui/bits';
 import { NotAvailableToRole, ProblemText } from '../ui/states';
 import { WriteProblem } from '../ui/WriteProblem';
 import { formatNumber } from '../../shared/i18n/format';
+import { inClinic } from '../ui/clinic';
 
 type Run = components['schemas']['BackfillOut'];
 type Reading = components['schemas']['InterpretReplyOut'];
@@ -33,7 +34,7 @@ export function BackfillPanel({ slotId, visitTypeId, onClose }: { slotId: string
   const [deciding, setDeciding] = useState<BackfillAction | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const state = useApiQuery(['backfill', slotId], () => unwrap(api.backfillState(slotId)));
-  const waitlist = useApiQuery(['backfill-waitlist', visitTypeId], () => unwrap(api.listWaitlist(visitTypeId)));
+  const waitlist = useApiQuery(['backfill-waitlist', visitTypeId], async () => inClinic(await unwrap(api.listWaitlist(visitTypeId)), active.clinicId));
   const canAct = hasRole(['front_desk']);
 
   const start = useIdempotentWrite(
@@ -226,8 +227,14 @@ function ReplyEntry({ slotId, patientId, onDone }: { slotId: string; patientId: 
   const word = useWord();
   const lang = useLang();
   const queryClient = useQueryClient();
+  const { active } = useSession();
   const [messageId, setMessageId] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<'replied' | 'timed_out' | null>(null);
+  // What the patient told the front desk, typed here. Stored (encrypted) on the patient's appointments thread only after a confirmation, and
+  // dropped from the page once it is saved. Nothing is sent to the patient.
+  const [typed, setTyped] = useState('');
+  const [savingReply, setSavingReply] = useState(false);
+  const [savedOutcome, setSavedOutcome] = useState<'clear' | 'red_flag' | 'unassessable' | null>(null);
 
   // The patient's appointments thread holds the stored reply. Only headers are listed (a time and who it is from), never the text.
   const thread = useApiQuery(['reply-thread', patientId], async () => {
@@ -263,6 +270,19 @@ function ReplyEntry({ slotId, patientId, onDone }: { slotId: string; patientId: 
       onDone(r.finished);
     },
   );
+  const save = useIdempotentWrite(
+    (_: void, key) => unwrap(api.recordReply({ clinic_id: active.clinicId, patient_id: patientId, text: typed }, { idempotencyKey: key })),
+    (r) => {
+      setSavingReply(false);
+      setTyped(''); // the text is gone from the page: it is stored, and read back only on a click
+      setMessageId(r.message_id);
+      setSavedOutcome(r.outcome);
+      text.reset();
+      reading.reset();
+      enter.reset();
+      void queryClient.invalidateQueries();
+    },
+  );
   const pick = (id: string) => {
     setMessageId(id);
     text.reset();
@@ -275,6 +295,29 @@ function ReplyEntry({ slotId, patientId, onDone }: { slotId: string; patientId: 
     <div>
       <h4>{t('backfill.reply.title')}</h4>
       <p className="hint">{t('backfill.reply.note')}</p>
+      <h5>{t('backfill.reply.typeTitle')}</h5>
+      <label htmlFor={`reply-text-${slotId}`}>{t('backfill.reply.typeLabel')}</label>
+      <textarea
+        id={`reply-text-${slotId}`}
+        rows={4}
+        maxLength={10000}
+        value={typed}
+        onChange={(e) => {
+          setTyped(e.target.value);
+          save.reset(); // a different text is a different request: never reuse the old key
+        }}
+      />
+      <p>
+        <button type="button" disabled={typed.trim() === ''} onClick={() => setSavingReply(true)}>
+          {t('backfill.reply.save')}
+        </button>
+      </p>
+      {savedOutcome && (
+        <p role="status">
+          {t('backfill.reply.saved')} {t(`backfill.reply.savedOutcome.${savedOutcome}`)}
+        </p>
+      )}
+      <h5>{t('backfill.reply.storedTitle')}</h5>
       {thread.isPending && (
         <p role="status" className="loading">
           {t('common.loading')}
@@ -363,6 +406,31 @@ function ReplyEntry({ slotId, patientId, onDone }: { slotId: string; patientId: 
         </button>
       </div>
 
+      {savingReply && (
+        <ConfirmDialog
+          title={t('backfill.reply.saveTitle')}
+          confirmLabel={t('backfill.reply.save')}
+          busy={save.isPending}
+          onConfirm={() => save.mutate()}
+          onCancel={() => {
+            save.reset(); // what was typed stays in the box so it can be corrected and saved again
+            setSavingReply(false);
+          }}
+          status={
+            <WriteProblem
+              problem={save.error}
+              calm={{
+                unavailable: t('backfill.reply.saveUnavailable'),
+                conflict: t('backfill.reply.saveConflict'),
+                invalid: t('backfill.reply.saveInvalid'),
+                not_found: t('backfill.reply.saveNotFound'),
+              }}
+            />
+          }
+        >
+          <p>{t('backfill.reply.saveBody')}</p>
+        </ConfirmDialog>
+      )}
       {confirming && (
         <ConfirmDialog
           title={t(confirming === 'replied' ? 'backfill.reply.enterTitle' : 'backfill.reply.noReplyTitle')}

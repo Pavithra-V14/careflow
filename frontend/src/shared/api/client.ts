@@ -15,6 +15,7 @@ export type DuplicateStatus = NonNullable<DuplicateQuery['status']>;
 type TaskQuery = NonNullable<paths['/v1/staff/review-tasks']['get']['parameters']['query']>;
 type ReviewTaskStatus = TaskQuery['status'];
 type TaskRole = NonNullable<TaskQuery['assigned_role']>;
+export type RecordReplyIn = components['schemas']['RecordReplyIn'];
 export type BackfillAction = components['schemas']['BackfillDecideIn']['action'];
 type BackfillReplyIn = components['schemas']['BackfillReplyIn'];
 type ThreadQuery = NonNullable<paths['/v1/staff/messages/threads']['get']['parameters']['query']>;
@@ -120,6 +121,7 @@ export const OPERATIONS = {
   decideBackfill: { method: 'post', path: '/v1/staff/scheduling/backfills/{slot_id}/decide' },
   replyBackfill: { method: 'post', path: '/v1/staff/scheduling/backfills/{slot_id}/reply' },
   interpretReply: { method: 'post', path: '/v1/staff/scheduling/offers/interpret-reply' },
+  recordReply: { method: 'post', path: '/v1/staff/scheduling/offers/replies' },
   listThreads: { method: 'get', path: '/v1/staff/messages/threads' },
   listThreadMessages: { method: 'get', path: '/v1/staff/messages/threads/{thread_id}/messages' },
   // ---- lists that replace typing: clinic, grievance categories, break-glass reasons and grants, upcoming visits ----
@@ -394,6 +396,8 @@ export function createApi(options: ApiOptions) {
       client.POST('/v1/staff/scheduling/backfills/{slot_id}/decide', { params: { path: { slot_id: slotId }, header: { 'X-Idempotency-Key': key(o) } }, body: { action } }),
     replyBackfill: (slotId: string, body: BackfillReplyIn, o?: WriteOptions) =>
       client.POST('/v1/staff/scheduling/backfills/{slot_id}/reply', { params: { path: { slot_id: slotId }, header: { 'X-Idempotency-Key': key(o) } }, body }),
+    // Stores what a patient told the front desk (encrypted, on the appointments thread; the red-flag rules read it first). Nothing is sent to the patient.
+    recordReply: (body: RecordReplyIn, o?: WriteOptions) => client.POST('/v1/staff/scheduling/offers/replies', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
     interpretReply: (messageId: string, o?: WriteOptions) =>
       client.POST('/v1/staff/scheduling/offers/interpret-reply', { params: { header: { 'X-Idempotency-Key': key(o) } }, body: { message_id: messageId } }),
     listThreads: (patientId: string, topic: ThreadTopic) => client.GET('/v1/staff/messages/threads', { params: { query: { patient_id: patientId, topic } } }),

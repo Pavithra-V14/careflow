@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { OPERATIONS, createApi, type Api, type WriteOptions, type ProposeMergeIn, type BeginUploadIn, type RegisterIn, type PatientSearchIn, type SlotIn, type HoldIn, type WaitlistJoinIn, type LocationIn, type ProviderIn, type VisitTypeIn, type CarePlanIn, type ResultIn, type BarrierIn, type EpisodeIn, type InviteIn, type RoleChangeIn, type AutonomySetIn, type VoicePurgeIn, type NoteIn, type BreakGlassOpenIn, type RecoveryRequestIn, type ConsentIn, type ClaimIn, type GrievanceIn } from '../src/shared/api/client';
+import { OPERATIONS, createApi, type Api, type WriteOptions, type ProposeMergeIn, type BeginUploadIn, type RegisterIn, type PatientSearchIn, type SlotIn, type HoldIn, type WaitlistJoinIn, type LocationIn, type ProviderIn, type VisitTypeIn, type CarePlanIn, type ResultIn, type BarrierIn, type EpisodeIn, type InviteIn, type RoleChangeIn, type AutonomySetIn, type VoicePurgeIn, type NoteIn, type BreakGlassOpenIn, type RecoveryRequestIn, type ConsentIn, type ClaimIn, type GrievanceIn, type RecordReplyIn } from '../src/shared/api/client';
 
 // Contract test (BUILD-SPEC 21): the client is driven for real; only the network transport is captured.
 // It asserts every method targets an endpoint that exists in the backend's schema, with its required
@@ -124,6 +124,7 @@ const INVOCATIONS: Record<keyof typeof OPERATIONS, (api: Api, o?: WriteOptions) 
   decideBackfill: (api, o) => api.decideBackfill(ID, 'skip', o),
   replyBackfill: (api, o) => api.replyBackfill(ID, { outcome: 'timed_out' }, o),
   interpretReply: (api, o) => api.interpretReply(ID, o),
+  recordReply: (api, o) => api.recordReply(body<RecordReplyIn>('RecordReplyIn'), o),
   listThreads: (api) => api.listThreads(ID, 'appointments'),
   listThreadMessages: (api) => api.listThreadMessages(ID),
   publicClinic: (api) => api.publicClinic(),

@@ -19,6 +19,7 @@ Two flags are OFF and stay OFF until the owner says: merge approve and unmerge (
 | F7 batch 2 | Alerts (acknowledge; the audience role is the escalation state), dashboard, care gaps panel, care plans, results |
 | F7 batch 3 | Care-gap writes, staff accounts, autonomy (mode, two-person switch, history), reviewer statistics, cost canvas, voice transcripts |
 | F7 batch 4 | Visit readiness, portal claims, break-glass, staff recovery, notes, grievances, result-correction tasks |
+| F8 follow-up 2 (2026-11-12) | The scheduling lists and reference lists show the active clinic only (item 17); Hold, Book and Join say "This patient is not registered at the clinic that owns this slot" for that 404; the offer run lets front desk type the patient's reply (saved encrypted, text dropped from the page, new message id passed to the reading and the entry); the stored-reply picker stays for replies saved earlier |
 | F8 follow-up (2026-11-11) | The clinic id comes from `GET /public/clinic` and the grievance category from `GET /v1/portal/grievance-categories` (a typed code is the fallback); consent notices show the patient-facing `label`; break-glass uses the reason list and my open grants; visit readiness picks from `GET /v1/staff/visits/upcoming`; labels for the readiness status, message sender and topic, voice workflow and status, reviewer verdict, cost state and reasons; the offer run after a cancel (prepare, send, skip, stop, enter the reply) |
 | F8 (batch 5) | The patient portal on the sign-in and sign-up pages: phone-code sign-in, create the patient account, notices shown exactly as sent, grant or withdraw, activate, claim a record, file a grievance, download my data |
 
@@ -44,7 +45,6 @@ the first live run.
 
 | Item | Blocked on |
 |---|---|
-| A route to store a typed patient reply for the offer run (the console can only pick a stored one) | backend (request item 16) |
 | Rows for holds, merges, duplicates, resolved tasks, and every new list, so row shapes can be checked | backend seed (request item 8) |
 | Enums that stay open-ended by design (shown humanised, never hidden): grievance `category`, review task `kind`, a run's `status` word | not blocked: the console labels what it knows and shows the rest as sent |
 | Merge approve and unmerge switched on | the first live approve with step-up |

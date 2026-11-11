@@ -8,9 +8,12 @@ import { NotAvailableToRole, ProblemText } from './states';
  * outcome of the system working (something changed, a switch is off, a rule refused) and is a calm status, not an alert; anything
  * else is the fixed message for its kind. The backend's own text is never shown.
  */
-export function WriteProblem({ problem, calm = {}, forbidden }: { problem: ApiProblem | null; calm?: Partial<Record<ProblemKind, ReactNode>>; forbidden?: ReactNode }) {
+export function WriteProblem({ problem, calm = {}, forbidden, details = {} }: { problem: ApiProblem | null; calm?: Partial<Record<ProblemKind, ReactNode>>; forbidden?: ReactNode; details?: Record<string, ReactNode> }) {
   const { t } = useTranslation();
   if (!problem) return null;
+  // A backend phrase the screen knows, said in the screen's own plain words (the phrase itself is never shown).
+  const known = problem.detail !== null ? details[problem.detail] : undefined;
+  if (known) return <p role="status">{known}</p>;
   const message = calm[problem.kind];
   if (message) return <p role="status">{message}</p>;
   if (problem.kind === 'forbidden') return forbidden ? <p role="status">{forbidden}</p> : <NotAvailableToRole />;

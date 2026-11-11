@@ -2028,6 +2028,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/scheduling/offers/replies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record Patient Reply Route
+         * @description Record a reply the patient gave to the front desk (by phone or in person): it is stored encrypted as a patient message in the patient's appointments thread, and the deterministic red-flag rules screen it
+         *     in the same transaction, before anything else (the reply and interpret routes then take its message id). A red flag or an unreadable reply raises the nurse task. 404 for a clinic you cannot see or a
+         *     patient who is not at it, 403 unless you are front desk there, 409 if the key was used for a different reply, 422 for a blank or over-long text, 503 if the encryption keys are not configured.
+         */
+        post: operations["record_patient_reply_route_v1_staff_scheduling_offers_replies_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/scheduling/offers/send": {
         parameters: {
             query?: never;
@@ -4603,6 +4625,49 @@ export interface components {
             codes: string[];
             /** Configured */
             configured: boolean;
+        };
+        /** RecordReplyIn */
+        RecordReplyIn: {
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /**
+             * Patient Id
+             * Format: uuid
+             */
+            patient_id: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * RecordReplyOut
+         * @description Ids and closed words only: never the text.
+         */
+        RecordReplyOut: {
+            /** Created */
+            created: boolean;
+            /**
+             * Message Id
+             * Format: uuid
+             */
+            message_id: string;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "red_flag" | "unassessable" | "clear";
+            /**
+             * Screening Id
+             * Format: uuid
+             */
+            screening_id: string;
+            /**
+             * Thread Id
+             * Format: uuid
+             */
+            thread_id: string;
         };
         /** RecoveryList */
         RecoveryList: {
@@ -12232,6 +12297,87 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InterpretReplyOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+            /** @description Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    record_patient_reply_route_v1_staff_scheduling_offers_replies_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordReplyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordReplyOut"];
                 };
             };
             /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */

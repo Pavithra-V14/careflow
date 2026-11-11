@@ -6,9 +6,15 @@ export type ProblemKind = 'unauthorized' | 'step_up' | 'forbidden' | 'not_found'
 
 export class ApiProblem extends Error {
   readonly kind: ProblemKind;
-  constructor(kind: ProblemKind) {
+  /**
+   * The backend's `detail` phrase, kept ONLY so the console can recognise a phrase it knows (for example "unknown patient for this clinic")
+   * and say it in its own plain words. It is never rendered as it came: an unknown phrase is shown as the fixed message for the kind.
+   */
+  readonly detail: string | null;
+  constructor(kind: ProblemKind, detail: string | null = null) {
     super(kind); // the kind word only; never a status line or a body
     this.kind = kind;
+    this.detail = detail;
   }
 }
 
@@ -27,6 +33,7 @@ export const toProblem = (e: unknown): ApiProblem => (e instanceof ApiProblem ? 
 
 interface Result<T> {
   data?: T | undefined;
+  error?: unknown;
   response: Response;
 }
 
@@ -42,7 +49,8 @@ export async function unwrap<T>(pending: Promise<Result<T>>): Promise<T> {
   if (result.response.ok && result.data !== undefined) return result.data;
   // A step-up challenge that was cancelled or not satisfied is not a sign-out: nothing was changed and a fresh code is needed.
   if (isStepUpChallenge(result.response)) throw new ApiProblem('step_up');
-  throw new ApiProblem(result.response.ok ? 'unknown' : problemFromStatus(result.response.status));
+  const detail = (result.error as { detail?: unknown } | undefined)?.detail;
+  throw new ApiProblem(result.response.ok ? 'unknown' : problemFromStatus(result.response.status), typeof detail === 'string' ? detail : null);
 }
 
 /** Answers that will not change on a retry: the idempotency key is dropped, so the next attempt is a new intent. */
