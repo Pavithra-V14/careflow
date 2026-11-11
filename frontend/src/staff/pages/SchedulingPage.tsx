@@ -210,7 +210,7 @@ function HoldsList() {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<NonNullable<HoldStatus>>('active');
   const [releasing, setReleasing] = useState<string | null>(null);
-  const query = useApiQuery(['holds', status], async () => inClinic(await unwrap(api.listHolds(status)), active.clinicId));
+  const query = useApiQuery(['holds', status], async () => inClinic(await unwrap(api.listHolds(status, active.clinicId)), active.clinicId));
 
   const release = useIdempotentWrite(
     (holdId: string, key) => unwrap(api.releaseHold(holdId, { idempotencyKey: key })),

@@ -330,7 +330,7 @@ export function createApi(options: ApiOptions) {
     listLocations: (includeInactive = false) => client.GET('/v1/staff/scheduling/locations', { params: { query: inactive(includeInactive) } }),
     listVisitTypes: (includeInactive = false) => client.GET('/v1/staff/scheduling/visit-types', { params: { query: inactive(includeInactive) } }),
     listPriorityLevels: (includeInactive = false) => client.GET('/v1/staff/scheduling/priority-levels', { params: { query: inactive(includeInactive) } }),
-    listHolds: (status?: HoldStatus) => client.GET('/v1/staff/scheduling/holds', { params: { query: status ? { status } : {} } }),
+    listHolds: (status?: HoldStatus, clinicId?: string) => client.GET('/v1/staff/scheduling/holds', { params: { query: { ...(status ? { status } : {}), ...(clinicId ? { clinic_id: clinicId } : {}) } } }),
     releaseHold: (holdId: string, o?: WriteOptions) =>
       client.POST('/v1/staff/scheduling/holds/{hold_id}/release', { params: { path: { hold_id: holdId }, header: { 'X-Idempotency-Key': key(o) } } }),
     draftOffer: (clinicId: string, visitTypeId: string) =>
@@ -352,19 +352,20 @@ export function createApi(options: ApiOptions) {
     listDuplicates: (status?: DuplicateStatus) => client.GET('/v1/staff/identity/possible-duplicates', { params: { query: status ? { status } : {} } }),
 
     // ---- F7: scheduling ---------------------------------------------------------------------------------------------
-    listSlots: (f: { providerId?: string; locationId?: string; limit?: number } = {}) =>
+    listSlots: (f: { providerId?: string; locationId?: string; clinicId?: string; limit?: number } = {}) =>
       client.GET('/v1/staff/scheduling/slots', {
-        params: { query: { ...(f.providerId ? { provider_id: f.providerId } : {}), ...(f.locationId ? { location_id: f.locationId } : {}), ...(f.limit ? { limit: f.limit } : {}) } },
+        params: { query: { ...(f.providerId ? { provider_id: f.providerId } : {}), ...(f.locationId ? { location_id: f.locationId } : {}), ...(f.clinicId ? { clinic_id: f.clinicId } : {}), ...(f.limit ? { limit: f.limit } : {}) } },
       }),
     createSlot: (body: SlotIn, o?: WriteOptions) => client.POST('/v1/staff/scheduling/slots', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
     holdSlot: (slotId: string, body: HoldIn, o?: WriteOptions) =>
       client.POST('/v1/staff/scheduling/slots/{slot_id}/hold', { params: { path: { slot_id: slotId }, header: { 'X-Idempotency-Key': key(o) } }, body }),
     bookSlot: (slotId: string, patientId: string, o?: WriteOptions) =>
       client.POST('/v1/staff/scheduling/slots/{slot_id}/book', { params: { path: { slot_id: slotId }, header: { 'X-Idempotency-Key': key(o) } }, body: { patient_id: patientId } }),
-    listBookings: (limit?: number) => client.GET('/v1/staff/scheduling/bookings', { params: { query: limit ? { limit } : {} } }),
+    listBookings: (clinicId?: string, limit?: number) => client.GET('/v1/staff/scheduling/bookings', { params: { query: { ...(clinicId ? { clinic_id: clinicId } : {}), ...(limit ? { limit } : {}) } } }),
     cancelBooking: (bookingId: string, o?: WriteOptions) =>
       client.POST('/v1/staff/scheduling/bookings/{booking_id}/cancel', { params: { path: { booking_id: bookingId }, header: { 'X-Idempotency-Key': key(o) } } }),
-    listWaitlist: (visitTypeId?: string) => client.GET('/v1/staff/scheduling/waitlist', { params: { query: visitTypeId ? { visit_type_id: visitTypeId } : {} } }),
+    listWaitlist: (visitTypeId?: string, clinicId?: string) =>
+      client.GET('/v1/staff/scheduling/waitlist', { params: { query: { ...(visitTypeId ? { visit_type_id: visitTypeId } : {}), ...(clinicId ? { clinic_id: clinicId } : {}) } } }),
     joinWaitlist: (body: WaitlistJoinIn, o?: WriteOptions) => client.POST('/v1/staff/scheduling/waitlist/join', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
     listOffers: (state?: OfferState) => client.GET('/v1/staff/scheduling/offers', { params: { query: state ? { state } : {} } }),
     markOfferDelivered: (holdId: string, o?: WriteOptions) =>

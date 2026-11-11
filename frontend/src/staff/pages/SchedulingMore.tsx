@@ -105,7 +105,7 @@ export function SlotsList() {
   const [adding, setAdding] = useState(false);
   const [offerFor, setOfferFor] = useState<Slot | null>(null);
   const [done, setDone] = useState<string | null>(null);
-  const query = useApiQuery(['slots', providerId, locationId], async () => inClinic(await unwrap(api.listSlots({ providerId, locationId })), active.clinicId));
+  const query = useApiQuery(['slots', providerId, locationId], async () => inClinic(await unwrap(api.listSlots({ providerId, locationId, clinicId: active.clinicId })), active.clinicId));
 
   const canAct = hasRole(CAN_SCHEDULE);
   return (
@@ -505,7 +505,7 @@ export function BookingsList() {
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<(components['schemas']['CancelOut'] & { visitTypeId: string | null }) | null>(null);
   const [preparing, setPreparing] = useState(false);
-  const query = useApiQuery(['bookings'], async () => inClinic(await unwrap(api.listBookings()), active.clinicId));
+  const query = useApiQuery(['bookings'], async () => inClinic(await unwrap(api.listBookings(active.clinicId)), active.clinicId));
   const cancel = useIdempotentWrite(
     (bookingId: string, key) => unwrap(api.cancelBooking(bookingId, { idempotencyKey: key })),
     (result) => {
@@ -623,7 +623,7 @@ export function WaitlistList() {
   const [visitType, setVisitType] = useState('');
   const [joining, setJoining] = useState(false);
   const [done, setDone] = useState(false);
-  const query = useApiQuery(['waitlist', visitType], async () => inClinic(await unwrap(api.listWaitlist(visitType || undefined)), active.clinicId));
+  const query = useApiQuery(['waitlist', visitType], async () => inClinic(await unwrap(api.listWaitlist(visitType || undefined, active.clinicId)), active.clinicId));
   return (
     <>
       <div className="toolbar">

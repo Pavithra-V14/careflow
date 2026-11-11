@@ -34,7 +34,7 @@ export function BackfillPanel({ slotId, visitTypeId, onClose }: { slotId: string
   const [deciding, setDeciding] = useState<BackfillAction | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const state = useApiQuery(['backfill', slotId], () => unwrap(api.backfillState(slotId)));
-  const waitlist = useApiQuery(['backfill-waitlist', visitTypeId], async () => inClinic(await unwrap(api.listWaitlist(visitTypeId)), active.clinicId));
+  const waitlist = useApiQuery(['backfill-waitlist', visitTypeId], async () => inClinic(await unwrap(api.listWaitlist(visitTypeId, active.clinicId)), active.clinicId));
   const canAct = hasRole(['front_desk']);
 
   const start = useIdempotentWrite(

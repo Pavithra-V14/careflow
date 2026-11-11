@@ -1871,7 +1871,7 @@ export interface paths {
         };
         /**
          * List Bookings
-         * @description Confirmed bookings, soonest appointment first.
+         * @description Confirmed bookings, soonest appointment first, optionally for one clinic. 404 if you give a clinic you cannot read.
          */
         get: operations["list_bookings_v1_staff_scheduling_bookings_get"];
         put?: never;
@@ -1911,7 +1911,7 @@ export interface paths {
         };
         /**
          * List Holds
-         * @description Holds of the clinics you may read, soonest to expire first (`active` by default; `status` filters).
+         * @description Holds of the clinics you may read, soonest to expire first (`active` by default; `status` filters; `clinic_id` narrows to one clinic). 404 if you give a clinic you cannot read.
          */
         get: operations["list_holds_v1_staff_scheduling_holds_get"];
         put?: never;
@@ -2144,7 +2144,7 @@ export interface paths {
         };
         /**
          * List Slots
-         * @description Open and held slots, soonest first, optionally for one provider and/or location.
+         * @description Open and held slots, soonest first, optionally for one clinic, provider and/or location. 404 if you give a clinic you cannot read.
          */
         get: operations["list_slots_v1_staff_scheduling_slots_get"];
         put?: never;
@@ -2232,7 +2232,7 @@ export interface paths {
         };
         /**
          * List Waitlist
-         * @description The waiting queue, clinical priority first and join time second, optionally for one visit type.
+         * @description The waiting queue, clinical priority first and join time second, optionally for one clinic and/or one visit type. 404 if you give a clinic you cannot read.
          */
         get: operations["list_waitlist_v1_staff_scheduling_waitlist_get"];
         put?: never;
@@ -11871,6 +11871,7 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                clinic_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -11889,6 +11890,15 @@ export interface operations {
             };
             /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11955,6 +11965,7 @@ export interface operations {
             query?: {
                 status?: ("active" | "released" | "expired" | "converted") | null;
                 limit?: number;
+                clinic_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -11973,6 +11984,15 @@ export interface operations {
             };
             /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -12748,6 +12768,7 @@ export interface operations {
                 location_id?: string | null;
                 starts_after?: string | null;
                 limit?: number;
+                clinic_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -12766,6 +12787,15 @@ export interface operations {
             };
             /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -13086,6 +13116,7 @@ export interface operations {
             query?: {
                 visit_type_id?: string | null;
                 limit?: number;
+                clinic_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -13104,6 +13135,15 @@ export interface operations {
             };
             /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

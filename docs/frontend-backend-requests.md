@@ -235,8 +235,8 @@ A route to record a staff-entered reply (topic appointments, sender recorded, au
 
 The console now shows only the active clinic's rows in the slot, booking, hold, waitlist and offer lists and in the reference lists (providers,
 locations, visit types, priority levels), and says "This patient is not registered at the clinic that owns this slot" for the 404 detail
-"unknown patient for this clinic". Request: when `GET .../slots`, `.../bookings`, `.../holds`, `.../waitlist` and `.../offers` take an optional
-`clinic_id` query parameter, say so in the snapshot and the console will send it as well (the client-side filter stays as a guard).
+"unknown patient for this clinic". The backend has added the optional `clinic_id` to the slot, booking, hold and waitlist lists (2026-11-12) and the console now sends it
+(the client-side filter stays as a guard). Offers and the reference lists take none yet.
 
 ## Decisions recorded here for later readers
 

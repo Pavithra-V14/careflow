@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CLINIC_A, CLINIC_B, json } from './helpers/fakes';
 import { ID, LEAK, fail, list, openConsole, writes, type Routes } from './helpers/console';
@@ -65,6 +65,20 @@ describe('item 17: the lists show the active clinic only', () => {
     const offer = (id: string, clinic: string) => ({ channel: null, clinic_id: clinic, created_at: '2026-11-09T05:00:00Z', delivered_at: null, expires_at: '2026-11-10T05:00:00Z', hold_id: id, message_id: MESSAGE, patient_id: ID.patient, slot_id: ID.slot, state: 'awaiting_delivery' });
     await openConsole({ hash: '/scheduling/offers', routes: [...refs, ['get', '/v1/staff/scheduling/offers', () => list([offer(ID.hold, CLINIC_A), offer(HOLD_OTHER, OTHER)])]] });
     expect((await screen.findAllByRole('row')).slice(1)).toHaveLength(1);
+  });
+
+  it('asks the backend for the active clinic on the slot, booking, hold and waitlist lists', async () => {
+    const asked = async (hash: string, path: string) => {
+      const { calls, unmount } = await openConsole({ hash, routes: [...refs, ['get', path, () => list([])]] });
+      await waitFor(() => expect(calls.some((c) => c.path === path)).toBe(true));
+      const ids = calls.filter((c) => c.path === path).map((c) => c.query.get('clinic_id'));
+      unmount();
+      return ids;
+    };
+    expect(await asked('/scheduling/slots', '/v1/staff/scheduling/slots')).toEqual([CLINIC_A]);
+    expect(await asked('/scheduling/bookings', '/v1/staff/scheduling/bookings')).toEqual([CLINIC_A]);
+    expect(await asked('/scheduling/holds', '/v1/staff/scheduling/holds')).toEqual([CLINIC_A]);
+    expect(await asked('/scheduling/waitlist', '/v1/staff/scheduling/waitlist')).toEqual([CLINIC_A]);
   });
 
   it('the reference lists show this clinic only', async () => {
