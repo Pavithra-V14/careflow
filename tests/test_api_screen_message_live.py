@@ -183,7 +183,7 @@ async def world():
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
                 yield type("World", (), {"conn": conn, "client": client, "ids": ids, "a": a, "b": b, "messages": messages, "vault": vault,
-                                         "thread": thread, "model_calls": model_calls})
+                                         "thread": thread, "model_calls": model_calls, "patient": patient})
     finally:
         await outer.rollback()
         await conn.close()
@@ -366,9 +366,16 @@ GRID_REQUIRED_TESTS = (
     "test_a_flagged_reply_is_never_put_to_the_model_and_still_raises_the_immediate_nurse_task",
     "test_a_clear_reply_gets_a_suggestion_with_no_text_and_one_audit_row",
     "test_only_a_patients_reply_on_the_appointments_topic_reaches_the_model",
+    "test_who_can_record_a_reply",
+    "test_a_recorded_reply_is_encrypted_screened_first_audited_without_text_and_then_usable_by_interpret",
+    "test_a_recorded_flagged_reply_raises_the_immediate_nurse_task",
+    "test_recording_a_reply_replays_by_key_and_refuses_a_different_request_under_it",
 )
 # Read by tests/test_api_role_matrix.py::test_split_routes_have_both_halves_and_the_dedicated_half_covers_every_role_on_every_topic
-COVERED_GRID = {("POST", "/v1/staff/scheduling/offers/interpret-reply"): {who: GRID_AXIS for who in SCREENS}}
+COVERED_GRID = {
+    ("POST", "/v1/staff/scheduling/offers/interpret-reply"): {who: GRID_AXIS for who in SCREENS},
+    ("POST", "/v1/staff/scheduling/offers/replies"): {who: GRID_AXIS for who in SCREENS},  # (the second route's own tests follow below)
+}
 
 
 async def interpret(w, who, message, *, key="new", token=None):
@@ -483,3 +490,81 @@ async def test_interpretation_authentication_comes_first_and_the_key_and_the_bod
     assert r.status_code == 422
     r = await w.client.post(INTERPRET, headers={**bearer(mint(sub)), "X-Idempotency-Key": "k"}, json={"message_id": str(mid), "actor": str(sub)})
     assert r.status_code == 422  # the actor is the signed-in account, never the body
+
+
+# ---- POST /v1/staff/scheduling/offers/replies (a reply the patient gave to the front desk; migration-free: the 0013 policy already lets front desk relay a patient message on appointments) ----------------------
+#
+# Same world, same never-committed transaction. The route stores an ENCRYPTED patient message and screens it in the same transaction, rules first and alone; the interpret route then takes its id.
+
+RECORD = "/v1/staff/scheduling/offers/replies"
+# Front desk of the clinic: 201. Roles that see the clinic row but are not front desk (nurse, doctor, admin, auditor, owner, and `multi`, a nurse in clinic A): 403. Everyone else cannot see the clinic: the one 404.
+RECORDS = {who: (201 if who == "fd_a" else 403 if who in {"nurse_a", "doctor_a", "multi", "admin_a", "auditor_a", "owner_a"} else 404) for who in SCREENS}
+
+
+async def record(w, who, text_, *, key="new", token=None, patient=None, **extra):
+    headers = {} if key is None else {"X-Idempotency-Key": f"k-{_u()}" if key == "new" else key}
+    headers.update(bearer(token) if token else bearer(mint(w.ids[who])) if who else {})
+    return await w.client.post(RECORD, headers=headers, json={"clinic_id": str(w.a), "patient_id": str(patient or w.patient), "text": text_, **extra})
+
+
+async def reply_rows(w):
+    return (await one(w, "select count(*) from msg.messages where idempotency_key like 'patient-reply:%'"))[0][0]
+
+
+@pytest.mark.parametrize("who", list(RECORDS))
+async def test_who_can_record_a_reply(w, who):
+    await synthetic_rule(w)
+    before = await reply_rows(w)
+    r = await record(w, who, f"yes that time suits me {PRIVATE}")
+    assert r.status_code == RECORDS[who], (who, r.text)
+    if RECORDS[who] == 201:
+        assert r.json()["outcome"] == "clear" and r.json()["created"] is True and PRIVATE not in r.text
+        assert await reply_rows(w) == before + 1
+    else:
+        assert r.json() in ({"detail": "not found"}, {"detail": "your role may not do this"}), who
+        assert await reply_rows(w) == before  # a refused caller stored nothing
+
+
+async def test_a_recorded_reply_is_encrypted_screened_first_audited_without_text_and_then_usable_by_interpret(w):
+    await synthetic_rule(w)
+    r = await record(w, "fd_a", f"yes that time suits me {PRIVATE}")
+    assert r.status_code == 201
+    body = r.json()
+    assert set(body) == {"message_id", "thread_id", "created", "screening_id", "outcome"} and PRIVATE not in r.text
+    assert body["thread_id"] == str(w.thread["appointments"])
+    ((sender, topic, recorded_by, ciphertext),) = await one(w, "select sender_kind, topic, recorded_by, body_ct from msg.messages where id = :m", m=body["message_id"])
+    assert (sender, topic, recorded_by) == ("patient", "appointments", w.ids["fd_a"]) and PRIVATE.encode() not in bytes(ciphertext)
+    assert len(await one(w, "select id from msg.screenings where message_id = :m", m=body["message_id"])) == 1  # the rules screened it, in the same transaction
+    rows = await one(w, "select actor_role, details from audit.log where action = 'offer.reply_record' and resource_id = :m", m=body["message_id"])
+    assert len(rows) == 1 and rows[0][0] == "front_desk" and without_scope(rows[0][1]) == {"outcome": "clear", "created": True} and PRIVATE not in str(rows[0][1])
+    before = len(w.model_calls)  # and the interpret route takes the new message id: the rules read it again first, then the (fake) model is asked once
+    again = await interpret(w, "fd_a", body["message_id"])
+    assert again.status_code == 200 and again.json()["outcome"] == "clear" and again.json()["suggestion"] == "accept" and len(w.model_calls) == before + 1
+
+
+async def test_a_recorded_flagged_reply_raises_the_immediate_nurse_task(w):
+    """# CLINICAL-PLACEHOLDER: needs clinician sign-off. Rule 2: the rules run first and alone; a hit raises the task. No model is involved in recording."""
+    await synthetic_rule(w)
+    before = len(w.model_calls)
+    r = await record(w, "fd_a", f"{PRIVATE} and zzalpha here")
+    assert r.status_code == 201 and r.json()["outcome"] == "red_flag" and PRIVATE not in r.text
+    ((kind, priority, role),) = await one(w, "select kind, priority, assigned_role from agents.review_tasks where source_message_id = :m", m=r.json()["message_id"])
+    assert (kind, priority, role) == ("red_flag", "immediate", "nurse") and len(w.model_calls) == before
+
+
+async def test_recording_a_reply_replays_by_key_and_refuses_a_different_request_under_it(w):
+    await synthetic_rule(w)
+    first = await record(w, "fd_a", f"same words {PRIVATE}", key="reply-key")
+    again = await record(w, "fd_a", f"same words {PRIVATE}", key="reply-key")
+    assert first.status_code == 201 and again.status_code == 201 and again.json()["created"] is False and again.json()["message_id"] == first.json()["message_id"]
+    assert len(await one(w, "select id from audit.log where action = 'offer.reply_record' and resource_id = :m", m=first.json()["message_id"])) == 1  # the replay wrote no second row
+    other = await record(w, "fd_a", "different words", key="reply-key")
+    assert other.status_code == 409 and other.json() == {"detail": "this idempotency key was already used by a different request"}
+    stranger = await record(w, "fd_a", "words", patient=_u())
+    assert stranger.status_code == 404 and stranger.json() == {"detail": "not found"}  # not a patient of the clinic
+    for label, kw in (("blank", {"text": "   "}), ("missing key", {"key": None}), ("blank key", {"key": "   "})):
+        text_ = kw.pop("text", "words")
+        r = await record(w, "fd_a", text_, **kw)
+        assert r.status_code == 422, label
+    for label, token in (("garbage", "not.a.jwt"), ("expired", mint(w.ids["fd_a"], exp=int(time.time()) - 3600)), ("attacker key", mint(w.ids["fd_a"], key=ATTACKER))):
+        assert (await record(w, None, "words", token=token)).status_code == 401, label
