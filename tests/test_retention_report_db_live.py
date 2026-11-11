@@ -105,7 +105,7 @@ async def world(db):
     old, recent, _none, future, cancelled = [await patient(n) for n in ("old", "recent", "none", "future", "cancelled")]
     await booking(old, NOW - timedelta(days=1500))
     await booking(old, NOW - timedelta(days=1400))  # the NEWEST started booking decides: still past a 1000-day cutoff
-    await booking(recent, NOW - timedelta(days=1500))
+    await booking(recent, NOW - timedelta(days=1600))  # (a different time: one provider's slots cannot overlap)
     await booking(recent, NOW - timedelta(days=2))  # one recent visit: not past the period
     await booking(future, NOW + timedelta(days=20))  # has not happened: no encounter
     await booking(cancelled, NOW - timedelta(days=2000), cancelled=True)  # a cancelled booking is not an encounter
