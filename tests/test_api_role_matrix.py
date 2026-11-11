@@ -1027,6 +1027,30 @@ def referral_run_cases(ids) -> list[tuple]:
 
 
 INTERPRET = "/v1/staff/scheduling/offers/interpret-reply"
+RECORD_REPLY = "/v1/staff/scheduling/offers/replies"
+
+
+def record_reply_cases(ids) -> list[tuple]:
+    """The COMMITTED half of POST .../offers/replies: a random patient id, so front desk of the clinic gets the one fixed 404 BEFORE anything is written (a stored reply is an append-only encrypted message, so a
+    success cannot be committed here); a role that sees the clinic but is not front desk gets 403; everyone else the one 404; plus 401 and 422. The 201 on a real patient, the red-flag order, the replay and
+    the audit row are in tests/test_api_screen_message_live.py (SPLIT_HARNESS)."""
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "patient_id": str(uuid.uuid4()), "text": "DEMO reply text", **o}
+    refused = ("nurse_a", "doctor_a", "admin_a", "business_owner_a", "auditor_a", "multi")
+    cases = []
+    for p in [*ids.people, "no account"]:
+        who = bearer(mint(ids.no_account)) if p == "no account" else p
+        status, expect = (403, NOT_YOUR_ROLE) if p in refused else (404, _fixed(404))
+        cases.append(_case(ids, f"{p} " + ("sees the clinic but is not front desk" if p in refused else "gets the one fixed not-found"), who, status, RECORD_REPLY, json=body(), body=expect))
+    fd = "front_desk_a"
+    cases += [
+        _case(ids, "an unknown clinic is not found", fd, 404, RECORD_REPLY, json=body(clinic_id=str(uuid.uuid4())), body=_fixed(404)),
+        _case(ids, "a blank text is rejected", fd, 422, RECORD_REPLY, json=body(text="   "), body=_fixed(422)),
+        _case(ids, "an empty text is rejected", fd, 422, RECORD_REPLY, json=body(text=""), body=_fixed(422)),
+        _case(ids, "an extra field is rejected", fd, 422, RECORD_REPLY, json=body(actor_id=str(uuid.uuid4())), body=_fixed(422)),
+        _case(ids, "a patient id that is not a uuid is rejected", fd, 422, RECORD_REPLY, json=body(patient_id="nope"), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", fd, 422, RECORD_REPLY, json=body(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, RECORD_REPLY, body())
 
 
 def interpret_reply_cases(ids) -> list[tuple]:
@@ -3653,6 +3677,7 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", REVIEW_REFERRAL): referral_review_cases,
     ("GET", REVIEW_VIEW): referral_review_view_cases,
     ("POST", INTERPRET): interpret_reply_cases,
+    ("POST", RECORD_REPLY): record_reply_cases,
 }
 
 
@@ -3680,6 +3705,8 @@ SPLIT_HARNESS: dict[tuple[str, str], str] = {
     ("POST", REVIEW_REFERRAL): "test_api_referrals_live.py",
     # Reply interpretation: the committed half above (random message ids) and the dedicated half (real encrypted messages, the rules first, the fake model) in the screening harness.
     ("POST", INTERPRET): "test_api_screen_message_live.py",
+    # Recording a reply the patient gave to the front desk: the committed half above (a random patient: 401, 403, 404, 422) and the dedicated half (a real patient, encrypted, the rules first, the replay, the audit row).
+    ("POST", RECORD_REPLY): "test_api_screen_message_live.py",
 }
 
 

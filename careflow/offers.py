@@ -23,7 +23,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from careflow.crypto import DemographicVault
-from careflow.messages import encrypt_body
+from careflow.messages import body_matches, encrypt_body
 from careflow.scheduling import SlotManager
 from careflow.scheduling_agent import SchedulingNotConfigured, SchedulingSettings
 
@@ -87,6 +87,49 @@ async def _thread_for(conn: AsyncConnection, *, clinic_id: uuid.UUID, origin: st
     if row is None:
         raise NotACandidate("no such patient in this clinic")
     return row[0]
+
+
+@dataclass(frozen=True)
+class ReplyRecorded:
+    message_id: uuid.UUID
+    thread_id: uuid.UUID
+    created: bool
+
+
+async def record_patient_reply(
+    conn: AsyncConnection, vault: DemographicVault, *, key_version: int, clinic_id: uuid.UUID, origin: str, patient_id: uuid.UUID, body_text: str, actor_id: uuid.UUID, idempotency_key: str,
+) -> ReplyRecorded:
+    """Append a reply a patient gave to the front desk (by phone, in person) to the patient's `appointments` thread as an encrypted `patient` message recorded by this person, in the caller's transaction.
+    Idempotent on `idempotency_key`: a replay of the same request returns the same message and writes nothing; the same key for another patient or other text is an OfferConflict. THE CALLER MUST SCREEN
+    THE MESSAGE IN THE SAME TRANSACTION (a patient message cannot commit without a screening: migration 0013), before anything else reads it."""
+    if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+        raise OfferError("an idempotency key is required on every write")
+    known = (await conn.execute(text("select 1 from mpi.patients where id = :p and clinic_id = :c and origin = :o and erased_at is null"), {"p": patient_id, "c": clinic_id, "o": origin})).first()
+    if known is None:
+        raise NotACandidate("no such patient in this clinic")
+    thread_id = await _thread_for(conn, clinic_id=clinic_id, origin=origin, patient_id=patient_id, created_by=actor_id, key=f"offer-thread:{patient_id}")
+    message_id = uuid.uuid5(uuid.NAMESPACE_URL, f"careflow-patient-reply:{clinic_id}:{idempotency_key}")
+    body = encrypt_body(vault, body_text, clinic_id=clinic_id, thread_id=thread_id, key_version=key_version, message_id=message_id)
+    try:
+        async with conn.begin_nested():
+            await conn.execute(
+                text(
+                    "insert into msg.messages (id, clinic_id, origin, topic, thread_id, sender_kind, recorded_by, body_ct, body_key_version, idempotency_key) "
+                    "values (:i, :c, :o, 'appointments', :t, 'patient', :u, :b, :v, :k)"
+                ),
+                {"i": body.message_id, "c": clinic_id, "o": origin, "t": thread_id, "u": actor_id, "b": body.body_ct, "v": body.body_key_version, "k": f"patient-reply:{clinic_id}:{idempotency_key}"},
+            )
+    except DBAPIError as exc:
+        if getattr(exc.orig, "sqlstate", None) != "23505":
+            raise
+        prior = (await conn.execute(text("select id, thread_id, body_ct, body_key_version, sender_kind, recorded_by from msg.messages where clinic_id = :c and idempotency_key = :k"), {"c": clinic_id, "k": f"patient-reply:{clinic_id}:{idempotency_key}"})).first()
+        same = prior is not None and prior.id == message_id and prior.thread_id == thread_id and prior.sender_kind == "patient" and prior.recorded_by == actor_id and prior.body_ct is not None
+        if same:
+            same = body_matches(vault, prior.body_ct, body_text, clinic_id=clinic_id, thread_id=thread_id, message_id=message_id, key_version=prior.body_key_version)
+        if not same:
+            raise OfferConflict("this idempotency key was used for a different reply") from exc
+        return ReplyRecorded(message_id, thread_id, False)
+    return ReplyRecorded(message_id, thread_id, True)
 
 
 async def send_offer(

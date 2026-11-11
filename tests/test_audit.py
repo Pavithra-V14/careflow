@@ -112,6 +112,7 @@ ROUTES = {
     "resolve_review_task": "review_task.resolve",
     "send_offer_route": "offer.send",
     "interpret_reply_route": "offer.interpret_reply",
+    "record_patient_reply_route": "offer.reply_record",
     "release_hold_route": "hold.release",
     "mark_offer_delivered": "offer.mark_delivered",
     "search_patients": "patient.search",

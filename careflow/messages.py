@@ -97,6 +97,14 @@ def decrypt_body(
     )
 
 
+def body_matches(vault: DemographicVault, body_ct: bytes, expected: str, *, clinic_id: uuid.UUID, thread_id: uuid.UUID, message_id: uuid.UUID, key_version: int) -> bool:
+    """Does the stored body equal `expected`? (A replay check; the plaintext stays in this module and only a boolean leaves it. An unreadable body is not a match.)"""
+    try:
+        return decrypt_body(vault, body_ct, clinic_id=clinic_id, thread_id=thread_id, message_id=message_id, key_version=key_version) == expected
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def decrypt_voice_chunk(vault: DemographicVault, body_ct: bytes, *, clinic_id: uuid.UUID, session_id: uuid.UUID, seq: int, key_version: int) -> str:
     """A stored voice-transcript chunk back to text (migration 0047: admin-only, audited reading). The chunk was bound to its session and sequence number when it was written (voice_sql.SqlTranscriptSink),
     so a chunk moved to another session or position does not decrypt. The one place a voice chunk is decrypted; the caller owns the text and must not log it."""

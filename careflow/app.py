@@ -1574,6 +1574,57 @@ class InterpretReplyOut(_Out):
     needs_person: bool
 
 
+class RecordReplyIn(_Body):
+    clinic_id: uuid.UUID
+    patient_id: uuid.UUID
+    text: str = Field(min_length=1, max_length=messages_mod.MAX_BODY_CHARS, pattern=r"\S")  # what the patient said, as the front desk typed it
+
+
+class RecordReplyOut(_Out):
+    """Ids and closed words only: never the text."""
+
+    message_id: uuid.UUID
+    thread_id: uuid.UUID
+    created: bool  # false on a replay of the same request
+    screening_id: uuid.UUID
+    outcome: Literal["red_flag", "unassessable", "clear"]
+
+
+@scheduling.post("/offers/replies", response_model=RecordReplyOut, status_code=201)
+async def record_patient_reply_route(body: RecordReplyIn, idempotency_key: IdempotencyKey, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims)) -> RecordReplyOut:
+    """Record a reply the patient gave to the front desk (by phone or in person): it is stored encrypted as a patient message in the patient's appointments thread, and the deterministic red-flag rules screen it
+    in the same transaction, before anything else (the reply and interpret routes then take its message id). A red flag or an unreadable reply raises the nurse task. 404 for a clinic you cannot see or a
+    patient who is not at it, 403 unless you are front desk there, 409 if the key was used for a different reply, 422 for a blank or over-long text, 503 if the encryption keys are not configured."""
+    vault: DemographicVault | None = request.app.state.vault
+    key_version = _active_key_version(request) if vault is not None else None
+    if vault is None or key_version is None:
+        log.error("recording a patient reply is unavailable: no usable encryption key is configured (deployment fault)")
+        raise HTTPException(status_code=503, detail="recording a reply is unavailable: encryption keys are not configured")
+    origin = await _front_desk_gate(conn, claims, body.clinic_id)
+    actor = uuid.UUID(claims["sub"])
+    try:
+        recorded = await offers.record_patient_reply(
+            conn, vault, key_version=key_version, clinic_id=body.clinic_id, origin=origin, patient_id=body.patient_id, body_text=body.text, actor_id=actor, idempotency_key=idempotency_key,
+        )
+    except offers.NotACandidate:
+        raise HTTPException(status_code=404, detail="not found") from None
+    except offers.OfferConflict:
+        raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request") from None
+    except messages_mod.MessageError:
+        raise HTTPException(status_code=422, detail="request rejected") from None
+    try:
+        screened = await screen_stored_message(conn, vault, _screening_engine, recorded.message_id, idempotency_key=f"reply-screen:{idempotency_key}")
+    except (MessageNotFound, ScreeningNotPermitted):
+        raise HTTPException(status_code=404, detail="not found") from None
+    if screened.unreadable_reason is not None:
+        log.warning("a recorded patient reply could not be read back; recorded unassessable (message=%s clinic=%s error=%s)", screened.message_id, screened.clinic_id, screened.unreadable_reason)
+    await write_audit(
+        conn, clinic_id=body.clinic_id, origin=origin, actor_id=actor, actor_role="front_desk", action="offer.reply_record", resource_type="message", resource_id=recorded.message_id,
+        details={"outcome": screened.outcome, "created": recorded.created}, idempotency_key=f"audit:reply-record:{recorded.message_id}:{idempotency_key}",
+    )
+    return RecordReplyOut(message_id=recorded.message_id, thread_id=recorded.thread_id, created=recorded.created, screening_id=screened.screening_id, outcome=screened.outcome)  # type: ignore[arg-type]
+
+
 @scheduling.post("/offers/interpret-reply", response_model=InterpretReplyOut)
 async def interpret_reply_route(body: InterpretReplyIn, idempotency_key: IdempotencyKey, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims)) -> InterpretReplyOut:
     """Suggest what a patient's reply means. 404 if you cannot see the message, 403 unless you are front desk of its clinic, 409 if the body was erased, 503 if reply interpretation or the encryption keys are

@@ -179,25 +179,46 @@ the backend code), `CareGapRowOut.source` (it acts on `unresolved_barrier`, `aft
 
 The backend added `GET /v1/staff/console/autonomy/history`; the console shows it under the pending proposals.
 
-### 13. A route to list the break-glass reason codes
+### 13. A route to list the break-glass reason codes: DONE (2026-11-10)
+
+The backend added `GET /v1/staff/break-glass/reasons?clinic_id` (and `GET /v1/staff/break-glass/mine?clinic_id` for your own open grants). The original request follows.
 
 `POST /v1/staff/break-glass` takes a reason code that must be on the clinic's list (`iam.break_glass_reasons`), but no route returns the
 list, so the console can offer only a field limited to the code's shape (lowercase letters, digits, underscores) and the backend's 422
 if the code is not on the list. A route like `GET /v1/staff/console/reason-codes` for these codes would let the console show a picklist
 instead.
 
-### 14. A way to find a visit for visit readiness
+### 14. A way to find a visit for visit readiness: DONE (2026-11-10)
+
+The backend added `GET /v1/staff/visits/upcoming?clinic_id&limit` (the booking id is the visit id). The original request follows.
 
 Visit readiness is keyed by a visit id, and no route lists visits, so the console asks for the id. A visit list (or the visit id on
 a booking row) would remove that.
 
-### 15. The clinic id for the patient forms, and the grievance categories
+### 15. The clinic id for the patient forms, and the grievance categories: DONE (2026-11-10)
+
+The backend added `GET /public/clinic` (no sign-in; 404 until the owner publishes a clinic) and `GET /v1/portal/grievance-categories`. The original request follows.
 
 The patient portal's claim and grievance requests need a `clinic_id`, but a patient has no way to know one and no route gives it. The
 console asks the patient to type a "clinic code" (a uuid the hospital tells them), which is poor. A way to learn it would remove that:
 either the hospital's id on a public configuration route, or the clinic implied by the invitation. Likewise the grievance `category` must
 be on the clinic's list but no route returns the list, so the form takes a code limited to its shape and the backend answers 422 if it is
 not on the list. A route that lists the categories (with labels) would let the form show a picklist.
+
+### 16. FINDING (frontend): Hold and Book say "That could not be found" because the slot and the patient are from different clinics
+
+**What the live run showed.** In Scheduling > Slots, choosing a patient from the search and pressing Hold or Book shows "That could not be found." (the generic `not_found` text).
+
+**Where it comes from.** The backend, as a 404 from `POST /v1/staff/scheduling/slots/{slot_id}/hold` or `.../book`. It is not a patient lookup and not row-level security: those routes do not look the patient up first, they insert the hold or booking, and the database refuses it because the patient is not a patient of the SLOT's clinic (a composite foreign key on `(patient_id, clinic_id)`). The route maps that to a 404 whose `detail` is `"unknown patient for this clinic"`; a slot that really is invisible gives `detail: "not found"`. Row-level security is not involved because foreign-key checks do not go through it.
+
+**Why the two clinics differ.** `GET /v1/staff/scheduling/slots` returns the open slots of EVERY clinic the account can read (each row carries `clinic_id`), while `PatientPicker` searches only the ACTIVE clinic (`active.clinicId`). The run showed both signs of it: the slot rows are "Demo Provider One / Demo Location North / Demo Visit Type A", while the Offers page of the same session lists the visit type "Test visit". Those belong to two different clinics, both named like the demo clinic.
+
+**What the frontend should do.**
+1. Show only slots whose `clinic_id` equals the active clinic (or take the clinic from the slot and give `PatientPicker` that clinic id, which needs the account to be front desk of it). The same applies to the bookings list, the holds list and the waitlist, which also span every readable clinic.
+2. Show the `detail` of a 404 when it is `"unknown patient for this clinic"` ("This patient is not registered at the clinic that owns this slot") instead of the generic text.
+3. Confirm in the browser's network tab before changing anything: the 404 response body of the Hold request should read `{"detail":"unknown patient for this clinic"}`. If it reads `{"detail":"not found"}` instead, tell the backend window: that would mean the slot itself is not visible and this finding is wrong.
+
+**Backend status.** No backend change was made: the refusal is correct, and a more specific answer would add nothing the slot's `clinic_id` does not already give. Not confirmed against live data (live tests run only in CI); the reasoning is from the code and the screenshots.
 
 ## Decisions recorded here for later readers
 
