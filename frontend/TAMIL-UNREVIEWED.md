@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-1319 of 1319 strings are unreviewed.
+1435 of 1435 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -361,6 +361,36 @@ Terms standardised: proposal, resolve / resolved.
 | `alerts.title` | Alerts | எச்சரிக்கைகள் | ok |
 | `app.hospitalName` | [PLACEHOLDER: hospital name] | [PLACEHOLDER: மருத்துவமனையின் பெயர்] | ok |
 | `app.staffTitle` | Staff console | பணியாளர் தளம் | ok |
+| `audit.action` | Action | செயல் | ok |
+| `audit.actor` | Person (account id) | நபர் (கணக்கு அடையாளம்) | ok |
+| `audit.actorInvalid` | An account id looks like 3f2b8c1e-6a4d-4e1b-9d0a-1c2d3e4f5a6b. | கணக்கு அடையாளம் 3f2b8c1e-6a4d-4e1b-9d0a-1c2d3e4f5a6b போல இருக்கும். | ok |
+| `audit.col.action` | Action | செயல் | ok |
+| `audit.col.clinic` | Clinic | மருத்துவமனை | ok |
+| `audit.col.details` | Details | விவரங்கள் | ok |
+| `audit.col.origin` | Origin | மூலம் | ok |
+| `audit.col.resource` | Record | பதிவு | ok |
+| `audit.col.when` | When | எப்போது | ok |
+| `audit.col.who` | Who | யார் | ok |
+| `audit.empty` | No rows match. | பொருந்தும் வரிகள் இல்லை. | ok |
+| `audit.end` | That is the end of the log for this search. | இந்தத் தேடலுக்கான பதிவின் முடிவு இதுவே. | ok |
+| `audit.filterHint` | All filters are optional. Leave a box empty to not filter on it. | எல்லா வடிகட்டிகளும் விருப்பமானவை. வடிகட்ட வேண்டாத பெட்டியை காலியாக விடுங்கள். | ok |
+| `audit.noClinic` | No clinic | மருத்துவமனை இல்லை | ok |
+| `audit.noDetails` | None | இல்லை | ok |
+| `audit.noRole` | No role recorded | பங்கு பதிவாகவில்லை | ok |
+| `audit.note` | Every row is shown as the system recorded it, newest first, for the clinics you audit. Nothing here can be changed. | ஒவ்வொரு வரியும் அமைப்பு பதிவு செய்தபடியே, நீங்கள் தணிக்கை செய்யும் மருத்துவமனைகளுக்கு, புதியது முதலில் காட்டப்படுகிறது. இங்கே எதையும் மாற்ற முடியாது. | ok |
+| `audit.older` | Older rows | பழைய வரிகள் | ok |
+| `audit.origin.canary` | Canary | கேனரி | ok |
+| `audit.origin.eval` | Evaluation | மதிப்பீடு | ok |
+| `audit.origin.live` | Live | நேரடி | ok |
+| `audit.origin.test` | Test | சோதனை | ok |
+| `audit.read` | Read the log | பதிவைப் படி | ok |
+| `audit.resourceId` | Record id | பதிவு அடையாளம் | ok |
+| `audit.resourceType` | Kind of record | பதிவின் வகை | ok |
+| `audit.showDetails` | Show details | விவரங்களைக் காட்டு | ok |
+| `audit.since` | From | முதல் | ok |
+| `audit.title` | Audit log | தணிக்கைப் பதிவு | ok |
+| `audit.until` | Until | வரை | ok |
+| `audit.zoneHint` | Dates are in your browser's time zone. | தேதிகள் உங்கள் உலாவியின் நேர மண்டலத்தில் உள்ளன. | ok |
 | `backfill.action.send` | Send | அனுப்பு | ok |
 | `backfill.action.skip` | Skip | தவிர் | ok |
 | `backfill.action.stop` | Stop | நிறுத்து | ok |
@@ -688,6 +718,55 @@ Terms standardised: proposal, resolve / resolved.
 | `env.live` | LIVE | LIVE | kept in English by design |
 | `env.test` | TEST | TEST | kept in English by design |
 | `env.unknown` | Environment unknown | சூழல் தெரியவில்லை | ok |
+| `erasure.actionsOff` | Asking, approving and cancelling are switched off until the second-factor check is confirmed. The list below is read-only. | கேட்பது, ஒப்புக்கொள்வது, ரத்து செய்வது ஆகியவை இரண்டாம் காரணி சரிபார்ப்பு உறுதிப்படுத்தப்படும் வரை அணைக்கப்பட்டுள்ளன. கீழே உள்ள பட்டியல் படிக்க மட்டுமே. | ok |
+| `erasure.alreadyOpen` | This patient already has an open request. | இந்த நோயாளிக்கு ஏற்கனவே ஒரு திறந்த கோரிக்கை உள்ளது. | ok |
+| `erasure.approve` | Approve | ஒப்புக்கொள் | ok |
+| `erasure.approveBody` | Approving erases the identity now. | ஒப்புக்கொண்டால் அடையாளம் இப்போதே அழிக்கப்படும். | ok |
+| `erasure.approveConflict` | This cannot be approved now (the patient may be part of a live merge, or the request changed). Nothing was erased. | இதை இப்போது ஒப்புக்கொள்ள முடியாது (நோயாளி நேரடி இணைப்பில் இருக்கலாம், அல்லது கோரிக்கை மாறியிருக்கலாம்). எதுவும் அழிக்கப்படவில்லை. | ok |
+| `erasure.approveForbidden` | You cannot approve this request (you may be the person who asked, or not front desk of this clinic). Nothing was erased. | இந்தக் கோரிக்கையை நீங்கள் ஒப்புக்கொள்ள முடியாது (நீங்களே கேட்டவராக இருக்கலாம், அல்லது இந்த மருத்துவமனையின் முன்பணியாளர் அல்ல). எதுவும் அழிக்கப்படவில்லை. | ok |
+| `erasure.approveTitle` | Approve this erasure? | இந்த அழிப்பை ஒப்புக்கொள்ளவா? | ok |
+| `erasure.approved` | Approved. The identity was erased. | ஒப்புக்கொள்ளப்பட்டது. அடையாளம் அழிக்கப்பட்டது. | ok |
+| `erasure.cancel` | Cancel the request | கோரிக்கையை ரத்து செய் | ok |
+| `erasure.cancelBody` | Cancelling closes the request. Nothing is erased. | ரத்து செய்தால் கோரிக்கை மூடப்படும். எதுவும் அழிக்கப்படாது. | ok |
+| `erasure.cancelConflict` | This request cannot be cancelled now. Nothing was changed. | இந்தக் கோரிக்கையை இப்போது ரத்து செய்ய முடியாது. எதுவும் மாற்றப்படவில்லை. | ok |
+| `erasure.cancelForbidden` | You cannot cancel this request (it may no longer be open). Nothing was changed. | இந்தக் கோரிக்கையை நீங்கள் ரத்து செய்ய முடியாது (அது இனி திறந்ததாக இல்லாமல் இருக்கலாம்). எதுவும் மாற்றப்படவில்லை. | ok |
+| `erasure.cancelTitle` | Cancel this request? | இந்தக் கோரிக்கையை ரத்து செய்யவா? | ok |
+| `erasure.cancelled` | The request was cancelled. | கோரிக்கை ரத்து செய்யப்பட்டது. | ok |
+| `erasure.codeHint` | You will be asked for a fresh authenticator code. | புதிய அங்கீகார குறியீடு கேட்கப்படும். | ok |
+| `erasure.col.action` | Action | செயல் | ok |
+| `erasure.col.created` | Asked | கேட்கப்பட்டது | ok |
+| `erasure.col.decided` | Decided | முடிவு | ok |
+| `erasure.col.patient` | Patient | நோயாளி | ok |
+| `erasure.col.reason` | Reason | காரணம் | ok |
+| `erasure.col.request` | Request | கோரிக்கை | ok |
+| `erasure.col.requestedBy` | Asked by | கேட்டவர் | ok |
+| `erasure.col.status` | Status | நிலை | ok |
+| `erasure.empty` | No requests. | கோரிக்கைகள் இல்லை. | ok |
+| `erasure.erasesBody` | Erasing removes the patient's encrypted name, date of birth and phone number. There is no way to bring them back from this screen. | அழிப்பு நோயாளியின் குறியாக்கம் செய்யப்பட்ட பெயர், பிறந்த தேதி, தொலைபேசி எண்ணை நீக்குகிறது. இந்தத் திரையிலிருந்து அவற்றைத் திரும்பப் பெற வழி இல்லை. | ok |
+| `erasure.hasMore` | There are more requests than are shown. | காட்டப்பட்டதை விட அதிகமான கோரிக்கைகள் உள்ளன. | ok |
+| `erasure.keepsBody` | It keeps the request and its audit rows (they are never deleted), the patient's record number, and the keyed fingerprints used for matching, which ignore an erased record. Messages are not erased by this step. | இது கோரிக்கையையும் அதன் தணிக்கை வரிகளையும் (அவை ஒருபோதும் நீக்கப்படாது), நோயாளியின் பதிவு எண்ணையும், பொருத்தத்துக்கான சாவி கைரேகைகளையும் வைத்திருக்கும்; பொருத்தம் அழிக்கப்பட்ட பதிவைப் புறக்கணிக்கும். இந்தப் படியில் செய்திகள் அழிக்கப்படாது. | ok |
+| `erasure.listTitle` | Requests | கோரிக்கைகள் | ok |
+| `erasure.note` | Erasing a patient's identity takes two front desk people: one asks and a different one approves. Each step needs a fresh authenticator code. | ஒரு நோயாளியின் அடையாளத்தை அழிக்க இரண்டு முன்பணியாளர்கள் தேவை: ஒருவர் கேட்கிறார், வேறொருவர் ஒப்புக்கொள்கிறார். ஒவ்வொரு படிக்கும் புதிய அங்கீகார குறியீடு தேவை. | ok |
+| `erasure.nothingNew` | Nothing new was done: the request was already decided or is no longer open. | புதிதாக எதுவும் செய்யப்படவில்லை: கோரிக்கை ஏற்கனவே முடிவு செய்யப்பட்டது அல்லது இனி திறந்ததாக இல்லை. | ok |
+| `erasure.off` | Switched off | அணைக்கப்பட்டது | ok |
+| `erasure.openRequests` | Open requests | திறந்த கோரிக்கைகள் | ok |
+| `erasure.otherMustApprove` | A different person must approve. | வேறொருவர் ஒப்புக்கொள்ள வேண்டும். | ok |
+| `erasure.patientNotFound` | This patient could not be found at this clinic. Nothing was sent. | இந்த நோயாளி இந்த மருத்துவமனையில் கிடைக்கவில்லை. எதுவும் அனுப்பப்படவில்லை. | ok |
+| `erasure.reason` | Reason (choose one) | காரணம் (ஒன்றைத் தேர்ந்தெடுங்கள்) | ok |
+| `erasure.reasonRefused` | That reason is not on the clinic's list. Nothing was sent. | அந்தக் காரணம் மருத்துவமனையின் பட்டியலில் இல்லை. எதுவும் அனுப்பப்படவில்லை. | ok |
+| `erasure.reasonsNotSetUp` | The clinic's list of erasure reasons is not set up yet, so a request cannot be made from here. Nothing was sent. | மருத்துவமனையின் அழிப்புக் காரணங்களின் பட்டியல் இன்னும் அமைக்கப்படவில்லை, எனவே இங்கிருந்து கோரிக்கை செய்ய முடியாது. எதுவும் அனுப்பப்படவில்லை. | ok |
+| `erasure.requestBody` | Nothing is erased yet. A different front desk person must approve it, with their own authenticator code. | இன்னும் எதுவும் அழிக்கப்படவில்லை. வேறொரு முன்பணியாளர் தமது சொந்த அங்கீகார குறியீட்டுடன் ஒப்புக்கொள்ள வேண்டும். | ok |
+| `erasure.requestButton` | Ask for erasure | அழிப்புக்குக் கேள் | ok |
+| `erasure.requestConfirmTitle` | Ask for this erasure? | இந்த அழிப்பைக் கேட்கவா? | ok |
+| `erasure.requestIs` | Request | கோரிக்கை | ok |
+| `erasure.requestTitle` | Ask for an erasure | அழிப்புக்குக் கேள் | ok |
+| `erasure.requested` | The request was made. A different front desk person must approve it. | கோரிக்கை செய்யப்பட்டது. வேறொரு முன்பணியாளர் ஒப்புக்கொள்ள வேண்டும். | ok |
+| `erasure.status.cancelled` | Cancelled | ரத்து செய்யப்பட்டது | ok |
+| `erasure.status.erased` | Erased | அழிக்கப்பட்டது | ok |
+| `erasure.status.requested` | Open | திறந்தது | ok |
+| `erasure.statusFilter` | Show | காட்டு | ok |
+| `erasure.title` | Erasure requests | அழிப்புக் கோரிக்கைகள் | ok |
+| `erasure.you` | You | நீங்கள் | ok |
 | `errorBoundary.body` | Reload the page, or go to the home screen. | பக்கத்தை மீண்டும் ஏற்றவும், அல்லது முகப்புத் திரைக்குச் செல்லவும். | ok |
 | `errorBoundary.home` | Go to the home screen | முகப்புத் திரைக்குச் செல் | ok |
 | `errorBoundary.reload` | Reload the page | பக்கத்தை மீண்டும் ஏற்று | ok |
@@ -780,9 +859,11 @@ Terms standardised: proposal, resolve / resolved.
 | `nav.access` | Break-glass | அவசரகால அணுகல் | ok |
 | `nav.admin` | Admin | நிர்வாகம் | ok |
 | `nav.alerts` | Alerts | எச்சரிக்கைகள் | ok |
+| `nav.audit` | Audit log | தணிக்கைப் பதிவு | ok |
 | `nav.care` | Care | பராமரிப்பு | ok |
 | `nav.claims` | Portal claims | வலைவாசல் கோரிக்கைகள் | ok |
 | `nav.dashboard` | Dashboard | கட்டுப்பாட்டுப் பலகை | ok |
+| `nav.erasure` | Erasure requests | அழிப்புக் கோரிக்கைகள் | ok |
 | `nav.home` | Home | முகப்பு | ok |
 | `nav.identity` | Identity | அடையாளம் | ok |
 | `nav.label` | Sections | பிரிவுகள் | ok |
@@ -828,6 +909,13 @@ Terms standardised: proposal, resolve / resolved.
 | `patients.dob` | Date of birth | பிறந்த தேதி | ok |
 | `patients.event.confirm` | Confirmed | உறுதிப்படுத்தப்பட்டது | ok |
 | `patients.event.revoke` | Confirmation revoked | உறுதிப்படுத்தல் திரும்பப் பெறப்பட்டது | minor drift |
+| `patients.full.audited` | Opening this shows the name, date of birth and phone, and is recorded in the audit log (who, role and which record, never the contents). | இதைத் திறந்தால் பெயர், பிறந்த தேதி, தொலைபேசி காட்டப்படும்; இது தணிக்கைப் பதிவில் பதிவாகும் (யார், பங்கு, எந்தப் பதிவு; உள்ளடக்கம் ஒருபோதும் இல்லை). | ok |
+| `patients.full.hide` | Hide the details | விவரங்களை மறை | ok |
+| `patients.full.noPhone` | Not recorded | பதிவாகவில்லை | ok |
+| `patients.full.open` | Open the full details | முழு விவரங்களைத் திற | ok |
+| `patients.full.rateLimited` | Too many records opened in a short time. Wait a moment and try again. | குறுகிய நேரத்தில் அதிகமான பதிவுகள் திறக்கப்பட்டன. சற்று காத்திருந்து மீண்டும் முயலுங்கள். | ok |
+| `patients.full.title` | Full details | முழு விவரங்கள் | ok |
+| `patients.full.unavailable` | The full details cannot be opened in this setup. Nothing was shown. | இந்த அமைப்பில் முழு விவரங்களைத் திறக்க முடியாது. எதுவும் காட்டப்படவில்லை. | ok |
 | `patients.invalidInput` | Check the date of birth and phone number. | பிறந்த தேதி மற்றும் தொலைபேசி எண்ணைச் சரிபார்க்கவும். | ok |
 | `patients.labelsWithheld` | Labels are withheld for these results. | இந்த முடிவுகளுக்கான குறிப்புகள் மறைக்கப்பட்டுள்ளன. | minor drift |
 | `patients.latestEvent` | Latest identity event | சமீபத்திய அடையாள நிகழ்வு | ok |
@@ -847,6 +935,24 @@ Terms standardised: proposal, resolve / resolved.
 | `patients.phone` | Phone number (optional) | தொலைபேசி எண் (விருப்பம்) | ok |
 | `patients.rateLimited` | Too many searches. Wait a moment and try again. | அதிகத் தேடல்கள். சற்று காத்திருந்து மீண்டும் முயற்சிக்கவும். | ok |
 | `patients.record` | Patient record | நோயாளர் பதிவு | ok |
+| `patients.register.button` | Register | பதிவு செய் | ok |
+| `patients.register.candidates` | Possible matching records: | பொருந்தக்கூடிய பதிவுகள்: | ok |
+| `patients.register.confirmBody` | This saves the name, date of birth and phone you typed, encrypted, at this clinic. If they match an existing record, that record is used instead of a new one. | நீங்கள் தட்டச்சு செய்த பெயர், பிறந்த தேதி, தொலைபேசியை இந்த மருத்துவமனையில் குறியாக்கம் செய்து சேமிக்கிறது. அவர் ஏற்கனவே உள்ள பதிவுடன் பொருந்தினால், புதிய பதிவுக்குப் பதிலாக அந்தப் பதிவு பயன்படுத்தப்படும். | ok |
+| `patients.register.confirmTitle` | Register this patient? | இந்த நோயாளியைப் பதிவு செய்யவா? | ok |
+| `patients.register.conflict` | A different person was already saved with this request. Check the details and register again. | இந்தக் கோரிக்கையுடன் வேறொரு நபர் ஏற்கனவே சேமிக்கப்பட்டார். விவரங்களைச் சரிபார்த்து மீண்டும் பதிவு செய்யுங்கள். | ok |
+| `patients.register.dob` | Date of birth to register | பதிவு செய்ய வேண்டியவரின் பிறந்த தேதி | ok |
+| `patients.register.hint` | Search first. Register only when the person is not found. The details are not kept on this page after saving. | முதலில் தேடுங்கள். நபர் கிடைக்காதபோது மட்டும் பதிவு செய்யுங்கள். சேமித்த பிறகு விவரங்கள் இந்தப் பக்கத்தில் இருக்காது. | ok |
+| `patients.register.invalid` | One of the fields is not valid. Check the date of birth and the phone number. Nothing was saved. | ஒரு புலம் சரியில்லை. பிறந்த தேதியையும் தொலைபேசி எண்ணையும் சரிபாருங்கள். எதுவும் சேமிக்கப்படவில்லை. | ok |
+| `patients.register.name` | Name to register | பதிவு செய்ய வேண்டிய பெயர் | ok |
+| `patients.register.notFound` | This clinic could not be found, or you are not front desk there. Nothing was saved. | இந்த மருத்துவமனை கிடைக்கவில்லை, அல்லது நீங்கள் இங்கே முன்பணியாளர் இல்லை. எதுவும் சேமிக்கப்படவில்லை. | ok |
+| `patients.register.outcome.created` | A new record was created. | புதிய பதிவு உருவாக்கப்பட்டது. | ok |
+| `patients.register.outcome.matched` | This person matched an existing record. | இந்த நபர் ஏற்கனவே உள்ள பதிவுடன் பொருந்தினார். | ok |
+| `patients.register.outcome.replayed` | This request had already been saved. Nothing new was created. | இந்தக் கோரிக்கை ஏற்கனவே சேமிக்கப்பட்டிருந்தது. புதிதாக எதுவும் உருவாக்கப்படவில்லை. | ok |
+| `patients.register.outcome.review` | Possible matches were found. Nothing was linked automatically; a person decides. | பொருந்தக்கூடியவை கண்டறியப்பட்டன. தானாக எதுவும் இணைக்கப்படவில்லை; ஒரு நபர் முடிவு செய்வார். | ok |
+| `patients.register.outcome.unknown` | The system answered, but the outcome is not one this screen knows. Open the record to check. | அமைப்பு பதிலளித்தது, ஆனால் முடிவு இந்தத் திரை அறியாத ஒன்று. பதிவைத் திறந்து சரிபாருங்கள். | ok |
+| `patients.register.phone` | Phone number to register (optional) | பதிவு செய்ய வேண்டிய தொலைபேசி எண் (விருப்பம்) | ok |
+| `patients.register.title` | Register a patient | நோயாளியைப் பதிவு செய் | ok |
+| `patients.register.unavailable` | Registering is not set up yet (encryption keys are not configured). Nothing was saved. | பதிவு செய்வது இன்னும் அமைக்கப்படவில்லை (குறியாக்க விசைகள் அமைக்கப்படவில்லை). எதுவும் சேமிக்கப்படவில்லை. | ok |
 | `patients.results` | Search results | தேடல் முடிவுகள் | ok |
 | `patients.revoke.accepted` | The request was accepted. Check the record for its current state. | கோரிக்கை ஏற்கப்பட்டது. பதிவின் தற்போதைய நிலையைச் சரிபார்க்கவும். | ok |
 | `patients.revoke.body` | This moves the record back to unverified, so a match on it is reviewed by a person. Nothing that is already linked is undone. | இது பதிவை மீண்டும் சரிபார்க்கப்படாத நிலைக்கு மாற்றுகிறது; அதனால் அதில் ஏற்படும் பொருத்தத்தை ஒரு நபர் மதிப்பாய்வு செய்வார். ஏற்கனவே இணைக்கப்பட்டவை எதுவும் மாற்றப்படாது. | minor drift; flag (unnatural): Awkward phrasing on a message describing what the system will do. |
@@ -875,8 +981,10 @@ Terms standardised: proposal, resolve / resolved.
 | `placeholder.about` | [PLACEHOLDER: about the hospital. Content must be supplied by the hospital.] | [PLACEHOLDER: about the hospital. Content must be supplied by the hospital.] | kept in English by design |
 | `placeholder.address` | [PLACEHOLDER: address] | [PLACEHOLDER: address] | kept in English by design |
 | `placeholder.departments` | [PLACEHOLDER: departments and doctors. Content must be supplied by the hospital.] | [PLACEHOLDER: departments and doctors. Content must be supplied by the hospital.] | kept in English by design |
+| `placeholder.erasureWording` | [PLACEHOLDER: what an erasure removes and what it keeps, in the clinic's own words. To be confirmed by the privacy owner and counsel.] | [PLACEHOLDER: what an erasure removes and what it keeps, in the clinic's own words. To be confirmed by the privacy owner and counsel.] | kept in English by design |
 | `placeholder.faqGrievance` | [PLACEHOLDER: how to raise a concern or a data request. Wording to be supplied by the hospital and its legal counsel.] | [PLACEHOLDER: how to raise a concern or a data request. Wording to be supplied by the hospital and its legal counsel.] | kept in English by design |
 | `placeholder.faqPrivacy` | [PLACEHOLDER: how personal information is used. Wording to be supplied by the hospital and its legal counsel.] | [PLACEHOLDER: how personal information is used. Wording to be supplied by the hospital and its legal counsel.] | kept in English by design |
+| `placeholder.fullRecordPending` | [PENDING: opening a patient's full details is awaiting the privacy owner's confirmation. Use synthetic data only until then.] | [PENDING: opening a patient's full details is awaiting the privacy owner's confirmation. Use synthetic data only until then.] | kept in English by design |
 | `placeholder.grievance` | [PLACEHOLDER: grievance officer name and contact details. To be supplied by the hospital.] | [PLACEHOLDER: grievance officer name and contact details. To be supplied by the hospital.] | kept in English by design |
 | `placeholder.hours` | [PLACEHOLDER: opening hours] | [PLACEHOLDER: opening hours] | kept in English by design |
 | `placeholder.identityChecks` | [PLACEHOLDER: what must be checked before confirming an identity. To be written by the clinic.] | [PLACEHOLDER: what must be checked before confirming an identity. To be written by the clinic.] | kept in English by design |
@@ -884,6 +992,7 @@ Terms standardised: proposal, resolve / resolved.
 | `placeholder.privacyNotice` | [PLACEHOLDER: privacy notice. To be supplied by the hospital and approved by its legal counsel.] | [PLACEHOLDER: privacy notice. To be supplied by the hospital and approved by its legal counsel.] | kept in English by design |
 | `placeholder.privacyPromise` | [PLACEHOLDER: privacy promise wording. To be written and approved by the hospital and its legal counsel.] | [PLACEHOLDER: privacy promise wording. To be written and approved by the hospital and its legal counsel.] | kept in English by design |
 | `placeholder.reasonCodes` | PLACEHOLDER - clinician to define | PLACEHOLDER - clinician to define | kept in English by design |
+| `placeholder.registerOutcomes` | [PLACEHOLDER: the front desk wording for each registration outcome. To be confirmed by the clinic.] | [PLACEHOLDER: the front desk wording for each registration outcome. To be confirmed by the clinic.] | kept in English by design |
 | `placeholder.reviewReasons` | PLACEHOLDER - clinician to define | PLACEHOLDER - clinician to define | kept in English by design |
 | `placeholder.revokeReasons` | [PLACEHOLDER: the wording of these reasons is not final. To be confirmed by the clinic.] | [PLACEHOLDER: the wording of these reasons is not final. To be confirmed by the clinic.] | kept in English by design |
 | `placeholder.taskClose` | PLACEHOLDER - clinician to define how this kind of task is closed. It cannot be closed here. | PLACEHOLDER - clinician to define how this kind of task is closed. It cannot be closed here. | kept in English by design |
@@ -1085,6 +1194,13 @@ Terms standardised: proposal, resolve / resolved.
 | `referrals.review.reasons` | Reasons | காரணங்கள் | ok |
 | `referrals.review.record` | Record decision | முடிவைப் பதிவு செய் | ok |
 | `referrals.review.title` | Record a decision | முடிவைப் பதிவு செய் | ok |
+| `referrals.run.body` | This queues the Front Door run for this document. It does not message the patient. Any red flag it finds arrives as a task for a person. | இந்த ஆவணத்துக்கான Front Door ஓட்டத்தை வரிசையில் சேர்க்கிறது. நோயாளிக்கு செய்தி அனுப்பாது. அது கண்டறியும் சிவப்புக் கொடி ஒரு நபருக்கான பணியாக வரும். | ok |
+| `referrals.run.button` | Run the referral | பரிந்துரையை இயக்கு | ok |
+| `referrals.run.notFound` | This referral could not be found. Nothing was queued. | இந்தப் பரிந்துரை கிடைக்கவில்லை. எதுவும் வரிசையில் சேர்க்கப்படவில்லை. | ok |
+| `referrals.run.queued` | The run was queued. Job: | ஓட்டம் வரிசையில் சேர்க்கப்பட்டது. பணி: | ok |
+| `referrals.run.replayed` | This request had already queued a run. Job: | இந்தக் கோரிக்கை ஏற்கனவே ஓட்டத்தை வரிசையில் சேர்த்திருந்தது. பணி: | ok |
+| `referrals.run.title` | Run this referral? | இந்தப் பரிந்துரையை இயக்கவா? | ok |
+| `referrals.run.unavailable` | Runs cannot be started yet (not set up). Nothing was queued. | ஓட்டங்களை இன்னும் தொடங்க முடியாது (அமைக்கப்படவில்லை). எதுவும் வரிசையில் சேர்க்கப்படவில்லை. | ok |
 | `referrals.title` | Referrals | பரிந்துரைகள் | ok |
 | `referrals.upload` | Upload a document | ஆவணத்தைப் பதிவேற்று | ok |
 | `referrals.version` | version | பதிப்பு | ok |

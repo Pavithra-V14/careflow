@@ -26,6 +26,8 @@ import { ReadinessPage } from '../pages/ReadinessPage';
 import { ClaimsPage } from '../pages/ClaimsPage';
 import { AccessPage } from '../pages/AccessPage';
 import { NotesPage } from '../pages/NotesPage';
+import { AuditPage } from '../pages/AuditPage';
+import { ErasurePage } from '../pages/ErasurePage';
 
 /**
  * The signed-in console: a persistent session bar (role, clinic, LIVE / TEST badge) above every screen, a role-aware
@@ -109,6 +111,8 @@ export function Shell() {
           <Route path="/notes" element={<NotesPage />} />
           <Route path="/claims" element={<ClaimsPage />} />
           <Route path="/access" element={<AccessPage />} />
+          <Route path="/erasure" element={<ErasurePage />} />
+          <Route path="/audit" element={<AuditPage />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/admin/:tab" element={<AdminPage />} />
           <Route path="*" element={<NotFoundPage />} />

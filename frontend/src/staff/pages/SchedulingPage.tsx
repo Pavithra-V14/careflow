@@ -140,7 +140,7 @@ function ProvidersList() {
     <AddReference kind="provider" />
     <RefList<components['schemas']['ProviderOut']>
       keyName="providers"
-      load={async (i) => inClinic(await unwrap(api.listProviders(i)), active.clinicId)}
+      load={async (i) => inClinic(await unwrap(api.listProviders(i, active.clinicId)), active.clinicId)}
       columns={['scheduling.col.name', 'scheduling.col.status']}
       row={(p) => [p.display_name, <ActiveBadge key="a" active={p.active} />]}
       rowKey={(p) => p.provider_id}
@@ -157,7 +157,7 @@ function LocationsList() {
     <AddReference kind="location" />
     <RefList<components['schemas']['LocationOut']>
       keyName="locations"
-      load={async (i) => inClinic(await unwrap(api.listLocations(i)), active.clinicId)}
+      load={async (i) => inClinic(await unwrap(api.listLocations(i, active.clinicId)), active.clinicId)}
       columns={['scheduling.col.name', 'scheduling.col.status']}
       row={(l) => [l.name, <ActiveBadge key="a" active={l.active} />]}
       rowKey={(l) => l.location_id}
@@ -176,7 +176,7 @@ function VisitTypesList() {
     <AddReference kind="visitType" />
     <RefList<components['schemas']['VisitTypeOut']>
       keyName="visitTypes"
-      load={async (i) => inClinic(await unwrap(api.listVisitTypes(i)), active.clinicId)}
+      load={async (i) => inClinic(await unwrap(api.listVisitTypes(i, active.clinicId)), active.clinicId)}
       columns={['scheduling.col.name', 'scheduling.col.duration', 'scheduling.col.status']}
       row={(v) => [v.name, `${formatNumber(v.duration_minutes, lang)} ${t('scheduling.minutes')}`, <ActiveBadge key="a" active={v.active} />]}
       rowKey={(v) => v.visit_type_id}
@@ -192,7 +192,7 @@ function PriorityLevelsList() {
   return (
     <RefList<components['schemas']['PriorityLevelOut']>
       keyName="priorityLevels"
-      load={async (i) => inClinic(await unwrap(api.listPriorityLevels(i)), active.clinicId)}
+      load={async (i) => inClinic(await unwrap(api.listPriorityLevels(i, active.clinicId)), active.clinicId)}
       columns={['scheduling.col.rank', 'scheduling.col.code', 'scheduling.col.label', 'scheduling.col.status']}
       row={(p) => [formatNumber(p.rank, lang), <code key="c">{p.code}</code>, p.label, <ActiveBadge key="a" active={p.active} />]}
       rowKey={(p) => p.code}
@@ -325,7 +325,7 @@ function OffersView() {
   const { api } = useAuth();
   const { active } = useSession();
   const [visitType, setVisitType] = useState('');
-  const types = useApiQuery(['offerTypes'], () => unwrap(api.listVisitTypes(false)));
+  const types = useApiQuery(['offerTypes'], async () => inClinic(await unwrap(api.listVisitTypes(false, active.clinicId)), active.clinicId));
   const draft = useMutation<components['schemas']['Envelope'], ApiProblem, string>({
     gcTime: 0,
     retry: false,

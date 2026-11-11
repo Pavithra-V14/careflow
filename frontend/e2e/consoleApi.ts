@@ -119,6 +119,22 @@ export function createConsoleApi(role: string, options: ConsoleOptions = {}, ses
       if (role !== 'front_desk') return no(403);
       return ok({ items: [{ matched_kinds: ['name_dob'], patient_id: ID.patient, registered_via: 'referral_worker', verified }] });
     }
+    // ---- F9: audit reader, register, erasure, Run, full record (MOCK ONLY) ----
+    if (method === 'GET' && path === '/v1/staff/audit') {
+      if (role !== 'auditor') return no(403);
+      const row = (n: number) => ({ action: n % 2 ? 'patient.view' : 'referral.run', actor_id: ID.user, actor_role: 'nurse', audit_id: n, clinic_id: ID.clinic, details: { count: n, note: 'plain text' }, occurred_at: '2026-11-10T04:00:00Z', origin: 'test', resource_id: ID.patient, resource_type: 'patient' });
+      return ok({ items: [row(3), row(2), row(1)], limit: 50, has_more: false, next_before_id: null });
+    }
+    if (method === 'POST' && path === '/v1/staff/patients') return role === 'front_desk' ? ok({ candidate_ids: [ID.patient2], outcome: 'review', patient_id: ID.patient }) : no(403);
+    if (method === 'POST' && m(/^\/v1\/staff\/referrals\/[^/]+\/run$/)) return READERS.includes(role) ? ok({ job_id: ID.candidate, replayed: false }) : no(403);
+    if (method === 'GET' && path === '/v1/staff/erasure-requests') {
+      if (role !== 'front_desk') return no(403);
+      const base = { approved_by: null, created_at: '2026-11-10T04:00:00Z', decided_at: null, patient_id: ID.patient, reason: 'reason_x', status: 'requested' };
+      return page([{ ...base, request_id: ID.task, requested_by: ID.user }, { ...base, request_id: ID.taskRed, requested_by: ME }]);
+    }
+    if (method === 'POST' && m(/^\/v1\/staff\/erasure-requests\/[^/]+\/approve$/)) return role === 'front_desk' ? ok({ erased: true, request_id: ID.task }) : no(403);
+    if (method === 'POST' && m(/^\/v1\/staff\/erasure-requests\/[^/]+\/cancel$/)) return role === 'front_desk' ? ok({ cancelled: true, request_id: ID.task }) : no(403);
+    if (method === 'GET' && m(/^\/v1\/staff\/patients\/[^/]+\/view$/)) return READERS.includes(role) ? ok({ clinic_id: ID.clinic, date_of_birth: '1990-02-03', name: 'Synthetic Person', patient_id: ID.patient, phone: '9000000000' }) : no(403);
     const patient = m(/^\/v1\/staff\/patients\/([^/]+)(\/confirm-identity|\/revoke-identity)?$/);
     if (patient) {
       if (!READERS.includes(role)) return no(403);

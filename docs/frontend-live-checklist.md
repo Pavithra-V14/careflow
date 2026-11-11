@@ -77,6 +77,30 @@ The scheduling lists show the ACTIVE clinic's rows only (the routes return every
 3. **Bookings, Holds, Waitlist, Offers** show the same clinic only. In the browser's network tab a refused Hold or Book answers 404 with
    `{"detail":"unknown patient for this clinic"}`; if it ever reads `{"detail":"not found"}` the slot itself is not visible: tell the backend.
 
+## Audit, register, erasure, Run and the full record (F9; synthetic data only)
+
+Use a demo clinic with synthetic people. The erasure buttons are OFF in a real build, so steps 4 and 5 below only check the list and the note
+until the step-up claim spike is recorded.
+
+1. **Audit log** (an auditor account; `GET /v1/staff/audit`). *You should see:* the page opens with nothing read; "Read the log" lists rows
+   newest first (when, action, who, record, clinic, origin); "Show details" opens a row's details as plain text; "Older rows" adds the next page and
+   keeps the filter; an account with no auditor role sees "not available to your role". Check that your own opens in steps 6 and 7 appear as rows.
+2. **Register a patient** (front desk, Patients page; `POST /v1/staff/patients`). Search first. *You should see:* an empty form, a confirmation, then
+   one of "A new record was created", "This person matched an existing record", "Possible matches were found. Nothing was linked automatically; a
+   person decides" (with links) or "This request had already been saved"; the typed details are gone from the page.
+3. **Run the referral** (front desk, nurse or doctor, referral detail; `POST /v1/staff/referrals/{document_id}/run`). *You should see:* a
+   confirmation, then "The run was queued. Job: ..." (or "already queued a run" on a replay); the referral's state changes as the run proceeds.
+4. **Erasure requests** (front desk; `GET /v1/staff/erasure-requests`). *You should see:* the open requests (who asked, shown as "You" for yours),
+   a plain note that asking, approving and cancelling are switched off, and the calm "list of erasure reasons is not set up yet" state under "Ask for
+   an erasure". The ask, approve and cancel calls (`POST /v1/staff/patients/{patient_id}/erasure-requests`,
+   `POST /v1/staff/erasure-requests/{request_id}/approve`, `.../cancel`) are not made until the flag is turned on.
+5. **When the flag is on** (only after the claim spike): approve as a DIFFERENT front desk account than the one that asked. *You should see:* the
+   confirmation naming what is erased and what is kept, the authenticator prompt, then "Approved. The identity was erased." The asker never sees an
+   Approve button on their own request.
+6. **Full details** (front desk, nurse or doctor, patient page; `GET /v1/staff/patients/{patient_id}/view`). *You should see:* the "pending the
+   privacy owner" notice, nothing read until you click "Open the full details", then the name, date of birth and phone, gone again on "Hide". An
+   audit row exists for each open (step 1). Outside the demo profile you should see "cannot be opened in this setup".
+
 ## Patient sign-in for the demo: Supabase phone sign-in with test numbers (VERIFY IN THE DASHBOARD)
 
 The patient portal signs in with a one-time code sent to a mobile number. For the demo this needs no SMS provider and no external service:
@@ -185,6 +209,18 @@ no workflow can start it.
 Operations in the client that no screen calls: `GET /readyz` (used only by the live-run guard through the proxy) and
 `POST /v1/staff/merges` (propose; not built). The snapshot has more routes (messages, bookings, waitlist, slots); no console screen
 uses them yet.
+
+### F9 calls
+
+| Screen | Call | Sends | Handled | Check against the backend |
+|---|---|---|---|---|
+| Audit log | `GET /v1/staff/audit` | filters; `limit` 50; `before_id` for older | 200; 403 not available; 5xx fixed | rows newest first; `next_before_id` pages; do `details` ever hold personal text? |
+| Register a patient | `POST /v1/staff/patients` | key; `{clinic_id, name, dob, phone?}` | 200 outcome; 404; 409; 422; 503 | the four outcome words; `candidate_ids` on `review` |
+| Referral detail, Run | `POST /v1/staff/referrals/{document_id}/run` | key | 200 job; 404; 403; 503 | which roles may start a run; `replayed` on a retried key |
+| Erasure requests | `GET /v1/staff/erasure-requests` | optional `status` | 200; 403; 5xx | `reason` words; `requested_by` equals my account id for "You" |
+| Erasure, ask | `POST /v1/staff/patients/{patient_id}/erasure-requests` | key; `{reason}`; step-up | 200; 409; 422; 503 | flag OFF: not called |
+| Erasure, approve / cancel | `POST /v1/staff/erasure-requests/{request_id}/approve` and `/cancel` | key; step-up | 200 (`erased` / `cancelled` true); 403; 409 | flag OFF: not called; `false` is a no-op |
+| Patient page, full details | `GET /v1/staff/patients/{patient_id}/view` | id; read on a click only | 200; 404; 403; 429; 503 | one audit row per open |
 
 ## Also verify by hand (the walk cannot)
 

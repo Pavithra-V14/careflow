@@ -8,7 +8,7 @@
  */
 export const SEND_ACTIVE_ROLE_HEADER = false;
 
-declare const __CAREFLOW_FLAGS__: { mergeActions: boolean } | undefined;
+declare const __CAREFLOW_FLAGS__: { mergeActions: boolean; erasureActions?: boolean } | undefined;
 
 /**
  * Merge APPROVE and UNMERGE buttons. OFF in every real build. These routes need a recently verified second factor, and the
@@ -19,4 +19,13 @@ declare const __CAREFLOW_FLAGS__: { mergeActions: boolean } | undefined;
  */
 export function mergeActionsEnabled(): boolean {
   return typeof __CAREFLOW_FLAGS__ !== 'undefined' && __CAREFLOW_FLAGS__.mergeActions === true;
+}
+
+/**
+ * Erasure request, approve and cancel buttons. OFF in every real build, for the same reason as the merge actions: each of these writes
+ * needs a recently verified second factor and the `aal` / `amr` claim shape the backend checks has not been observed in a real token.
+ * The list of requests is read-only and always shown. Compile-time only, on in `--mode e2e` (the mock browser build), pinned by tests.
+ */
+export function erasureActionsEnabled(): boolean {
+  return typeof __CAREFLOW_FLAGS__ !== 'undefined' && __CAREFLOW_FLAGS__.erasureActions === true;
 }

@@ -9,7 +9,8 @@ import { QueryView } from '../ui/states';
 import { NotFoundPage } from './NotFoundPage';
 import { ReferralReview } from './ReferralReview';
 import { ReviewerView } from './ReviewerView';
-import { CAN_REVIEW_REFERRAL } from '../sections';
+import { CAN_REVIEW_REFERRAL, CAN_RUN_REFERRAL } from '../sections';
+import { ReferralRun } from './ReferralRun';
 import { useSession } from '../session/SessionContext';
 import { CareLinks } from '../components/CareLinks';
 import { TYPE_LABEL } from './ReferralsPage';
@@ -60,6 +61,8 @@ function Detail({ documentId }: { documentId: string }) {
               <dt>{t('referrals.col.state')}</dt>
               <dd>{word('referrals.runState', r.run_state)}</dd>
             </dl>
+
+            {hasRole(CAN_RUN_REFERRAL) && <ReferralRun documentId={documentId} />}
 
             <h2>{t('referrals.holds')}</h2>
             {r.holds.length === 0 ? (

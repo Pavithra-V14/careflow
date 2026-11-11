@@ -6,7 +6,7 @@
 // backend disagree, the backend wins and this list is the thing to fix. Roles below follow the route docstrings in
 // openapi.snapshot.json and docs/design/review-task-routes.md.
 
-type SectionId = 'referrals' | 'tasks' | 'patients' | 'identity' | 'scheduling' | 'alerts' | 'dashboard' | 'care' | 'admin' | 'readiness' | 'claims' | 'access' | 'notes';
+type SectionId = 'referrals' | 'tasks' | 'patients' | 'identity' | 'scheduling' | 'alerts' | 'dashboard' | 'care' | 'admin' | 'readiness' | 'claims' | 'access' | 'notes' | 'audit' | 'erasure';
 
 export interface Section {
   id: SectionId;
@@ -29,6 +29,8 @@ const SECTIONS: readonly Section[] = [
   { id: 'notes', path: '/notes', labelKey: 'nav.notes', roles: ['nurse', 'doctor'] },
   { id: 'claims', path: '/claims', labelKey: 'nav.claims', roles: ['front_desk'] },
   { id: 'access', path: '/access', labelKey: 'nav.access', roles: ['front_desk', 'nurse', 'doctor', 'admin'] },
+  { id: 'erasure', path: '/erasure', labelKey: 'nav.erasure', roles: ['front_desk'] },
+  { id: 'audit', path: '/audit', labelKey: 'nav.audit', roles: ['auditor'] },
   { id: 'admin', path: '/admin', labelKey: 'nav.admin', roles: ['admin', 'doctor'] },
 ];
 
@@ -65,6 +67,15 @@ export const CAN_SCHEDULE = ['front_desk'] as const;
 export const CAN_SET_UP = ['front_desk', 'admin'] as const;
 export const CAN_REVIEW_REFERRAL = ['nurse', 'doctor'] as const;
 export const CAN_REVOKE_IDENTITY = ['front_desk'] as const;
+/** Read the audit log: the route says an auditor of some clinic (not admin). */
+export const CAN_READ_AUDIT = ['auditor'] as const;
+/** Request, approve and cancel a patient's erasure, and register a patient: front desk, per the route docs. */
+export const CAN_ERASE = ['front_desk'] as const;
+export const CAN_REGISTER_PATIENT = ['front_desk'] as const;
+/** Start a Front Door run for a referral. The route says only "if you may start a run": the roles below are the owner's list; the backend decides. */
+export const CAN_RUN_REFERRAL = ['front_desk', 'nurse', 'doctor'] as const;
+/** Open the decrypted record: front desk, nurse and doctor of its clinic, per the route docs. */
+export const CAN_VIEW_FULL_RECORD = ['front_desk', 'nurse', 'doctor'] as const;
 export const CAN_SEE_DUPLICATES = ['front_desk'] as const;
 /** Approve and unmerge (behind the mergeActions flag, which is off). */
 export const CAN_MERGE_ACTIONS = ['front_desk'] as const;

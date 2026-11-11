@@ -19,6 +19,7 @@ Two flags are OFF and stay OFF until the owner says: merge approve and unmerge (
 | F7 batch 2 | Alerts (acknowledge; the audience role is the escalation state), dashboard, care gaps panel, care plans, results |
 | F7 batch 3 | Care-gap writes, staff accounts, autonomy (mode, two-person switch, history), reviewer statistics, cost canvas, voice transcripts |
 | F7 batch 4 | Visit readiness, portal claims, break-glass, staff recovery, notes, grievances, result-correction tasks |
+| F9 (2026-11-12) | The routes the console did not call yet: the audit reader (auditor only), register a patient (front desk, on the Patients page), the two-person erasure screen (list always; ask, approve and cancel behind a flag that is OFF; the reasons list has no route yet, so asking shows "not set up"), a Run button on the referral detail (front desk, nurse, doctor), and the decrypted record view (**pending the privacy owner's confirmation, see section 6**) |
 | F8 follow-up 2 (2026-11-12) | The scheduling lists and reference lists show the active clinic only (item 17); Hold, Book and Join say "This patient is not registered at the clinic that owns this slot" for that 404; the offer run lets front desk type the patient's reply (saved encrypted, text dropped from the page, new message id passed to the reading and the entry); the stored-reply picker stays for replies saved earlier |
 | F8 follow-up (2026-11-11) | The clinic id comes from `GET /public/clinic` and the grievance category from `GET /v1/portal/grievance-categories` (a typed code is the fallback); consent notices show the patient-facing `label`; break-glass uses the reason list and my open grants; visit readiness picks from `GET /v1/staff/visits/upcoming`; labels for the readiness status, message sender and topic, voice workflow and status, reviewer verdict, cost state and reasons; the offer run after a cancel (prepare, send, skip, stop, enter the reply) |
 | F8 (batch 5) | The patient portal on the sign-in and sign-up pages: phone-code sign-in, create the patient account, notices shown exactly as sent, grant or withdraw, activate, claim a record, file a grievance, download my data |
@@ -73,6 +74,17 @@ Owner-requested record (2026-11-09). These hold today and are pinned by tests:
   code, notice text or data. The language choice is the one other thing kept (a convenience, not patient data). Typed text (a grievance, a
   claim) is dropped from the page once it is sent. "Download my data" builds one file from the answer and keeps nothing. No analytics, no
   third-party scripts (`tests/source-guards.test.ts`).
+- **The decrypted record view (PENDING THE PRIVACY OWNER'S CONFIRMATION before any real data).** A patient's page has an "Open the full details"
+  button for front desk, nurse and doctor. It reads `GET /v1/staff/patients/{id}/view` ONLY on that click (the open is an audited read: who,
+  role, patient id; never the contents), shows the name, date of birth and phone, and drops them on "Hide", on leaving the page and on a role
+  change. The answer is a mutation result, not a cached query: it is not refetched on focus or reconnect and is never written to storage, a
+  URL or a log. The backend itself refuses it outside the demo profile with synthetic data (503), and the console says so in plain words. The
+  screen carries a visible "pending" notice. **Until the privacy owner confirms this, use synthetic data only.**
+- **Register a patient** keeps the typed name, date of birth and phone only until the save; after it they are dropped from the page and only the
+  record id (a link) remains. **The audit reader** shows rows exactly as sent, with each row's `details` only after a click, as plain text.
+- **Erasure.** The confirmation says what the design note (`docs/design/patient-erasure-and-update-narrowing.md`) says is erased (the encrypted
+  name, date of birth and phone) and kept (the request and its audit rows, the record number, the keyed matching fingerprints; messages are not
+  erased by this step). That wording is marked as a placeholder until the privacy owner and counsel confirm it.
 - The only things kept in the staff browser are the Supabase session, the language choice, and (per tab) the chosen role.
 
 ## 7. Role gates checked against the schema descriptions

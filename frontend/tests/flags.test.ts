@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { resolveConfig } from 'vite';
 import { FLAGS_GLOBAL } from '../env-allowlist';
-import { SEND_ACTIVE_ROLE_HEADER, mergeActionsEnabled } from '../src/staff/featureFlags';
+import { SEND_ACTIVE_ROLE_HEADER, erasureActionsEnabled, mergeActionsEnabled } from '../src/staff/featureFlags';
 
 // The merge approve / unmerge buttons stay OFF until the step-up claim spike is recorded. These tests pin that.
 
-async function flagsFor(mode: string): Promise<{ mergeActions: boolean }> {
+async function flagsFor(mode: string): Promise<{ mergeActions: boolean; erasureActions: boolean }> {
   const cfg = await resolveConfig({ configFile: 'vite.config.ts', root: process.cwd(), mode }, 'build', mode);
-  return JSON.parse(String(cfg.define?.[FLAGS_GLOBAL])) as { mergeActions: boolean };
+  return JSON.parse(String(cfg.define?.[FLAGS_GLOBAL])) as { mergeActions: boolean; erasureActions: boolean };
 }
 
 describe('feature flags', () => {
@@ -31,6 +31,12 @@ describe('feature flags', () => {
     } finally {
       for (const n of planted) delete process.env[n];
     }
+  });
+
+  it('has erasure actions OFF in every real build and on only in the mock-backed e2e mode', async () => {
+    expect(erasureActionsEnabled()).toBe(false);
+    for (const mode of ['production', 'development', 'staging', 'test']) expect((await flagsFor(mode)).erasureActions).toBe(false);
+    expect((await flagsFor('e2e')).erasureActions).toBe(true);
   });
 
   it('keeps the active-role header off as well', () => {

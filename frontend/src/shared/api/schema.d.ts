@@ -1951,7 +1951,7 @@ export interface paths {
         };
         /**
          * List Locations
-         * @description Locations (rooms, sites) of the clinics you may read, by name.
+         * @description Locations (rooms, sites) of the clinics you may read, by name; `clinic_id` narrows to one clinic. 404 if you give a clinic you cannot read.
          */
         get: operations["list_locations_v1_staff_scheduling_locations_get"];
         put?: never;
@@ -1975,7 +1975,7 @@ export interface paths {
         };
         /**
          * List Offers
-         * @description Offers of the clinics you may read, newest first (`state` filters). An offer is `delivered` only if a person marked it; `expired` once its hold ran out. Ids, times and closed words only.
+         * @description Offers of the clinics you may read, newest first (`state` filters, `clinic_id` narrows to one clinic). An offer is `delivered` only if a person marked it; `expired` once its hold ran out. Ids, times and closed words only. 404 if you give a clinic you cannot read.
          */
         get: operations["list_offers_v1_staff_scheduling_offers_get"];
         put?: never;
@@ -2100,7 +2100,7 @@ export interface paths {
         };
         /**
          * List Priority Levels
-         * @description The clinic's clinical priority levels, rank 1 first. The levels themselves are clinician-approved data (sched.priority_levels); this only reads them.
+         * @description The clinical priority levels, rank 1 first; `clinic_id` narrows to one clinic. The levels themselves are clinician-approved data (sched.priority_levels); this only reads them. 404 if you give a clinic you cannot read.
          */
         get: operations["list_priority_levels_v1_staff_scheduling_priority_levels_get"];
         put?: never;
@@ -2120,7 +2120,7 @@ export interface paths {
         };
         /**
          * List Providers
-         * @description Providers of the clinics you may read, by display name.
+         * @description Providers of the clinics you may read, by display name; `clinic_id` narrows to one clinic. 404 if you give a clinic you cannot read.
          */
         get: operations["list_providers_v1_staff_scheduling_providers_get"];
         put?: never;
@@ -2208,7 +2208,7 @@ export interface paths {
         };
         /**
          * List Visit Types
-         * @description Visit types of the clinics you may read, by name, with their scheduling length.
+         * @description Visit types of the clinics you may read, by name, with their scheduling length; `clinic_id` narrows to one clinic. 404 if you give a clinic you cannot read.
          */
         get: operations["list_visit_types_v1_staff_scheduling_visit_types_get"];
         put?: never;
@@ -12086,6 +12086,7 @@ export interface operations {
             query?: {
                 include_inactive?: boolean;
                 limit?: number;
+                clinic_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -12104,6 +12105,15 @@ export interface operations {
             };
             /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -12199,6 +12209,7 @@ export interface operations {
             query?: {
                 state?: ("awaiting_delivery" | "delivered" | "expired" | "booked" | "released") | null;
                 limit?: number;
+                clinic_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -12217,6 +12228,15 @@ export interface operations {
             };
             /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -12612,6 +12632,7 @@ export interface operations {
             query?: {
                 include_inactive?: boolean;
                 limit?: number;
+                clinic_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -12637,6 +12658,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
             422: {
                 headers: {
@@ -12653,6 +12683,7 @@ export interface operations {
             query?: {
                 include_inactive?: boolean;
                 limit?: number;
+                clinic_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -12671,6 +12702,15 @@ export interface operations {
             };
             /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -13003,6 +13043,7 @@ export interface operations {
             query?: {
                 include_inactive?: boolean;
                 limit?: number;
+                clinic_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -13021,6 +13062,15 @@ export interface operations {
             };
             /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

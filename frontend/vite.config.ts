@@ -29,7 +29,7 @@ export default defineConfig(({ mode }) => {
     // Explicit and narrow on purpose: nothing in this project uses VITE_ names, and a broad prefix would leak.
     envPrefix: 'VITE_',
     // Flags are compile-time constants, never environment variables. mergeActions is on ONLY in `--mode e2e` (mock browser tests).
-    define: { [CONFIG_GLOBAL]: JSON.stringify(exposed), [FLAGS_GLOBAL]: JSON.stringify({ mergeActions: mode === 'e2e' }) },
+    define: { [CONFIG_GLOBAL]: JSON.stringify(exposed), [FLAGS_GLOBAL]: JSON.stringify({ mergeActions: mode === 'e2e', erasureActions: mode === 'e2e' }) },
     build: {
       rollupOptions: {
         input: {
