@@ -642,12 +642,16 @@ async def _any_role_held(conn: AsyncConnection, roles: tuple[str, ...]) -> bool:
     return bool((await conn.execute(text("select iam.has_any_role(cast(:r as text[]))"), {"r": list(roles)})).scalar())
 
 
-async def _readable_clinics(conn: AsyncConnection, claims: dict[str, Any]) -> list[uuid.UUID]:
+async def _readable_clinics(conn: AsyncConnection, claims: dict[str, Any], clinic_id: uuid.UUID | None = None) -> list[uuid.UUID]:
     # Through the RLS helper (migration 0028), so the active-role header narrows the list to the active clinic. A clinic row is visible to its own staff (clinics_select_own_staff).
     rows = await conn.execute(text("select c.id from iam.clinics c where iam.has_clinic_role(c.id, cast(:roles as text[])) order by c.id"), {"roles": list(SCHEDULING_READERS)})
     clinics = [r[0] for r in rows]
     if not clinics:
         raise HTTPException(status_code=403, detail="your role may not read this")
+    if clinic_id is not None:
+        if clinic_id not in clinics:
+            raise HTTPException(status_code=404, detail="not found")  # a clinic you cannot read and one that does not exist are one answer
+        return [clinic_id]
     return clinics
 
 
@@ -712,9 +716,10 @@ async def list_slots(
     location_id: uuid.UUID | None = None,
     starts_after: datetime | None = None,
     limit: Limit = 100,
+    clinic_id: uuid.UUID | None = None,
 ) -> SlotList:
-    """Open and held slots, soonest first, optionally for one provider and/or location."""
-    clinics = await _readable_clinics(conn, claims)
+    """Open and held slots, soonest first, optionally for one clinic, provider and/or location. 404 if you give a clinic you cannot read."""
+    clinics = await _readable_clinics(conn, claims, clinic_id)
     rows = await _slots.list_slots(
         conn, clinics, provider_id=provider_id, location_id=location_id, starts_after=starts_after, limit=limit + 1
     )
@@ -729,10 +734,10 @@ async def list_slots(
 
 @scheduling.get("/bookings", response_model=BookingList)
 async def list_bookings(
-    conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 100
+    conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 100, clinic_id: uuid.UUID | None = None
 ) -> BookingList:
-    """Confirmed bookings, soonest appointment first."""
-    clinics = await _readable_clinics(conn, claims)
+    """Confirmed bookings, soonest appointment first, optionally for one clinic. 404 if you give a clinic you cannot read."""
+    clinics = await _readable_clinics(conn, claims, clinic_id)
     rows = await _slots.list_bookings(conn, clinics, limit=limit + 1)
     items = [
         BookingOut(booking_id=r.id, clinic_id=r.clinic_id, slot_id=r.slot_id, patient_id=r.patient_id,
@@ -749,9 +754,10 @@ async def list_waitlist(
     claims: dict[str, Any] = Depends(verified_claims),
     visit_type_id: uuid.UUID | None = None,
     limit: Limit = 100,
+    clinic_id: uuid.UUID | None = None,
 ) -> WaitlistList:
-    """The waiting queue, clinical priority first and join time second, optionally for one visit type."""
-    clinics = await _readable_clinics(conn, claims)
+    """The waiting queue, clinical priority first and join time second, optionally for one clinic and/or one visit type. 404 if you give a clinic you cannot read."""
+    clinics = await _readable_clinics(conn, claims, clinic_id)
     rows = await _slots.list_waitlist(conn, clinics, visit_type_id=visit_type_id, limit=limit + 1)
     items = [
         WaitlistEntryOut(waitlist_id=r.id, clinic_id=r.clinic_id, patient_id=r.patient_id, visit_type_id=r.visit_type_id,
@@ -2429,10 +2435,10 @@ class ReleaseOut(_Out):
 
 @scheduling.get("/holds", response_model=HoldRowList)
 async def list_holds(
-    conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), status: Literal["active", "released", "expired", "converted"] | None = "active", limit: Limit = 100
+    conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), status: Literal["active", "released", "expired", "converted"] | None = "active", limit: Limit = 100, clinic_id: uuid.UUID | None = None
 ) -> HoldRowList:
-    """Holds of the clinics you may read, soonest to expire first (`active` by default; `status` filters)."""
-    clinics = await _readable_clinics(conn, claims)
+    """Holds of the clinics you may read, soonest to expire first (`active` by default; `status` filters; `clinic_id` narrows to one clinic). 404 if you give a clinic you cannot read."""
+    clinics = await _readable_clinics(conn, claims, clinic_id)
     rows = (
         await conn.execute(
             text(

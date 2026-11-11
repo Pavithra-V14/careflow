@@ -227,7 +227,7 @@ A route to record a staff-entered reply (topic appointments, sender recorded, au
 2. Show the `detail` of a 404 when it is `"unknown patient for this clinic"` ("This patient is not registered at the clinic that owns this slot") instead of the generic text.
 3. Confirm in the browser's network tab before changing anything: the 404 response body of the Hold request should read `{"detail":"unknown patient for this clinic"}`. If it reads `{"detail":"not found"}` instead, tell the backend window: that would mean the slot itself is not visible and this finding is wrong.
 
-**Backend status.** No backend change was made: the refusal is correct, and a more specific answer would add nothing the slot's `clinic_id` does not already give. Not confirmed against live data (live tests run only in CI); the reasoning is from the code and the screenshots.
+**Backend status.** The refusal is correct, so it is unchanged. What the backend added (2026-11-11): an optional `clinic_id` query parameter on `GET /v1/staff/scheduling/slots`, `/bookings`, `/holds` and `/waitlist`. Pass the active clinic's id and only that clinic's rows come back; a clinic you cannot read (or that does not exist) is the one 404. Without it the lists still span every readable clinic. Not confirmed against live data (live tests run only in CI); the reasoning is from the code and the screenshots.
 
 ## Decisions recorded here for later readers
 

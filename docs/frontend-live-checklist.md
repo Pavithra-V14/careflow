@@ -114,15 +114,15 @@ no workflow can start it.
 | Confirm identity | `POST .../{patient_id}/confirm-identity` | key, no body | 200; 409; 403 | no step-up demanded |
 | Revoke identity | `POST .../{patient_id}/revoke-identity` | key; `{reason}` | 200 shows `review_task`; 409; 403 | `review_task` words (`on_record` = nothing new recorded, confirmed); reasons accepted |
 | Scheduling lists | `GET /v1/staff/scheduling/providers`, `/locations`, `/visit-types`, `/priority-levels` | `include_inactive` only when ticked | 200; 403 | fields present; inactive filter |
-| Holds | `GET /v1/staff/scheduling/holds?status=` | `status` (default active) | 200; 403 | status words |
+| Holds | `GET /v1/staff/scheduling/holds?status=` | `status` (default active), optional `clinic_id` | 200; 403; 404 clinic not readable | status words |
 | Release a hold | `POST /v1/staff/scheduling/holds/{hold_id}/release` | key, no body | 200; 409 (booked or expired, shown calmly); 403 | 409 wording |
-| Slots | `GET /v1/staff/scheduling/slots` | optional `provider_id`, `location_id` | 200; 403/5xx fixed messages | `status` words (open, held, ...); `hold_expires_at` null when open |
+| Slots | `GET /v1/staff/scheduling/slots` | optional `clinic_id`, `provider_id`, `location_id` | 200; 404 clinic not readable; 403/5xx fixed messages | `status` words (open, held, ...); `hold_expires_at` null when open |
 | Hold a slot | `POST /v1/staff/scheduling/slots/{slot_id}/hold` | key, `duration_minutes`, optional `patient_id` | 200; 409 "changed in the meantime" | not run live yet: a write |
 | Book a slot | `POST /v1/staff/scheduling/slots/{slot_id}/book` | key, `patient_id` | 200; 409 | not run live yet: a write |
 | Add a slot | `POST /v1/staff/scheduling/slots` | key, ids, ISO times | 200; 409 overlap; 422 bad range | not run live yet: a write |
-| Bookings | `GET /v1/staff/scheduling/bookings` | no query | 200 | rows, `has_more` |
+| Bookings | `GET /v1/staff/scheduling/bookings` | optional `clinic_id` | 200; 404 clinic not readable | rows, `has_more` |
 | Cancel a booking | `POST /v1/staff/scheduling/bookings/{booking_id}/cancel` | key | 200 shows the ranked waitlist; nobody is contacted | not run live yet: a write |
-| Waitlist | `GET /v1/staff/scheduling/waitlist` | optional `visit_type_id` | 200 | `clinical_priority` words, `rank` order |
+| Waitlist | `GET /v1/staff/scheduling/waitlist` | optional `clinic_id`, `visit_type_id` | 200; 404 clinic not readable | `clinical_priority` words, `rank` order |
 | Join the waitlist | `POST /v1/staff/scheduling/waitlist/join` | key, patient, visit type, priority code | 200; 409 already waiting | not run live yet: a write |
 | Offers | `GET /v1/staff/scheduling/offers` | optional `state` | 200 | the five `state` words |
 | Mark an offer delivered | `POST /v1/staff/scheduling/offers/{hold_id}/mark-delivered` | key | 200; 409 no longer live | not run live yet: a write |
