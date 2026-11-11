@@ -629,6 +629,14 @@ def read_cases(ids, route) -> list[tuple]:
     if route == "waitlist":
         cases.append(_case(ids, "another clinic's visit type returns nothing", "front_desk_a", 200, f"{path}?visit_type_id={ids.vt_b}",
                            key=None, body=_page(ids, check=lambda items: items == [])))
+    cases += [
+        _case(ids, "clinic_id of the reader's own clinic returns that clinic's rows", "front_desk_a", 200, f"{path}?clinic_id={A}", key=None, body=_page(ids, clinic_only=A, non_empty=True, **shape)),
+        _case(ids, "clinic_id of a clinic the reader cannot read is the one not-found", "front_desk_a", 404, f"{path}?clinic_id={ids.clinic_b}", key=None, body=_fixed(404)),
+        _case(ids, "clinic_id of a clinic that does not exist is the same not-found", "front_desk_a", 404, f"{path}?clinic_id={uuid.uuid4()}", key=None, body=_fixed(404)),
+        _case(ids, "a reader of the other clinic who names this clinic gets the same not-found", "front_desk_b", 404, f"{path}?clinic_id={A}", key=None, body=_fixed(404)),
+        _case(ids, "a clinic_id that is not a uuid is rejected", "front_desk_a", 422, f"{path}?clinic_id=nope", key=None, body=_fixed(422)),
+        _case(ids, "a non-reader who names a clinic is still refused first", "admin_a", 403, f"{path}?clinic_id={A}", key=None),
+    ]
     denied = [p for p in ids.people if p not in ("front_desk_a", "front_desk_b", "nurse_a", "doctor_a", "multi")]
     cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path, key=None) for p in denied]
     cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, path, key=None))
@@ -1836,6 +1844,10 @@ def hold_list_cases(ids) -> list[tuple]:
               body=_page(ids, check=lambda items: all(set(i) == {"hold_id", "clinic_id", "slot_id", "patient_id", "status", "created_at", "expires_at"} for i in items))),
         _case(ids, "a reader of another clinic sees none of this clinic's holds", "front_desk_b", 200, HOLDS, key=None, body=_page(ids, check=lambda items: items == [])),
         _case(ids, "an unknown status is rejected", "front_desk_a", 422, HOLDS + "?status=bogus", key=None, body=_fixed(422)),
+        _case(ids, "clinic_id of the reader's own clinic lists that clinic's holds", "front_desk_a", 200, f"{HOLDS}?clinic_id={ids.clinic_a}", key=None, body=_page(ids, clinic_only=ids.clinic_a, non_empty=True, check=has(active, True))),
+        _case(ids, "clinic_id of a clinic the reader cannot read is the one not-found", "front_desk_a", 404, f"{HOLDS}?clinic_id={ids.clinic_b}", key=None, body=_fixed(404)),
+        _case(ids, "a clinic_id that does not exist is the same not-found", "front_desk_a", 404, f"{HOLDS}?clinic_id={uuid.uuid4()}", key=None, body=_fixed(404)),
+        _case(ids, "a clinic_id that is not a uuid is rejected", "front_desk_a", 422, f"{HOLDS}?clinic_id=nope", key=None, body=_fixed(422)),
         _case(ids, "limit=0 is rejected", "front_desk_a", 422, HOLDS + "?limit=0", key=None, body=_fixed(422)),
     ]
     denied = [p for p in ids.people if p not in (*readers, "front_desk_b")]

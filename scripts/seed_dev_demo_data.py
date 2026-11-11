@@ -125,7 +125,13 @@ def det(*parts: object) -> uuid.UUID:
     return uuid.uuid5(NAMESPACE, "|".join(str(p) for p in parts))
 
 
-async def seed(conn: AsyncConnection, clinic: uuid.UUID, vault: DemographicVault, key_version: int, say=print) -> None:
+def refuse_a_second_seeded_clinic(other_seeded: list[uuid.UUID], allow: bool) -> None:
+    """Demo data goes into ONE clinic. A second seeded clinic is how a dev project ends up with two clinics that look alike (slots of one, patients of the other), so it needs an explicit flag."""
+    if other_seeded and not allow:
+        raise Refused(f"refusing: {len(other_seeded)} other clinic(s) already hold demo data ({', '.join(str(c) for c in other_seeded)}); pass --allow-second-seeded-clinic only if you really want a second one")
+
+
+async def seed(conn: AsyncConnection, clinic: uuid.UUID, vault: DemographicVault, key_version: int, say=print, *, allow_second_clinic: bool = False) -> None:
     bypass = (await conn.execute(text("select rolbypassrls from pg_roles where rolname = current_user"))).scalar()
     if not bypass:
         raise Refused("refusing: the migrator role does not bypass row-level security, which this seed relies on (as the migrations do)")
@@ -135,6 +141,8 @@ async def seed(conn: AsyncConnection, clinic: uuid.UUID, vault: DemographicVault
     if clinic_row.origin != "test":
         raise Refused("refusing: that clinic's origin is not 'test'; demo data goes into a test clinic only")
     origin = "test"
+    others = (await conn.execute(text("select distinct clinic_id from sched.locations where idempotency_key like :p and clinic_id <> :c order by clinic_id"), {"p": f"{SEED}:%", "c": clinic})).scalars().all()
+    refuse_a_second_seeded_clinic(list(others), allow_second_clinic)
     k = f"{SEED}:{clinic}"  # every idempotency key carries the clinic: keys are unique across clinics for most of these tables
 
     front_desk = (
@@ -292,6 +300,7 @@ async def main() -> int:
     ap.add_argument("--clinic-id", required=True, type=uuid.UUID)
     ap.add_argument("--env-file", default=".env")
     ap.add_argument("--dry-run", action="store_true", help="do everything, then roll it back: nothing is kept")
+    ap.add_argument("--allow-second-seeded-clinic", action="store_true", help="seed this clinic although another clinic already holds demo data")
     args = ap.parse_args()
     env = dict(dotenv_values(Path(args.env_file)))
     try:
@@ -316,7 +325,7 @@ async def main() -> int:
             async with engine.connect() as conn:
                 tx = await conn.begin()
                 try:
-                    await seed(conn, args.clinic_id, vault, key_version)
+                    await seed(conn, args.clinic_id, vault, key_version, allow_second_clinic=args.allow_second_seeded_clinic)
                     if args.dry_run:
                         await tx.rollback()
                         print("dry run: everything was rolled back, nothing was kept")
