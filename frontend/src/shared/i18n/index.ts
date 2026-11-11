@@ -21,6 +21,8 @@ import f11Ta from './f11.ta.json';
 import f12En from './f12.en.json';
 import f13En from './f13.en.json';
 import f14En from './f14.en.json';
+import f15En from './f15.en.json';
+import f15Ta from './f15.ta.json';
 import f14Ta from './f14.ta.json';
 import f13Ta from './f13.ta.json';
 import f12Ta from './f12.ta.json';
@@ -38,8 +40,8 @@ function mergeTrees(base: Tree, extra: Tree): Tree {
 }
 
 export const RESOURCES = {
-  en: mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(en as Tree, consoleEn as Tree), f4En as Tree), f6En as Tree), f7En as Tree), f8En as Tree), f9En as Tree), f10En as Tree), f12En as Tree), f11En as Tree), f13En as Tree), f14En as Tree),
-  ta: mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(ta as Tree, consoleTa as Tree), f4Ta as Tree), f6Ta as Tree), f7Ta as Tree), f8Ta as Tree), f9Ta as Tree), f10Ta as Tree), f12Ta as Tree), f11Ta as Tree), f13Ta as Tree), f14Ta as Tree),
+  en: mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(en as Tree, consoleEn as Tree), f4En as Tree), f6En as Tree), f7En as Tree), f8En as Tree), f9En as Tree), f10En as Tree), f12En as Tree), f11En as Tree), f13En as Tree), f14En as Tree), f15En as Tree),
+  ta: mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(ta as Tree, consoleTa as Tree), f4Ta as Tree), f6Ta as Tree), f7Ta as Tree), f8Ta as Tree), f9Ta as Tree), f10Ta as Tree), f12Ta as Tree), f11Ta as Tree), f13Ta as Tree), f14Ta as Tree), f15Ta as Tree),
 };
 
 export const LANGUAGES = ['en', 'ta'] as const;

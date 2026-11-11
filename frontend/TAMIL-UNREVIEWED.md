@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-1304 of 1304 strings are unreviewed.
+1319 of 1319 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -405,7 +405,7 @@ Terms standardised: proposal, resolve / resolved.
 | `backfill.reply.none` | No stored reply was found for this patient. The reply has to be stored first; this console cannot store one yet. If none came, choose No reply came. | இந்த நோயாளிக்கு சேமிக்கப்பட்ட பதில் எதுவும் கிடைக்கவில்லை. பதில் முதலில் சேமிக்கப்பட வேண்டும்; இந்தக் கணினியால் இன்னும் ஒன்றைச் சேமிக்க முடியாது. பதில் வரவில்லை என்றால், பதில் வரவில்லை என்பதைத் தேர்ந்தெடுங்கள். | ok |
 | `backfill.reply.notConfigured` | Reply reading is not set up yet. Read the message yourself. | பதிலைப் படித்தறிதல் இன்னும் அமைக்கப்படவில்லை. செய்தியை நீங்களே படியுங்கள். | ok |
 | `backfill.reply.notWaiting` | The run is not waiting for a reply. Refresh and look again. | ஓட்டம் பதிலுக்காகக் காத்திருக்கவில்லை. புதுப்பித்து மீண்டும் பாருங்கள். | ok |
-| `backfill.reply.note` | Pick the stored reply, read it, and confirm what to enter. A suggested reading is only a suggestion: you decide. The red-flag rules read the reply first. | சேமிக்கப்பட்ட பதிலைத் தேர்ந்தெடுத்து, படித்து, எதை உள்ளிடுவது என்பதை உறுதிசெய்யுங்கள். பரிந்துரைக்கப்பட்ட புரிதல் ஒரு பரிந்துரை மட்டுமே: நீங்களே முடிவு செய்கிறீர்கள். சிவப்புக் கொடி விதிகள் முதலில் பதிலைப் படிக்கும். | ok |
+| `backfill.reply.note` | Type what the patient told you, or pick a reply that was stored earlier. A suggested reading is only a suggestion: you decide. The red-flag rules read the reply first. | நோயாளி உங்களிடம் சொன்னதை தட்டச்சு செய்யுங்கள், அல்லது முன்பு சேமிக்கப்பட்ட பதிலைத் தேர்ந்தெடுங்கள். பரிந்துரைக்கப்பட்ட புரிதல் ஒரு பரிந்துரை மட்டுமே: நீங்களே முடிவு செய்கிறீர்கள். சிவப்புக் கொடி விதிகள் முதலில் பதிலைப் படிக்கும். | ok |
 | `backfill.reply.outcome.clear` | Clear | தெளிவு | ok |
 | `backfill.reply.outcome.red_flag` | Red flag | சிவப்புக் கொடி | ok |
 | `backfill.reply.outcome.unassessable` | Could not be assessed | மதிப்பிட முடியவில்லை | ok |
@@ -417,8 +417,20 @@ Terms standardised: proposal, resolve / resolved.
 | `backfill.reply.reasons.red_flag` | The rules found a red flag | விதிகள் சிவப்புக் கொடியைக் கண்டன | ok |
 | `backfill.reply.reasons.spend_ceiling` | The spend ceiling was reached | செலவு உச்சவரம்பு எட்டப்பட்டது | ok |
 | `backfill.reply.reasons.unassessable` | The rules could not assess it | விதிகளால் மதிப்பிட முடியவில்லை | ok |
+| `backfill.reply.save` | Save the reply | பதிலைச் சேமி | ok |
+| `backfill.reply.saveBody` | Stores what you typed as a message from the patient, encrypted, in their appointments thread. The red-flag rules read it first. Nothing is sent to the patient. Saving it does not yet enter it into the offer run. | நீங்கள் தட்டச்சு செய்ததை நோயாளியிடமிருந்து வந்த செய்தியாக, குறியாக்கம் செய்து, அவரது சந்திப்புகள் இழையில் சேமிக்கிறது. சிவப்புக் கொடி விதிகள் முதலில் அதைப் படிக்கும். நோயாளிக்கு எதுவும் அனுப்பப்படாது. சேமிப்பது இன்னும் வாய்ப்பு ஓட்டத்தில் அதை உள்ளிடாது. | ok |
+| `backfill.reply.saveConflict` | A different reply was already saved with this request. Check what you typed and save again. | இந்தக் கோரிக்கையுடன் வேறொரு பதில் ஏற்கனவே சேமிக்கப்பட்டது. நீங்கள் தட்டச்சு செய்ததைச் சரிபார்த்து மீண்டும் சேமிக்கவும். | ok |
+| `backfill.reply.saveInvalid` | The reply is blank or too long. Nothing was saved. | பதில் காலியாக உள்ளது அல்லது மிக நீளமாக உள்ளது. எதுவும் சேமிக்கப்படவில்லை. | ok |
+| `backfill.reply.saveNotFound` | This patient is not registered at this clinic. Nothing was saved. | இந்த நோயாளி இந்த மருத்துவமனையில் பதிவு செய்யப்படவில்லை. எதுவும் சேமிக்கப்படவில்லை. | ok |
+| `backfill.reply.saveTitle` | Save this reply? | இந்தப் பதிலைச் சேமிக்கவா? | ok |
+| `backfill.reply.saveUnavailable` | Replies cannot be stored yet (encryption is not set up). Nothing was saved. | பதில்களை இன்னும் சேமிக்க முடியாது (குறியாக்கம் அமைக்கப்படவில்லை). எதுவும் சேமிக்கப்படவில்லை. | ok |
+| `backfill.reply.saved` | The reply was saved and picked below. The rules' reading: | பதில் சேமிக்கப்பட்டு கீழே தேர்ந்தெடுக்கப்பட்டது. விதிகளின் வாசிப்பு: | ok |
+| `backfill.reply.savedOutcome.clear` | clear | தெளிவு | ok |
+| `backfill.reply.savedOutcome.red_flag` | a red flag was found; a nurse task was raised | சிவப்புக் கொடி கண்டறியப்பட்டது; செவிலியர் பணி எழுப்பப்பட்டது | ok |
+| `backfill.reply.savedOutcome.unassessable` | it could not be assessed; a nurse task was raised | மதிப்பிட முடியவில்லை; செவிலியர் பணி எழுப்பப்பட்டது | ok |
 | `backfill.reply.screenedNote` | The rules did not clear this reply. Entering it raises the nurse task and ends the run. | விதிகள் இந்தப் பதிலைத் தெளிவானது எனக் குறிக்கவில்லை. இதை உள்ளிட்டால் செவிலியர் பணி எழுப்பப்பட்டு ஓட்டம் முடியும். | ok |
 | `backfill.reply.screening` | Rules screening | விதிகள் பரிசோதனை | ok |
+| `backfill.reply.storedTitle` | Or pick a reply that was stored earlier | அல்லது முன்பு சேமிக்கப்பட்ட பதிலைத் தேர்ந்தெடுங்கள் | ok |
 | `backfill.reply.suggest` | Suggest a reading | ஒரு புரிதலைப் பரிந்துரை | ok |
 | `backfill.reply.suggested` | Suggested reading (a person confirms) | பரிந்துரைக்கப்பட்ட புரிதல் (ஒருவர் உறுதிசெய்வார்) | ok |
 | `backfill.reply.suggestion` | Suggested meaning | பரிந்துரைக்கப்பட்ட பொருள் | ok |
@@ -428,6 +440,8 @@ Terms standardised: proposal, resolve / resolved.
 | `backfill.reply.suggestions.question` | Asks a question | கேள்வி கேட்கிறார் | ok |
 | `backfill.reply.suggestions.unclear` | Unclear | தெளிவில்லை | ok |
 | `backfill.reply.title` | The patient's reply | நோயாளியின் பதில் | ok |
+| `backfill.reply.typeLabel` | The patient's reply, as they gave it (by phone or in person) | நோயாளியின் பதில், அவர் கொடுத்தபடியே (தொலைபேசியில் அல்லது நேரில்) | ok |
+| `backfill.reply.typeTitle` | Type what the patient told you | நோயாளி உங்களிடம் சொன்னதைத் தட்டச்சு செய்யுங்கள் | ok |
 | `backfill.reply.why` | Why there is no suggestion | பரிந்துரை ஏன் இல்லை | ok |
 | `backfill.reply.yourCall` | Entering the reply records it as stored. What it means is your decision. | பதிலை உள்ளிடுவது அதைச் சேமிக்கப்பட்டதாகப் பதிவு செய்யும். அதன் பொருள் உங்கள் முடிவு. | ok |
 | `backfill.replyEntered` | The reply was entered. Finished: {{finished}}. | பதில் உள்ளிடப்பட்டது. முடிந்ததா: {{finished}}. | ok |
@@ -1242,6 +1256,7 @@ Terms standardised: proposal, resolve / resolved.
 | `scheduling.slots` | Slots | நேர இடங்கள் | ok |
 | `scheduling.startsAt` | Starts | தொடக்கம் | ok |
 | `scheduling.title` | Scheduling | நேர அட்டவணை | minor drift |
+| `scheduling.unknownPatient` | This patient is not registered at the clinic that owns this slot. | இந்த நோயாளி இந்த நேர இடத்தைக் கொண்ட மருத்துவமனையில் பதிவு செய்யப்படவில்லை. | ok |
 | `scheduling.visitTypes` | Visit types | வருகை வகைகள் | ok |
 | `scheduling.waitlist` | Waitlist | காத்திருப்புப் பட்டியல் | ok |
 | `scheduling.zoneNote` | Times are in the clinic time zone: {{zone}} (demo placeholder). | நேரங்கள் மருத்துவமனையின் நேர மண்டலத்தில் உள்ளன: {{zone}} (டெமோ இடஒதுக்கீடு). | ok |

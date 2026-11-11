@@ -80,7 +80,6 @@
     "close": "Close",
     "reply": {
       "title": "The patient's reply",
-      "note": "Pick the stored reply, read it, and confirm what to enter. A suggested reading is only a suggestion: you decide. The red-flag rules read the reply first.",
       "none": "No stored reply was found for this patient. The reply has to be stored first; this console cannot store one yet. If none came, choose No reply came.",
       "pick": "Stored messages from this patient's appointments thread",
       "read": "Read this message",

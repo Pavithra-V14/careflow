@@ -33,9 +33,13 @@ for (const lang of LANGS) {
     await page.locator('main tbody tr').first().getByRole('button').nth(2).click();
     await page.locator('section[aria-labelledby^="bf-"] .toolbar button').first().click(); // Send
     await page.getByRole('dialog').locator('.dialog-actions button').nth(1).click();
-    await expect(page.locator('section[aria-labelledby^="bf-"] fieldset input[type=radio]')).toBeVisible();
-    await page.locator('section[aria-labelledby^="bf-"] fieldset input[type=radio]').check();
-    await page.locator('section[aria-labelledby^="bf-"] p button').nth(1).click(); // Suggest a reading
+    await expect(page.locator('section[aria-labelledby^="bf-"] textarea')).toBeVisible();
+    // Type the reply, confirm saving it: the text leaves the page and the saved message is picked.
+    await page.locator('section[aria-labelledby^="bf-"] textarea').fill('Typed reply words');
+    await page.getByRole('button', { name: lang === 'en' ? 'Save the reply' : /பதிலைச் சேமி/ }).first().click();
+    await page.getByRole('dialog').locator('.dialog-actions button').nth(1).click();
+    await expect(page.locator('section[aria-labelledby^="bf-"] textarea')).toHaveValue('');
+    await page.locator('section[aria-labelledby^="bf-"] p button').nth(2).click(); // Suggest a reading
     await expect(page.locator('section[aria-labelledby^="bf-"] dl.facts').nth(1)).toBeVisible();
     await sweep(page, 'f12-backfill-reply', lang);
   });

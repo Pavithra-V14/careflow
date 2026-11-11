@@ -205,7 +205,9 @@ either the hospital's id on a public configuration route, or the clinic implied 
 be on the clinic's list but no route returns the list, so the form takes a code limited to its shape and the backend answers 422 if it is
 not on the list. A route that lists the categories (with labels) would let the form show a picklist.
 
-### 16. A route to store the patient's typed reply: DONE (2026-11-11)
+### 16. A route to store the patient's typed reply: DONE (2026-11-12)
+
+`POST /v1/staff/scheduling/offers/replies` is in the snapshot and the offer run uses it: front desk types the reply, confirms, and the returned `message_id` goes to the interpret and reply steps. The original request, kept for the record:: DONE (2026-11-11)
 
 The backend added `POST /v1/staff/scheduling/offers/replies` (front desk; body `{clinic_id, patient_id, text}`; 201 `{message_id, thread_id, created, screening_id, outcome}`). The text is stored encrypted as a patient message in the appointments thread and screened by the red-flag rules in the same call; use `message_id` in the backfill reply and interpret-reply. The original request follows.
 
@@ -228,6 +230,13 @@ A route to record a staff-entered reply (topic appointments, sender recorded, au
 3. Confirm in the browser's network tab before changing anything: the 404 response body of the Hold request should read `{"detail":"unknown patient for this clinic"}`. If it reads `{"detail":"not found"}` instead, tell the backend window: that would mean the slot itself is not visible and this finding is wrong.
 
 **Backend status.** The refusal is correct, so it is unchanged. What the backend added (2026-11-11): an optional `clinic_id` query parameter on `GET /v1/staff/scheduling/slots`, `/bookings`, `/holds` and `/waitlist`. Pass the active clinic's id and only that clinic's rows come back; a clinic you cannot read (or that does not exist) is the one 404. Without it the lists still span every readable clinic. Not confirmed against live data (live tests run only in CI); the reasoning is from the code and the screenshots.
+
+### 17 (frontend status). Item 17 is fixed on the console side
+
+The console now shows only the active clinic's rows in the slot, booking, hold, waitlist and offer lists and in the reference lists (providers,
+locations, visit types, priority levels), and says "This patient is not registered at the clinic that owns this slot" for the 404 detail
+"unknown patient for this clinic". Request: when `GET .../slots`, `.../bookings`, `.../holds`, `.../waitlist` and `.../offers` take an optional
+`clinic_id` query parameter, say so in the snapshot and the console will send it as well (the client-side filter stays as a guard).
 
 ## Decisions recorded here for later readers
 

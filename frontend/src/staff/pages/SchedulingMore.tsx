@@ -13,11 +13,18 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Badge, PlaceholderNote, ShortId, Time, useLang, useWord } from '../ui/bits';
 import { NotAvailableToRole, ProblemText, QueryView } from '../ui/states';
 import { formatNumber } from '../../shared/i18n/format';
+import { inClinic } from '../ui/clinic';
 import { BackfillPanel } from './BackfillPanel';
 import { clinicLocalToIso } from '../../shared/clinicTime';
 import { ZoneNote } from '../components/ZoneNote';
 
 type Slot = components['schemas']['SlotOut'];
+
+/** A 404 from hold, book or join means the patient is not a patient of the clinic that owns the slot. The backend says so; the console says it plainly. */
+const useSlotDetails = (): Record<string, string> => {
+  const { t } = useTranslation();
+  return { 'unknown patient for this clinic': t('scheduling.unknownPatient') };
+};
 
 // ---- shared helpers --------------------------------------------------------------------------------------------------
 
@@ -25,9 +32,12 @@ type Slot = components['schemas']['SlotOut'];
  * How a failed write is told inside its dialog. 403 is the shared "not available to your role"; 409 is a normal outcome
  * (something changed under you), so it is a calm status and not an alert; anything else is a fixed message per kind.
  */
-function WriteProblem({ problem, conflict, invalid }: { problem: ApiProblem | null; conflict?: string; invalid?: string }) {
+function WriteProblem({ problem, conflict, invalid, details = {} }: { problem: ApiProblem | null; conflict?: string; invalid?: string; details?: Record<string, string> }) {
   const { t } = useTranslation();
   if (!problem) return null;
+  // A backend phrase this screen knows, said in plain words (the phrase itself is never shown).
+  const known = problem.detail !== null ? details[problem.detail] : undefined;
+  if (known) return <p role="status">{known}</p>;
   if (problem.kind === 'forbidden') return <NotAvailableToRole />;
   if (problem.kind === 'conflict') return <p role="status">{conflict ?? t('scheduling.conflict')}</p>;
   if (problem.kind === 'invalid' && invalid) return <p role="alert">{invalid}</p>;
@@ -46,9 +56,10 @@ const nameOf = <T,>(items: T[] | undefined, id: string, idOf: (i: T) => string, 
 /** The three reference lists, shared by several tabs under the same query keys the reference tabs use. */
 function useReferences() {
   const { api } = useAuth();
-  const providers = useApiQuery(['providers', false], () => unwrap(api.listProviders(false)));
-  const locations = useApiQuery(['locations', false], () => unwrap(api.listLocations(false)));
-  const visitTypes = useApiQuery(['visitTypes', false], () => unwrap(api.listVisitTypes(false)));
+  const { active } = useSession();
+  const providers = useApiQuery(['providers', false], async () => inClinic(await unwrap(api.listProviders(false)), active.clinicId));
+  const locations = useApiQuery(['locations', false], async () => inClinic(await unwrap(api.listLocations(false)), active.clinicId));
+  const visitTypes = useApiQuery(['visitTypes', false], async () => inClinic(await unwrap(api.listVisitTypes(false)), active.clinicId));
   return { providers: providers.data?.items, locations: locations.data?.items, visitTypes: visitTypes.data?.items };
 }
 
@@ -84,7 +95,7 @@ const Refresh = ({ onClick, busy }: { onClick: () => void; busy: boolean }) => {
 export function SlotsList() {
   const { t } = useTranslation();
   const { api } = useAuth();
-  const { hasRole } = useSession();
+  const { active, hasRole } = useSession();
   const word = useWord();
   const queryClient = useQueryClient();
   const refs = useReferences();
@@ -94,7 +105,7 @@ export function SlotsList() {
   const [adding, setAdding] = useState(false);
   const [offerFor, setOfferFor] = useState<Slot | null>(null);
   const [done, setDone] = useState<string | null>(null);
-  const query = useApiQuery(['slots', providerId, locationId], () => unwrap(api.listSlots({ providerId, locationId })));
+  const query = useApiQuery(['slots', providerId, locationId], async () => inClinic(await unwrap(api.listSlots({ providerId, locationId })), active.clinicId));
 
   const canAct = hasRole(CAN_SCHEDULE);
   return (
@@ -219,6 +230,7 @@ export function SlotsList() {
 
 function HoldDialog({ slot, onClose }: { slot: Slot; onClose: (ok: boolean) => void }) {
   const { t } = useTranslation();
+  const details = useSlotDetails();
   const { api } = useAuth();
   const [minutes, setMinutes] = useState('');
   const [patient, setPatient] = useState<string | null>(null);
@@ -239,7 +251,7 @@ function HoldDialog({ slot, onClose }: { slot: Slot; onClose: (ok: boolean) => v
         hold.reset();
         onClose(false);
       }}
-      status={<WriteProblem problem={hold.error} />}
+      status={<WriteProblem problem={hold.error} details={details} />}
     >
       <p>{t('scheduling.holdBody')}</p>
       {/* Nothing is filled in for the person: the length of a hold is theirs to enter. */}
@@ -270,6 +282,7 @@ function HoldDialog({ slot, onClose }: { slot: Slot; onClose: (ok: boolean) => v
 
 function BookDialog({ slot, onClose }: { slot: Slot; onClose: (ok: boolean) => void }) {
   const { t } = useTranslation();
+  const details = useSlotDetails();
   const { api } = useAuth();
   const [patient, setPatient] = useState<string | null>(null);
   const book = useIdempotentWrite(
@@ -287,7 +300,7 @@ function BookDialog({ slot, onClose }: { slot: Slot; onClose: (ok: boolean) => v
         book.reset();
         onClose(false);
       }}
-      status={<WriteProblem problem={book.error} />}
+      status={<WriteProblem problem={book.error} details={details} />}
     >
       <p>{t('scheduling.bookBody')}</p>
       <PatientPicker
@@ -486,13 +499,13 @@ export function AddReference({ kind }: { kind: 'provider' | 'location' | 'visitT
 export function BookingsList() {
   const { t } = useTranslation();
   const { api } = useAuth();
-  const { hasRole } = useSession();
+  const { active, hasRole } = useSession();
   const queryClient = useQueryClient();
   const refs = useReferences();
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<(components['schemas']['CancelOut'] & { visitTypeId: string | null }) | null>(null);
   const [preparing, setPreparing] = useState(false);
-  const query = useApiQuery(['bookings'], () => unwrap(api.listBookings()));
+  const query = useApiQuery(['bookings'], async () => inClinic(await unwrap(api.listBookings()), active.clinicId));
   const cancel = useIdempotentWrite(
     (bookingId: string, key) => unwrap(api.cancelBooking(bookingId, { idempotencyKey: key })),
     (result) => {
@@ -603,14 +616,14 @@ export function BookingsList() {
 export function WaitlistList() {
   const { t } = useTranslation();
   const { api } = useAuth();
-  const { hasRole } = useSession();
+  const { active, hasRole } = useSession();
   const queryClient = useQueryClient();
   const refs = useReferences();
   const lang = useLang();
   const [visitType, setVisitType] = useState('');
   const [joining, setJoining] = useState(false);
   const [done, setDone] = useState(false);
-  const query = useApiQuery(['waitlist', visitType], () => unwrap(api.listWaitlist(visitType || undefined)));
+  const query = useApiQuery(['waitlist', visitType], async () => inClinic(await unwrap(api.listWaitlist(visitType || undefined)), active.clinicId));
   return (
     <>
       <div className="toolbar">
@@ -681,11 +694,13 @@ export function WaitlistList() {
 
 function JoinDialog({ refs, onClose }: { refs: Refs; onClose: (ok: boolean) => void }) {
   const { t } = useTranslation();
+  const details = useSlotDetails();
   const { api } = useAuth();
   const [patient, setPatient] = useState<string | null>(null);
   const [visitType, setVisitType] = useState('');
   const [priority, setPriority] = useState('');
-  const levels = useApiQuery(['priorityLevels', false], () => unwrap(api.listPriorityLevels(false)));
+  const { active } = useSession();
+  const levels = useApiQuery(['priorityLevels', false], async () => inClinic(await unwrap(api.listPriorityLevels(false)), active.clinicId));
   const join = useIdempotentWrite(
     (_: void, key) => unwrap(api.joinWaitlist({ patient_id: patient as string, visit_type_id: visitType, clinical_priority: priority }, { idempotencyKey: key })),
     () => onClose(true),
@@ -702,7 +717,7 @@ function JoinDialog({ refs, onClose }: { refs: Refs; onClose: (ok: boolean) => v
         join.reset();
         onClose(false);
       }}
-      status={<WriteProblem problem={join.error} conflict={t('scheduling.joinConflict')} />}
+      status={<WriteProblem problem={join.error} conflict={t('scheduling.joinConflict')} details={details} />}
     >
       <p>{t('scheduling.joinBody')}</p>
       <PatientPicker
@@ -764,7 +779,7 @@ async function fetchOfferText(api: ReturnType<typeof useAuth>['api'], offer: Off
 export function OffersList() {
   const { t } = useTranslation();
   const { api } = useAuth();
-  const { hasRole } = useSession();
+  const { active, hasRole } = useSession();
   const queryClient = useQueryClient();
   const word = useWord();
   const [state, setState] = useState<OfferState | ''>('');
@@ -772,7 +787,7 @@ export function OffersList() {
   const [marked, setMarked] = useState(false);
   const [copied, setCopied] = useState<'ok' | 'manual' | null>(null);
   const [manualText, setManualText] = useState<string | null>(null);
-  const query = useApiQuery(['offers', state], () => unwrap(api.listOffers(state || undefined)));
+  const query = useApiQuery(['offers', state], async () => inClinic(await unwrap(api.listOffers(state || undefined)), active.clinicId));
 
   const copy = useMutation<'ok' | 'manual', ApiProblem, Offer>({
     gcTime: 0,
