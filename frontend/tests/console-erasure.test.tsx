@@ -34,7 +34,7 @@ describe('erasure: approve and cancel', () => {
     expect(writes(calls)).toHaveLength(0);
     expect(within(dialog).getByText(/removes the patient's encrypted name, date of birth and phone number/)).toBeInTheDocument();
     expect(within(dialog).getByText(/keeps the request and its audit rows/)).toBeInTheDocument();
-    expect(within(dialog).getByText(/fresh authenticator code/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/recent authenticator code/)).toBeInTheDocument();
     expect(dialog.querySelector('[data-placeholder]')).not.toBeNull(); // the wording is marked as awaiting the privacy owner
     await user.click(within(dialog).getByRole('button', { name: 'Approve' }));
     expect(await screen.findByText('Approved. The identity was erased.')).toBeInTheDocument();
