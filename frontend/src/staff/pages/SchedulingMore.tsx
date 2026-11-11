@@ -57,9 +57,9 @@ const nameOf = <T,>(items: T[] | undefined, id: string, idOf: (i: T) => string, 
 function useReferences() {
   const { api } = useAuth();
   const { active } = useSession();
-  const providers = useApiQuery(['providers', false], async () => inClinic(await unwrap(api.listProviders(false)), active.clinicId));
-  const locations = useApiQuery(['locations', false], async () => inClinic(await unwrap(api.listLocations(false)), active.clinicId));
-  const visitTypes = useApiQuery(['visitTypes', false], async () => inClinic(await unwrap(api.listVisitTypes(false)), active.clinicId));
+  const providers = useApiQuery(['providers', false], async () => inClinic(await unwrap(api.listProviders(false, active.clinicId)), active.clinicId));
+  const locations = useApiQuery(['locations', false], async () => inClinic(await unwrap(api.listLocations(false, active.clinicId)), active.clinicId));
+  const visitTypes = useApiQuery(['visitTypes', false], async () => inClinic(await unwrap(api.listVisitTypes(false, active.clinicId)), active.clinicId));
   return { providers: providers.data?.items, locations: locations.data?.items, visitTypes: visitTypes.data?.items };
 }
 
@@ -700,7 +700,7 @@ function JoinDialog({ refs, onClose }: { refs: Refs; onClose: (ok: boolean) => v
   const [visitType, setVisitType] = useState('');
   const [priority, setPriority] = useState('');
   const { active } = useSession();
-  const levels = useApiQuery(['priorityLevels', false], async () => inClinic(await unwrap(api.listPriorityLevels(false)), active.clinicId));
+  const levels = useApiQuery(['priorityLevels', false], async () => inClinic(await unwrap(api.listPriorityLevels(false, active.clinicId)), active.clinicId));
   const join = useIdempotentWrite(
     (_: void, key) => unwrap(api.joinWaitlist({ patient_id: patient as string, visit_type_id: visitType, clinical_priority: priority }, { idempotencyKey: key })),
     () => onClose(true),
@@ -787,7 +787,7 @@ export function OffersList() {
   const [marked, setMarked] = useState(false);
   const [copied, setCopied] = useState<'ok' | 'manual' | null>(null);
   const [manualText, setManualText] = useState<string | null>(null);
-  const query = useApiQuery(['offers', state], async () => inClinic(await unwrap(api.listOffers(state || undefined)), active.clinicId));
+  const query = useApiQuery(['offers', state], async () => inClinic(await unwrap(api.listOffers(state || undefined, active.clinicId)), active.clinicId));
 
   const copy = useMutation<'ok' | 'manual', ApiProblem, Offer>({
     gcTime: 0,

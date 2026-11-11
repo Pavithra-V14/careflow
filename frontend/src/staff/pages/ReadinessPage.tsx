@@ -8,6 +8,7 @@ import { useApiQuery, useIdempotentWrite } from '../hooks';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Badge, PageHeading, ShortId, Time, UUID, useWord } from '../ui/bits';
 import { NotAvailableToRole, ProblemText, QueryView } from '../ui/states';
+import { inClinic } from '../ui/clinic';
 import { useSession } from '../session/SessionContext';
 import { WriteProblem } from '../ui/WriteProblem';
 
@@ -24,7 +25,7 @@ export function ReadinessPage() {
   const { active } = useSession();
   const id = useId();
   const upcoming = useApiQuery(['upcoming-visits'], () => unwrap(api.upcomingVisits(active.clinicId)));
-  const types = useApiQuery(['visitTypes', false], () => unwrap(api.listVisitTypes(false)));
+  const types = useApiQuery(['visitTypes', false], async () => inClinic(await unwrap(api.listVisitTypes(false, active.clinicId)), active.clinicId));
   const [text, setText] = useState('');
   const [visitId, setVisitId] = useState<string | null>(null);
   const bad = text.trim() !== '' && !UUID.test(text.trim());

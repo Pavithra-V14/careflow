@@ -5,7 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { unwrap, type ApiProblem } from '../apiState';
 import { useAuth } from '../auth/AuthProvider';
 import { useApiQuery, useIdempotentWrite } from '../hooks';
-import { CAN_CONFIRM_IDENTITY, CAN_REVOKE_IDENTITY } from '../sections';
+import { CAN_CONFIRM_IDENTITY, CAN_REVOKE_IDENTITY, CAN_VIEW_FULL_RECORD } from '../sections';
+import { PatientFullRecord } from './PatientFullRecord';
 import { useSession } from '../session/SessionContext';
 import { CareLinks } from '../components/CareLinks';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -103,6 +104,8 @@ function RecordView({ patientId }: { patientId: string }) {
             )}
 
             <CareLinks patientId={patientId} />
+
+            {hasRole(CAN_VIEW_FULL_RECORD) && !p.merged_into && <PatientFullRecord patientId={patientId} />}
 
             {/* Front desk only, and only for a record that is currently verified. The backend decides. */}
             {hasRole(CAN_REVOKE_IDENTITY) && p.verified && !p.merged_into && <IdentityRevoke patientId={patientId} onDone={setRevoked} />}

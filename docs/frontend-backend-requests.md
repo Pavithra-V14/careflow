@@ -236,7 +236,21 @@ A route to record a staff-entered reply (topic appointments, sender recorded, au
 The console now shows only the active clinic's rows in the slot, booking, hold, waitlist and offer lists and in the reference lists (providers,
 locations, visit types, priority levels), and says "This patient is not registered at the clinic that owns this slot" for the 404 detail
 "unknown patient for this clinic". The backend has added the optional `clinic_id` to the slot, booking, hold and waitlist lists (2026-11-12) and the console now sends it
-(the client-side filter stays as a guard). Offers and the reference lists take none yet.
+(the client-side filter stays as a guard). The offers and the four reference lists took the same parameter on 2026-11-12 and the console sends it there too.
+
+### 18. A route to list the clinic's erasure reasons (needed before the console can ask for an erasure)
+
+`POST /v1/staff/patients/{patient_id}/erasure-requests` accepts only a reason from the clinic's list (a required setting, `CAREFLOW_ERASE_REASONS`,
+503 while it is unset), but no route returns the list, and the console keeps no list of its own (which reasons a clinic may erase for is a privacy and
+legal decision). Please add a read route like `GET /v1/staff/console/reason-codes` (`{configured, codes[]}`) for front desk of the clinic. Until then the
+console's "Ask for an erasure" shows "not set up" and cannot be submitted. The seam is `src/staff/pages/erasureReasons.ts`.
+
+### 19. Questions from the F9 screens
+
+- The audit route says "an auditor of some clinic" and not admin, so the audit reader is shown to auditors only. Should an admin read it too?
+- `POST /v1/staff/referrals/{document_id}/run` says only "403 if you may not start a run". The console offers Run to front desk, nurse and doctor
+  and lets the backend decide; please say which roles may.
+- The audit rows span every clinic the auditor audits; the console shows them all with the clinic id. Should the route take `clinic_id`?
 
 ## Decisions recorded here for later readers
 

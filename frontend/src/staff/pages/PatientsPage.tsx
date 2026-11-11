@@ -4,7 +4,8 @@ import { useMutation } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ApiProblem, toProblem, unwrap } from '../apiState';
 import { useAuth } from '../auth/AuthProvider';
-import { CAN_SEARCH_PATIENTS } from '../sections';
+import { CAN_REGISTER_PATIENT, CAN_SEARCH_PATIENTS } from '../sections';
+import { RegisterPatient } from './RegisterPatient';
 import { useSession } from '../session/SessionContext';
 import { Badge, PageHeading, ShortId, UUID, useWord } from '../ui/bits';
 import { EmptyState, NotAvailableToRole } from '../ui/states';
@@ -159,6 +160,8 @@ export function PatientsPage() {
             </table>
           </>
         ))}
+
+      {hasRole(CAN_REGISTER_PATIENT) && <RegisterPatient />}
 
       <h2>{t('patients.openTitle')}</h2>
       <form onSubmit={openById} noValidate>

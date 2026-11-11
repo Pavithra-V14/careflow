@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { OPERATIONS, createApi, type Api, type WriteOptions, type ProposeMergeIn, type BeginUploadIn, type RegisterIn, type PatientSearchIn, type SlotIn, type HoldIn, type WaitlistJoinIn, type LocationIn, type ProviderIn, type VisitTypeIn, type CarePlanIn, type ResultIn, type BarrierIn, type EpisodeIn, type InviteIn, type RoleChangeIn, type AutonomySetIn, type VoicePurgeIn, type NoteIn, type BreakGlassOpenIn, type RecoveryRequestIn, type ConsentIn, type ClaimIn, type GrievanceIn, type RecordReplyIn } from '../src/shared/api/client';
+import { OPERATIONS, createApi, type Api, type WriteOptions, type ProposeMergeIn, type BeginUploadIn, type RegisterIn, type PatientSearchIn, type SlotIn, type HoldIn, type WaitlistJoinIn, type LocationIn, type ProviderIn, type VisitTypeIn, type CarePlanIn, type ResultIn, type BarrierIn, type EpisodeIn, type InviteIn, type RoleChangeIn, type AutonomySetIn, type VoicePurgeIn, type NoteIn, type BreakGlassOpenIn, type RecoveryRequestIn, type ConsentIn, type ClaimIn, type GrievanceIn, type RecordReplyIn, type IngestIn } from '../src/shared/api/client';
 
 // Contract test (BUILD-SPEC 21): the client is driven for real; only the network transport is captured.
 // It asserts every method targets an endpoint that exists in the backend's schema, with its required
@@ -125,6 +125,14 @@ const INVOCATIONS: Record<keyof typeof OPERATIONS, (api: Api, o?: WriteOptions) 
   replyBackfill: (api, o) => api.replyBackfill(ID, { outcome: 'timed_out' }, o),
   interpretReply: (api, o) => api.interpretReply(ID, o),
   recordReply: (api, o) => api.recordReply(body<RecordReplyIn>('RecordReplyIn'), o),
+  readAudit: (api) => api.readAudit({ action: 'x', limit: 5 }),
+  registerPatient: (api, o) => api.registerPatient(body<IngestIn>('IngestIn'), o),
+  listErasureRequests: (api) => api.listErasureRequests('requested'),
+  requestErasure: (api, o) => api.requestErasure(ID, 'x', o),
+  approveErasure: (api, o) => api.approveErasure(ID, o),
+  cancelErasure: (api, o) => api.cancelErasure(ID, o),
+  startReferralRun: (api, o) => api.startReferralRun(ID, o),
+  viewPatientRecord: (api) => api.viewPatientRecord(ID),
   listThreads: (api) => api.listThreads(ID, 'appointments'),
   listThreadMessages: (api) => api.listThreadMessages(ID),
   publicClinic: (api) => api.publicClinic(),

@@ -40,13 +40,13 @@ for (const lang of LANGS) {
     await openConsole(page, 'front_desk', lang);
     await go(page, '#/patients', READY[lang].patients as string);
     await page.locator('input[type=text]').first().fill('Test Person');
-    await page.locator('input[type=date]').fill('1990-02-03');
+    await page.locator('input[type=date]').first().fill('1990-02-03');
     await page.locator('form button[type=submit]').first().click();
     await expect(page.locator('table')).toBeVisible();
     await sweep(page, 'patients-results', lang);
     await go(page, `#/patients/${ID.patient}`, ID.patient);
     await sweep(page, 'patient-record', lang);
-    await page.locator('main .toolbar button').click();
+    await page.locator('main .toolbar button').first().click();
     await expect(page.getByRole('dialog')).toBeVisible();
     await sweep(page, 'patient-confirm-dialog', lang);
   });
@@ -187,8 +187,8 @@ test('roles: an admin sees Tasks, Scheduling, Alerts, Dashboard, Care and Admin 
   await expect(page.locator('main')).toContainText('This is not available to your role.');
 });
 
-test('roles: an auditor has no sections and is told so', async ({ page }) => {
-  await openConsole(page, 'auditor', 'en');
+test('roles: a role with no sections is told so', async ({ page }) => {
+  await openConsole(page, 'business_owner', 'en');
   await expect(page.locator('main')).toContainText('No sections are available to your role.');
   await check(page, 'no-sections', 'en', VIEWPORTS[2]);
 });

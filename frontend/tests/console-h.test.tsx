@@ -81,6 +81,20 @@ describe('item 17: the lists show the active clinic only', () => {
     expect(await asked('/scheduling/waitlist', '/v1/staff/scheduling/waitlist')).toEqual([CLINIC_A]);
   });
 
+  it('asks the backend for the active clinic on the offers list and on the reference lists', async () => {
+    const asked = async (hash: string, paths: string[]) => {
+      const { calls, unmount } = await openConsole({ hash, routes: [...refs, ['get', '/v1/staff/scheduling/offers', () => list([])]] });
+      for (const path of paths) await waitFor(() => expect(calls.some((c) => c.path === path)).toBe(true));
+      const ids = paths.map((path) => calls.filter((c) => c.path === path).map((c) => c.query.get('clinic_id')));
+      unmount();
+      return ids;
+    };
+    expect(await asked('/scheduling/offers', ['/v1/staff/scheduling/offers', '/v1/staff/scheduling/visit-types'])).toEqual([[CLINIC_A], [CLINIC_A]]);
+    expect(await asked('/scheduling/providers', ['/v1/staff/scheduling/providers'])).toEqual([[CLINIC_A]]);
+    expect(await asked('/scheduling/locations', ['/v1/staff/scheduling/locations'])).toEqual([[CLINIC_A]]);
+    expect(await asked('/scheduling/priority-levels', ['/v1/staff/scheduling/priority-levels'])).toEqual([[CLINIC_A]]);
+  });
+
   it('the reference lists show this clinic only', async () => {
     await openConsole({ hash: '/scheduling/providers', routes: [...refs] });
     await screen.findByText('Provider A');

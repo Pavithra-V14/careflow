@@ -16,6 +16,9 @@ type TaskQuery = NonNullable<paths['/v1/staff/review-tasks']['get']['parameters'
 type ReviewTaskStatus = TaskQuery['status'];
 type TaskRole = NonNullable<TaskQuery['assigned_role']>;
 export type RecordReplyIn = components['schemas']['RecordReplyIn'];
+export type IngestIn = components['schemas']['IngestIn'];
+export type AuditFilter = { action?: string; resourceType?: string; resourceId?: string; actorId?: string; since?: string; until?: string; beforeId?: number; limit?: number };
+export type ErasureStatus = 'requested' | 'erased' | 'cancelled';
 export type BackfillAction = components['schemas']['BackfillDecideIn']['action'];
 type BackfillReplyIn = components['schemas']['BackfillReplyIn'];
 type ThreadQuery = NonNullable<paths['/v1/staff/messages/threads']['get']['parameters']['query']>;
@@ -122,6 +125,15 @@ export const OPERATIONS = {
   replyBackfill: { method: 'post', path: '/v1/staff/scheduling/backfills/{slot_id}/reply' },
   interpretReply: { method: 'post', path: '/v1/staff/scheduling/offers/interpret-reply' },
   recordReply: { method: 'post', path: '/v1/staff/scheduling/offers/replies' },
+  // ---- audit reader, register a patient, erasure, referral run, decrypted record view ----
+  readAudit: { method: 'get', path: '/v1/staff/audit' },
+  registerPatient: { method: 'post', path: '/v1/staff/patients' },
+  listErasureRequests: { method: 'get', path: '/v1/staff/erasure-requests' },
+  requestErasure: { method: 'post', path: '/v1/staff/patients/{patient_id}/erasure-requests' },
+  approveErasure: { method: 'post', path: '/v1/staff/erasure-requests/{request_id}/approve' },
+  cancelErasure: { method: 'post', path: '/v1/staff/erasure-requests/{request_id}/cancel' },
+  startReferralRun: { method: 'post', path: '/v1/staff/referrals/{document_id}/run' },
+  viewPatientRecord: { method: 'get', path: '/v1/staff/patients/{patient_id}/view' },
   listThreads: { method: 'get', path: '/v1/staff/messages/threads' },
   listThreadMessages: { method: 'get', path: '/v1/staff/messages/threads/{thread_id}/messages' },
   // ---- lists that replace typing: clinic, grievance categories, break-glass reasons and grants, upcoming visits ----
@@ -281,7 +293,7 @@ export function createApi(options: ApiOptions) {
     },
   });
   const key = (o?: WriteOptions): string => o?.idempotencyKey ?? newKey();
-  const inactive = (include: boolean) => (include ? { include_inactive: true } : {});
+  const inactive = (include: boolean, clinicId?: string) => ({ ...(include ? { include_inactive: true } : {}), ...(clinicId ? { clinic_id: clinicId } : {}) });
 
   return {
     getMe: () => client.GET('/v1/iam/me'),
@@ -326,10 +338,10 @@ export function createApi(options: ApiOptions) {
     openPatient: (patientId: string) => client.GET('/v1/staff/patients/{patient_id}', { params: { path: { patient_id: patientId } } }),
     confirmIdentity: (patientId: string, o?: WriteOptions) =>
       client.POST('/v1/staff/patients/{patient_id}/confirm-identity', { params: { path: { patient_id: patientId }, header: { 'X-Idempotency-Key': key(o) } } }),
-    listProviders: (includeInactive = false) => client.GET('/v1/staff/scheduling/providers', { params: { query: inactive(includeInactive) } }),
-    listLocations: (includeInactive = false) => client.GET('/v1/staff/scheduling/locations', { params: { query: inactive(includeInactive) } }),
-    listVisitTypes: (includeInactive = false) => client.GET('/v1/staff/scheduling/visit-types', { params: { query: inactive(includeInactive) } }),
-    listPriorityLevels: (includeInactive = false) => client.GET('/v1/staff/scheduling/priority-levels', { params: { query: inactive(includeInactive) } }),
+    listProviders: (includeInactive = false, clinicId?: string) => client.GET('/v1/staff/scheduling/providers', { params: { query: inactive(includeInactive, clinicId) } }),
+    listLocations: (includeInactive = false, clinicId?: string) => client.GET('/v1/staff/scheduling/locations', { params: { query: inactive(includeInactive, clinicId) } }),
+    listVisitTypes: (includeInactive = false, clinicId?: string) => client.GET('/v1/staff/scheduling/visit-types', { params: { query: inactive(includeInactive, clinicId) } }),
+    listPriorityLevels: (includeInactive = false, clinicId?: string) => client.GET('/v1/staff/scheduling/priority-levels', { params: { query: inactive(includeInactive, clinicId) } }),
     listHolds: (status?: HoldStatus, clinicId?: string) => client.GET('/v1/staff/scheduling/holds', { params: { query: { ...(status ? { status } : {}), ...(clinicId ? { clinic_id: clinicId } : {}) } } }),
     releaseHold: (holdId: string, o?: WriteOptions) =>
       client.POST('/v1/staff/scheduling/holds/{hold_id}/release', { params: { path: { hold_id: holdId }, header: { 'X-Idempotency-Key': key(o) } } }),
@@ -367,7 +379,7 @@ export function createApi(options: ApiOptions) {
     listWaitlist: (visitTypeId?: string, clinicId?: string) =>
       client.GET('/v1/staff/scheduling/waitlist', { params: { query: { ...(visitTypeId ? { visit_type_id: visitTypeId } : {}), ...(clinicId ? { clinic_id: clinicId } : {}) } } }),
     joinWaitlist: (body: WaitlistJoinIn, o?: WriteOptions) => client.POST('/v1/staff/scheduling/waitlist/join', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
-    listOffers: (state?: OfferState) => client.GET('/v1/staff/scheduling/offers', { params: { query: state ? { state } : {} } }),
+    listOffers: (state?: OfferState, clinicId?: string) => client.GET('/v1/staff/scheduling/offers', { params: { query: { ...(state ? { state } : {}), ...(clinicId ? { clinic_id: clinicId } : {}) } } }),
     markOfferDelivered: (holdId: string, o?: WriteOptions) =>
       client.POST('/v1/staff/scheduling/offers/{hold_id}/mark-delivered', { params: { path: { hold_id: holdId }, header: { 'X-Idempotency-Key': key(o) } } }),
     createLocation: (body: LocationIn, o?: WriteOptions) => client.POST('/v1/staff/scheduling/locations', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
@@ -399,6 +411,33 @@ export function createApi(options: ApiOptions) {
       client.POST('/v1/staff/scheduling/backfills/{slot_id}/reply', { params: { path: { slot_id: slotId }, header: { 'X-Idempotency-Key': key(o) } }, body }),
     // Stores what a patient told the front desk (encrypted, on the appointments thread; the red-flag rules read it first). Nothing is sent to the patient.
     recordReply: (body: RecordReplyIn, o?: WriteOptions) => client.POST('/v1/staff/scheduling/offers/replies', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    readAudit: (f: AuditFilter = {}) =>
+      client.GET('/v1/staff/audit', {
+        params: {
+          query: {
+            ...(f.action ? { action: f.action } : {}),
+            ...(f.resourceType ? { resource_type: f.resourceType } : {}),
+            ...(f.resourceId ? { resource_id: f.resourceId } : {}),
+            ...(f.actorId ? { actor_id: f.actorId } : {}),
+            ...(f.since ? { since: f.since } : {}),
+            ...(f.until ? { until: f.until } : {}),
+            ...(f.beforeId !== undefined ? { before_id: f.beforeId } : {}),
+            ...(f.limit ? { limit: f.limit } : {}),
+          },
+        },
+      }),
+    registerPatient: (body: IngestIn, o?: WriteOptions) => client.POST('/v1/staff/patients', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    listErasureRequests: (status?: ErasureStatus) => client.GET('/v1/staff/erasure-requests', { params: { query: status ? { status } : {} } }),
+    requestErasure: (patientId: string, reason: string, o?: WriteOptions) =>
+      client.POST('/v1/staff/patients/{patient_id}/erasure-requests', { params: { path: { patient_id: patientId }, header: { 'X-Idempotency-Key': key(o) } }, body: { reason } }),
+    approveErasure: (requestId: string, o?: WriteOptions) =>
+      client.POST('/v1/staff/erasure-requests/{request_id}/approve', { params: { path: { request_id: requestId }, header: { 'X-Idempotency-Key': key(o) } } }),
+    cancelErasure: (requestId: string, o?: WriteOptions) =>
+      client.POST('/v1/staff/erasure-requests/{request_id}/cancel', { params: { path: { request_id: requestId }, header: { 'X-Idempotency-Key': key(o) } } }),
+    startReferralRun: (documentId: string, o?: WriteOptions) =>
+      client.POST('/v1/staff/referrals/{document_id}/run', { params: { path: { document_id: documentId }, header: { 'X-Idempotency-Key': key(o) } } }),
+    // An audited read of the decrypted record: called only from a click, and its result is never cached.
+    viewPatientRecord: (patientId: string) => client.GET('/v1/staff/patients/{patient_id}/view', { params: { path: { patient_id: patientId } } }),
     interpretReply: (messageId: string, o?: WriteOptions) =>
       client.POST('/v1/staff/scheduling/offers/interpret-reply', { params: { header: { 'X-Idempotency-Key': key(o) } }, body: { message_id: messageId } }),
     listThreads: (patientId: string, topic: ThreadTopic) => client.GET('/v1/staff/messages/threads', { params: { query: { patient_id: patientId, topic } } }),
