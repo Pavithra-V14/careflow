@@ -631,8 +631,8 @@ async def test_many_simultaneous_writers_for_one_window_produce_exactly_one_slot
                 await conn.execute("select set_config('request.jwt.claims', $1, true)", claims)
                 await conn.execute(SLOT, clinic, prov, loc, vt, T0, "2031-03-03 10:30+00", f"many-{i}-{_u()}")
             return "won"
-        except asyncpg.ExclusionViolationError:
-            return "blocked"
+        except (asyncpg.ExclusionViolationError, asyncpg.DeadlockDetectedError):
+            return "blocked"  # (eight identical inserts can deadlock on the exclusion check: PostgreSQL aborts one, which writes nothing; the invariant is still exactly one slot)
         finally:
             await conn.close()
 
