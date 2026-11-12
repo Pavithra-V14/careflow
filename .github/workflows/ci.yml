@@ -193,17 +193,16 @@ jobs:
           - shard: 2  # matrix part 2 of 3 + rotation 319 + binding 44 + staff roles 19
             matrix_part: "2/3"
             files: >-
+              tests/test_rls_spend_and_approval_live.py
+              tests/test_scheduling_live.py
               tests/test_api_role_matrix.py
               tests/test_patient_binding_live.py
               tests/test_staff_roles_concurrency_live.py
               tests/test_rotation_live.py
-          - shard: 7  # matrix part 3 of 3 + queue 370 + spend 362 + scheduling 299
+          - shard: 7  # matrix part 3 of 3 (run 43162154517 measured 58 min with queue 370 + spend 362 + scheduling 299, which moved to shards 2 and 5 on 2026-11-12)
             matrix_part: "3/3"
             files: >-
               tests/test_api_role_matrix.py
-              tests/test_queue_live.py
-              tests/test_rls_spend_and_approval_live.py
-              tests/test_scheduling_live.py
           - shard: 3  # about 41 min (run 41842559711 measured 51.0 min job time, 2745 s of tests: referrals 1316 + identity 483 + mpi worker 315 + triage 234 + checkpoints 225 + msg 212 + docs 209 + real token 32 + storage policies 20; mpi worker and triage moved to shard 6 on 2026-11-04, about 550 s). The secret key reaches THIS shard only (storage policies and real token stay here).
             matrix_part: ""
             files: >-
@@ -235,6 +234,8 @@ jobs:
           - shard: 5  # the ACTIVE ROLE (docs/design/active-role.md): the database tests (never committed) and PART 1 of 3 of the header dimension of every staff route (its own seeded world). Runs 41652369869 and 42258778879 measured 58 and 52 to 57 minutes for two parts, so it is three parts (shards 5, 6, 8). 2026-11-11: shard 6 hit the 60-minute limit twice (13:10 to 14:10, cancelled at 78%), shard 5 took 32 minutes, so eight database files (hardening, replica-mode guards, origin oracle, backfill durable, canary document, care gaps, voice, alerts) moved from shard 6 to shard 5.
             matrix_part: "1/4"
             files: >-
+              tests/test_visit_readiness_db_live.py
+              tests/test_queue_live.py
               tests/test_active_role_live.py
               tests/test_active_role_matrix_live.py
           - shard: 6  # PART 2 of 3 of the header dimension, plus the mpi worker and triage RLS files moved from shard 3
@@ -260,12 +261,11 @@ jobs:
               tests/test_voice_admin_db_live.py
               tests/test_care_gap_producers_db_live.py
               tests/test_patient_portal_db_live.py
-              tests/test_care_journey_db_live.py
-              tests/test_phase12_db_live.py
-              tests/test_visit_readiness_db_live.py
           - shard: 9  # PART 4 of 4 of the header dimension, plus the eight database files that were in shard 5 (hardening, replica-mode guards, origin oracle, backfill durable, canary document, care gaps, voice, alerts). Added 2026-11-12: shards 5 and 6 measured 57 and 52 minutes of a 60-minute limit (run 43036262441).
             matrix_part: "4/4"
             files: >-
+              tests/test_phase12_db_live.py
+              tests/test_care_journey_db_live.py
               tests/test_active_role_matrix_live.py
               tests/test_hardening_0065_db_live.py
               tests/test_guards_replica_mode_db_live.py
