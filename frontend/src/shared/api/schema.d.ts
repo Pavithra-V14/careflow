@@ -426,7 +426,7 @@ export interface paths {
         };
         /**
          * Read Audit Log
-         * @description Audit rows of the clinics you audit, newest first. 403 unless you are an auditor of some clinic.
+         * @description Audit rows of the clinics you audit, newest first; `clinic_id` narrows to one clinic. 403 unless you are an auditor of some clinic, 404 if you give a clinic you do not audit.
          */
         get: operations["read_audit_log_v1_staff_audit_get"];
         put?: never;
@@ -967,6 +967,26 @@ export interface paths {
          * @description Erasure requests of the clinics where you are front desk, newest first (`status` filters; open ones by default). Ids, a reason code and times only. 403 unless you are front desk somewhere.
          */
         get: operations["list_erasure_requests_v1_staff_erasure_requests_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/erasure-requests/reasons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Erasure Reasons
+         * @description The reasons a patient may be erased for (the clinic's closed list, the required setting CAREFLOW_ERASE_REASONS), sorted, for the request form. 403 unless you are front desk somewhere, 503 while the list is not set.
+         */
+        get: operations["erasure_reasons_v1_staff_erasure_requests_reasons_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3483,6 +3503,11 @@ export interface components {
             episode_id: string;
             /** Episode Rule Ids */
             episode_rule_ids: string[];
+        };
+        /** EraseReasonsOut */
+        EraseReasonsOut: {
+            /** Reasons */
+            reasons: string[];
         };
         /** EraseRequestIn */
         EraseRequestIn: {
@@ -7018,6 +7043,7 @@ export interface operations {
                 until?: string | null;
                 before_id?: number | null;
                 limit?: number;
+                clinic_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -7045,6 +7071,15 @@ export interface operations {
             };
             /** @description Authenticated, but this role may not do this. Fixed body. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8964,6 +8999,53 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+        };
+    };
+    erasure_reasons_v1_staff_erasure_requests_reasons_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EraseReasonsOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };

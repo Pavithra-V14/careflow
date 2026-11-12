@@ -127,6 +127,7 @@ export function createConsoleApi(role: string, options: ConsoleOptions = {}, ses
     }
     if (method === 'POST' && path === '/v1/staff/patients') return role === 'front_desk' ? ok({ candidate_ids: [ID.patient2], outcome: 'review', patient_id: ID.patient }) : no(403);
     if (method === 'POST' && m(/^\/v1\/staff\/referrals\/[^/]+\/run$/)) return READERS.includes(role) ? ok({ job_id: ID.candidate, replayed: false }) : no(403);
+    if (method === 'GET' && path === '/v1/staff/erasure-requests/reasons') return role === 'front_desk' ? ok({ reasons: ['reason_x', 'reason_y'] }) : no(403);
     if (method === 'GET' && path === '/v1/staff/erasure-requests') {
       if (role !== 'front_desk') return no(403);
       const base = { approved_by: null, created_at: '2026-11-10T04:00:00Z', decided_at: null, patient_id: ID.patient, reason: 'reason_x', status: 'requested' };

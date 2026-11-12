@@ -6,16 +6,15 @@ import { ID, LEAK, fail, list, openConsole, writes, type Routes } from './helper
 
 // MOCK-ONLY. The erasure write buttons are OFF in every real build (tests/flags.test.ts). This file switches the flag ON for the unit
 // environment only, to prove how the screen behaves once the step-up claim spike is recorded: confirmation first, what is erased and
-// what is kept, one idempotency key per intent, a different person to approve, and the step-up prompt. The reasons list has no route
-// yet, so it is faked here through the single seam (erasureReasons.ts).
-const h = vi.hoisted(() => ({ reasons: null as readonly string[] | null }));
+// what is kept, one idempotency key per intent, a different person to approve, and the step-up prompt. The reasons come from
+// GET /v1/staff/erasure-requests/reasons.
 vi.mock('../src/staff/featureFlags', async (original) => ({ ...(await original<typeof import('../src/staff/featureFlags')>()), erasureActionsEnabled: () => true }));
-vi.mock('../src/staff/pages/erasureReasons', () => ({ useErasureReasons: () => h.reasons }));
 
 const req = (over: Record<string, unknown> = {}) => ({ approved_by: null, created_at: '2026-11-10T04:00:00Z', decided_at: null, patient_id: ID.patient, reason: 'reason_x', request_id: ID.task, requested_by: ID.user, status: 'requested', ...over });
 const listRoute = (...rows: unknown[]): Routes[number] => ['get', '/v1/staff/erasure-requests', () => list(rows)];
 const approvePath = `/v1/staff/erasure-requests/${ID.task}/approve`;
 const cancelPath = `/v1/staff/erasure-requests/${ID.task}/cancel`;
+const reasonsRoute = (reasons: string[]): Routes[number] => ['get', '/v1/staff/erasure-requests/reasons', () => json({ reasons })];
 const stepUp = () => json({ detail: 'step-up required' }, 401, { 'WWW-Authenticate': 'step-up' });
 
 describe('erasure: approve and cancel', () => {
@@ -112,21 +111,26 @@ describe('erasure: approve and cancel', () => {
 });
 
 describe('erasure: ask for one', () => {
+  it('asks for the reasons only when the ask form is shown, and says so when it cannot be read', async () => {
+    const { calls } = await openConsole({ hash: '/erasure', routes: [listRoute(), ['get', '/v1/staff/erasure-requests/reasons', () => fail(500)]] });
+    await screen.findByRole('alert');
+    expect(calls.some((c) => c.path === '/v1/staff/erasure-requests/reasons')).toBe(true);
+    expect(screen.queryByText(LEAK)).toBeNull();
+  });
+
   const searchRoute: Routes[number] = ['post', '/v1/staff/patients/search', () => json({ items: [{ patient_id: ID.patient, verified: true, registered_via: 'front_desk', matched_kinds: ['name_dob'] }], labels_withheld: false, truncated: false })];
   const askPath = `/v1/staff/patients/${ID.patient}/erasure-requests`;
 
-  it('shows the calm "not set up" state, with no way to submit, while the reasons list has no route', async () => {
-    h.reasons = null;
-    const { calls } = await openConsole({ hash: '/erasure', routes: [listRoute()] });
+  it.each([[503], [200]])('shows the calm "not set up" state, with no way to submit, when the reasons list is unset (%i)', async (code) => {
+    const { calls } = await openConsole({ hash: '/erasure', routes: [listRoute(), ['get', '/v1/staff/erasure-requests/reasons', () => (code === 503 ? fail(503) : json({ reasons: [] }))]] });
     expect(await screen.findByText(/list of erasure reasons is not set up yet/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Ask for erasure' })).toBeNull();
     expect(writes(calls)).toHaveLength(0);
   });
 
   it('with a reasons list: nothing is pre-selected, it asks first, and sends the chosen reason once with a key', async () => {
-    h.reasons = ['reason_x', 'reason_y'];
     const user = userEvent.setup();
-    const { calls } = await openConsole({ hash: '/erasure', routes: [listRoute(), searchRoute, ['post', askPath, () => json({ patient_id: ID.patient, request_id: ID.task, status: 'requested' })]] });
+    const { calls } = await openConsole({ hash: '/erasure', routes: [listRoute(), reasonsRoute(['reason_x', 'reason_y']), searchRoute, ['post', askPath, () => json({ patient_id: ID.patient, request_id: ID.task, status: 'requested' })]] });
     await screen.findByText('No requests.');
     const ask = screen.getByRole('button', { name: 'Ask for erasure' });
     expect(ask).toBeDisabled();
@@ -154,9 +158,8 @@ describe('erasure: ask for one', () => {
     [422, /not on the clinic's list/],
     [503, /list of erasure reasons is not set up yet/],
   ])('answers %i in fixed words', async (code, text) => {
-    h.reasons = ['reason_x'];
     const user = userEvent.setup();
-    await openConsole({ hash: '/erasure', routes: [listRoute(), searchRoute, ['post', askPath, () => fail(code)]] });
+    await openConsole({ hash: '/erasure', routes: [listRoute(), reasonsRoute(['reason_x']), searchRoute, ['post', askPath, () => fail(code)]] });
     await screen.findByText('No requests.');
     await user.type(screen.getByLabelText('Full name'), 'Test Person');
     await user.type(screen.getByLabelText('Date of birth'), '1990-02-03');

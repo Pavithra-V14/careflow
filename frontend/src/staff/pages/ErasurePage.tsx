@@ -8,13 +8,13 @@ import { unwrap } from '../apiState';
 import { useAuth } from '../auth/AuthProvider';
 import { PatientPicker } from '../components/PatientPicker';
 import { erasureActionsEnabled } from '../featureFlags';
-import { useErasureReasons } from './erasureReasons';
+import { useErasureReasons, type ErasureReasons } from './erasureReasons';
 import { useApiQuery, useIdempotentWrite } from '../hooks';
 import { CAN_ERASE } from '../sections';
 import { useSession } from '../session/SessionContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Badge, PageHeading, PlaceholderNote, ShortId, Time, useWord } from '../ui/bits';
-import { NotAvailableToRole, QueryView } from '../ui/states';
+import { NotAvailableToRole, ProblemText, QueryView } from '../ui/states';
 import { WriteProblem } from '../ui/WriteProblem';
 
 type Row = components['schemas']['ErasureRequestRow'];
@@ -47,7 +47,7 @@ function Body() {
   const [acting, setActing] = useState<{ row: Row; kind: 'approve' | 'cancel' } | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const enabled = erasureActionsEnabled();
-  const reasons = useErasureReasons();
+  const reasons = useErasureReasons(enabled);
   const query = useApiQuery(['erasure-requests', status], () => unwrap(api.listErasureRequests(status === '' ? undefined : status)));
 
   return (
@@ -187,7 +187,7 @@ function Body() {
 }
 
 /** Ask for a patient's identity to be erased. Nothing is pre-selected; the reason comes only from the clinic's list. */
-function RequestForm({ reasons, onDone }: { reasons: readonly string[] | null; onDone: () => void }) {
+function RequestForm({ reasons, onDone }: { reasons: ErasureReasons; onDone: () => void }) {
   const { t } = useTranslation();
   const { api } = useAuth();
   const id = useId();
@@ -206,7 +206,23 @@ function RequestForm({ reasons, onDone }: { reasons: readonly string[] | null; o
     },
   );
 
-  if (reasons === null || reasons.length === 0) {
+  if (reasons.state === 'loading') {
+    return (
+      <p role="status" className="loading">
+        {t('common.loading')}
+      </p>
+    );
+  }
+  if (reasons.state === 'failed') {
+    return reasons.kind === 'forbidden' ? (
+      <NotAvailableToRole />
+    ) : (
+      <p role="alert" className="state state-error">
+        <ProblemText kind={reasons.kind} />
+      </p>
+    );
+  }
+  if (reasons.state === 'not_set_up') {
     return (
       <p role="status" className="state state-empty">
         {t('erasure.reasonsNotSetUp')}
@@ -224,7 +240,7 @@ function RequestForm({ reasons, onDone }: { reasons: readonly string[] | null; o
       />
       <fieldset>
         <legend>{t('erasure.reason')}</legend>
-        {reasons.map((r) => (
+        {reasons.reasons.map((r) => (
           <label key={r} className="choice">
             <input
               type="radio"
