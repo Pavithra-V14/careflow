@@ -3034,7 +3034,7 @@ async def create_slot(body: SlotIn, idempotency_key: IdempotencyKey, conn: TxCon
         conn, table="slots", clinic_id=body.clinic_id, origin=origin, key=idempotency_key,
         columns={"provider_id": body.provider_id, "location_id": body.location_id, "visit_type_id": body.visit_type_id, "starts_at": body.starts_at, "ends_at": body.ends_at},
         same=lambda r: (r.provider_id, r.location_id, r.visit_type_id, r.starts_at, r.ends_at) == (body.provider_id, body.location_id, body.visit_type_id, body.starts_at, body.ends_at),
-        error_map={"23P01": (409, "that time overlaps another slot of this provider"), "23503": (404, "not found")},
+        error_map={"23P01": (409, "that time overlaps another slot of this provider"), "40P01": (409, "another change to this provider's slots was made at the same moment; try again"), "23503": (404, "not found")},
     )
     await _setup_audit(conn, clinic_id=body.clinic_id, origin=origin, claims=claims, role=role, action="setup.create_slot", resource_id=new_id, key=idempotency_key, replayed=replayed)
     return CreatedOut(id=new_id, clinic_id=body.clinic_id, replayed=replayed)

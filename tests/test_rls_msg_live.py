@@ -688,10 +688,30 @@ async def test_rotation_transition_requires_a_new_key_version_and_changes_nothin
     assert await db.fetchval("select body_key_version from msg.messages where id = $1", mid) == 2
 
 
+async def ddl_when_free(db, statement, *, attempts=45, pause=5.0):
+    """Run DDL on msg.messages inside the test's rolled-back transaction. DDL needs an exclusive lock, and another shard's long-lived (never committed) transaction can hold a row lock on this table for its
+    whole module (the screening harness does), so a plain ALTER intermittently waits past the statement timeout. Each attempt waits at most 4 s, in its own savepoint, and the next one starts a few seconds
+    later: the DDL runs as soon as the other shard's module ends. It is the same statement and the same assertions; only the waiting is patient."""
+    import asyncio
+
+    import asyncpg
+
+    for attempt in range(attempts):
+        try:
+            async with db.transaction():
+                await db.execute("set local lock_timeout = '4s'")
+                await db.execute(statement)
+            return
+        except (asyncpg.exceptions.LockNotAvailableError, asyncpg.exceptions.QueryCanceledError):
+            if attempt == attempts - 1:
+                raise
+            await asyncio.sleep(pause)
+
+
 async def test_append_only_trigger_covers_a_column_added_later(db):
     """'Nothing else changes' is judged on the whole row, so a column added later is immutable by default."""
     w = await seed(db)
-    await db.execute("alter table msg.messages add column later_note text")
+    await ddl_when_free(db, "alter table msg.messages add column later_note text")
     mid = w.messages["care"]
     assert await fails(db, f"update msg.messages set later_note = 'x' where id = '{mid}'") == "23001"
     assert await fails(db, f"update msg.messages set later_note = 'x', body_ct = {bx(b'z' * 41)}, body_key_version = 2 where id = '{mid}'") == "23001"
