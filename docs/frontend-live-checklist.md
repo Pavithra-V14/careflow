@@ -214,10 +214,11 @@ uses them yet.
 
 | Screen | Call | Sends | Handled | Check against the backend |
 |---|---|---|---|---|
-| Audit log | `GET /v1/staff/audit` | filters; `limit` 50; `before_id` for older | 200; 403 not available; 5xx fixed | rows newest first; `next_before_id` pages; do `details` ever hold personal text? |
+| Audit log | `GET /v1/staff/audit` | filters, optional `clinic_id` (404 for a clinic you do not audit); `limit` 50; `before_id` for older | 200; 403 not available; 5xx fixed | rows newest first; `next_before_id` pages; do `details` ever hold personal text? |
 | Register a patient | `POST /v1/staff/patients` | key; `{clinic_id, name, dob, phone?}` | 200 outcome; 404; 409; 422; 503 | the four outcome words; `candidate_ids` on `review` |
 | Referral detail, Run | `POST /v1/staff/referrals/{document_id}/run` | key | 200 job; 404; 403; 503 | which roles may start a run; `replayed` on a retried key |
 | Erasure requests | `GET /v1/staff/erasure-requests` | optional `status` | 200; 403; 5xx | `reason` words; `requested_by` equals my account id for "You" |
+| Erasure reasons | `GET /v1/staff/erasure-requests/reasons` | no query | 200 `{reasons}` (sorted); 403 not front desk; 503 until the clinic sets CAREFLOW_ERASE_REASONS | the closed list for the ask form's picklist (the demo pack gives `demo_reason`) |
 | Erasure, ask | `POST /v1/staff/patients/{patient_id}/erasure-requests` | key; `{reason}`; step-up | 200; 409; 422; 503 | flag OFF: not called |
 | Erasure, approve / cancel | `POST /v1/staff/erasure-requests/{request_id}/approve` and `/cancel` | key; step-up | 200 (`erased` / `cancelled` true); 403; 409 | flag OFF: not called; `false` is a no-op |
 | Patient page, full details | `GET /v1/staff/patients/{patient_id}/view` | id; read on a click only | 200; 404; 403; 429; 503 | one audit row per open |

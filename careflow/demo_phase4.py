@@ -49,6 +49,7 @@ VARIABLES: Final = {
     "break_glass_minutes": "CAREFLOW_BREAK_GLASS_MINUTES",
     "break_glass_max_reopens": "CAREFLOW_BREAK_GLASS_MAX_REOPENS",
     "grievance_categories": "CAREFLOW_GRIEVANCE_CATEGORIES",
+    "erase_reasons": "CAREFLOW_ERASE_REASONS",
 }
 
 

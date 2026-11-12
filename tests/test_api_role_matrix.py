@@ -2046,6 +2046,16 @@ def erase_request_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(refused), body())
 
 
+def erasure_reasons_cases(ids) -> list[tuple]:
+    """GET .../erasure-requests/reasons: front desk of any clinic reads the closed list (the matrix app is configured with the test reason `entered_in_error`); everyone else is refused with 403."""
+    path = ERASURES + "/reasons"
+    cases = [_case(ids, f"{p} reads the list", p, 200, path, key=None, body=lambda b: b == {"reasons": ["entered_in_error"]}) for p in ("front_desk_a", "front_desk_b")]
+    denied = [p for p in ids.people if p not in ("front_desk_a", "front_desk_b")]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path, key=None, body=lambda b: b == {"detail": "your role may not read this"}) for p in denied]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, path, key=None, body=lambda b: b == {"detail": "your role may not read this"}))
+    return cases + _unauthenticated(ids, path, None)
+
+
 def erasure_list_cases(ids) -> list[tuple]:
     new_erasure_request(ids)
     readers = ("front_desk_a", "multi")  # multi is a nurse in A and a doctor in B: NOT front desk anywhere, so refused below
@@ -2512,6 +2522,11 @@ def audit_reader_cases(ids) -> list[tuple]:
         _case(ids, "an actor id that is not a uuid is rejected", "auditor_a", 422, AUDIT + "?actor_id=nope", key=None, body=_fixed(422)),
         _case(ids, "a time that is not a time is rejected", "auditor_a", 422, AUDIT + "?since=yesterday", key=None, body=_fixed(422)),
         _case(ids, "limit=0 is rejected", "auditor_a", 422, AUDIT + "?limit=0", key=None, body=_fixed(422)),
+        _case(ids, "clinic_id of the audited clinic returns its rows", "auditor_a", 200, AUDIT + f"?action=matrix.probe&clinic_id={ids.clinic_a}", key=None, body=_page_audit(lambda b: only(b["items"], 3))),
+        _case(ids, "clinic_id of a clinic the auditor does not audit is the one not-found", "auditor_a", 404, AUDIT + f"?clinic_id={ids.clinic_b}", key=None, body=_fixed(404)),
+        _case(ids, "clinic_id of a clinic that does not exist is the same not-found", "auditor_a", 404, AUDIT + f"?clinic_id={uuid.uuid4()}", key=None, body=_fixed(404)),
+        _case(ids, "a clinic_id that is not a uuid is rejected", "auditor_a", 422, AUDIT + "?clinic_id=nope", key=None, body=_fixed(422)),
+        _case(ids, "a non-auditor who names a clinic is still refused first", "front_desk_a", 403, AUDIT + f"?clinic_id={ids.clinic_a}", key=None, body=READ_403_BODY),
     ]
     denied = [p for p in ids.people if p != "auditor_a"]
     cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, AUDIT, key=None, body=READ_403_BODY) for p in denied]
@@ -3680,6 +3695,7 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", ACCOUNTS + "/{account_id}/reinstate"): staff_reinstate_cases,
     ("POST", ERASE_REQUEST): erase_request_cases,
     ("GET", ERASURES): erasure_list_cases,
+    ("GET", ERASURES + "/reasons"): erasure_reasons_cases,
     ("POST", ERASURES + "/{request_id}/approve"): erase_approve_cases,
     ("POST", ERASURES + "/{request_id}/cancel"): erase_cancel_cases,
     ("GET", OFFERS): offer_list_cases,

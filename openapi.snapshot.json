@@ -2656,6 +2656,23 @@
         "title": "EpisodeOut",
         "type": "object"
       },
+      "EraseReasonsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          }
+        },
+        "required": [
+          "reasons"
+        ],
+        "title": "EraseReasonsOut",
+        "type": "object"
+      },
       "EraseRequestIn": {
         "additionalProperties": false,
         "properties": {
@@ -9614,7 +9631,7 @@
     },
     "/v1/staff/audit": {
       "get": {
-        "description": "Audit rows of the clinics you audit, newest first. 403 unless you are an auditor of some clinic.",
+        "description": "Audit rows of the clinics you audit, newest first; `clinic_id` narrows to one clinic. 403 unless you are an auditor of some clinic, 404 if you give a clinic you do not audit.",
         "operationId": "read_audit_log_v1_staff_audit_get",
         "parameters": [
           {
@@ -9748,6 +9765,23 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Clinic Id"
+            }
           }
         ],
         "responses": {
@@ -9780,6 +9814,16 @@
               }
             },
             "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
           },
           "422": {
             "content": {
@@ -12604,6 +12648,63 @@
           }
         ],
         "summary": "List Erasure Requests",
+        "tags": [
+          "staff erasure"
+        ]
+      }
+    },
+    "/v1/staff/erasure-requests/reasons": {
+      "get": {
+        "description": "The reasons a patient may be erased for (the clinic's closed list, the required setting CAREFLOW_ERASE_REASONS), sorted, for the request form. 403 unless you are front desk somewhere, 503 while the list is not set.",
+        "operationId": "erasure_reasons_v1_staff_erasure_requests_reasons_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EraseReasonsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Erasure Reasons",
         "tags": [
           "staff erasure"
         ]

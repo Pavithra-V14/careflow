@@ -2558,6 +2558,21 @@ async def request_patient_erasure_route(
     return EraseRequestOut(request_id=request_id, patient_id=patient_id, status=state or "requested")
 
 
+class EraseReasonsOut(_Out):
+    reasons: list[str]
+
+
+@staff_erasure.get("/reasons", response_model=EraseReasonsOut)
+async def erasure_reasons(request: Request, conn: TxConn) -> EraseReasonsOut:
+    """The reasons a patient may be erased for (the clinic's closed list, the required setting CAREFLOW_ERASE_REASONS), sorted, for the request form. 403 unless you are front desk somewhere, 503 while the list is not set."""
+    if not await _any_role_held(conn, ("front_desk",)):
+        raise HTTPException(status_code=403, detail="your role may not read this")
+    allowed: frozenset[str] | None = request.app.state.erase_reasons
+    if not allowed:
+        raise HTTPException(status_code=503, detail="erasure is unavailable: not configured")
+    return EraseReasonsOut(reasons=sorted(allowed))
+
+
 @staff_erasure.get("", response_model=ErasureRequestList)
 async def list_erasure_requests(conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), status: Literal["requested", "erased", "cancelled"] | None = "requested", limit: Limit = 100) -> ErasureRequestList:
     """Erasure requests of the clinics where you are front desk, newest first (`status` filters; open ones by default). Ids, a reason code and times only. 403 unless you are front desk somewhere."""
@@ -3062,18 +3077,23 @@ async def read_audit_log(
     conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), action: Annotated[str | None, Query(pattern=_TOKEN_PATTERN)] = None,
     resource_type: Annotated[str | None, Query(pattern=_TOKEN_PATTERN)] = None, resource_id: Annotated[str | None, Query(max_length=64, pattern=r"^[A-Za-z0-9_:.\-]+$")] = None,
     actor_id: uuid.UUID | None = None, since: datetime | None = None, until: datetime | None = None, before_id: Annotated[int | None, Query(ge=1)] = None, limit: Limit = 100,
+    clinic_id: uuid.UUID | None = None,
 ) -> AuditList:
-    """Audit rows of the clinics you audit, newest first. 403 unless you are an auditor of some clinic."""
+    """Audit rows of the clinics you audit, newest first; `clinic_id` narrows to one clinic. 403 unless you are an auditor of some clinic, 404 if you give a clinic you do not audit."""
     await _staff_reader(conn, claims, ("auditor",))
+    if clinic_id is not None:
+        audited = [r[0] for r in (await conn.execute(text("select c.id from iam.clinics c where iam.has_clinic_role(c.id, array['auditor'])"))).all()]
+        if clinic_id not in audited:
+            raise HTTPException(status_code=404, detail="not found")  # a clinic you do not audit and one that does not exist are one answer
     rows = (
         await conn.execute(
             text(
                 "select id, occurred_at, origin, clinic_id, actor_id, actor_role, action, resource_type, resource_id, details from audit.log "
                 "where (cast(:a as text) is null or action = :a) and (cast(:rt as text) is null or resource_type = :rt) and (cast(:ri as text) is null or resource_id = :ri) "
                 "and (cast(:u as uuid) is null or actor_id = :u) and (cast(:s as timestamptz) is null or occurred_at >= :s) and (cast(:e as timestamptz) is null or occurred_at < :e) "
-                "and (cast(:b as bigint) is null or id < :b) order by id desc limit :n"
+                "and (cast(:b as bigint) is null or id < :b) and (cast(:c as uuid) is null or clinic_id = :c) order by id desc limit :n"
             ),
-            {"a": action, "rt": resource_type, "ri": resource_id, "u": actor_id, "s": since, "e": until, "b": before_id, "n": limit + 1},
+            {"a": action, "rt": resource_type, "ri": resource_id, "u": actor_id, "s": since, "e": until, "b": before_id, "c": clinic_id, "n": limit + 1},
         )
     ).all()
     items = [
@@ -5265,7 +5285,7 @@ def create_app(
         except care_gap_rules.CareGapRulesError:
             log.error("CAREFLOW_CARE_GAP_RULES is invalid: no care episodes can be created")
             app.state.care_gap_rules = None
-        app.state.erase_reasons = frozenset(w.strip() for w in (cfg.erase_reasons or "").split(",") if w.strip()) or None
+        app.state.erase_reasons = frozenset(w.strip() for w in (cfg.erase_reasons or p4env.get("CAREFLOW_ERASE_REASONS") or "").split(",") if w.strip()) or None  # (the demo pack supplies a labelled placeholder only under demo + synthetic_only)
         app.state.clock = clock
         app.state.required_roles = cfg.required_roles
         app.state.worker_account_id = cfg.worker_account_id

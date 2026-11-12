@@ -91,3 +91,6 @@ settings:
   consent_labels:
     value: '{"care_delivery": "DEMO ONLY - Care", "ai_processing": "DEMO ONLY - AI-assisted processing", "service_improvement": "DEMO ONLY - Service improvement"}'
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  erase_reasons:
+    value: "demo_reason"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
