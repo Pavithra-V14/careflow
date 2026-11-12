@@ -17,7 +17,7 @@ type ReviewTaskStatus = TaskQuery['status'];
 type TaskRole = NonNullable<TaskQuery['assigned_role']>;
 export type RecordReplyIn = components['schemas']['RecordReplyIn'];
 export type IngestIn = components['schemas']['IngestIn'];
-export type AuditFilter = { action?: string; resourceType?: string; resourceId?: string; actorId?: string; since?: string; until?: string; beforeId?: number; limit?: number };
+export type AuditFilter = { action?: string; resourceType?: string; resourceId?: string; actorId?: string; since?: string; until?: string; beforeId?: number; limit?: number; clinicId?: string };
 export type ErasureStatus = 'requested' | 'erased' | 'cancelled';
 export type BackfillAction = components['schemas']['BackfillDecideIn']['action'];
 type BackfillReplyIn = components['schemas']['BackfillReplyIn'];
@@ -132,6 +132,7 @@ export const OPERATIONS = {
   requestErasure: { method: 'post', path: '/v1/staff/patients/{patient_id}/erasure-requests' },
   approveErasure: { method: 'post', path: '/v1/staff/erasure-requests/{request_id}/approve' },
   cancelErasure: { method: 'post', path: '/v1/staff/erasure-requests/{request_id}/cancel' },
+  erasureReasons: { method: 'get', path: '/v1/staff/erasure-requests/reasons' },
   startReferralRun: { method: 'post', path: '/v1/staff/referrals/{document_id}/run' },
   viewPatientRecord: { method: 'get', path: '/v1/staff/patients/{patient_id}/view' },
   listThreads: { method: 'get', path: '/v1/staff/messages/threads' },
@@ -416,6 +417,7 @@ export function createApi(options: ApiOptions) {
         params: {
           query: {
             ...(f.action ? { action: f.action } : {}),
+            ...(f.clinicId ? { clinic_id: f.clinicId } : {}),
             ...(f.resourceType ? { resource_type: f.resourceType } : {}),
             ...(f.resourceId ? { resource_id: f.resourceId } : {}),
             ...(f.actorId ? { actor_id: f.actorId } : {}),
@@ -434,6 +436,7 @@ export function createApi(options: ApiOptions) {
       client.POST('/v1/staff/erasure-requests/{request_id}/approve', { params: { path: { request_id: requestId }, header: { 'X-Idempotency-Key': key(o) } } }),
     cancelErasure: (requestId: string, o?: WriteOptions) =>
       client.POST('/v1/staff/erasure-requests/{request_id}/cancel', { params: { path: { request_id: requestId }, header: { 'X-Idempotency-Key': key(o) } } }),
+    erasureReasons: () => client.GET('/v1/staff/erasure-requests/reasons'),
     startReferralRun: (documentId: string, o?: WriteOptions) =>
       client.POST('/v1/staff/referrals/{document_id}/run', { params: { path: { document_id: documentId }, header: { 'X-Idempotency-Key': key(o) } } }),
     // An audited read of the decrypted record: called only from a click, and its result is never cached.

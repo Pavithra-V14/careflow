@@ -50,6 +50,7 @@ export function AuditPage() {
 function Reader() {
   const { t } = useTranslation();
   const { api } = useAuth();
+  const { active } = useSession();
   const id = useId();
   const word = useWord();
   const [action, setAction] = useState('');
@@ -69,7 +70,7 @@ function Reader() {
     retry: false,
     mutationFn: async ({ f }) => {
       try {
-        return await unwrap(api.readAudit({ ...f, limit: PAGE }));
+        return await unwrap(api.readAudit({ ...f, clinicId: active.clinicId, limit: PAGE }));
       } catch (e) {
         throw toProblem(e);
       }

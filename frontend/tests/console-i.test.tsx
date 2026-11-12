@@ -38,6 +38,7 @@ describe('audit reader', () => {
     expect(first?.query.get('action')).toBe('patient.view');
     expect(first?.query.get('actor_id')).toBe(ID.user);
     expect(first?.query.get('limit')).toBe('50');
+    expect(first?.query.get('clinic_id')).toBe(CLINIC_A); // the active clinic, on every page
     expect(first?.query.has('before_id')).toBe(false);
     // details only after a click, shown as plain text (never as markup)
     await user.click(screen.getAllByText('Show details')[0] as HTMLElement);
@@ -48,6 +49,7 @@ describe('audit reader', () => {
     const second = calls.filter((c) => c.path === '/v1/staff/audit')[1];
     expect(second?.query.get('before_id')).toBe('8');
     expect(second?.query.get('action')).toBe('patient.view'); // the same filter
+    expect(second?.query.get('clinic_id')).toBe(CLINIC_A);
     expect(screen.queryByRole('button', { name: 'Older rows' })).toBeNull();
     expect(writes(calls)).toHaveLength(0);
   });

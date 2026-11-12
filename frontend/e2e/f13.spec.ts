@@ -48,10 +48,11 @@ for (const lang of LANGS) {
     await sweep(page, 'f13-run-result', lang);
   });
 
-  test(`erasure requests, the approve confirmation and the calm "not set up" ask form [${lang}]`, async ({ page }) => {
+  test(`erasure requests, the approve confirmation and the ask form with the clinic's reasons [${lang}]`, async ({ page }) => {
     await openConsole(page, 'front_desk', lang);
     await go(page, '#/erasure', /\S/);
     await expect(page.locator('main table tbody tr')).toHaveCount(2);
+    await expect(page.locator('main fieldset input[type=radio]')).toHaveCount(2); // the clinic's reasons, none chosen
     await sweep(page, 'f13-erasure-list', lang);
     await page.locator('main tbody button').first().click(); // Approve on a request somebody else made
     await expect(page.getByRole('dialog')).toBeVisible();

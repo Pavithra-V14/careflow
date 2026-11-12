@@ -91,8 +91,7 @@ until the step-up claim spike is recorded.
 3. **Run the referral** (front desk, nurse or doctor, referral detail; `POST /v1/staff/referrals/{document_id}/run`). *You should see:* a
    confirmation, then "The run was queued. Job: ..." (or "already queued a run" on a replay); the referral's state changes as the run proceeds.
 4. **Erasure requests** (front desk; `GET /v1/staff/erasure-requests`). *You should see:* the open requests (who asked, shown as "You" for yours),
-   a plain note that asking, approving and cancelling are switched off, and the calm "list of erasure reasons is not set up yet" state under "Ask for
-   an erasure". The ask, approve and cancel calls (`POST /v1/staff/patients/{patient_id}/erasure-requests`,
+   a plain note that asking, approving and cancelling are switched off, and, under "Ask for an erasure", the clinic's reasons from `GET /v1/staff/erasure-requests/reasons` (none chosen), or the calm "not set up yet" state on a 503. The ask, approve and cancel calls (`POST /v1/staff/patients/{patient_id}/erasure-requests`,
    `POST /v1/staff/erasure-requests/{request_id}/approve`, `.../cancel`) are not made until the flag is turned on.
 5. **When the flag is on** (only after the claim spike): approve as a DIFFERENT front desk account than the one that asked. *You should see:* the
    confirmation naming what is erased and what is kept, the authenticator prompt, then "Approved. The identity was erased." The asker never sees an
@@ -217,7 +216,7 @@ uses them yet.
 | Audit log | `GET /v1/staff/audit` | filters, optional `clinic_id` (404 for a clinic you do not audit); `limit` 50; `before_id` for older | 200; 403 not available; 5xx fixed | rows newest first; `next_before_id` pages; do `details` ever hold personal text? |
 | Register a patient | `POST /v1/staff/patients` | key; `{clinic_id, name, dob, phone?}` | 200 outcome; 404; 409; 422; 503 | the four outcome words; `candidate_ids` on `review` |
 | Referral detail, Run | `POST /v1/staff/referrals/{document_id}/run` | key | 200 job; 404; 403; 503 | which roles may start a run; `replayed` on a retried key |
-| Erasure requests | `GET /v1/staff/erasure-requests` | optional `status` | 200; 403; 5xx | `reason` words; `requested_by` equals my account id for "You" |
+| Erasure requests | `GET /v1/staff/erasure-requests`, `GET /v1/staff/erasure-requests/reasons` | optional `status` | 200; 403; 5xx | `reason` words; `requested_by` equals my account id for "You" |
 | Erasure reasons | `GET /v1/staff/erasure-requests/reasons` | no query | 200 `{reasons}` (sorted); 403 not front desk; 503 until the clinic sets CAREFLOW_ERASE_REASONS | the closed list for the ask form's picklist (the demo pack gives `demo_reason`) |
 | Erasure, ask | `POST /v1/staff/patients/{patient_id}/erasure-requests` | key; `{reason}`; step-up | 200; 409; 422; 503 | flag OFF: not called |
 | Erasure, approve / cancel | `POST /v1/staff/erasure-requests/{request_id}/approve` and `/cancel` | key; step-up | 200 (`erased` / `cancelled` true); 403; 409 | flag OFF: not called; `false` is a no-op |
