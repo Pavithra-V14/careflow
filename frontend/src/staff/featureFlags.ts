@@ -8,7 +8,19 @@
  */
 export const SEND_ACTIVE_ROLE_HEADER = false;
 
-declare const __CAREFLOW_FLAGS__: { mergeActions: boolean; erasureActions?: boolean } | undefined;
+declare const __CAREFLOW_FLAGS__: { mergeActions: boolean; erasureActions?: boolean; devSkipStaffMfa?: boolean } | undefined;
+
+/**
+ * DEV ONLY. Lets a staff member reach the console with the password alone (no authenticator enrolment, challenge or step-up
+ * prompt) on a DEVELOPMENT project. Compile-time constant set by vite.config.ts ONLY for the dev server (`vite serve`, mode
+ * "development") AND only when the shell that started it set VITE_DEV_SKIP_STAFF_MFA=1; never from a file, and never in any
+ * build (`vite build`) whatever its mode. The extra `import.meta.env.DEV` check keeps it false in a production bundle even if the
+ * constant were somehow present. While on, every staff page shows a banner. The backend still enforces whatever it enforces.
+ * Switch it off (just do not set the variable) before any real use. Pinned by tests/flags.test.ts.
+ */
+export function devSkipStaffMfa(): boolean {
+  return import.meta.env.DEV === true && typeof __CAREFLOW_FLAGS__ !== 'undefined' && __CAREFLOW_FLAGS__.devSkipStaffMfa === true;
+}
 
 /**
  * Merge APPROVE and UNMERGE buttons. OFF in every real build. These routes need a recently verified second factor, and the

@@ -108,3 +108,12 @@ The console's menu and buttons are conveniences; the backend decides. Compared w
 ## 8. Last full run
 
 The counts for the last full run are given in the report that accompanies each push.
+
+## Dev-only switch: skip the staff second factor (VITE_DEV_SKIP_STAFF_MFA) - SWITCH OFF BEFORE ANY REAL USE
+
+Decided by the user (2026-11-13) so the live pass can sign in with the password only on the DEV project.
+- A build-time constant, OFF by default, set ONLY by `vite.config.ts` when the dev server (`vite serve`, mode `development`) was started from a shell that set `VITE_DEV_SKIP_STAFF_MFA=1`. It reads the process environment, never a file, so it is in no committed file. It is false in every build (`vite build`) whatever the mode, and the code also requires `import.meta.env.DEV`.
+- While on: a password-only session goes straight to the console (no enrolment, challenge or step-up prompt; a step-up 401 is reported as "a fresh code is needed, nothing was changed"), and EVERY staff page shows a banner "DEVELOPMENT ONLY: the second factor (authenticator) is skipped in this build...".
+- The backend is unchanged: it enforces whatever it enforces (for example CAREFLOW_REQUIRE_AAL2). Routes that refuse without a second factor are "not tested live: needs second factor".
+- Pinned by `tests/flags.test.ts` (fails if any build honours it) and `tests/dev-skip-mfa.test.tsx` (banner and password-only sign-in, flag mocked on).
+- Never used for real patients. To switch it off: start the dev server without the variable.

@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { useQueryClient } from '@tanstack/react-query';
 import { createApi, type Api } from '../../shared/api/client';
 import { StepUpDialog } from '../components/StepUpDialog';
-import { SEND_ACTIVE_ROLE_HEADER } from '../featureFlags';
+import { SEND_ACTIVE_ROLE_HEADER, devSkipStaffMfa } from '../featureFlags';
 import { storeGrant } from '../activeRole';
 import { isOffline } from '../online';
 import type { AuthPort, TotpEnrolment } from './port';
@@ -47,6 +47,8 @@ function createStepUpGate(port: AuthPort, show: (state: StepUpState) => void): (
   return () => {
     if (pending) return pending;
     pending = (async () => {
+      // DEV ONLY: no step-up prompt; the write is reported as "a fresh code is needed, nothing was changed" and the backend decides.
+      if (devSkipStaffMfa()) return false;
       const [first] = await port.listVerifiedTotpFactorIds();
       if (!first) return false;
       return new Promise<boolean>((resolve) => show({ factorId: first, resolve }));
@@ -70,6 +72,8 @@ export function AuthProvider({ port, apiBaseUrl, children }: { port: AuthPort; a
     const { current, next } = await port.getAssurance();
     if (current === null) return setPhase('signed-out');
     if (current === 'aal2') return setPhase('ready');
+    // DEV ONLY (see devSkipStaffMfa): a password-only session goes straight to the console. Off in every build.
+    if (devSkipStaffMfa()) return setPhase('ready');
     if (next === 'aal2') {
       const [first] = await port.listVerifiedTotpFactorIds();
       if (first) {

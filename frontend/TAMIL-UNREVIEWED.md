@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-1435 of 1435 strings are unreviewed.
+1436 of 1436 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -715,6 +715,7 @@ Terms standardised: proposal, resolve / resolved.
 | `dev.refresh` | Refresh session, then capture | அமர்வைப் புதுப்பித்து, பின் பெறுக | minor drift |
 | `dev.reveal` | Also show enum-like values (the aal level and amr method names) | enum போன்ற மதிப்புகளையும் காட்டு (aal நிலை, amr முறைப் பெயர்கள்) | ok |
 | `dev.title` | Developer: claim structure | உருவாக்குநர்: கிளெய்ம் அமைப்பு | corrected after AI review (meaning problem); blind re-check: minor-drift |
+| `devMfa.banner` | DEVELOPMENT ONLY: the second factor (authenticator) is skipped in this build. Do not use it with real patients. It must be switched off before any real use. | வளர்ச்சிக்கு மட்டும்: இந்த உருவாக்கத்தில் இரண்டாம் காரணி (அங்கீகரிப்பு செயலி) தவிர்க்கப்படுகிறது. உண்மையான நோயாளிகளுடன் பயன்படுத்த வேண்டாம். உண்மையான பயன்பாட்டிற்கு முன் இதை அணைக்க வேண்டும். | ok |
 | `env.live` | LIVE | LIVE | kept in English by design |
 | `env.test` | TEST | TEST | kept in English by design |
 | `env.unknown` | Environment unknown | சூழல் தெரியவில்லை | ok |
