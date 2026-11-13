@@ -185,6 +185,7 @@ from careflow.queue import NotPermitted as QueueNotPermitted
 from careflow.queue import PostgresQueue
 from careflow.readiness import check_readiness, parse_required_roles
 from careflow.registry import RegistryError, load_registry
+from careflow.request_timing import RequestTimingMiddleware
 from careflow.review_console import (
     DeadlinePolicy,
     ReasonCodes,
@@ -5405,6 +5406,9 @@ def create_app(
         raise MfaSettingRefused("CAREFLOW_REQUIRE_AAL2 may be turned off only in profile=demo with data_policy=synthetic_only: refusing to start")
     refuse_demo_outside_demo(os.environ, resolve_profile())  # the demo Phase 3 placeholders may never be present outside profile=demo + data_policy=synthetic_only
     app.add_exception_handler(RequestValidationError, _validation_error_handler)  # type: ignore[arg-type]
+
+    if resolve_profile() == "demo":  # request timing in the access log: the demo profile only; every other profile keeps the existing default (no timing line)
+        app.add_middleware(RequestTimingMiddleware)
 
     @app.middleware("http")
     async def no_store_for_patient_routes(request: Request, call_next):

@@ -4,7 +4,8 @@
 #   .\scripts\run_demo_backend.ps1
 #
 # Why a script: the backend reads some names from the real process environment (the profile, the data policy, the demo switches, the feature flags), not only from .env. This script copies every NAME=value
-# line of .env into the environment of THIS window (values are never printed), then sets the demo switches, then starts the server on http://127.0.0.1:8000. Stop it with Ctrl+C.
+# line of .env into the environment of THIS window (values are never printed), then sets the demo switches, then starts the server on http://127.0.0.1:8000 (or the port given with -Port). Stop it with Ctrl+C.
+param([int]$Port = 8000)  # a free port if 8000 is taken: .\scriptsun_demo_backend.ps1 -Port 8010
 $ErrorActionPreference = "Stop"
 if (-not (Test-Path ".env")) { Write-Host "There is no .env in this folder. Copy .env.example to .env and fill it in first (see docs/first-run-guide.md)."; exit 2 }
 foreach ($line in Get-Content ".env") {
@@ -26,5 +27,5 @@ if (-not $env:CAREFLOW_CLINIC_TIME_ZONE) { $env:CAREFLOW_CLINIC_TIME_ZONE = "Asi
 foreach ($required in @("DATABASE_URL_APP", "CAREFLOW_WORKER_ACCOUNT_ID", "SUPABASE_JWKS_URL", "CAREFLOW_ENC_SECRET_V1", "CAREFLOW_HMAC_SECRET_V1")) {
     if (-not (Get-Item -Path ("Env:" + $required) -ErrorAction SilentlyContinue)) { Write-Host "Missing in .env: $required (see docs/first-run-guide.md, section 3)"; exit 2 }
 }
-Write-Host "Starting the backend on http://127.0.0.1:8000 (demo profile, synthetic data only). Press Ctrl+C to stop."
-& .\.venv\Scripts\python.exe -m uvicorn careflow.app:app --host 127.0.0.1 --port 8000
+Write-Host "Starting the backend on http://127.0.0.1:$Port (demo profile, synthetic data only). Press Ctrl+C to stop."
+& .\.venv\Scripts\python.exe -m uvicorn careflow.app:app --host 127.0.0.1 --port $Port
