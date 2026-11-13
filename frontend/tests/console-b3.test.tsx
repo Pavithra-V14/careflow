@@ -272,10 +272,10 @@ describe('admin: autonomy', () => {
     expect(await screen.findByText('There is no history yet.')).toBeInTheDocument();
   });
 
-  it('shows a doctor the Autonomy tab only', async () => {
+  it('shows a doctor the Autonomy and Red-flag rules tabs only', async () => {
     await openConsole({ role: 'doctor', hash: '/admin', routes: [modeRoute(), proposalsRoute([])] });
     const tabs = await screen.findByRole('navigation', { name: 'Admin sections' });
-    expect(within(tabs).getAllByRole('link').map((a) => a.textContent)).toEqual(['Autonomy']);
+    expect(within(tabs).getAllByRole('link').map((a) => a.textContent)).toEqual(['Autonomy', 'Red-flag rules']);
   });
 });
 

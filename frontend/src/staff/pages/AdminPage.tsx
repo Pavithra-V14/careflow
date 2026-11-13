@@ -16,11 +16,12 @@ import { WriteProblem } from '../ui/WriteProblem';
 import { NotFoundPage } from './NotFoundPage';
 import { CostCanvas, ReviewerStats, VoicePanel } from './AdminReports';
 import { Grievances, Recovery } from './AdminMore';
+import { RedFlagRules } from './RedFlagRules';
 
 type Account = components['schemas']['StaffAccountOut'];
 
 /** The roles an admin can invite or grant (the schema's list; queue_worker cannot be granted). None is pre-selected. */
-const STAFF_ROLES: readonly StaffRole[] = ['front_desk', 'nurse', 'doctor', 'admin', 'auditor', 'business_owner'];
+const STAFF_ROLES: readonly StaffRole[] = ['front_desk', 'front_desk_supervisor', 'nurse', 'doctor', 'admin', 'auditor', 'business_owner'];
 const isStaffRole = (v: string): v is StaffRole => (STAFF_ROLES as readonly string[]).includes(v);
 
 export function AdminPage() {
@@ -45,6 +46,7 @@ export function AdminPage() {
       <h2>{t(`admin.tab.${current.id}`)}</h2>
       {current.id === 'accounts' && <Accounts />}
       {current.id === 'autonomy' && <Autonomy />}
+      {current.id === 'rules' && <RedFlagRules />}
       {current.id === 'reviewer' && <ReviewerStats />}
       {current.id === 'cost' && <CostCanvas />}
       {current.id === 'voice' && <VoicePanel />}

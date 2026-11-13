@@ -43,7 +43,7 @@ for (const lang of LANGS) {
     await sweep(page, 'f9-autonomy', lang);
   });
 
-  test(`doctor, autonomy (the only tab) [${lang}]`, async ({ page }) => {
+  test(`doctor, autonomy (the first tab) [${lang}]`, async ({ page }) => {
     await openConsole(page, 'doctor', lang);
     await go(page, '#/admin', /\S/);
     await expect(page.locator('main table').first()).toBeVisible();
