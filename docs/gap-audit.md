@@ -30,7 +30,7 @@ Everything not listed here is built and tested (against the real database, as pu
 |---|---|---|
 | Outbox and event-to-job supervisor producers (§7.4) | PARTIAL | Table, relay and tick exist. Producers: the document run job (direct enqueue) and a recorded result (an outbox event, written in the result's own transaction; the worker identity wakes the plan). Other state changes emit no event |
 | Redis/SQS queue adapter stub (§7.4) | NOT BUILT | Deferred by the spec until volume needs it |
-| Bi-temporal clinical state: vitals, labs, medications, notes (§9.5, §9.6) | PARTIAL | `clinical.results` (valid time, recorded time, supersede chain, append-only) exists (0050). Medications and notes are NOT built: they need coded vocabularies, which are clinician content |
+| Bi-temporal clinical state: vitals, labs, medications, notes (§9.5, §9.6) | PARTIAL | `clinical.results` (valid time, recorded time, supersede chain, append-only) exists (0050). Medications are BUILT as a mechanism (0074): a code, a verified flag and times, append-only and bi-temporal; NO dose, route, frequency or free text, and the code list is the clinic's required setting `CAREFLOW_MEDICATION_CODES` (503 until set). Notes are built (0061); vitals and resource history are not |
 | Correction fan-out and decision provenance (§9.5) | PARTIAL | Results carry amendment or correction (declared, else inferred); a correction raises a doctor review task for every care-plan step that used the old value (0061). Not built: the 30-day window (steps keep no decision time, so every acted-on decision is reviewed), stopping an in-flight run, and decision records that carry the versioned ids of everything they read (only care-plan steps cite a result) |
 | Notes: embeddings, structure-aware splitting, content-addressed cache (§9.6) | NOT BUILT | Append-only encrypted notes with addenda exist (0061: erased with the patient, rotated with the keys); the splitting, the embedding cache and note retrieval need an embedding model and Qdrant, neither approved |
 | Care episodes and recurrence rules (§9.3) | PARTIAL | Producers exist (0048: nurse/doctor create episodes and record done; the worker raises the overdue alert). The rule DEFINITIONS are a required setting no clinician has written; the demo pack has one labelled placeholder |
@@ -64,13 +64,13 @@ Everything not listed here is built and tested (against the real database, as pu
 ## 14 and 15. Evaluation, cost
 | Item | Status | Reason |
 |---|---|---|
-| Gold set, held-out split, thresholds, judge calibration (§14.1 to 14.3) | DECISION | Mechanism built; no reviewed case exists; the three bars are clinician-set |
+| Gold set, held-out split, thresholds, judge calibration (§14.1 to 14.3) | DECISION | Mechanism built, and a runner (`scripts/gold_run.py`, `careflow/eval_runner.py`) now scores the real rule engine over the gating cases and writes the `red_flag_recall` evidence (exactly 100% passes; a draft rule scores nothing in `clinical`; a changed frozen case withholds all evidence). No reviewed case exists; the rules file (`CAREFLOW_EVAL_RULES_FILE`), the bars and baselines are required settings nobody has set |
 | DeepEval, RAGAS, Langfuse experiments (§14.2) | NOT BUILT | New external dependencies, not approved |
 | Pre-deployment go/no-go and readiness scorecard (§14.6) | UNMEASURED | Checker built; every evidence cell is empty, answer is NO-GO |
 | Business KPIs (§14.5) | NOT BUILT | Needs a baseline and owner-set targets |
 | Autonomy promotion evidence (§14.7) | UNMEASURED | Demotion rule is pure code; promotion needs months of data |
 | Cost canvas F and total (§15.1) | DECISION | Owner left F and the total null |
-| Budgets, cascade, attribution (§15.2 to 15.4) | PARTIAL | Ceilings and a durable ledger for one path; the cheap-then-expensive cascade runs only in the gateway for `decision` |
+| Budgets, cascade, attribution (§15.2 to 15.4) | PARTIAL | Ceilings and a durable ledger for one path (the worker's); the session-call path now has a durable ledger too (0075, definer functions, owner-set per-call cap, no real model call wired); the cheap-then-expensive cascade runs only in the gateway for `decision` |
 
 ## 16 to 18. Reliability, data model, auth
 | Item | Status | Reason |
