@@ -45,6 +45,7 @@ export type RuleDecision = components['schemas']['RuleDecisionIn']['decision'];
 export type VoicePurgeIn = components['schemas']['VoicePurgeIn'];
 export type CarePlanIn = components['schemas']['CarePlanIn'];
 export type ResultIn = components['schemas']['ResultIn'];
+export type MedicationIn = components['schemas']['MedicationIn'];
 export type CarePlanAction = components['schemas']['CarePlanConfirmIn']['action'];
 export type SlotIn = components['schemas']['SlotIn'];
 export type HoldIn = components['schemas']['HoldIn'];
@@ -119,6 +120,8 @@ export const OPERATIONS = {
   createCarePlan: { method: 'post', path: '/v1/staff/care-plans' },
   confirmCarePlan: { method: 'post', path: '/v1/staff/care-plans/{plan_id}/confirm' },
   recordResult: { method: 'post', path: '/v1/staff/results' },
+  listMedications: { method: 'get', path: '/v1/staff/medications' },
+  recordMedication: { method: 'post', path: '/v1/staff/medications' },
   // ---- backfill: an offer run for a freed slot (nothing is sent to a patient) ----
   startBackfill: { method: 'post', path: '/v1/staff/scheduling/backfills' },
   backfillState: { method: 'get', path: '/v1/staff/scheduling/backfills/{slot_id}' },
@@ -403,6 +406,8 @@ export function createApi(options: ApiOptions) {
     createCarePlan: (body: CarePlanIn, o?: WriteOptions) => client.POST('/v1/staff/care-plans', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
     confirmCarePlan: (planId: string, action: CarePlanAction, o?: WriteOptions) =>
       client.POST('/v1/staff/care-plans/{plan_id}/confirm', { params: { path: { plan_id: planId }, header: { 'X-Idempotency-Key': key(o) } }, body: { action } }),
+    listMedications: (clinicId: string, patientId: string) => client.GET('/v1/staff/medications', { params: { query: { clinic_id: clinicId, patient_id: patientId } } }),
+    recordMedication: (body: MedicationIn, o?: WriteOptions) => client.POST('/v1/staff/medications', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
     recordResult: (body: ResultIn, o?: WriteOptions) => client.POST('/v1/staff/results', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
 
     // ---- backfill: an offer run for a freed slot. Nothing here sends anything to a patient. -----------------------------------

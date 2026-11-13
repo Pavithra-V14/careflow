@@ -32,6 +32,8 @@ const ROUTES: [role: string, name: string, hash: string][] = [
   ['front_desk', 'claims', '#/claims'],
   ['front_desk', 'access', '#/access'],
   ['front_desk', 'not-found', '#/nowhere'],
+  ['nurse', 'patient-record-medications', `#/patients/${PATIENT}`],
+  ['doctor', 'patient-record-medications-doctor', `#/patients/${PATIENT}`],
   ['nurse', 'referral-review', `#/referrals/${ID.doc}`],
   ['nurse', 'care-gaps', '#/care/gaps'],
   ['nurse', 'care-plans', '#/care/plans'],

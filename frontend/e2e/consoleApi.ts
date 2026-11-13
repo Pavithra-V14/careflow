@@ -222,6 +222,11 @@ export function createConsoleApi(role: string, options: ConsoleOptions = {}, ses
     if (method === 'POST' && path === '/v1/staff/care-gaps/barriers') return CLINICAL.includes(role) ? [201, { barrier_id: ID.candidate, created: true }] : no(403);
     if (method === 'GET' && path === '/v1/staff/accounts') return role === 'admin' ? page([{ account_id: ID.user, roles: ['nurse'], status: 'active' }, { account_id: ID.candidate, roles: ['admin'], status: 'suspended' }]) : no(403);
     if (method === 'POST' && path === '/v1/staff/accounts/invite') return role === 'admin' ? [503, { detail: LEAK }] : no(403);
+    if (method === 'GET' && path === '/v1/staff/medications') {
+      if (!['nurse', 'doctor'].includes(role)) return no(403);
+      return ok({ medications: [{ code: 'PLACEHOLDER-CODE-1', medication_id: ID.merge, recorded_at: '2026-11-10T05:00:00Z', superseded: false, supersedes_id: null, valid_from: '2026-11-01T05:00:00Z', valid_to: null, verified: true }, { code: 'PLACEHOLDER-CODE-2', medication_id: ID.doc, recorded_at: '2026-11-09T05:00:00Z', superseded: true, supersedes_id: null, valid_from: '2026-10-01T05:00:00Z', valid_to: '2026-10-30T05:00:00Z', verified: false }] });
+    }
+    if (method === 'POST' && path === '/v1/staff/medications') return ['nurse', 'doctor'].includes(role) ? ok({ created: true, medication_id: ID.patient2 }) : no(403);
     if (method === 'GET' && path === '/v1/staff/console/red-flag-rules') {
       if (!['admin', 'doctor'].includes(role)) return no(403);
       const base = { approved_at: null, has_vitals_criteria: false, origin: 'test', patterns: ['PLACEHOLDER-PATTERN-A'], phrases: ['PLACEHOLDER-PHRASE-A'], rule_code: 'placeholder_rule', status: 'draft_unreviewed' };

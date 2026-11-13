@@ -5,10 +5,11 @@ import { useTranslation } from 'react-i18next';
 import { unwrap, type ApiProblem } from '../apiState';
 import { useAuth } from '../auth/AuthProvider';
 import { useApiQuery, useIdempotentWrite } from '../hooks';
-import { CAN_CONFIRM_IDENTITY, CAN_REVOKE_IDENTITY, CAN_VIEW_FULL_RECORD } from '../sections';
+import { CAN_CONFIRM_IDENTITY, CAN_USE_MEDICATIONS, CAN_REVOKE_IDENTITY, CAN_VIEW_FULL_RECORD } from '../sections';
 import { PatientFullRecord } from './PatientFullRecord';
 import { useSession } from '../session/SessionContext';
 import { CareLinks } from '../components/CareLinks';
+import { MedicationsPanel } from './MedicationsPanel';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Badge, PageHeading, PlaceholderNote, Time, UUID, useWord } from '../ui/bits';
 import { NotAvailableToRole, ProblemText, QueryView } from '../ui/states';
@@ -106,6 +107,8 @@ function RecordView({ patientId }: { patientId: string }) {
             )}
 
             <CareLinks patientId={patientId} />
+
+            {hasRole(CAN_USE_MEDICATIONS) && !p.merged_into && <MedicationsPanel patientId={patientId} />}
 
             {hasRole(CAN_VIEW_FULL_RECORD) && !p.merged_into && <PatientFullRecord patientId={patientId} />}
 

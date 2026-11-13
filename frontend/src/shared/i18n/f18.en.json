@@ -1,0 +1,37 @@
+{
+  "medications": {
+    "title": "Medications",
+    "note": "The medication statements recorded for this patient, newest first. Nothing is edited or deleted: a correction or a stop is a new row that replaces the old one. Codes are shown exactly as recorded.",
+    "record": "Record a medication",
+    "empty": "No medication statements are recorded for this patient.",
+    "col": {
+      "code": "Code",
+      "verified": "Verified",
+      "from": "From",
+      "to": "To",
+      "recorded": "Recorded",
+      "state": "State",
+      "action": "Action"
+    },
+    "noEnd": "No end recorded",
+    "current": "Current",
+    "superseded": "Replaced by a later row",
+    "replaces": "Replaces",
+    "correct": "Correct or stop",
+    "recordTitle": "Record a medication statement?",
+    "correctTitle": "Correct or stop this medication statement?",
+    "recordBody": "This adds a new row to the patient's record. It cannot be edited afterwards; a later change is another new row.",
+    "correctBody": "This adds a new row that replaces the row below. The old row stays on record, marked as replaced.",
+    "code": "Code",
+    "codeHint": "A code from this clinic's own list. Letters, numbers, dots, dashes and underscores only.",
+    "verified": "Verified",
+    "validFrom": "From",
+    "validTo": "To (leave empty if no end is recorded)",
+    "validToHint": "An empty end is saved as \"no end recorded\". It is not read as \"still taking\".",
+    "save": "Record",
+    "done": "The medication statement was recorded.",
+    "notSetUp": "This clinic's list of medication codes is not set up yet. Nothing was recorded.",
+    "conflict": "That row was already replaced, or this request clashes with an earlier one. Reload and try again.",
+    "invalid": "The code is not in this clinic's list, or the times are not valid. Nothing was recorded."
+  }
+}
