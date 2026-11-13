@@ -102,3 +102,34 @@ for (const lang of LANGS) {
     });
   }
 }
+
+// Rule authoring by keyboard alone, and axe at 320 / 768 / 1280 with the form and then the review step open. Placeholder words only.
+for (const lang of LANGS) {
+  test(`rule authoring: keyboard only, review before save, accessible at all widths [${lang}]`, async ({ page }) => {
+    await openConsole(page, 'doctor', lang);
+    await go(page, '#/admin/rules', /\S/);
+    const open = page.locator('main button').filter({ hasText: lang === 'en' ? 'Write a new rule version' : 'புதிய விதிப் பதிப்பை எழுது' });
+    await open.focus();
+    await page.keyboard.press('Enter');
+    const dialog = page.locator('dialog[open]');
+    await expect(dialog).toBeVisible();
+    const fields = dialog.locator('input[type=text], textarea');
+    await expect(fields).toHaveCount(3);
+    await fields.nth(0).focus();
+    await page.keyboard.type('placeholder_rule');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('placeholder phrase one');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('wordA wordB');
+    await sweep(page, `f10-authoring-form`, lang);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const primary = dialog.locator('button').last();
+    await primary.focus();
+    await page.keyboard.press('Enter'); // Review the draft
+    await expect(dialog).toContainText('wordA + wordB');
+    await sweep(page, `f10-authoring-review`, lang);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.keyboard.press('Escape'); // closes with nothing saved
+    await expect(dialog).toHaveCount(0);
+  });
+}

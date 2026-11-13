@@ -12,6 +12,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Badge, ShortId, Time, useWord } from '../ui/bits';
 import { QueryView } from '../ui/states';
 import { WriteProblem } from '../ui/WriteProblem';
+import { RuleAuthoring } from './RuleAuthoring';
 
 type Rule = components['schemas']['RuleVersionOut'];
 
@@ -50,6 +51,7 @@ export function RedFlagRules() {
     <>
       <p>{t('admin.rules.intro')}</p>
       <p className="hint">{canDecide ? t('admin.rules.twoDoctors') : t('admin.rules.readOnly')}</p>
+      {canDecide && <RuleAuthoring onSaved={() => setNote(t('admin.rules.author.saved'))} />}
       {note && <p role="status">{note}</p>}
       <QueryView query={rules} isEmpty={(d) => d.rules.length === 0} empty={t('admin.rules.empty')}>
         {(d) => (
@@ -108,6 +110,7 @@ export function RedFlagRules() {
 
 function RuleContent({ rule }: { rule: Rule }) {
   const { t } = useTranslation();
+  const tokenSets = rule.token_sets ?? []; // older answers had none
   return (
     <dl className="facts">
       <dt>{t('admin.rules.phrases')}</dt>
@@ -132,6 +135,18 @@ function RuleContent({ rule }: { rule: Rule }) {
               <li key={`${i}-${p}`}>
                 <code>{p}</code>
               </li>
+            ))}
+          </ul>
+        )}
+      </dd>
+      <dt>{t('admin.rules.tokenSets')}</dt>
+      <dd>
+        {tokenSets.length === 0 ? (
+          t('admin.rules.none')
+        ) : (
+          <ul>
+            {tokenSets.map((s, i) => (
+              <li key={`${i}-${s.join(' ')}`}>{s.join(' + ')}</li>
             ))}
           </ul>
         )}
@@ -162,6 +177,7 @@ function RuleCard({ rule, accountId }: { rule: Rule; accountId: string }) {
           <Time value={rule.approved_at} />
         </dd>
       </dl>
+      {rule.status === 'draft_unreviewed' && <p className="hint">{t('admin.rules.draftNote')}</p>}
       <RuleContent rule={rule} />
       <h4>{t('admin.rules.decisions')}</h4>
       {rule.decisions.length === 0 ? (
