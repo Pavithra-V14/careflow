@@ -117,3 +117,9 @@ Decided by the user (2026-11-13) so the live pass can sign in with the password 
 - The backend is unchanged: it enforces whatever it enforces (for example CAREFLOW_REQUIRE_AAL2). Routes that refuse without a second factor are "not tested live: needs second factor".
 - Pinned by `tests/flags.test.ts` (fails if any build honours it) and `tests/dev-skip-mfa.test.tsx` (banner and password-only sign-in, flag mocked on).
 - Never used for real patients. To switch it off: start the dev server without the variable.
+
+## Bundle size note (2026-11-13)
+
+A production build has one shared chunk of about 770 kB (205 kB gzip) holding React, supabase-js, react-query and the English and Tamil strings, plus a 229 kB (50 kB gzip) staff app. Both languages load for everyone. This is accepted for now. If the patient portal ever has to run well on slow mobile data, the fix is to load Tamil on demand (only when a person picks it); lazy page loading was tried and not kept (it broke 7 console tests that expect pages at once, and saved only about 165 kB).
+
+Polish pass: `frontend/e2e/keyboard-zoom.spec.ts` walks the heaviest screens keyboard-only (Tab reaches the controls, a visible focus indicator on each, no trap) and at 200% zoom (no horizontal scroll, axe clean), in English and Tamil; a scan found no unused exports in `src/`.
