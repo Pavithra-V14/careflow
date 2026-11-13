@@ -7044,6 +7044,7 @@
               "approved",
               "rejected",
               "retired",
+              "withdrawn",
               "already_decided",
               "not_draft",
               "not_approved",
@@ -7230,6 +7231,10 @@
             ],
             "title": "Approved At"
           },
+          "authored_by_you": {
+            "title": "Authored By You",
+            "type": "boolean"
+          },
           "decisions": {
             "items": {
               "$ref": "#/components/schemas/RuleDecisionRowOut"
@@ -7308,6 +7313,7 @@
           "phrases",
           "patterns",
           "token_sets",
+          "authored_by_you",
           "has_vitals_criteria",
           "approved_at",
           "decisions"

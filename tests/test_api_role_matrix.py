@@ -4545,6 +4545,18 @@ def test_with_the_vocabulary_set_a_medication_is_recorded_replayed_superseded_an
     audits = _run(_fetch("select details from audit.log where action = 'medication.record' and resource_id = $1", first))
     assert len(audits) == 1 and set(without_scope(audits[0]["details"])) == {"verified", "supersedes"}  # ids and flags only
 
+def test_the_rules_list_says_authored_by_you_only_to_the_author_and_shows_no_author_id(client, ids):
+    doctor, admin = ids.people["doctor_a"][0], ids.people["admin_a"][0]
+    made = client.post(RULES, headers={**bearer(mint(doctor)), "X-Idempotency-Key": _new_key()}, json={"clinic_id": str(ids.clinic_a), "rule_code": "zz_flag", "phrases": ["zzflag"]})  # a meaningless marker
+    assert made.status_code == 201
+    rule_id = made.json()["rule_id"]
+    for who, expected in ((doctor, True), (admin, False)):
+        listed = client.get(RULES + f"?clinic_id={ids.clinic_a}", headers=bearer(mint(who)))
+        assert listed.status_code == 200
+        (mine,) = [r for r in listed.json()["rules"] if r["rule_id"] == rule_id]
+        assert mine["authored_by_you"] is expected and "authored_by" not in mine and str(doctor) not in listed.text
+        assert mine["status"] == "draft_unreviewed" and set(mine) >= {"rule_id", "rule_code", "version_id", "status", "phrases", "token_sets", "authored_by_you", "decisions"}
+
 def test_with_the_task_settings_unset_the_revoke_is_recorded_and_says_no_task_was_raised(client, ids):
     patient = new_confirmed_patient(ids)
     fd = ids.people["front_desk_a"][0]

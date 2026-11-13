@@ -181,6 +181,20 @@ async def test_the_same_key_with_a_different_draft_is_a_conflict_not_a_silent_re
     assert await author(db, w, key="c1", code="zz_other") == "23505"
 
 
+async def test_a_replay_after_the_draft_was_withdrawn_or_retired_says_so_not_recorded(db):
+    w = await world(db)
+    rid = (await author(db, w, key="rp1"))[0][0]
+    assert await as_app(db, w["doc2"], DECIDE, r=rid, d="approve", k="rp-a") == [("recorded",)]
+    assert await as_app(db, w["doc3"], "select kb.withdraw_red_flag_draft(:r, :k)", r=rid, k="rp-w") == [("withdrawn",)]
+    assert await as_app(db, w["doc2"], DECIDE, r=rid, d="approve", k="rp-a") == [("withdrawn",)]  # the draft was withdrawn: not "waiting for a second approver"
+    other = (await author(db, w, code="zz_rp2", key="rp2"))[0][0]
+    await as_app(db, w["doc2"], DECIDE, r=other, d="approve", k="rp-b")
+    await as_app(db, w["doc3"], DECIDE, r=other, d="approve", k="rp-c")
+    await as_app(db, w["doc1"], DECIDE, r=other, d="retire", k="rp-r1")
+    await as_app(db, w["doc2"], DECIDE, r=other, d="retire", k="rp-r2")
+    assert await as_app(db, w["doc3"], DECIDE, r=other, d="approve", k="rp-c") == [("retired",)]  # an approve replayed on a version that was later retired
+
+
 WITHDRAW = "select kb.withdraw_red_flag_draft(:r, :k)"
 
 

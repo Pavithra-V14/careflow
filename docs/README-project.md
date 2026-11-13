@@ -144,6 +144,7 @@ Authority is the module that reads each one; many are CLINICIAN- or OWNER-OWNED 
 | 0076 | `0076_red_flag_rule_authoring.sql` | (owner decision 2026-11-13, item 3; BUILD-SPEC.md 5.2, 12.5, 20.2; CLAUDE.md rules 1, 2, 5, 8, 10). Fix forward from 0072; no merged migration is edited. |
 | 0077 | `0077_red_flag_draft_withdrawal.sql` | (owner decision 2026-11-13, item 6; BUILD-SPEC.md 20.2; CLAUDE.md rules 1, 5, 8, 10). Fix forward from 0072 and 0076; no merged migration is edited. |
 | 0078 | `0078_red_flag_rule_retirement.sql` | (owner decision 2026-11-13; BUILD-SPEC.md 12.5, 20.2; CLAUDE.md rules 1, 3, 5, 8, 10). Fix forward from 0072, 0076 and 0077; no merged migration is edited. |
+| 0079 | `0079_red_flag_decision_replay_words.sql` | (owner decision 2026-11-13; fix forward from 0078; CLAUDE.md rules 3, 10). The whole-set review found that a doctor who recorded an approve on a draft that was later WITHDRAWN (or an |
 
 ## 7. What is still fake or undecided
 

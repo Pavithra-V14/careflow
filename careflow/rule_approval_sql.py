@@ -16,7 +16,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 RESULTS: Final = (
-    "recorded", "approved", "rejected", "retired", "already_decided", "not_draft", "not_approved", "origin_mismatch", "author_cannot_decide", "empty_rule", "rejected_earlier", "platform_rule",
+    "recorded", "approved", "rejected", "retired", "withdrawn", "already_decided", "not_draft", "not_approved", "origin_mismatch", "author_cannot_decide", "empty_rule", "rejected_earlier", "platform_rule",
 )
 
 
@@ -34,6 +34,7 @@ class RuleVersion:
     phrases: list[str]
     patterns: list[str]
     token_sets: list[list[str]]
+    authored_by_you: bool
     has_vitals_criteria: bool
     approved_at: Any
     decisions: list[dict[str, Any]]
@@ -50,12 +51,12 @@ async def decide(conn: AsyncConnection, *, rule_id: uuid.UUID, decision: str, id
         raise
 
 
-async def list_versions(conn: AsyncConnection, clinic_id: uuid.UUID, *, limit: int) -> list[RuleVersion]:
+async def list_versions(conn: AsyncConnection, clinic_id: uuid.UUID, *, limit: int, viewer: uuid.UUID) -> list[RuleVersion]:
     """The clinic's own rule versions, newest first, with the decisions made on each. Row-level security shows doctors and admins of the clinic only."""
     rules = (
         await conn.execute(
             text(
-                "select id, rule_code, version_id, status, origin, phrases, patterns, token_sets, vitals_criteria <> '{}'::jsonb as has_vitals, approved_at from kb.red_flag_rules "
+                "select id, rule_code, version_id, status, origin, phrases, patterns, token_sets, vitals_criteria <> '{}'::jsonb as has_vitals, approved_at, authored_by from kb.red_flag_rules "
                 "where clinic_id = :c order by rule_code, version_id desc limit :n"
             ),
             {"c": clinic_id, "n": limit},
@@ -73,7 +74,7 @@ async def list_versions(conn: AsyncConnection, clinic_id: uuid.UUID, *, limit: i
     for d in decided:
         by_rule.setdefault(d.rule_id, []).append({"decision": d.decision, "decided_by": d.decided_by, "decided_at": d.created_at})
     return [
-        RuleVersion(r.id, r.rule_code, r.version_id, r.status, r.origin, list(r.phrases), list(r.patterns), [list(t) for t in r.token_sets], bool(r.has_vitals), r.approved_at, by_rule.get(r.id, []))
+        RuleVersion(r.id, r.rule_code, r.version_id, r.status, r.origin, list(r.phrases), list(r.patterns), [list(t) for t in r.token_sets], r.authored_by is not None and r.authored_by == viewer, bool(r.has_vitals), r.approved_at, by_rule.get(r.id, []))
         for r in rules
     ]
 

@@ -3845,7 +3845,7 @@ async def autonomy_history(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str,
 
 RULE_VIEWERS = ("doctor", "admin")
 RULE_DECIDERS = ("doctor",)
-RuleDecisionWord = Literal["recorded", "approved", "rejected", "retired", "already_decided", "not_draft", "not_approved", "origin_mismatch", "author_cannot_decide", "empty_rule", "rejected_earlier", "platform_rule"]
+RuleDecisionWord = Literal["recorded", "approved", "rejected", "retired", "withdrawn", "already_decided", "not_draft", "not_approved", "origin_mismatch", "author_cannot_decide", "empty_rule", "rejected_earlier", "platform_rule"]
 
 
 class RuleDecisionIn(_Body):
@@ -3871,6 +3871,7 @@ class RuleVersionOut(_Out):
     phrases: list[str]
     patterns: list[str]
     token_sets: list[list[str]]
+    authored_by_you: bool  # true when YOUR account wrote this draft; the author's account id is never shown
     has_vitals_criteria: bool
     approved_at: datetime | None
     decisions: list[RuleDecisionRowOut]
@@ -3884,11 +3885,11 @@ class RuleVersionList(_Out):
 async def list_red_flag_rules(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 200) -> RuleVersionList:
     """The clinic's own red-flag rule versions with the decisions made on each, so an approver sees exactly what they are approving. 404 if the clinic is not visible to you, 403 unless you are a doctor or admin there. Read-only."""
     await _console_clinic(conn, clinic_id, RULE_VIEWERS)
-    versions = await rule_approval_sql.list_versions(conn, clinic_id, limit=limit)
+    versions = await rule_approval_sql.list_versions(conn, clinic_id, limit=limit, viewer=uuid.UUID(claims["sub"]))
     return RuleVersionList(
         rules=[
             RuleVersionOut(
-                rule_id=v.rule_id, rule_code=v.rule_code, version_id=v.version_id, status=v.status, origin=v.origin, phrases=v.phrases, patterns=v.patterns, token_sets=v.token_sets, has_vitals_criteria=v.has_vitals_criteria,
+                rule_id=v.rule_id, rule_code=v.rule_code, version_id=v.version_id, status=v.status, origin=v.origin, phrases=v.phrases, patterns=v.patterns, token_sets=v.token_sets, authored_by_you=v.authored_by_you, has_vitals_criteria=v.has_vitals_criteria,
                 approved_at=v.approved_at, decisions=[RuleDecisionRowOut(**d) for d in v.decisions],
             )
             for v in versions
