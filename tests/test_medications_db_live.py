@@ -6,6 +6,7 @@ import json
 import os
 import time
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -123,10 +124,10 @@ async def test_reads_are_for_nurse_and_doctor_of_the_clinic_with_a_second_factor
 async def test_a_stop_or_correction_supersedes_once_and_only_for_the_same_patient(db):
     w = await world(db)
     first = (await add(db, w, key="s1"))[0][0]
-    assert len(await add(db, w, s=first, vt="2026-02-01", key="s2")) == 1  # a stop: the same code with an end
+    assert len(await add(db, w, s=first, vt=datetime(2026, 2, 1, tzinfo=UTC), key="s2")) == 1  # a stop: the same code with an end
     assert await add(db, w, s=first, key="s3") == "23505"  # superseded at most once
     assert await add(db, w, patient="p2", s=first, key="s4") in ("23503", "42501")  # a row of ANOTHER patient cannot be superseded
-    assert await add(db, w, vt="2025-01-01", key="s5") == "23514"  # an end before the start
+    assert await add(db, w, vt=datetime(2025, 1, 1, tzinfo=UTC), key="s5") == "23514"  # an end before the start
     assert await add(db, w, code="bad code", key="s6") == "23514"
     assert await add(db, w, v=None, key="s7") in ("23502", "23514")  # verified has no default
     same = await add(db, w, key="s1")  # a replay by key hits the unique key
@@ -150,4 +151,4 @@ async def test_the_table_is_append_only_for_everyone(db):
             await db.execute(text("truncate clinical.medications"))
     assert h is not None
     triggers = (await db.execute(text("select tgenabled from pg_trigger where tgrelid = 'clinical.medications'::regclass and not tgisinternal and tgname like 'medications_no_%'"))).all()
-    assert triggers and all(t[0] == "A" for t in triggers)
+    assert triggers and all(t[0] in ("A", b"A") for t in triggers)

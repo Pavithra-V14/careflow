@@ -3332,7 +3332,7 @@ def rule_author_cases(ids) -> list[tuple]:
     cases += [
         _case(ids, "the same key with a different draft is a conflict", "doctor_a", 409, RULES, json=body(phrases=["zzother"]), key=key, body=lambda b: b == {"detail": "this idempotency key was already used by a different request"}),
         _case(ids, "an unknown clinic is not found", "doctor_a", 404, RULES, json=body(clinic_id=str(uuid.uuid4())), body=_fixed(404)),
-        _case(ids, "a rule with no criterion is rejected", "doctor_a", 422, RULES, json=body(phrases=[], token_sets=[]), body=_fixed(422)),
+        _case(ids, "a rule with no criterion is rejected", "doctor_a", 422, RULES, json=body(phrases=[], token_sets=[]), body=_rejected),
         _case(ids, "a regular expression has no place in the language (an extra field)", "doctor_a", 422, RULES, json=body(patterns=["a.*b"]), body=_fixed(422)),
         _case(ids, "a bad rule code is rejected", "doctor_a", 422, RULES, json=body(rule_code="Bad Code"), body=_fixed(422)),
         _case(ids, "a phrase over the limit is rejected", "doctor_a", 422, RULES, json=body(phrases=["x" * 201]), body=_fixed(422)),

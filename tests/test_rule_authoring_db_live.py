@@ -101,7 +101,7 @@ async def author(db, w, who="doc1", code="zz_draft", ph=("zzmarker",), ts=(("zza
 
 
 async def active(db, w, profile):
-    return [tuple(r) for r in await owner(db, "select rule_code, version_id, has_criteria from kb.active_red_flag_rules(:c, 'test', :p) order by 1, 2", c=w["clinic"], p=profile)]
+    return [tuple(r) for r in await owner(db, "select rule_code, version_id, has_criteria from kb.active_red_flag_rules(:c, 'test', :p) where rule_code <> 'unauthored_stub' order by 1, 2", c=w["clinic"], p=profile)]
 
 
 async def test_a_doctor_writes_a_draft_that_is_never_active_in_the_clinical_profile(db):

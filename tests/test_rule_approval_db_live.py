@@ -111,7 +111,7 @@ async def status_of(db, rid):
 
 
 async def active_codes(db, w, profile):
-    rows = await owner(db, "select rule_code, version_id from kb.active_red_flag_rules(:c, 'test', :p) order by 1, 2", c=w["clinic"], p=profile)
+    rows = await owner(db, "select rule_code, version_id from kb.active_red_flag_rules(:c, 'test', :p) where rule_code <> 'unauthored_stub' order by 1, 2", c=w["clinic"], p=profile)  # (the 0007 inert stub is a platform-wide draft: left out)
     return [tuple(r) for r in rows]
 
 
@@ -317,4 +317,4 @@ async def test_the_content_is_never_edited_the_ledger_is_append_only_and_the_app
         db,
         "select tgname, tgenabled from pg_trigger where tgrelid in ('kb.red_flag_rules'::regclass, 'kb.red_flag_rule_decisions'::regclass) and not tgisinternal and tgname like '%no_%' order by 1",
     )
-    assert triggers and all(t[1] == "A" for t in triggers)  # ENABLE ALWAYS: they hold under replica mode too
+    assert triggers and all(t[1] in ("A", b"A") for t in triggers)  # ENABLE ALWAYS: they hold under replica mode too
