@@ -906,7 +906,13 @@ export interface paths {
          */
         get: operations["list_red_flag_rules_v1_staff_console_red_flag_rules_get"];
         put?: never;
-        post?: never;
+        /**
+         * Author Red Flag Rule
+         * @description A doctor writes a DRAFT red-flag rule version for the clinic in the restricted language (literal phrases and token sets; no regular expression). It is NEVER active: a draft counts only in the demo profile,
+         *     and it becomes approved only through the two-doctor decision, by a doctor who is not its author. A new version of an existing rule code is the next number. Idempotent on the key. 404 if the clinic is not visible to you,
+         *     403 unless you are a doctor there, 409 if the key belongs to a different draft, 422 for a shape outside the language (limits, no criterion). Nothing is approved by default.
+         */
+        post: operations["author_red_flag_rule_v1_staff_console_red_flag_rules_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5478,6 +5484,36 @@ export interface components {
             /** Recorded */
             recorded: boolean;
         };
+        /**
+         * RuleDraftIn
+         * @description The RESTRICTED language: literal phrases and token sets, nothing else (no regular expression exists in it). Matching is on word boundaries after the engine's normalisation.
+         */
+        RuleDraftIn: {
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /** Phrases */
+            phrases?: string[];
+            /** Rule Code */
+            rule_code: string;
+            /** Token Sets */
+            token_sets?: string[][];
+        };
+        /** RuleDraftOut */
+        RuleDraftOut: {
+            /**
+             * Rule Id
+             * Format: uuid
+             */
+            rule_id: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "draft_unreviewed";
+        };
         /** RuleVersionList */
         RuleVersionList: {
             /** Rules */
@@ -5512,6 +5548,8 @@ export interface components {
              * @enum {string}
              */
             status: "draft_unreviewed" | "approved" | "retired";
+            /** Token Sets */
+            token_sets: string[][];
             /** Version Id */
             version_id: number;
         };
@@ -9011,6 +9049,78 @@ export interface operations {
             };
             /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+        };
+    };
+    author_red_flag_rule_v1_staff_console_red_flag_rules_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuleDraftIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleDraftOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

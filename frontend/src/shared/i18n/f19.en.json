@@ -1,0 +1,40 @@
+{
+  "admin": {
+    "rules": {
+      "tokenSets": "Token sets",
+      "draftNote": "This is a draft. It is never active. It becomes approved only when two different doctors approve it, and its author cannot be one of them.",
+      "author": {
+        "open": "Write a new rule version",
+        "title": "Write a draft red-flag rule version",
+        "body": "A rule has a code and any number of literal phrases and token sets. There is no other kind of criterion here, and no regular expression. Nothing is filled in for you. The version is saved as a draft only.",
+        "code": "Rule code",
+        "codeHint": "Lower-case letters, digits and underscores, starting with a letter, at most 63 characters. A code that already exists gets the next version number.",
+        "phrases": "Phrases (one per line)",
+        "phrasesHint": "Each line is one literal phrase, at most {{length}} characters, at most {{max}} phrases. Empty lines are ignored.",
+        "sets": "Token sets (one set per line, words separated by spaces)",
+        "setsHint": "Each line is one set of {{min}} to {{max}} words with at least two different words, each word at most {{token}} characters, at most {{sets}} sets.",
+        "problems": "Problems to fix",
+        "err": {
+          "code": "The rule code must start with a lower-case letter and use only lower-case letters, digits and underscores (at most 63 characters).",
+          "noCriterion": "Add at least one phrase or one token set.",
+          "tooManyPhrases": "There are too many phrases (at most {{max}}).",
+          "tooManySets": "There are too many token sets (at most {{sets}}).",
+          "phraseLong": "Phrase line {{line}} is too long.",
+          "phraseChars": "Phrase line {{line}} has a control character or an invisible character. Retype it.",
+          "setSize": "Token set line {{line}} must have between 2 and 10 words.",
+          "tokenLong": "Token set line {{line}} has a word that is too long.",
+          "tokenChars": "Token set line {{line}} has a control character or an invisible character. Retype it.",
+          "sameWords": "Token set line {{line}} needs at least two different words."
+        },
+        "review": "Review the draft",
+        "confirmTitle": "Save this draft red-flag rule version?",
+        "confirmBody": "This saves exactly what is shown below as a draft. A draft is never active, and it is approved only when two different doctors approve it. You cannot approve a draft you wrote.",
+        "back": "Back to editing",
+        "save": "Save draft",
+        "saved": "The draft was saved. It is not approved and it is not active.",
+        "conflict": "This request clashes with an earlier one that used the same key. Close this window and start again.",
+        "invalid": "The draft is outside what a rule may contain. Nothing was saved. Check the limits and try again."
+      }
+    }
+  }
+}

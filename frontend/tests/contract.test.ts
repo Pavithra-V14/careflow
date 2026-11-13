@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { OPERATIONS, createApi, type Api, type WriteOptions, type ProposeMergeIn, type BeginUploadIn, type RegisterIn, type PatientSearchIn, type SlotIn, type HoldIn, type WaitlistJoinIn, type LocationIn, type ProviderIn, type VisitTypeIn, type CarePlanIn, type ResultIn, type BarrierIn, type EpisodeIn, type InviteIn, type RoleChangeIn, type AutonomySetIn, type VoicePurgeIn, type NoteIn, type BreakGlassOpenIn, type RecoveryRequestIn, type ConsentIn, type ClaimIn, type GrievanceIn, type RecordReplyIn, type MedicationIn, type IngestIn } from '../src/shared/api/client';
+import { OPERATIONS, createApi, type Api, type WriteOptions, type ProposeMergeIn, type BeginUploadIn, type RegisterIn, type PatientSearchIn, type SlotIn, type HoldIn, type WaitlistJoinIn, type LocationIn, type ProviderIn, type VisitTypeIn, type CarePlanIn, type ResultIn, type BarrierIn, type EpisodeIn, type InviteIn, type RoleChangeIn, type AutonomySetIn, type VoicePurgeIn, type NoteIn, type BreakGlassOpenIn, type RecoveryRequestIn, type ConsentIn, type ClaimIn, type GrievanceIn, type RecordReplyIn, type MedicationIn, type RuleDraftIn, type IngestIn } from '../src/shared/api/client';
 
 // Contract test (BUILD-SPEC 21): the client is driven for real; only the network transport is captured.
 // It asserts every method targets an endpoint that exists in the backend's schema, with its required
@@ -74,6 +74,7 @@ const INVOCATIONS: Record<keyof typeof OPERATIONS, (api: Api, o?: WriteOptions) 
   listRedFlagRules: (api) => api.listRedFlagRules(ID),
   listMedications: (api) => api.listMedications(ID, ID),
   recordMedication: (api, o) => api.recordMedication(body<MedicationIn>('MedicationIn'), o),
+  authorRedFlagRule: (api, o) => api.authorRedFlagRule(body<RuleDraftIn>('RuleDraftIn'), o),
   decideRedFlagRule: (api, o) => api.decideRedFlagRule(ID, 'approve', o),
   proposeMerge: (api, o) => api.proposeMerge(body<ProposeMergeIn>('ProposeMergeIn'), o),
   approveMerge: (api, o) => api.approveMerge(ID, o),

@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-1521 of 1521 strings are unreviewed.
+1551 of 1551 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -299,12 +299,41 @@ Terms standardised: proposal, resolve / resolved.
 | `admin.rules.approveBody` | You are approving exactly the content shown below. The version becomes approved only if a second, different doctor also approves it. The person who wrote a version cannot decide it. | கீழே காட்டப்பட்டுள்ள உள்ளடக்கத்தையே நீங்கள் ஒப்புக்கொள்கிறீர்கள். இரண்டாவது, வேறொரு மருத்துவரும் ஒப்புக்கொண்டால் மட்டுமே இந்தப் பதிப்பு அங்கீகரிக்கப்படும். ஒரு பதிப்பை எழுதியவர் அதில் முடிவெடுக்க முடியாது. | ok |
 | `admin.rules.approveTitle` | Approve this red-flag rule version? | இந்தச் சிவப்புக் கொடி விதிப் பதிப்பை ஒப்புக்கொள்ளலாமா? | ok |
 | `admin.rules.approvedAt` | Approved at | அங்கீகரிக்கப்பட்ட நேரம் | ok |
+| `admin.rules.author.back` | Back to editing | திருத்தத்திற்குத் திரும்பு | ok |
+| `admin.rules.author.body` | A rule has a code and any number of literal phrases and token sets. There is no other kind of criterion here, and no regular expression. Nothing is filled in for you. The version is saved as a draft only. | ஒரு விதிக்கு ஒரு குறியீடும், எத்தனை வேண்டுமானாலும் நேரடிச் சொற்றொடர்களும் சொல் தொகுப்புகளும் உண்டு. இங்கே வேறு வகை நிபந்தனை இல்லை, வழக்கமான கோவை (regular expression) இல்லை. உங்களுக்காக எதுவும் நிரப்பப்படுவதில்லை. இந்தப் பதிப்பு வரைவாக மட்டுமே சேமிக்கப்படும். | ok |
+| `admin.rules.author.code` | Rule code | விதிக் குறியீடு | ok |
+| `admin.rules.author.codeHint` | Lower-case letters, digits and underscores, starting with a letter, at most 63 characters. A code that already exists gets the next version number. | சிறிய ஆங்கில எழுத்துகள், இலக்கங்கள், அடிக்கோடுகள் மட்டும்; ஓர் எழுத்தில் தொடங்க வேண்டும்; அதிகபட்சம் 63 எழுத்துகள். ஏற்கெனவே உள்ள குறியீட்டுக்கு அடுத்த பதிப்பு எண் கிடைக்கும். | ok |
+| `admin.rules.author.confirmBody` | This saves exactly what is shown below as a draft. A draft is never active, and it is approved only when two different doctors approve it. You cannot approve a draft you wrote. | கீழே காட்டப்பட்டுள்ளதையே இது வரைவாகச் சேமிக்கிறது. வரைவு ஒருபோதும் செயலில் இருக்காது; இரண்டு வெவ்வேறு மருத்துவர்கள் ஒப்புக்கொண்டால் மட்டுமே அது அங்கீகரிக்கப்படும். நீங்கள் எழுதிய வரைவை நீங்களே அங்கீகரிக்க முடியாது. | ok |
+| `admin.rules.author.confirmTitle` | Save this draft red-flag rule version? | இந்தச் சிவப்புக் கொடி விதிப் பதிப்பின் வரைவைச் சேமிக்கலாமா? | ok |
+| `admin.rules.author.conflict` | This request clashes with an earlier one that used the same key. Close this window and start again. | இதே விசையைப் பயன்படுத்திய முந்தைய கோரிக்கையுடன் இந்தக் கோரிக்கை முரண்படுகிறது. இந்தச் சாளரத்தை மூடி மீண்டும் தொடங்கவும். | ok |
+| `admin.rules.author.err.code` | The rule code must start with a lower-case letter and use only lower-case letters, digits and underscores (at most 63 characters). | விதிக் குறியீடு சிறிய ஆங்கில எழுத்தில் தொடங்கி, சிறிய ஆங்கில எழுத்துகள், இலக்கங்கள், அடிக்கோடுகள் மட்டுமே கொண்டிருக்க வேண்டும் (அதிகபட்சம் 63 எழுத்துகள்). | ok |
+| `admin.rules.author.err.noCriterion` | Add at least one phrase or one token set. | குறைந்தது ஒரு சொற்றொடர் அல்லது ஒரு சொல் தொகுப்பைச் சேர்க்கவும். | ok |
+| `admin.rules.author.err.phraseChars` | Phrase line {{line}} has a control character or an invisible character. Retype it. | சொற்றொடர் வரி {{line}} இல் கட்டுப்பாட்டு எழுத்து அல்லது கண்ணுக்குத் தெரியாத எழுத்து உள்ளது. மீண்டும் தட்டச்சு செய்யவும். | ok |
+| `admin.rules.author.err.phraseLong` | Phrase line {{line}} is too long. | சொற்றொடர் வரி {{line}} மிக நீளமானது. | ok |
+| `admin.rules.author.err.sameWords` | Token set line {{line}} needs at least two different words. | சொல் தொகுப்பு வரி {{line}} இல் குறைந்தது இரண்டு வெவ்வேறு சொற்கள் வேண்டும். | ok |
+| `admin.rules.author.err.setSize` | Token set line {{line}} must have between 2 and 10 words. | சொல் தொகுப்பு வரி {{line}} இல் 2 முதல் 10 சொற்கள் இருக்க வேண்டும். | ok |
+| `admin.rules.author.err.tokenChars` | Token set line {{line}} has a control character or an invisible character. Retype it. | சொல் தொகுப்பு வரி {{line}} இல் கட்டுப்பாட்டு எழுத்து அல்லது கண்ணுக்குத் தெரியாத எழுத்து உள்ளது. மீண்டும் தட்டச்சு செய்யவும். | ok |
+| `admin.rules.author.err.tokenLong` | Token set line {{line}} has a word that is too long. | சொல் தொகுப்பு வரி {{line}} இல் மிக நீளமான ஒரு சொல் உள்ளது. | ok |
+| `admin.rules.author.err.tooManyPhrases` | There are too many phrases (at most {{max}}). | சொற்றொடர்கள் மிக அதிகம் (அதிகபட்சம் {{max}}). | ok |
+| `admin.rules.author.err.tooManySets` | There are too many token sets (at most {{sets}}). | சொல் தொகுப்புகள் மிக அதிகம் (அதிகபட்சம் {{sets}}). | ok |
+| `admin.rules.author.invalid` | The draft is outside what a rule may contain. Nothing was saved. Check the limits and try again. | வரைவு, ஒரு விதி கொண்டிருக்கக்கூடியதற்கு வெளியே உள்ளது. எதுவும் சேமிக்கப்படவில்லை. வரம்புகளைச் சரிபார்த்து மீண்டும் முயலவும். | ok |
+| `admin.rules.author.open` | Write a new rule version | புதிய விதிப் பதிப்பை எழுது | ok |
+| `admin.rules.author.phrases` | Phrases (one per line) | சொற்றொடர்கள் (ஒரு வரிக்கு ஒன்று) | ok |
+| `admin.rules.author.phrasesHint` | Each line is one literal phrase, at most {{length}} characters, at most {{max}} phrases. Empty lines are ignored. | ஒவ்வொரு வரியும் ஒரு நேரடிச் சொற்றொடர், அதிகபட்சம் {{length}} எழுத்துகள், அதிகபட்சம் {{max}} சொற்றொடர்கள். காலி வரிகள் புறக்கணிக்கப்படும். | ok |
+| `admin.rules.author.problems` | Problems to fix | சரிசெய்ய வேண்டியவை | ok |
+| `admin.rules.author.review` | Review the draft | வரைவைச் சரிபார் | ok |
+| `admin.rules.author.save` | Save draft | வரைவைச் சேமி | ok |
+| `admin.rules.author.saved` | The draft was saved. It is not approved and it is not active. | வரைவு சேமிக்கப்பட்டது. அது அங்கீகரிக்கப்படவில்லை, செயலிலும் இல்லை. | ok |
+| `admin.rules.author.sets` | Token sets (one set per line, words separated by spaces) | சொல் தொகுப்புகள் (ஒரு வரிக்கு ஒரு தொகுப்பு, சொற்கள் இடைவெளியால் பிரிக்கப்பட வேண்டும்) | ok |
+| `admin.rules.author.setsHint` | Each line is one set of {{min}} to {{max}} words with at least two different words, each word at most {{token}} characters, at most {{sets}} sets. | ஒவ்வொரு வரியும் {{min}} முதல் {{max}} சொற்கள் கொண்ட ஒரு தொகுப்பு; குறைந்தது இரண்டு வெவ்வேறு சொற்கள்; ஒவ்வொரு சொல்லும் அதிகபட்சம் {{token}} எழுத்துகள்; அதிகபட்சம் {{sets}} தொகுப்புகள். | ok |
+| `admin.rules.author.title` | Write a draft red-flag rule version | சிவப்புக் கொடி விதிப் பதிப்பின் வரைவை எழுது | ok |
 | `admin.rules.col.at` | When | எப்போது | ok |
 | `admin.rules.col.by` | Decided by (account id) | முடிவெடுத்தவர் (கணக்கு அடையாளம்) | ok |
 | `admin.rules.col.decision` | Decision | முடிவு | ok |
 | `admin.rules.decisionWords.approve` | Approved | ஒப்புக்கொண்டார் | ok |
 | `admin.rules.decisionWords.reject` | Rejected | நிராகரித்தார் | ok |
 | `admin.rules.decisions` | Decisions so far | இதுவரை எடுத்த முடிவுகள் | ok |
+| `admin.rules.draftNote` | This is a draft. It is never active. It becomes approved only when two different doctors approve it, and its author cannot be one of them. | இது ஒரு வரைவு. இது ஒருபோதும் செயலில் இருக்காது. இரண்டு வெவ்வேறு மருத்துவர்கள் ஒப்புக்கொண்டால் மட்டுமே இது அங்கீகரிக்கப்படும்; அதை எழுதியவர் அவர்களில் ஒருவராக இருக்க முடியாது. | ok |
 | `admin.rules.empty` | There are no red-flag rule versions to show. | காட்ட சிவப்புக் கொடி விதிப் பதிப்புகள் இல்லை. | ok |
 | `admin.rules.intro` | The red-flag rule versions of this clinic, with the decisions made on each. Every phrase and pattern is shown exactly as the system holds it. This screen cannot write or change a rule. | இந்த மருத்துவமனையின் சிவப்புக் கொடி விதிப் பதிப்புகளும், ஒவ்வொன்றிலும் எடுக்கப்பட்ட முடிவுகளும். ஒவ்வொரு சொற்றொடரும் வடிவமும் அமைப்பில் உள்ளபடியே காட்டப்படுகின்றன. இந்தத் திரையில் விதியை எழுதவோ மாற்றவோ முடியாது. | ok |
 | `admin.rules.listLabel` | Red-flag rule versions | சிவப்புக் கொடி விதிப் பதிப்புகள் | ok |
@@ -336,6 +365,7 @@ Terms standardised: proposal, resolve / resolved.
 | `admin.rules.statuses.approved` | Approved | அங்கீகரிக்கப்பட்டது | ok |
 | `admin.rules.statuses.draft_unreviewed` | Draft, not approved | வரைவு, அங்கீகரிக்கப்படவில்லை | ok |
 | `admin.rules.statuses.retired` | Retired | நிறுத்தப்பட்டது | ok |
+| `admin.rules.tokenSets` | Token sets | சொல் தொகுப்புகள் | ok |
 | `admin.rules.twoDoctors` | A draft version becomes approved only when two different doctors approve it, each with a fresh authenticator code. One rejection closes the version. Nothing is approved by default. | வரைவுப் பதிப்பு, இரண்டு வெவ்வேறு மருத்துவர்கள் ஒவ்வொருவரும் புதிய அங்கீகார குறியீட்டுடன் ஒப்புக்கொண்டால் மட்டுமே அங்கீகரிக்கப்படும். ஒரு நிராகரிப்பு அந்தப் பதிப்பை மூடிவிடும். இயல்பாக எதுவும் அங்கீகரிக்கப்படுவதில்லை. | ok |
 | `admin.rules.vitals` | Vital-sign criteria | உடல்நிலை அளவீட்டு நிபந்தனைகள் | ok |
 | `admin.rules.vitalsNo` | This version has no vital-sign criteria. | இந்தப் பதிப்பில் உடல்நிலை அளவீட்டு நிபந்தனைகள் இல்லை. | ok |

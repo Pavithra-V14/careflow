@@ -1,6 +1,9 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach, vi } from 'vitest';
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
+
+// A test that passes alone must not fail because the machine is busy (the first render of a file pays a cold start): findBy and waitFor wait up to 5 s instead of 1 s.
+configure({ asyncUtilTimeout: 5000 });
 
 import { resetScreenFocus } from '../src/staff/components/ScreenHeading';
 

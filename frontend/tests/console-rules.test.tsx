@@ -15,6 +15,7 @@ const rule = (over: Record<string, unknown> = {}) => ({
   has_vitals_criteria: false,
   origin: 'test',
   patterns: ['PLACEHOLDER-PATTERN-A'],
+  token_sets: [['placeholder-word-a', 'placeholder-word-b']],
   phrases: ['PLACEHOLDER-PHRASE-A', 'PLACEHOLDER-PHRASE-B'],
   rule_code: 'placeholder_rule',
   rule_id: RULE,

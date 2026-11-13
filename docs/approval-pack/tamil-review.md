@@ -1,6 +1,8 @@
 # Tamil review pack (AI-prepared, NOT reviewed by a native speaker)
 
-Prepared 2026-11-13. Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 1438 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
+Prepared 2026-11-13. Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 1551 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
+
+**Regenerated 2026-11-13:** this version includes the 113 strings added since the first pack (red-flag rule list, approval and drafting screens, the front desk supervisor, the new alert label, the revoke alert lines and medications). They are written and second-passed in the same way and are just as unreviewed.
 
 ## What the second pass looked at
 
@@ -10,11 +12,11 @@ Meaning errors, register for patients, medical or safety terms, unsafe ambiguity
 - **B** wrong or odd meaning, wrong register, or an inconsistent term. Needs a native speaker.
 - **C** minor wording, or an administrator-only technical label.
 
-How it was done, honestly: all 1438 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and every string of four words or more and every short string that differs from its English was read once by the AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
+How it was done, honestly: all 1551 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and every string of four words or more and every short string that differs from its English was read once by the AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
 
-Automatic checks: 1438 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
+Automatic checks: 1551 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
 
-Notes: 33 grade A, 43 grade B, 22 grade C (98 rows with a note; some notes cover a group of similar strings, named in the note).
+Notes: 50 grade A, 75 grade B, 29 grade C (154 rows with a note; some notes cover a group of similar strings, named in the note).
 
 ## Part 1. Strings that most need a native speaker (safety first)
 
@@ -49,6 +51,22 @@ Notes: 33 grade A, 43 grade B, 22 grade C (98 rows with a note; some notes cover
 | `care.results.done` | The result was recorded. | முடிவு பதிவானது. | "result" = முடிவு, same ambiguity as care.results.body. |
 | `care.results.changes.amendment` | Amendment | மேம்படுத்தல் | See care.results.changeHint: amendment rendered மேம்படுத்தல் ("improvement"). |
 | `referrals.proposal` | Triage proposal | வகைப்படுத்தல் முன்மொழிவு | "Triage" (sorting patients by clinical urgency) is rendered வகைப்படுத்தல் ("classification"), which drops the urgency meaning. The task kind triage_proposal itself stays in English by design; a native clinician should choose the Tamil for triage. |
+| `admin.rules.approve` | Approve | ஒப்புக்கொள் | "Approve" is rendered ஒப்புக்கொள், the same verb that is also used for "acknowledge" (alerts) and that can mean "admit". For a two-doctor safety approval a clinician must choose the verb (for example ஒப்புதல் அளி). Same issue in approveTitle, approveBody and the result strings. |
+| `admin.rules.approveTitle` | Approve this red-flag rule version? | இந்தச் சிவப்புக் கொடி விதிப் பதிப்பை ஒப்புக்கொள்ளலாமா? | Same verb issue as admin.rules.approve: this is the confirmation question before a doctor approves a red-flag rule. |
+| `admin.rules.approveBody` | You are approving exactly the content shown below. The version becomes approved only if a second, different doctor also approves it. The person who wrote a version cannot decide it. | கீழே காட்டப்பட்டுள்ள உள்ளடக்கத்தையே நீங்கள் ஒப்புக்கொள்கிறீர்கள். இரண்டாவது, வேறொரு மருத்துவரும் ஒப்புக்கொண்டால் மட்டுமே இந்தப் பதிப்பு அங்கீகரிக்கப்படும். ஒரு பதிப்பை எழுதியவர் அதில் முடிவெடுக்க முடியாது. | Safety text for the approval confirmation. Check that it is unmistakable that a SECOND, different doctor is also needed, and that "the person who wrote it cannot decide it" reads as a rule, not a suggestion. |
+| `admin.rules.rejectBody` | One rejection closes this version for good. It cannot be approved afterwards. | ஒரு நிராகரிப்பு இந்தப் பதிப்பை நிரந்தரமாக மூடிவிடும். அதன் பிறகு இதை ஒப்புக்கொள்ள முடியாது. | "One rejection closes this version for good" (நிரந்தரமாக மூடிவிடும்): check that the irreversibility is clear and that "close" is not read as "pause". |
+| `admin.rules.twoDoctors` | A draft version becomes approved only when two different doctors approve it, each with a fresh authenticator code. One rejection closes the version. Nothing is approved by default. | வரைவுப் பதிப்பு, இரண்டு வெவ்வேறு மருத்துவர்கள் ஒவ்வொருவரும் புதிய அங்கீகார குறியீட்டுடன் ஒப்புக்கொண்டால் மட்டுமே அங்கீகரிக்கப்படும். ஒரு நிராகரிப்பு அந்தப் பதிப்பை மூடிவிடும். இயல்பாக எதுவும் அங்கீகரிக்கப்படுவதில்லை. | States the two-doctor rule and "nothing is approved by default" (இயல்பாக எதுவும் அங்கீகரிக்கப்படுவதில்லை). Check that இயல்பாக reads as "by default" and not "normally". |
+| `admin.rules.draftNote` | This is a draft. It is never active. It becomes approved only when two different doctors approve it, and its author cannot be one of them. | இது ஒரு வரைவு. இது ஒருபோதும் செயலில் இருக்காது. இரண்டு வெவ்வேறு மருத்துவர்கள் ஒப்புக்கொண்டால் மட்டுமே இது அங்கீகரிக்கப்படும்; அதை எழுதியவர் அவர்களில் ஒருவராக இருக்க முடியாது. | Says a draft is never active. A wrong word here could make a draft look live. Check "never" (ஒருபோதும்) and "active" (செயலில்). |
+| `admin.rules.statuses.draft_unreviewed` | Draft, not approved | வரைவு, அங்கீகரிக்கப்படவில்லை | "Draft, not approved": check it cannot be read as "approved draft". The word அங்கீகரிக்கப்பட்டது is used for the status "Approved" but the button verb is ஒப்புக்கொள்: two words for one idea. |
+| `admin.rules.result.recorded` | Your approval was recorded. The version is not approved yet: a second, different doctor must approve it. | உங்கள் ஒப்புதல் பதிவு செய்யப்பட்டது. இந்தப் பதிப்பு இன்னும் அங்கீகரிக்கப்படவில்லை: இரண்டாவது, வேறொரு மருத்துவர் ஒப்புக்கொள்ள வேண்டும். | "Your approval was recorded. It is not approved yet: a second, different doctor must approve it." Check that the two halves cannot be read as "approved". |
+| `admin.rules.result.approved` | Your approval was recorded and this version is now approved. | உங்கள் ஒப்புதல் பதிவு செய்யப்பட்டது; இந்தப் பதிப்பு இப்போது அங்கீகரிக்கப்பட்டுள்ளது. | "This version is now approved": check the word is the same as the status word and cannot be read as "recorded only". |
+| `admin.rules.result.author_cannot_decide` | You wrote this version, so you cannot decide it. A different doctor must. | இந்தப் பதிப்பை நீங்கள் எழுதினீர்கள், எனவே இதில் முடிவெடுக்க முடியாது. வேறொரு மருத்துவர் முடிவெடுக்க வேண்டும். | Tells the author they cannot decide their own rule. Check it is firm and not polite advice. |
+| `admin.rules.author.confirmBody` | This saves exactly what is shown below as a draft. A draft is never active, and it is approved only when two different doctors approve it. You cannot approve a draft you wrote. | கீழே காட்டப்பட்டுள்ளதையே இது வரைவாகச் சேமிக்கிறது. வரைவு ஒருபோதும் செயலில் இருக்காது; இரண்டு வெவ்வேறு மருத்துவர்கள் ஒப்புக்கொண்டால் மட்டுமே அது அங்கீகரிக்கப்படும். நீங்கள் எழுதிய வரைவை நீங்களே அங்கீகரிக்க முடியாது. | Says the draft is never active and needs two different doctors, and that you cannot approve your own. Same wording checks as admin.rules.draftNote. |
+| `admin.rules.author.saved` | The draft was saved. It is not approved and it is not active. | வரைவு சேமிக்கப்பட்டது. அது அங்கீகரிக்கப்படவில்லை, செயலிலும் இல்லை. | "Not approved and not active": check both halves are unmistakable. |
+| `medications.validToHint` | An empty end is saved as "no end recorded". It is not read as "still taking". | காலியான முடிவு "முடிவு பதிவு செய்யப்படவில்லை" என்று சேமிக்கப்படும். அது "இன்னும் எடுத்துக்கொள்கிறார்" என்று கருதப்படாது. | "Saved as no end recorded; not read as still taking." The Tamil uses a masculine verb (எடுத்துக்கொள்கிறார்) for a patient of unknown gender, and "still taking" is a clinical statement. Needs a native clinician to reword neutrally. |
+| `medications.noEnd` | No end recorded | முடிவு நேரம் பதிவு செய்யப்படவில்லை | "No end recorded" rendered முடிவு நேரம் பதிவு செய்யப்படவில்லை: it must never read as "ongoing". Check. |
+| `medications.correct` | Correct or stop | திருத்து அல்லது நிறுத்து | "Correct or stop" rendered திருத்து அல்லது நிறுத்து. In English and Tamil "stop" could mean stopping the medicine or stopping the record. Needs a clinician to choose wording. |
+| `medications.correctTitle` | Correct or stop this medication statement? | இந்த மருந்து அறிக்கையைத் திருத்தவா அல்லது நிறுத்தவா? | Same "stop" ambiguity as medications.correct. |
 
 ### 3. Erasure, privacy, consent and patient rights
 
@@ -66,6 +84,7 @@ Notes: 33 grade A, 43 grade B, 22 grade C (98 rows with a note; some notes cover
 | `identity.approveBody` | This links the two records. It asks for a fresh authenticator code first. | இது இரண்டு பதிவுகளையும் இணைக்கிறது. முதலில் புதிய அங்கீகாரக் குறியீடு கேட்கப்படும். | "merge" of two patient records and "link" use the same word (இணை / இணைப்பு) in identity.approveBody, identity.approved, identity.unmergeBody, identity.flagged and the portal claim strings. Merging two patients is high-consequence; the wording must make clear it is joining two records into one, not a link or connection. |
 | `identity.unmergeBody` | This breaks the link between the two records. It asks for a fresh authenticator code first. | இது இரண்டு பதிவுகளுக்கிடையிலான இணைப்பை உடைக்கிறது. முதலில் புதிய அங்கீகாரக் குறியீடு கேட்கப்படும். | "breaks the link" (இணைப்பை உடைக்கிறது): same merge/link ambiguity, and உடை ("break") may read as damage rather than undo. |
 | `patients.revoke.title` | Revoke this identity confirmation? | இந்த அடையாள உறுதிப்படுத்தலைத் திரும்பப் பெறவா? | "Revoke / take back" is rendered திரும்பப் பெறு, and "cannot be undone / cannot bring back" is rendered திரும்பப் பெற முடியாது in other strings. The same verb means two different things; a reader could confuse "revoke" with "cannot be reversed". |
+| `alerts.class.identity_revoked_suspect` | An identity confirmation was revoked as suspect | அடையாள உறுதிப்படுத்தல் சந்தேகத்தின் பேரில் திரும்பப் பெறப்பட்டது | "An identity confirmation was revoked as suspect" rendered அடையாள உறுதிப்படுத்தல் சந்தேகத்தின் பேரில் திரும்பப் பெறப்பட்டது. திரும்பப் பெறு is the same verb as "cannot be undone" elsewhere, and சந்தேகம் may read as suspicion of the person. Needs a native reviewer. |
 
 ### 5. "Acknowledge" versus "approve", and irreversible actions
 
@@ -128,6 +147,38 @@ Notes: 33 grade A, 43 grade B, 22 grade C (98 rows with a note; some notes cover
 | `patients.via.front_desk` | Front desk | வரவேற்பு மேசை | "Front desk" is வரவேற்பு மேசை here and முன்பணியாளர் in the erasure strings. Use one term. |
 | `readiness.col.ends` | Ends | முடிவு | முடிவு means "decision", "result" AND "end" in this interface (readiness.col.ends, scheduling.col.ends, care.results, referrals.col.decision). One word for three meanings in a clinical setting. |
 | `shell.clinic` | Clinic | கிளினிக் | "Clinic" is கிளினிக் here but மருத்துவமனை ("hospital") in nearly every other string; the console serves clinics, the landing pages a hospital. Check which word is meant where. |
+| `admin.rules.reject` | Reject | நிராகரி | நிராகரி is a plain word for reject; check that it reads as final for a red-flag rule version. |
+| `admin.rules.rejectTitle` | Reject this red-flag rule version? | இந்தச் சிவப்புக் கொடி விதிப் பதிப்பை நிராகரிக்கலாமா? | Confirmation question; check the verb with admin.rules.reject. |
+| `admin.rules.statuses.approved` | Approved | அங்கீகரிக்கப்பட்டது | அங்கீகரிக்கப்பட்டது versus the button verb ஒப்புக்கொள்: pick one family of words for approve. |
+| `admin.rules.statuses.retired` | Retired | நிறுத்தப்பட்டது | "Retired" is rendered நிறுத்தப்பட்டது ("stopped"), the same root as the "stop" and "hold" strings. Check it means taken out of use, not paused. |
+| `admin.rules.result.rejected` | Your rejection was recorded. This version is closed. | உங்கள் நிராகரிப்பு பதிவு செய்யப்பட்டது. இந்தப் பதிப்பு மூடப்பட்டது. | Check the closed state is clear. |
+| `admin.rules.result.already_decided` | You already decided on this version the other way. Nothing changed. | இந்தப் பதிப்பில் நீங்கள் ஏற்கெனவே எதிர்த் திசையில் முடிவெடுத்துவிட்டீர்கள். எதுவும் மாறவில்லை. | "The other way" rendered எதிர்த் திசையில்: check it means the opposite decision. |
+| `admin.rules.result.not_draft` | This version is not a draft any more, so nothing was recorded. | இந்தப் பதிப்பு இப்போது வரைவு அல்ல, எனவே எதுவும் பதிவு செய்யப்படவில்லை. | "Not a draft any more": check the tense and that nothing was saved is clear. |
+| `admin.rules.result.origin_mismatch` | This version belongs to a different environment than this clinic, so nothing was recorded. | இந்தப் பதிப்பு இந்த மருத்துவமனையின் சூழலைச் சேர்ந்தது அல்ல, எனவே எதுவும் பதிவு செய்யப்படவில்லை. | "Environment" rendered சூழல்; check it is understood as live, test and so on, not surroundings. |
+| `admin.rules.result.empty_rule` | This version has no phrases, patterns or vital-sign criteria, so it cannot be approved. | இந்தப் பதிப்பில் சொற்றொடர்கள், வடிவங்கள் அல்லது உடல்நிலை அளவீட்டு நிபந்தனைகள் எதுவும் இல்லை, எனவே இதை ஒப்புக்கொள்ள முடியாது. | No content, cannot be approved: check wording. |
+| `admin.rules.result.rejected_earlier` | A doctor already rejected this version, so it cannot be approved. | ஒரு மருத்துவர் ஏற்கெனவே இந்தப் பதிப்பை நிராகரித்துவிட்டார், எனவே இதை ஒப்புக்கொள்ள முடியாது. | Check it says a doctor already rejected it, so it cannot be approved. |
+| `admin.rules.result.platform_rule` | This rule applies to every clinic. Who may approve it has not been decided, so nothing was approved here. | இந்த விதி எல்லா மருத்துவமனைகளுக்கும் பொருந்தும். இதை யார் ஒப்புக்கொள்ளலாம் என்பது இன்னும் முடிவு செய்யப்படவில்லை, எனவே இங்கே எதுவும் அங்கீகரிக்கப்படவில்லை. | "This rule applies to every clinic. Who may approve it has not been decided." Check the meaning of "applies to every clinic". |
+| `admin.rules.result.unknown` | The system answered with a result this screen does not know. Nothing is shown as approved. Reload the page to see the current state. | இந்தத் திரைக்குத் தெரியாத ஒரு முடிவை அமைப்பு தெரிவித்தது. எதுவும் அங்கீகரிக்கப்பட்டதாகக் காட்டப்படவில்லை. தற்போதைய நிலையைப் பார்க்க பக்கத்தை மீண்டும் ஏற்றவும். | Fallback: "nothing is shown as approved. Reload". Check clarity. |
+| `admin.rules.origins.canary` | Canary | கேனரி | "Canary" is transliterated கேனரி; a test-case word, check whether clinicians would understand it, or keep it in English. |
+| `admin.rules.vitals` | Vital-sign criteria | உடல்நிலை அளவீட்டு நிபந்தனைகள் | "Vital-sign criteria" rendered உடல்நிலை அளவீட்டு நிபந்தனைகள்: check the clinical term clinicians use for vital signs. |
+| `admin.rules.tokenSets` | Token sets | சொல் தொகுப்புகள் | "Token sets" rendered சொல் தொகுப்புகள் ("word sets"): a technical term; check it is understood as words that must all appear together. |
+| `admin.rules.author.body` | A rule has a code and any number of literal phrases and token sets. There is no other kind of criterion here, and no regular expression. Nothing is filled in for you. The version is saved as a draft only. | ஒரு விதிக்கு ஒரு குறியீடும், எத்தனை வேண்டுமானாலும் நேரடிச் சொற்றொடர்களும் சொல் தொகுப்புகளும் உண்டு. இங்கே வேறு வகை நிபந்தனை இல்லை, வழக்கமான கோவை (regular expression) இல்லை. உங்களுக்காக எதுவும் நிரப்பப்படுவதில்லை. இந்தப் பதிப்பு வரைவாக மட்டுமே சேமிக்கப்படும். | Mentions "regular expression" in Tamil with the English words in brackets. Check whether to keep the English term for a doctor. |
+| `admin.rules.author.err.phraseChars` | Phrase line {{line}} has a control character or an invisible character. Retype it. | சொற்றொடர் வரி {{line}} இல் கட்டுப்பாட்டு எழுத்து அல்லது கண்ணுக்குத் தெரியாத எழுத்து உள்ளது. மீண்டும் தட்டச்சு செய்யவும். | "Control character or an invisible character": technical, check it is understandable by a doctor and that retyping is the right advice. |
+| `admin.rules.author.err.tokenChars` | Token set line {{line}} has a control character or an invisible character. Retype it. | சொல் தொகுப்பு வரி {{line}} இல் கட்டுப்பாட்டு எழுத்து அல்லது கண்ணுக்குத் தெரியாத எழுத்து உள்ளது. மீண்டும் தட்டச்சு செய்யவும். | Same as phraseChars. |
+| `admin.rules.author.err.sameWords` | Token set line {{line}} needs at least two different words. | சொல் தொகுப்பு வரி {{line}} இல் குறைந்தது இரண்டு வெவ்வேறு சொற்கள் வேண்டும். | "At least two different words" for a token set: check clarity. |
+| `medications.correctBody` | This adds a new row that replaces the row below. The old row stays on record, marked as replaced. | இது கீழே உள்ள வரிசையை மாற்றும் புதிய வரிசையைச் சேர்க்கிறது. பழைய வரிசை, மாற்றப்பட்டது எனக் குறிக்கப்பட்டு பதிவில் இருக்கும். | "Replaces the row below; the old row stays, marked replaced": check மாற்றும் (replace) versus "change". |
+| `medications.superseded` | Replaced by a later row | பிந்தைய வரிசையால் மாற்றப்பட்டது | "Replaced by a later row" rendered பிந்தைய வரிசையால் மாற்றப்பட்டது: check it does not read as "changed medicine". |
+| `medications.verified` | Verified | சரிபார்க்கப்பட்டது | சரிபார்க்கப்பட்டது (verified): check who verified is not implied. |
+| `medications.title` | Medications | மருந்துகள் | மருந்துகள் (medications) as a heading may read as a list of what the patient takes now, but it lists statements incl. stopped ones. |
+| `medications.note` | The medication statements recorded for this patient, newest first. Nothing is edited or deleted: a correction or a stop is a new row that replaces the old one. Codes are shown exactly as recorded. | இந்த நோயாளிக்காகப் பதிவு செய்யப்பட்ட மருந்து அறிக்கைகள், புதியவை முதலில். எதுவும் திருத்தப்படுவதோ நீக்கப்படுவதோ இல்லை: திருத்தம் அல்லது நிறுத்தம் என்பது பழைய வரிசையை மாற்றும் புதிய வரிசை. குறியீடுகள் பதிவு செய்யப்பட்டபடியே காட்டப்படுகின்றன. | Says nothing is edited or deleted, a correction is a new row. Check it is clear. |
+| `medications.recordBody` | This adds a new row to the patient's record. It cannot be edited afterwards; a later change is another new row. | இது நோயாளியின் பதிவில் புதிய வரிசையைச் சேர்க்கிறது. பிறகு இதைத் திருத்த முடியாது; பின்னர் ஏற்படும் மாற்றம் மற்றொரு புதிய வரிசையாகும். | "Cannot be edited afterwards": check it is clear that a later change is a new row. |
+| `medications.notSetUp` | This clinic's list of medication codes is not set up yet. Nothing was recorded. | இந்த மருத்துவமனையின் மருந்துக் குறியீடுகளின் பட்டியல் இன்னும் அமைக்கப்படவில்லை. எதுவும் பதிவு செய்யப்படவில்லை. | "The clinic's list of medication codes is not set up. Nothing was recorded.": check that "nothing was recorded" is unmistakable. |
+| `medications.invalid` | The code is not in this clinic's list, or the times are not valid. Nothing was recorded. | குறியீடு இந்த மருத்துவமனையின் பட்டியலில் இல்லை, அல்லது நேரங்கள் சரியாக இல்லை. எதுவும் பதிவு செய்யப்படவில்லை. | "Code not in the clinic's list, or times not valid. Nothing was recorded.": check. |
+| `patients.revoke.alert.raised` | An alert was sent to the administrators. | நிர்வாகிகளுக்கு எச்சரிக்கை அனுப்பப்பட்டது. | "An alert was sent to the administrators": check நிர்வாகிகள் is who the clinic means. |
+| `patients.revoke.alert.not_for_this_reason` | No administrator alert was raised for this reason. | இந்தக் காரணத்திற்கு நிர்வாகி எச்சரிக்கை எழுப்பப்படவில்லை. | Check it says no alert, not that nothing was recorded. |
+| `patients.revoke.alert.not_configured` | No administrator alert was raised: the alert settings are not configured yet. | நிர்வாகி எச்சரிக்கை எழுப்பப்படவில்லை: எச்சரிக்கை அமைப்புகள் இன்னும் அமைக்கப்படவில்லை. | Settings not configured; check clarity. |
+| `admin.tab.rules` | Red-flag rules | சிவப்புக் கொடி விதிகள் | "Red-flag rules" tab: literal சிவப்புக் கொடி (see the red flag theme); check the term clinicians use. |
+| `admin.rules.intro` | The red-flag rule versions of this clinic, with the decisions made on each. Every phrase and pattern is shown exactly as the system holds it. This screen cannot write or change a rule. | இந்த மருத்துவமனையின் சிவப்புக் கொடி விதிப் பதிப்புகளும், ஒவ்வொன்றிலும் எடுக்கப்பட்ட முடிவுகளும். ஒவ்வொரு சொற்றொடரும் வடிவமும் அமைப்பில் உள்ளபடியே காட்டப்படுகின்றன. இந்தத் திரையில் விதியை எழுதவோ மாற்றவோ முடியாது. | "Shown exactly as the system holds it": check it conveys that the screen cannot change a rule. |
 
 ## Part 3. Minor wording and technical labels (grade C)
 
@@ -155,30 +206,38 @@ Notes: 33 grade A, 43 grade B, 22 grade C (98 rows with a note; some notes cover
 | `scheduling.col.heldUntil` | Held until | வரை நிறுத்தம் | "Held until" rendered வரை நிறுத்தம் ("until halt"); awkward. |
 | `tasks.priority.standard` | Standard | வழக்கமான | "Standard" priority rendered வழக்கமான ("usual"); check it reads as a priority level next to உடனடி (immediate). |
 | `upload.scan.clean` | Clean | சுத்தம் | "Clean" (a file scan found nothing) rendered சுத்தம் ("cleanliness"). |
+| `admin.rules.origins.eval` | Evaluation | மதிப்பீடு | மதிப்பீடு (evaluation): check it is a test environment and not "assessment of a person". |
+| `admin.rules.phrases` | Phrases | சொற்றொடர்கள் | சொற்றொடர்கள் (phrases): check it is clear these are literal text matched in messages. |
+| `admin.rules.patterns` | Patterns | வடிவங்கள் | வடிவங்கள் (patterns): a technical label for older rules. |
+| `admin.rules.author.setsHint` | Each line is one set of {{min}} to {{max}} words with at least two different words, each word at most {{token}} characters, at most {{sets}} sets. | ஒவ்வொரு வரியும் {{min}} முதல் {{max}} சொற்கள் கொண்ட ஒரு தொகுப்பு; குறைந்தது இரண்டு வெவ்வேறு சொற்கள்; ஒவ்வொரு சொல்லும் அதிகபட்சம் {{token}} எழுத்துகள்; அதிகபட்சம் {{sets}} தொகுப்புகள். | Numbers and limits for token sets; check number words. |
+| `medications.conflict` | That row was already replaced, or this request clashes with an earlier one. Reload and try again. | அந்த வரிசை ஏற்கெனவே மாற்றப்பட்டுவிட்டது, அல்லது இந்தக் கோரிக்கை முந்தையதுடன் முரண்படுகிறது. மீண்டும் ஏற்றி முயலவும். | Technical conflict message. |
+| `medications.codeHint` | A code from this clinic's own list. Letters, numbers, dots, dashes and underscores only. | இந்த மருத்துவமனையின் சொந்தப் பட்டியலில் உள்ள குறியீடு. எழுத்துகள், எண்கள், புள்ளிகள், கோடுகள், அடிக்கோடுகள் மட்டும். | Allowed characters for a code. |
+| `roles.front_desk_supervisor` | Front desk supervisor | வரவேற்பு மேசை மேற்பார்வையாளர் | வரவேற்பு மேசை மேற்பார்வையாளர்: consistent with வரவேற்பு மேசை but the project also uses முன்பணியாளர் for front desk. |
 
 ## Part 4. Terms used inconsistently
 
 | English term | Tamil used (number of strings, approximate: substring match) | Problem |
 |---|---|---|
-| approve | ஒப்புக்கொள் (verb), ஒப்புதல் (noun) (45) | The verb also means "admit/agree"; some places use ஒப்புதல் அளி. |
+| approve | ஒப்புக்கொள் (verb), ஒப்புதல் (noun) (54) | The verb also means "admit/agree"; some places use ஒப்புதல் அளி. |
 | acknowledge | ஏற்றுக்கொள் ("accept") (15) | Same verb as approve; the action only records that you have seen something. |
-| record / log / transcript / register | பதிவு everywhere (106) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
-| result / decision / end | முடிவு everywhere (53) | One word for a clinical result, a person's decision and an end time. |
+| record / log / transcript / register | பதிவு everywhere (123) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
+| result / decision / end | முடிவு everywhere (61) | One word for a clinical result, a person's decision and an end time. |
 | role | பங்கு (14) | Also means "share"; பணி is used for "task". |
 | merge / link / connect / attach | இணை / இணைப்பு (50) | Merging two patient records, linking a portal account, attaching a note: one word. |
-| red flag | சிவப்புக் கொடி (literal) (11) | Check the wording clinicians use. |
-| hold (a slot or a referral) | நிறுத்து / நிறுத்தம் (stop) and ஒதுக்கீடு (allocation) (35) | Two or three words for one idea. |
+| red flag | சிவப்புக் கொடி (literal) (19) | Check the wording clinicians use. |
+| hold (a slot or a referral) | நிறுத்து / நிறுத்தம் (stop) and ஒதுக்கீடு (allocation) (39) | Two or three words for one idea. |
 | task / job | பணி (66) | A review task and a queued job share the word. |
-| patient | நோயாளி and நோயாளர் (70) | Two spellings. |
-| clinic / hospital | மருத்துவமனை (most strings), கிளினிக் (1) (47) | Check which is meant where. |
-| front desk | வரவேற்பு மேசை and முன்பணியாளர் (7) | Two renderings. |
+| approved (a status) and approve (a button) | அங்கீகரிக்கப்பட்டது (status) and ஒப்புக்கொள் (button) (14) | Two word families for one idea in the red-flag rule screens. |
+| patient | நோயாளி and நோயாளர் (73) | Two spellings. |
+| clinic / hospital | மருத்துவமனை (most strings), கிளினிக் (1) (53) | Check which is meant where. |
+| front desk | வரவேற்பு மேசை and முன்பணியாளர் (8) | Two renderings. |
 | confidence | நம்பிக்கை (2) | Means belief or hope; the strings mean how sure the system is. |
 | sample (a sampled decision) | மாதிரி (5) | Reads as a laboratory specimen. |
-| revoke / take back, and "cannot be undone" | திரும்பப் பெறு for both (15) | The same verb for "revoke" and "cannot be reversed". |
-| fresh (code) | புதிய ("new") (18) | Means a recently entered code, not a new one. |
+| revoke / take back, and "cannot be undone" | திரும்பப் பெறு for both (16) | The same verb for "revoke" and "cannot be reversed". |
+| fresh (code) | புதிய ("new") (23) | Means a recently entered code, not a new one. |
 | screen (the rules read text) | பரிசோதனை (6) | The word for a medical examination or test. |
 | escalate | உயர்நிலைக்கு அனுப்பு ("send to a higher level") (5) | Loses the sense of raising urgency. |
-| authenticator | அங்கீகார செயலி (app) / அங்கீகார குறியீடு (code) (14) | Consistent; check it is the word staff use. |
+| authenticator | அங்கீகார செயலி (app) / அங்கீகார குறியீடு (code) (15) | Consistent; check it is the word staff use. |
 
 ## Part 5. Register
 
@@ -220,7 +279,7 @@ These are the same in English and Tamil by design, and a Tamil-speaking patient 
 - `tasks.kind.screening_unassessable`
 - `tasks.kind.triage_proposal`
 
-## Part 7. All 1438 strings
+## Part 7. All 1551 strings
 
 Fill in the last column. Write **OK**, or write the full corrected Tamil (keep every {{placeholder}} exactly as it is). Leave a row empty if you have not looked at it.
 
@@ -461,6 +520,82 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `admin.reviewer.verdicts.review` | Needs a look | பார்க்க வேண்டும் | no issue found | |
 | `admin.reviewer.verdicts.too_few` | Too few decisions | முடிவுகள் மிகக் குறைவு | no issue found | |
 | `admin.reviewer.window` | The last {{days}} days. | கடந்த {{days}} நாட்கள். | no issue found | |
+| `admin.rules.approve` | Approve | ஒப்புக்கொள் | A: "Approve" is rendered ஒப்புக்கொள், the same verb that is also used for "acknowledge" (alerts) and that can mean "admit". For a two-doctor safety approval a clinician must choose the verb (for example ஒப்புதல் அளி). Same issue in approveTitle, approveBody and the result strings. | |
+| `admin.rules.approveBody` | You are approving exactly the content shown below. The version becomes approved only if a second, different doctor also approves it. The person who wrote a version cannot decide it. | கீழே காட்டப்பட்டுள்ள உள்ளடக்கத்தையே நீங்கள் ஒப்புக்கொள்கிறீர்கள். இரண்டாவது, வேறொரு மருத்துவரும் ஒப்புக்கொண்டால் மட்டுமே இந்தப் பதிப்பு அங்கீகரிக்கப்படும். ஒரு பதிப்பை எழுதியவர் அதில் முடிவெடுக்க முடியாது. | A: Safety text for the approval confirmation. Check that it is unmistakable that a SECOND, different doctor is also needed, and that "the person who wrote it cannot decide it" reads as a rule, not a suggestion. | |
+| `admin.rules.approveTitle` | Approve this red-flag rule version? | இந்தச் சிவப்புக் கொடி விதிப் பதிப்பை ஒப்புக்கொள்ளலாமா? | A: Same verb issue as admin.rules.approve: this is the confirmation question before a doctor approves a red-flag rule. | |
+| `admin.rules.approvedAt` | Approved at | அங்கீகரிக்கப்பட்ட நேரம் | no issue found | |
+| `admin.rules.author.back` | Back to editing | திருத்தத்திற்குத் திரும்பு | no issue found | |
+| `admin.rules.author.body` | A rule has a code and any number of literal phrases and token sets. There is no other kind of criterion here, and no regular expression. Nothing is filled in for you. The version is saved as a draft only. | ஒரு விதிக்கு ஒரு குறியீடும், எத்தனை வேண்டுமானாலும் நேரடிச் சொற்றொடர்களும் சொல் தொகுப்புகளும் உண்டு. இங்கே வேறு வகை நிபந்தனை இல்லை, வழக்கமான கோவை (regular expression) இல்லை. உங்களுக்காக எதுவும் நிரப்பப்படுவதில்லை. இந்தப் பதிப்பு வரைவாக மட்டுமே சேமிக்கப்படும். | B: Mentions "regular expression" in Tamil with the English words in brackets. Check whether to keep the English term for a doctor. | |
+| `admin.rules.author.code` | Rule code | விதிக் குறியீடு | no issue found | |
+| `admin.rules.author.codeHint` | Lower-case letters, digits and underscores, starting with a letter, at most 63 characters. A code that already exists gets the next version number. | சிறிய ஆங்கில எழுத்துகள், இலக்கங்கள், அடிக்கோடுகள் மட்டும்; ஓர் எழுத்தில் தொடங்க வேண்டும்; அதிகபட்சம் 63 எழுத்துகள். ஏற்கெனவே உள்ள குறியீட்டுக்கு அடுத்த பதிப்பு எண் கிடைக்கும். | no issue found | |
+| `admin.rules.author.confirmBody` | This saves exactly what is shown below as a draft. A draft is never active, and it is approved only when two different doctors approve it. You cannot approve a draft you wrote. | கீழே காட்டப்பட்டுள்ளதையே இது வரைவாகச் சேமிக்கிறது. வரைவு ஒருபோதும் செயலில் இருக்காது; இரண்டு வெவ்வேறு மருத்துவர்கள் ஒப்புக்கொண்டால் மட்டுமே அது அங்கீகரிக்கப்படும். நீங்கள் எழுதிய வரைவை நீங்களே அங்கீகரிக்க முடியாது. | A: Says the draft is never active and needs two different doctors, and that you cannot approve your own. Same wording checks as admin.rules.draftNote. | |
+| `admin.rules.author.confirmTitle` | Save this draft red-flag rule version? | இந்தச் சிவப்புக் கொடி விதிப் பதிப்பின் வரைவைச் சேமிக்கலாமா? | no issue found | |
+| `admin.rules.author.conflict` | This request clashes with an earlier one that used the same key. Close this window and start again. | இதே விசையைப் பயன்படுத்திய முந்தைய கோரிக்கையுடன் இந்தக் கோரிக்கை முரண்படுகிறது. இந்தச் சாளரத்தை மூடி மீண்டும் தொடங்கவும். | no issue found | |
+| `admin.rules.author.err.code` | The rule code must start with a lower-case letter and use only lower-case letters, digits and underscores (at most 63 characters). | விதிக் குறியீடு சிறிய ஆங்கில எழுத்தில் தொடங்கி, சிறிய ஆங்கில எழுத்துகள், இலக்கங்கள், அடிக்கோடுகள் மட்டுமே கொண்டிருக்க வேண்டும் (அதிகபட்சம் 63 எழுத்துகள்). | no issue found | |
+| `admin.rules.author.err.noCriterion` | Add at least one phrase or one token set. | குறைந்தது ஒரு சொற்றொடர் அல்லது ஒரு சொல் தொகுப்பைச் சேர்க்கவும். | no issue found | |
+| `admin.rules.author.err.phraseChars` | Phrase line {{line}} has a control character or an invisible character. Retype it. | சொற்றொடர் வரி {{line}} இல் கட்டுப்பாட்டு எழுத்து அல்லது கண்ணுக்குத் தெரியாத எழுத்து உள்ளது. மீண்டும் தட்டச்சு செய்யவும். | B: "Control character or an invisible character": technical, check it is understandable by a doctor and that retyping is the right advice. | |
+| `admin.rules.author.err.phraseLong` | Phrase line {{line}} is too long. | சொற்றொடர் வரி {{line}} மிக நீளமானது. | no issue found | |
+| `admin.rules.author.err.sameWords` | Token set line {{line}} needs at least two different words. | சொல் தொகுப்பு வரி {{line}} இல் குறைந்தது இரண்டு வெவ்வேறு சொற்கள் வேண்டும். | B: "At least two different words" for a token set: check clarity. | |
+| `admin.rules.author.err.setSize` | Token set line {{line}} must have between 2 and 10 words. | சொல் தொகுப்பு வரி {{line}} இல் 2 முதல் 10 சொற்கள் இருக்க வேண்டும். | no issue found | |
+| `admin.rules.author.err.tokenChars` | Token set line {{line}} has a control character or an invisible character. Retype it. | சொல் தொகுப்பு வரி {{line}} இல் கட்டுப்பாட்டு எழுத்து அல்லது கண்ணுக்குத் தெரியாத எழுத்து உள்ளது. மீண்டும் தட்டச்சு செய்யவும். | B: Same as phraseChars. | |
+| `admin.rules.author.err.tokenLong` | Token set line {{line}} has a word that is too long. | சொல் தொகுப்பு வரி {{line}} இல் மிக நீளமான ஒரு சொல் உள்ளது. | no issue found | |
+| `admin.rules.author.err.tooManyPhrases` | There are too many phrases (at most {{max}}). | சொற்றொடர்கள் மிக அதிகம் (அதிகபட்சம் {{max}}). | no issue found | |
+| `admin.rules.author.err.tooManySets` | There are too many token sets (at most {{sets}}). | சொல் தொகுப்புகள் மிக அதிகம் (அதிகபட்சம் {{sets}}). | no issue found | |
+| `admin.rules.author.invalid` | The draft is outside what a rule may contain. Nothing was saved. Check the limits and try again. | வரைவு, ஒரு விதி கொண்டிருக்கக்கூடியதற்கு வெளியே உள்ளது. எதுவும் சேமிக்கப்படவில்லை. வரம்புகளைச் சரிபார்த்து மீண்டும் முயலவும். | no issue found | |
+| `admin.rules.author.open` | Write a new rule version | புதிய விதிப் பதிப்பை எழுது | no issue found | |
+| `admin.rules.author.phrases` | Phrases (one per line) | சொற்றொடர்கள் (ஒரு வரிக்கு ஒன்று) | no issue found | |
+| `admin.rules.author.phrasesHint` | Each line is one literal phrase, at most {{length}} characters, at most {{max}} phrases. Empty lines are ignored. | ஒவ்வொரு வரியும் ஒரு நேரடிச் சொற்றொடர், அதிகபட்சம் {{length}} எழுத்துகள், அதிகபட்சம் {{max}} சொற்றொடர்கள். காலி வரிகள் புறக்கணிக்கப்படும். | no issue found | |
+| `admin.rules.author.problems` | Problems to fix | சரிசெய்ய வேண்டியவை | no issue found | |
+| `admin.rules.author.review` | Review the draft | வரைவைச் சரிபார் | no issue found | |
+| `admin.rules.author.save` | Save draft | வரைவைச் சேமி | no issue found | |
+| `admin.rules.author.saved` | The draft was saved. It is not approved and it is not active. | வரைவு சேமிக்கப்பட்டது. அது அங்கீகரிக்கப்படவில்லை, செயலிலும் இல்லை. | A: "Not approved and not active": check both halves are unmistakable. | |
+| `admin.rules.author.sets` | Token sets (one set per line, words separated by spaces) | சொல் தொகுப்புகள் (ஒரு வரிக்கு ஒரு தொகுப்பு, சொற்கள் இடைவெளியால் பிரிக்கப்பட வேண்டும்) | no issue found | |
+| `admin.rules.author.setsHint` | Each line is one set of {{min}} to {{max}} words with at least two different words, each word at most {{token}} characters, at most {{sets}} sets. | ஒவ்வொரு வரியும் {{min}} முதல் {{max}} சொற்கள் கொண்ட ஒரு தொகுப்பு; குறைந்தது இரண்டு வெவ்வேறு சொற்கள்; ஒவ்வொரு சொல்லும் அதிகபட்சம் {{token}} எழுத்துகள்; அதிகபட்சம் {{sets}} தொகுப்புகள். | C: Numbers and limits for token sets; check number words. | |
+| `admin.rules.author.title` | Write a draft red-flag rule version | சிவப்புக் கொடி விதிப் பதிப்பின் வரைவை எழுது | no issue found | |
+| `admin.rules.col.at` | When | எப்போது | no issue found | |
+| `admin.rules.col.by` | Decided by (account id) | முடிவெடுத்தவர் (கணக்கு அடையாளம்) | no issue found | |
+| `admin.rules.col.decision` | Decision | முடிவு | no issue found | |
+| `admin.rules.decisionWords.approve` | Approved | ஒப்புக்கொண்டார் | no issue found | |
+| `admin.rules.decisionWords.reject` | Rejected | நிராகரித்தார் | no issue found | |
+| `admin.rules.decisions` | Decisions so far | இதுவரை எடுத்த முடிவுகள் | no issue found | |
+| `admin.rules.draftNote` | This is a draft. It is never active. It becomes approved only when two different doctors approve it, and its author cannot be one of them. | இது ஒரு வரைவு. இது ஒருபோதும் செயலில் இருக்காது. இரண்டு வெவ்வேறு மருத்துவர்கள் ஒப்புக்கொண்டால் மட்டுமே இது அங்கீகரிக்கப்படும்; அதை எழுதியவர் அவர்களில் ஒருவராக இருக்க முடியாது. | A: Says a draft is never active. A wrong word here could make a draft look live. Check "never" (ஒருபோதும்) and "active" (செயலில்). | |
+| `admin.rules.empty` | There are no red-flag rule versions to show. | காட்ட சிவப்புக் கொடி விதிப் பதிப்புகள் இல்லை. | no issue found | |
+| `admin.rules.intro` | The red-flag rule versions of this clinic, with the decisions made on each. Every phrase and pattern is shown exactly as the system holds it. This screen cannot write or change a rule. | இந்த மருத்துவமனையின் சிவப்புக் கொடி விதிப் பதிப்புகளும், ஒவ்வொன்றிலும் எடுக்கப்பட்ட முடிவுகளும். ஒவ்வொரு சொற்றொடரும் வடிவமும் அமைப்பில் உள்ளபடியே காட்டப்படுகின்றன. இந்தத் திரையில் விதியை எழுதவோ மாற்றவோ முடியாது. | B: "Shown exactly as the system holds it": check it conveys that the screen cannot change a rule. | |
+| `admin.rules.listLabel` | Red-flag rule versions | சிவப்புக் கொடி விதிப் பதிப்புகள் | no issue found | |
+| `admin.rules.noDecisions` | Nobody has decided on this version yet. | இந்தப் பதிப்பில் இதுவரை யாரும் முடிவெடுக்கவில்லை. | no issue found | |
+| `admin.rules.none` | None | இல்லை | no issue found | |
+| `admin.rules.origin` | Environment | சூழல் | no issue found | |
+| `admin.rules.origins.canary` | Canary | கேனரி | B: "Canary" is transliterated கேனரி; a test-case word, check whether clinicians would understand it, or keep it in English. | |
+| `admin.rules.origins.eval` | Evaluation | மதிப்பீடு | C: மதிப்பீடு (evaluation): check it is a test environment and not "assessment of a person". | |
+| `admin.rules.origins.live` | Live | நேரடி | no issue found | |
+| `admin.rules.origins.test` | Test | சோதனை | no issue found | |
+| `admin.rules.patterns` | Patterns | வடிவங்கள் | C: வடிவங்கள் (patterns): a technical label for older rules. | |
+| `admin.rules.phrases` | Phrases | சொற்றொடர்கள் | C: சொற்றொடர்கள் (phrases): check it is clear these are literal text matched in messages. | |
+| `admin.rules.readOnly` | You can read these rules and who decided on them. Only doctors decide. | இந்த விதிகளையும் அவற்றில் முடிவெடுத்தவர்களையும் நீங்கள் படிக்கலாம். மருத்துவர்கள் மட்டுமே முடிவெடுப்பார்கள். | no issue found | |
+| `admin.rules.reject` | Reject | நிராகரி | B: நிராகரி is a plain word for reject; check that it reads as final for a red-flag rule version. | |
+| `admin.rules.rejectBody` | One rejection closes this version for good. It cannot be approved afterwards. | ஒரு நிராகரிப்பு இந்தப் பதிப்பை நிரந்தரமாக மூடிவிடும். அதன் பிறகு இதை ஒப்புக்கொள்ள முடியாது. | A: "One rejection closes this version for good" (நிரந்தரமாக மூடிவிடும்): check that the irreversibility is clear and that "close" is not read as "pause". | |
+| `admin.rules.rejectTitle` | Reject this red-flag rule version? | இந்தச் சிவப்புக் கொடி விதிப் பதிப்பை நிராகரிக்கலாமா? | B: Confirmation question; check the verb with admin.rules.reject. | |
+| `admin.rules.result.already_decided` | You already decided on this version the other way. Nothing changed. | இந்தப் பதிப்பில் நீங்கள் ஏற்கெனவே எதிர்த் திசையில் முடிவெடுத்துவிட்டீர்கள். எதுவும் மாறவில்லை. | B: "The other way" rendered எதிர்த் திசையில்: check it means the opposite decision. | |
+| `admin.rules.result.approved` | Your approval was recorded and this version is now approved. | உங்கள் ஒப்புதல் பதிவு செய்யப்பட்டது; இந்தப் பதிப்பு இப்போது அங்கீகரிக்கப்பட்டுள்ளது. | A: "This version is now approved": check the word is the same as the status word and cannot be read as "recorded only". | |
+| `admin.rules.result.author_cannot_decide` | You wrote this version, so you cannot decide it. A different doctor must. | இந்தப் பதிப்பை நீங்கள் எழுதினீர்கள், எனவே இதில் முடிவெடுக்க முடியாது. வேறொரு மருத்துவர் முடிவெடுக்க வேண்டும். | A: Tells the author they cannot decide their own rule. Check it is firm and not polite advice. | |
+| `admin.rules.result.empty_rule` | This version has no phrases, patterns or vital-sign criteria, so it cannot be approved. | இந்தப் பதிப்பில் சொற்றொடர்கள், வடிவங்கள் அல்லது உடல்நிலை அளவீட்டு நிபந்தனைகள் எதுவும் இல்லை, எனவே இதை ஒப்புக்கொள்ள முடியாது. | B: No content, cannot be approved: check wording. | |
+| `admin.rules.result.not_draft` | This version is not a draft any more, so nothing was recorded. | இந்தப் பதிப்பு இப்போது வரைவு அல்ல, எனவே எதுவும் பதிவு செய்யப்படவில்லை. | B: "Not a draft any more": check the tense and that nothing was saved is clear. | |
+| `admin.rules.result.origin_mismatch` | This version belongs to a different environment than this clinic, so nothing was recorded. | இந்தப் பதிப்பு இந்த மருத்துவமனையின் சூழலைச் சேர்ந்தது அல்ல, எனவே எதுவும் பதிவு செய்யப்படவில்லை. | B: "Environment" rendered சூழல்; check it is understood as live, test and so on, not surroundings. | |
+| `admin.rules.result.platform_rule` | This rule applies to every clinic. Who may approve it has not been decided, so nothing was approved here. | இந்த விதி எல்லா மருத்துவமனைகளுக்கும் பொருந்தும். இதை யார் ஒப்புக்கொள்ளலாம் என்பது இன்னும் முடிவு செய்யப்படவில்லை, எனவே இங்கே எதுவும் அங்கீகரிக்கப்படவில்லை. | B: "This rule applies to every clinic. Who may approve it has not been decided." Check the meaning of "applies to every clinic". | |
+| `admin.rules.result.recorded` | Your approval was recorded. The version is not approved yet: a second, different doctor must approve it. | உங்கள் ஒப்புதல் பதிவு செய்யப்பட்டது. இந்தப் பதிப்பு இன்னும் அங்கீகரிக்கப்படவில்லை: இரண்டாவது, வேறொரு மருத்துவர் ஒப்புக்கொள்ள வேண்டும். | A: "Your approval was recorded. It is not approved yet: a second, different doctor must approve it." Check that the two halves cannot be read as "approved". | |
+| `admin.rules.result.rejected` | Your rejection was recorded. This version is closed. | உங்கள் நிராகரிப்பு பதிவு செய்யப்பட்டது. இந்தப் பதிப்பு மூடப்பட்டது. | B: Check the closed state is clear. | |
+| `admin.rules.result.rejected_earlier` | A doctor already rejected this version, so it cannot be approved. | ஒரு மருத்துவர் ஏற்கெனவே இந்தப் பதிப்பை நிராகரித்துவிட்டார், எனவே இதை ஒப்புக்கொள்ள முடியாது. | B: Check it says a doctor already rejected it, so it cannot be approved. | |
+| `admin.rules.result.unknown` | The system answered with a result this screen does not know. Nothing is shown as approved. Reload the page to see the current state. | இந்தத் திரைக்குத் தெரியாத ஒரு முடிவை அமைப்பு தெரிவித்தது. எதுவும் அங்கீகரிக்கப்பட்டதாகக் காட்டப்படவில்லை. தற்போதைய நிலையைப் பார்க்க பக்கத்தை மீண்டும் ஏற்றவும். | B: Fallback: "nothing is shown as approved. Reload". Check clarity. | |
+| `admin.rules.status` | Status | நிலை | no issue found | |
+| `admin.rules.statuses.approved` | Approved | அங்கீகரிக்கப்பட்டது | B: அங்கீகரிக்கப்பட்டது versus the button verb ஒப்புக்கொள்: pick one family of words for approve. | |
+| `admin.rules.statuses.draft_unreviewed` | Draft, not approved | வரைவு, அங்கீகரிக்கப்படவில்லை | A: "Draft, not approved": check it cannot be read as "approved draft". The word அங்கீகரிக்கப்பட்டது is used for the status "Approved" but the button verb is ஒப்புக்கொள்: two words for one idea. | |
+| `admin.rules.statuses.retired` | Retired | நிறுத்தப்பட்டது | B: "Retired" is rendered நிறுத்தப்பட்டது ("stopped"), the same root as the "stop" and "hold" strings. Check it means taken out of use, not paused. | |
+| `admin.rules.tokenSets` | Token sets | சொல் தொகுப்புகள் | B: "Token sets" rendered சொல் தொகுப்புகள் ("word sets"): a technical term; check it is understood as words that must all appear together. | |
+| `admin.rules.twoDoctors` | A draft version becomes approved only when two different doctors approve it, each with a fresh authenticator code. One rejection closes the version. Nothing is approved by default. | வரைவுப் பதிப்பு, இரண்டு வெவ்வேறு மருத்துவர்கள் ஒவ்வொருவரும் புதிய அங்கீகார குறியீட்டுடன் ஒப்புக்கொண்டால் மட்டுமே அங்கீகரிக்கப்படும். ஒரு நிராகரிப்பு அந்தப் பதிப்பை மூடிவிடும். இயல்பாக எதுவும் அங்கீகரிக்கப்படுவதில்லை. | A: States the two-doctor rule and "nothing is approved by default" (இயல்பாக எதுவும் அங்கீகரிக்கப்படுவதில்லை). Check that இயல்பாக reads as "by default" and not "normally". | |
+| `admin.rules.vitals` | Vital-sign criteria | உடல்நிலை அளவீட்டு நிபந்தனைகள் | B: "Vital-sign criteria" rendered உடல்நிலை அளவீட்டு நிபந்தனைகள்: check the clinical term clinicians use for vital signs. | |
+| `admin.rules.vitalsNo` | This version has no vital-sign criteria. | இந்தப் பதிப்பில் உடல்நிலை அளவீட்டு நிபந்தனைகள் இல்லை. | no issue found | |
+| `admin.rules.vitalsYes` | This version has vital-sign criteria. | இந்தப் பதிப்பில் உடல்நிலை அளவீட்டு நிபந்தனைகள் உள்ளன. | no issue found | |
+| `admin.rules.youDecided` | You have already decided on this version. | இந்தப் பதிப்பில் நீங்கள் ஏற்கெனவே முடிவெடுத்துவிட்டீர்கள். | no issue found | |
 | `admin.stepUp` | This needs a fresh authenticator code. You will be asked for it. | இதற்குப் புதிய அங்கீகார குறியீடு தேவை. அது உங்களிடம் கேட்கப்படும். | B: "fresh" code is rendered புதிய ("new"). It means a RECENTLY entered code, not a never-used one; a reviewer should pick wording that says "recent". | |
 | `admin.tab.accounts` | Staff accounts | பணியாளர் கணக்குகள் | no issue found | |
 | `admin.tab.autonomy` | Autonomy | தன்னாட்சி | no issue found | |
@@ -468,6 +603,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `admin.tab.grievances` | Grievances | குறைகள் | no issue found | |
 | `admin.tab.recovery` | Staff recovery | பணியாளர் மீட்பு | no issue found | |
 | `admin.tab.reviewer` | Reviewer statistics | மதிப்பாய்வாளர் புள்ளிவிவரங்கள் | no issue found | |
+| `admin.tab.rules` | Red-flag rules | சிவப்புக் கொடி விதிகள் | B: "Red-flag rules" tab: literal சிவப்புக் கொடி (see the red flag theme); check the term clinicians use. | |
 | `admin.tab.voice` | Voice transcripts | குரல் பதிவுகள் | no issue found | |
 | `admin.tabs` | Admin sections | நிர்வாகப் பிரிவுகள் | no issue found | |
 | `admin.title` | Admin | நிர்வாகம் | no issue found | |
@@ -504,6 +640,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `alerts.class.dead_letters` | Failed jobs waiting | தோல்வியுற்ற பணிகள் காத்திருக்கின்றன | no issue found | |
 | `alerts.class.delivery_failed` | Delivery failed | வழங்கல் தோல்வியடைந்தது | no issue found | |
 | `alerts.class.fallback_spike` | Fallback spike | மாற்று வழி பயன்பாடு அதிகரிப்பு | no issue found | |
+| `alerts.class.identity_revoked_suspect` | An identity confirmation was revoked as suspect | அடையாள உறுதிப்படுத்தல் சந்தேகத்தின் பேரில் திரும்பப் பெறப்பட்டது | A: "An identity confirmation was revoked as suspect" rendered அடையாள உறுதிப்படுத்தல் சந்தேகத்தின் பேரில் திரும்பப் பெறப்பட்டது. திரும்பப் பெறு is the same verb as "cannot be undone" elsewhere, and சந்தேகம் may read as suspicion of the person. Needs a native reviewer. | |
 | `alerts.class.queue_age` | Queue is old | வரிசை பழையதாகிவிட்டது | no issue found | |
 | `alerts.class.red_flag_overdue` | Red-flag task overdue | சிவப்புக் கொடிப் பணி தாமதமானது | A: "Red-flag task overdue" (an overdue safety task) uses the literal சிவப்புக் கொடி term; an overdue red-flag alert must be unmistakable. | |
 | `alerts.class.spend_runaway` | Spending is running away | செலவு கட்டுப்பாட்டை மீறுகிறது | no issue found | |
@@ -1023,6 +1160,37 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `landing.privacy.readNotice` | Read the privacy notice | தனியுரிமை அறிவிப்பைப் படிக்கவும் | no issue found | |
 | `languages.en` | English | English | kept in English by design | |
 | `languages.ta` | தமிழ் | தமிழ் | kept in English by design | |
+| `medications.code` | Code | குறியீடு | no issue found | |
+| `medications.codeHint` | A code from this clinic's own list. Letters, numbers, dots, dashes and underscores only. | இந்த மருத்துவமனையின் சொந்தப் பட்டியலில் உள்ள குறியீடு. எழுத்துகள், எண்கள், புள்ளிகள், கோடுகள், அடிக்கோடுகள் மட்டும். | C: Allowed characters for a code. | |
+| `medications.col.action` | Action | செயல் | no issue found | |
+| `medications.col.code` | Code | குறியீடு | no issue found | |
+| `medications.col.from` | From | தொடக்கம் | no issue found | |
+| `medications.col.recorded` | Recorded | பதிவு செய்யப்பட்டது | no issue found | |
+| `medications.col.state` | State | நிலை | no issue found | |
+| `medications.col.to` | To | முடிவு | no issue found | |
+| `medications.col.verified` | Verified | சரிபார்க்கப்பட்டது | no issue found | |
+| `medications.conflict` | That row was already replaced, or this request clashes with an earlier one. Reload and try again. | அந்த வரிசை ஏற்கெனவே மாற்றப்பட்டுவிட்டது, அல்லது இந்தக் கோரிக்கை முந்தையதுடன் முரண்படுகிறது. மீண்டும் ஏற்றி முயலவும். | C: Technical conflict message. | |
+| `medications.correct` | Correct or stop | திருத்து அல்லது நிறுத்து | A: "Correct or stop" rendered திருத்து அல்லது நிறுத்து. In English and Tamil "stop" could mean stopping the medicine or stopping the record. Needs a clinician to choose wording. | |
+| `medications.correctBody` | This adds a new row that replaces the row below. The old row stays on record, marked as replaced. | இது கீழே உள்ள வரிசையை மாற்றும் புதிய வரிசையைச் சேர்க்கிறது. பழைய வரிசை, மாற்றப்பட்டது எனக் குறிக்கப்பட்டு பதிவில் இருக்கும். | B: "Replaces the row below; the old row stays, marked replaced": check மாற்றும் (replace) versus "change". | |
+| `medications.correctTitle` | Correct or stop this medication statement? | இந்த மருந்து அறிக்கையைத் திருத்தவா அல்லது நிறுத்தவா? | A: Same "stop" ambiguity as medications.correct. | |
+| `medications.current` | Current | தற்போதையது | no issue found | |
+| `medications.done` | The medication statement was recorded. | மருந்து அறிக்கை பதிவு செய்யப்பட்டது. | no issue found | |
+| `medications.empty` | No medication statements are recorded for this patient. | இந்த நோயாளிக்கு மருந்து அறிக்கைகள் எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
+| `medications.invalid` | The code is not in this clinic's list, or the times are not valid. Nothing was recorded. | குறியீடு இந்த மருத்துவமனையின் பட்டியலில் இல்லை, அல்லது நேரங்கள் சரியாக இல்லை. எதுவும் பதிவு செய்யப்படவில்லை. | B: "Code not in the clinic's list, or times not valid. Nothing was recorded.": check. | |
+| `medications.noEnd` | No end recorded | முடிவு நேரம் பதிவு செய்யப்படவில்லை | A: "No end recorded" rendered முடிவு நேரம் பதிவு செய்யப்படவில்லை: it must never read as "ongoing". Check. | |
+| `medications.notSetUp` | This clinic's list of medication codes is not set up yet. Nothing was recorded. | இந்த மருத்துவமனையின் மருந்துக் குறியீடுகளின் பட்டியல் இன்னும் அமைக்கப்படவில்லை. எதுவும் பதிவு செய்யப்படவில்லை. | B: "The clinic's list of medication codes is not set up. Nothing was recorded.": check that "nothing was recorded" is unmistakable. | |
+| `medications.note` | The medication statements recorded for this patient, newest first. Nothing is edited or deleted: a correction or a stop is a new row that replaces the old one. Codes are shown exactly as recorded. | இந்த நோயாளிக்காகப் பதிவு செய்யப்பட்ட மருந்து அறிக்கைகள், புதியவை முதலில். எதுவும் திருத்தப்படுவதோ நீக்கப்படுவதோ இல்லை: திருத்தம் அல்லது நிறுத்தம் என்பது பழைய வரிசையை மாற்றும் புதிய வரிசை. குறியீடுகள் பதிவு செய்யப்பட்டபடியே காட்டப்படுகின்றன. | B: Says nothing is edited or deleted, a correction is a new row. Check it is clear. | |
+| `medications.record` | Record a medication | மருந்தைப் பதிவு செய் | no issue found | |
+| `medications.recordBody` | This adds a new row to the patient's record. It cannot be edited afterwards; a later change is another new row. | இது நோயாளியின் பதிவில் புதிய வரிசையைச் சேர்க்கிறது. பிறகு இதைத் திருத்த முடியாது; பின்னர் ஏற்படும் மாற்றம் மற்றொரு புதிய வரிசையாகும். | B: "Cannot be edited afterwards": check it is clear that a later change is a new row. | |
+| `medications.recordTitle` | Record a medication statement? | மருந்து அறிக்கையைப் பதிவு செய்யலாமா? | no issue found | |
+| `medications.replaces` | Replaces | மாற்றுவது | no issue found | |
+| `medications.save` | Record | பதிவு செய் | no issue found | |
+| `medications.superseded` | Replaced by a later row | பிந்தைய வரிசையால் மாற்றப்பட்டது | B: "Replaced by a later row" rendered பிந்தைய வரிசையால் மாற்றப்பட்டது: check it does not read as "changed medicine". | |
+| `medications.title` | Medications | மருந்துகள் | B: மருந்துகள் (medications) as a heading may read as a list of what the patient takes now, but it lists statements incl. stopped ones. | |
+| `medications.validFrom` | From | தொடக்கம் | no issue found | |
+| `medications.validTo` | To (leave empty if no end is recorded) | முடிவு (முடிவு நேரம் பதிவு செய்யப்படாவிட்டால் காலியாக விடவும்) | no issue found | |
+| `medications.validToHint` | An empty end is saved as "no end recorded". It is not read as "still taking". | காலியான முடிவு "முடிவு பதிவு செய்யப்படவில்லை" என்று சேமிக்கப்படும். அது "இன்னும் எடுத்துக்கொள்கிறார்" என்று கருதப்படாது. | A: "Saved as no end recorded; not read as still taking." The Tamil uses a masculine verb (எடுத்துக்கொள்கிறார்) for a patient of unknown gender, and "still taking" is a clinical statement. Needs a native clinician to reword neutrally. | |
+| `medications.verified` | Verified | சரிபார்க்கப்பட்டது | B: சரிபார்க்கப்பட்டது (verified): check who verified is not implied. | |
 | `nav.access` | Break-glass | அவசரகால அணுகல் | no issue found | |
 | `nav.admin` | Admin | நிர்வாகம் | no issue found | |
 | `nav.alerts` | Alerts | எச்சரிக்கைகள் | no issue found | |
@@ -1122,6 +1290,9 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `patients.register.unavailable` | Registering is not set up yet (encryption keys are not configured). Nothing was saved. | பதிவு செய்வது இன்னும் அமைக்கப்படவில்லை (குறியாக்க விசைகள் அமைக்கப்படவில்லை). எதுவும் சேமிக்கப்படவில்லை. | no issue found | |
 | `patients.results` | Search results | தேடல் முடிவுகள் | no issue found | |
 | `patients.revoke.accepted` | The request was accepted. Check the record for its current state. | கோரிக்கை ஏற்கப்பட்டது. பதிவின் தற்போதைய நிலையைச் சரிபார்க்கவும். | no issue found | |
+| `patients.revoke.alert.not_configured` | No administrator alert was raised: the alert settings are not configured yet. | நிர்வாகி எச்சரிக்கை எழுப்பப்படவில்லை: எச்சரிக்கை அமைப்புகள் இன்னும் அமைக்கப்படவில்லை. | B: Settings not configured; check clarity. | |
+| `patients.revoke.alert.not_for_this_reason` | No administrator alert was raised for this reason. | இந்தக் காரணத்திற்கு நிர்வாகி எச்சரிக்கை எழுப்பப்படவில்லை. | B: Check it says no alert, not that nothing was recorded. | |
+| `patients.revoke.alert.raised` | An alert was sent to the administrators. | நிர்வாகிகளுக்கு எச்சரிக்கை அனுப்பப்பட்டது. | B: "An alert was sent to the administrators": check நிர்வாகிகள் is who the clinic means. | |
 | `patients.revoke.body` | This moves the record back to unverified, so a match on it is reviewed by a person. Nothing that is already linked is undone. | இது பதிவை மீண்டும் சரிபார்க்கப்படாத நிலைக்கு மாற்றுகிறது; அதனால் அதில் ஏற்படும் பொருத்தத்தை ஒரு நபர் மதிப்பாய்வு செய்வார். ஏற்கனவே இணைக்கப்பட்டவை எதுவும் மாற்றப்படாது. | no issue found; earlier AI pass flag (unnatural): Awkward phrasing on a message describing what the system will do. | |
 | `patients.revoke.button` | Revoke confirmation | உறுதிப்படுத்தலைத் திரும்பப் பெறு | no issue found | |
 | `patients.revoke.chooseFirst` | Choose a reason first. | முதலில் ஒரு காரணத்தைத் தேர்ந்தெடுக்கவும். | no issue found | |
@@ -1403,6 +1574,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `roles.business_owner` | Business owner | வணிக உரிமையாளர் | no issue found | |
 | `roles.doctor` | Doctor | மருத்துவர் | no issue found | |
 | `roles.front_desk` | Front desk | வரவேற்பு மேசை | no issue found | |
+| `roles.front_desk_supervisor` | Front desk supervisor | வரவேற்பு மேசை மேற்பார்வையாளர் | C: வரவேற்பு மேசை மேற்பார்வையாளர்: consistent with வரவேற்பு மேசை but the project also uses முன்பணியாளர் for front desk. | |
 | `roles.guardian` | Guardian | பாதுகாவலர் | no issue found | |
 | `roles.nurse` | Nurse | செவிலியர் | no issue found | |
 | `roles.patient` | Patient | நோயாளர் | no issue found | |
