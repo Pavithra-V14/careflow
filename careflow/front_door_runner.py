@@ -128,8 +128,11 @@ def front_door_handler(components: FrontDoorComponents, *, session_for: SessionF
         with worker_context():  # document extraction (heavy, and it may call the vision model) is allowed here and nowhere in the request path
             if not state.values:
                 await graph.ainvoke(initial_state(document_id, ctx.job.clinic_id, ctx.job.origin), config)
-            elif state.next and state.next != ("review",):
-                await graph.ainvoke(None, config)  # a crashed run: continue from the last checkpoint
+            elif (state.next and state.next != ("review",)) or (not state.next and getattr(state, "tasks", ())):
+                # A crashed run: continue from the last checkpoint. The second case is a crash AFTER a step's work was saved and BEFORE the next checkpoint was written (LangGraph's `next`
+                # lists only tasks WITHOUT saved results, so such a thread looks finished: `next` is empty) while `tasks` still lists the step. Left alone it would never reach its review pause
+                # and the review route would answer 409 for ever (found live 2026-11-13: the tick deadline cut two runs at exactly that point). A finished or paused thread has no such task.
+                await graph.ainvoke(None, config)
         # paused at review (a person must decide) or finished: nothing to do, and the job is complete
 
     return handle
