@@ -3313,6 +3313,36 @@ def medication_list_cases(ids) -> list[tuple]:
     ]
     return cases + _unauthenticated(ids, path(), None)[:4]
 
+RULE_AUTHOR_REFUSED = ("front_desk_a", "nurse_a", "admin_a", "business_owner_a", "auditor_a", "multi")  # (only a doctor authors; multi is a nurse here)
+
+
+def rule_author_cases(ids) -> list[tuple]:
+    # MEANINGLESS marker words: no clinical content in a test
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "rule_code": "zz_marker", "phrases": ["zzmarker"], "token_sets": [["zzalpha", "zzbeta"]], **o}
+    made = lambda b: set(b) == {"rule_id", "status"} and b["status"] == "draft_unreviewed"
+    key = _new_key()
+    cases = [
+        _case(ids, "doctor_a writes a draft", "doctor_a", 201, RULES, json=body(), key=key, body=made),
+        _case(ids, "the same key again is the same draft", "doctor_a", 201, RULES, json=body(), key=key, body=made),
+    ]
+    cases += [_case(ids, f"{p} sees the clinic but is refused", p, 403, RULES, json=body(), body=NOT_YOUR_ROLE) for p in RULE_AUTHOR_REFUSED]
+    others = [p for p in ids.people if p != "doctor_a" and p not in RULE_AUTHOR_REFUSED]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused with the one not-found", p, 404, RULES, json=body(), body=_fixed(404)) for p in others]
+    cases += [
+        _case(ids, "the same key with a different draft is a conflict", "doctor_a", 409, RULES, json=body(phrases=["zzother"]), key=key, body=lambda b: b == {"detail": "this idempotency key was already used by a different request"}),
+        _case(ids, "an unknown clinic is not found", "doctor_a", 404, RULES, json=body(clinic_id=str(uuid.uuid4())), body=_fixed(404)),
+        _case(ids, "a rule with no criterion is rejected", "doctor_a", 422, RULES, json=body(phrases=[], token_sets=[]), body=_fixed(422)),
+        _case(ids, "a regular expression has no place in the language (an extra field)", "doctor_a", 422, RULES, json=body(patterns=["a.*b"]), body=_fixed(422)),
+        _case(ids, "a bad rule code is rejected", "doctor_a", 422, RULES, json=body(rule_code="Bad Code"), body=_fixed(422)),
+        _case(ids, "a phrase over the limit is rejected", "doctor_a", 422, RULES, json=body(phrases=["x" * 201]), body=_fixed(422)),
+        _case(ids, "a token set of one word is rejected", "doctor_a", 422, RULES, json=body(token_sets=[["zzalpha"]]), body=_fixed(422)),
+        _case(ids, "a token with a space is rejected", "doctor_a", 422, RULES, json=body(token_sets=[["zz alpha", "zzbeta"]]), body=_fixed(422)),
+        _case(ids, "more than 100 phrases are rejected", "doctor_a", 422, RULES, json=body(phrases=["zz"] * 101), body=_fixed(422)),
+        _case(ids, "an extra field is rejected", "doctor_a", 422, RULES, json=body(extra=1), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "doctor_a", 422, RULES, json=body(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, RULES, body())
+
 # ---- break-glass access (migration 0058; BUILD-SPEC.md 18.4) ------------------------------------------------------------------------------------------------------------------------------------------------
 # Front desk, nurse and doctor open a time-limited grant for one patient (a reason code from the clinic's owner-kept list); the holder reads that patient's messages (this world has no encryption keys, so the
 # read answers 503 after the grant is found; the decrypting path and the database behaviour are in tests/test_break_glass_db_live.py); an admin of the clinic who did not open it reviews. Opening writes
@@ -3740,6 +3770,7 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", AUTONOMY_PROPOSALS): autonomy_proposals_list_cases,
     ("POST", AUTONOMY_RESOLVE): autonomy_resolve_cases,
     ("GET", RULES): rules_list_cases,
+    ("POST", RULES): rule_author_cases,
     ("POST", RULE_DECISION): rule_decision_cases,
     ("POST", MEDICATIONS): medication_record_cases,
     ("GET", MEDICATIONS): medication_list_cases,

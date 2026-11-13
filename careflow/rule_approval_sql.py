@@ -33,6 +33,7 @@ class RuleVersion:
     origin: str
     phrases: list[str]
     patterns: list[str]
+    token_sets: list[list[str]]
     has_vitals_criteria: bool
     approved_at: Any
     decisions: list[dict[str, Any]]
@@ -54,7 +55,7 @@ async def list_versions(conn: AsyncConnection, clinic_id: uuid.UUID, *, limit: i
     rules = (
         await conn.execute(
             text(
-                "select id, rule_code, version_id, status, origin, phrases, patterns, vitals_criteria <> '{}'::jsonb as has_vitals, approved_at from kb.red_flag_rules "
+                "select id, rule_code, version_id, status, origin, phrases, patterns, token_sets, vitals_criteria <> '{}'::jsonb as has_vitals, approved_at from kb.red_flag_rules "
                 "where clinic_id = :c order by rule_code, version_id desc limit :n"
             ),
             {"c": clinic_id, "n": limit},
@@ -72,7 +73,7 @@ async def list_versions(conn: AsyncConnection, clinic_id: uuid.UUID, *, limit: i
     for d in decided:
         by_rule.setdefault(d.rule_id, []).append({"decision": d.decision, "decided_by": d.decided_by, "decided_at": d.created_at})
     return [
-        RuleVersion(r.id, r.rule_code, r.version_id, r.status, r.origin, list(r.phrases), list(r.patterns), bool(r.has_vitals), r.approved_at, by_rule.get(r.id, []))
+        RuleVersion(r.id, r.rule_code, r.version_id, r.status, r.origin, list(r.phrases), list(r.patterns), [list(t) for t in r.token_sets], bool(r.has_vitals), r.approved_at, by_rule.get(r.id, []))
         for r in rules
     ]
 
@@ -81,3 +82,35 @@ async def rule_clinic(conn: AsyncConnection, rule_id: uuid.UUID) -> tuple[bool, 
     """(visible, clinic_id) for one version; a version the caller cannot see is `(False, None)`; a platform-wide one has clinic_id None."""
     row = (await conn.execute(text("select clinic_id from kb.red_flag_rules where id = :r"), {"r": rule_id})).first()
     return (False, None) if row is None else (True, row.clinic_id)
+
+
+class KeyConflict(Exception):
+    """The idempotency key was used for a different draft."""
+
+
+class BadShape(Exception):
+    """The draft is outside the restricted language (limits, characters, no criterion)."""
+
+
+async def author_draft(conn: AsyncConnection, *, clinic_id: uuid.UUID, rule_code: str, phrases: list[str], token_sets: list[list[str]], idempotency_key: str) -> uuid.UUID:
+    """Write a DRAFT version through kb.author_red_flag_rule_draft (migration 0076): literal phrases and token sets only, never a regular expression. Raises Refused (not a doctor of the clinic, no second factor,
+    or the key belongs to another rule) or BadShape."""
+    import json
+
+    try:
+        async with conn.begin_nested():
+            return (
+                await conn.execute(
+                    text("select kb.author_red_flag_rule_draft(:c, :code, cast(:ph as text[]), cast(:ts as jsonb), :k)"),
+                    {"c": clinic_id, "code": rule_code, "ph": phrases, "ts": json.dumps(token_sets), "k": idempotency_key},
+                )
+            ).scalar_one()
+    except DBAPIError as exc:
+        state = getattr(exc.orig, "sqlstate", None)
+        if state == "42501":
+            raise Refused from None
+        if state == "22023":
+            raise BadShape from None
+        if state == "23505":
+            raise KeyConflict from None
+        raise

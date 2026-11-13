@@ -7125,6 +7125,75 @@
         "title": "RuleDoneOut",
         "type": "object"
       },
+      "RuleDraftIn": {
+        "additionalProperties": false,
+        "description": "The RESTRICTED language: literal phrases and token sets, nothing else (no regular expression exists in it). Matching is on word boundaries after the engine's normalisation.",
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "phrases": {
+            "items": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Phrases",
+            "type": "array"
+          },
+          "rule_code": {
+            "pattern": "^[a-z][a-z0-9_]{0,62}$",
+            "title": "Rule Code",
+            "type": "string"
+          },
+          "token_sets": {
+            "items": {
+              "items": {
+                "maxLength": 40,
+                "minLength": 1,
+                "pattern": "^\\S+$",
+                "type": "string"
+              },
+              "maxItems": 10,
+              "minItems": 2,
+              "type": "array"
+            },
+            "maxItems": 50,
+            "title": "Token Sets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "rule_code"
+        ],
+        "title": "RuleDraftIn",
+        "type": "object"
+      },
+      "RuleDraftOut": {
+        "additionalProperties": false,
+        "properties": {
+          "rule_id": {
+            "format": "uuid",
+            "title": "Rule Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "draft_unreviewed",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rule_id",
+          "status"
+        ],
+        "title": "RuleDraftOut",
+        "type": "object"
+      },
       "RuleVersionList": {
         "additionalProperties": false,
         "properties": {
@@ -7210,6 +7279,16 @@
             "title": "Status",
             "type": "string"
           },
+          "token_sets": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Token Sets",
+            "type": "array"
+          },
           "version_id": {
             "title": "Version Id",
             "type": "integer"
@@ -7223,6 +7302,7 @@
           "origin",
           "phrases",
           "patterns",
+          "token_sets",
           "has_vitals_criteria",
           "approved_at",
           "decisions"
@@ -12724,6 +12804,107 @@
           }
         ],
         "summary": "List Red Flag Rules",
+        "tags": [
+          "staff console"
+        ]
+      },
+      "post": {
+        "description": "A doctor writes a DRAFT red-flag rule version for the clinic in the restricted language (literal phrases and token sets; no regular expression). It is NEVER active: a draft counts only in the demo profile,\nand it becomes approved only through the two-doctor decision, by a doctor who is not its author. A new version of an existing rule code is the next number. Idempotent on the key. 404 if the clinic is not visible to you,\n403 unless you are a doctor there, 409 if the key belongs to a different draft, 422 for a shape outside the language (limits, no criterion). Nothing is approved by default.",
+        "operationId": "author_red_flag_rule_v1_staff_console_red_flag_rules_post",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 173,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleDraftIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleDraftOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Author Red Flag Rule",
         "tags": [
           "staff console"
         ]

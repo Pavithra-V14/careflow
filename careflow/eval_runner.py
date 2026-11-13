@@ -83,7 +83,7 @@ def load_rule_rows(path: Path) -> tuple[list[dict[str, Any]], list[str]]:
             continue
         rows.append({
             "id": uuid.uuid5(_NAMESPACE, f"{raw.get('clinic_id')}:{raw['rule_code']}:{raw['version_id']}"), "clinic_id": raw.get("clinic_id"), "rule_code": raw["rule_code"], "version_id": raw["version_id"],
-            "status": raw["status"], "phrases": list(raw.get("phrases") or []), "patterns": list(raw.get("patterns") or []),
+            "status": raw["status"], "phrases": list(raw.get("phrases") or []), "patterns": list(raw.get("patterns") or []), "token_sets": [list(t) for t in raw.get("token_sets") or []],
         })
     return rows, problems
 

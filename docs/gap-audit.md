@@ -1,6 +1,6 @@
-# Gap audit: BUILD-SPEC.md against the code (re-read in full 2026-11-08, after migration 0061)
+# Gap audit: BUILD-SPEC.md against the code (re-read in full 2026-11-08 after migration 0061; rows updated 2026-11-13 through migration 0076)
 
-Every spec item that is **not built**, **built only to a fake or a port**, or **needs a decision**, with one line of reason. Status words: **FAKE** = a port with a fake/stand-in and no real adapter; **NOT BUILT**; **DECISION** = built or buildable but waits for an owner, clinician, provider or counsel answer; **UNMEASURED** = a mechanism exists, the real number does not. Companion documents: `docs/design/pre-launch-checklist.md` (rows 1 to 71, owners and closing evidence), `docs/design/remaining-work.md` (blocked list), `docs/design/phase*-*.md`.
+Every spec item that is **not built**, **built only to a fake or a port**, or **needs a decision**, with one line of reason. Status words: **FAKE** = a port with a fake/stand-in and no real adapter; **NOT BUILT**; **DECISION** = built or buildable but waits for an owner, clinician, provider or counsel answer; **UNMEASURED** = a mechanism exists, the real number does not. Companion documents: `docs/design/pre-launch-checklist.md` (rows 1 to 81, owners and closing evidence), `docs/design/remaining-work.md` (blocked list), `docs/design/phase*-*.md`.
 
 Everything not listed here is built and tested (against the real database, as pure code, or in process with fakes where a row says so). Only what is still fake, unbuilt, undecided or unmeasured is listed.
 
@@ -42,7 +42,7 @@ Everything not listed here is built and tested (against the real database, as pu
 |---|---|---|
 | Retrieval pipeline end to end (§10) | FAKE | BM25 and fusion are pure code; no embeddings, Qdrant, reranker or chunking against real documents; the real-PDF spike is open |
 | Protocol cards (§10.2, §20.2) | DECISION | `kb.cards` does not exist; every card, threshold and `intake_question` is clinician content |
-| Red-flag rules content and the 100% recall gate (§5.2, §14.3) | DECISION | BUILT (0072): the two-doctor approval route and database function (versioned, append-only ledger, aal2, nothing approved by default, a draft is never in force in `clinical`). NOT built: authoring (rules still arrive from the migrator; patterns have no execution timeout yet), approval of a platform-wide rule, retiring a version through a route. The rule CONTENT and the recall bar are the clinicians' (checklist 19, 21) |
+| Red-flag rules content and the 100% recall gate (§5.2, §14.3) | DECISION | BUILT (0072): the two-doctor approval route and database function (versioned, append-only ledger, aal2, nothing approved by default, a draft is never in force in `clinical`). BUILT (0076): doctors write DRAFT rules in a restricted language (literal phrases and token sets, no regular expression, bounded), through `POST /v1/staff/console/red-flag-rules`; a draft is never active and the author cannot approve it. NOT built: approval of a platform-wide rule (refused by owner decision), retiring a version through a route, a draft-editing flow (a change is a new version). The rule CONTENT and the recall bar are the clinicians' (checklist 19, 21) |
 | Retrieval quality gate and abstention (§10.8, §10.9) | UNMEASURED | Needs the gold set and thresholds |
 | Instruction-injection classifier (§11.1) | PARTIAL | Heuristics only; the hard gate needs a clinician-authored adversarial set (checklist 41) |
 | PII masking before retrieval (§11.3) | PARTIAL | Heuristic masker exists; not wired to a real retriever |

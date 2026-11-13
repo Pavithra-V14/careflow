@@ -72,7 +72,8 @@ def test_no_rules_at_all_is_a_miss_never_a_pass():
 
 
 def test_settings_have_no_defaults_and_a_bad_value_is_reported_not_ignored():
-    assert eval_runner.read_settings({}) == eval_runner.EvalSettings(None, {}, {}, ())
+    empty = eval_runner.read_settings({})
+    assert (empty.rules_file, empty.bars, empty.baselines, empty.problems) == (None, {}, {}, ())
     s = eval_runner.read_settings({"CAREFLOW_EVAL_BAR_PRIORITY_ACCURACY": "1.5", "CAREFLOW_EVAL_BASELINE_CARD_RECALL_AT_3": "0.9,0.9", "CAREFLOW_EVAL_BAR_CARD_RECALL_AT_3": "0.8"})
     assert s.bars == {"card_recall_at_3": 0.8} and len(s.problems) == 2 and s.baselines == {}
 

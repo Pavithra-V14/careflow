@@ -172,6 +172,7 @@ ALLOWED = {
     "db/migrations/0054_autonomy_switch_admin_and_doctor.sql": "the same proposer check, for the corrected admin-and-doctor rule; the caller and the approver role go through iam.has_clinic_role (active-role aware)",
     "db/migrations/0065_hardening_from_the_set_review.sql": "re-issues the recovery function of 0060 (which reads the TARGET account's other grants) and checks the retrofitted functions; no caller check is made through staff_roles directly",
     "db/migrations/0060_staff_recovery_two_admins.sql": "the recovery request function reads the TARGET account's grant (another person's, so the caller's active role cannot narrow it); the caller is checked through iam.has_clinic_role",
+    "db/migrations/0073_front_desk_supervisor_and_revoke_alert.sql": "re-issues two of the 0034 staff-management functions (grant and revoke) with the supervisor role: they change OTHER accounts' grants and check the CALLER through iam.has_clinic_role",
     "db/migrations/0034_staff_account_management.sql": "the five staff-management functions: they change OTHER accounts' grants, and check the CALLER through iam.has_clinic_role (which honours the active role)",
 }
 
