@@ -893,6 +893,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/console/red-flag-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Red Flag Rules
+         * @description The clinic's own red-flag rule versions with the decisions made on each, so an approver sees exactly what they are approving. 404 if the clinic is not visible to you, 403 unless you are a doctor or admin there. Read-only.
+         */
+        get: operations["list_red_flag_rules_v1_staff_console_red_flag_rules_get"];
+        put?: never;
+        /**
+         * Author Red Flag Rule
+         * @description A doctor writes a DRAFT red-flag rule version for the clinic in the restricted language (literal phrases and token sets; no regular expression). It is NEVER active: a draft counts only in the demo profile,
+         *     and it becomes approved only through the two-doctor decision, by a doctor who is not its author. A new version of an existing rule code is the next number. Idempotent on the key. 404 if the clinic is not visible to you,
+         *     403 unless you are a doctor there, 409 if the key belongs to a different draft, 422 for a shape outside the language (limits, no criterion). Nothing is approved by default.
+         */
+        post: operations["author_red_flag_rule_v1_staff_console_red_flag_rules_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/console/red-flag-rules/{rule_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide Red Flag Rule
+         * @description Approve or reject a DRAFT red-flag rule version as a doctor of its clinic with a verified second factor (checked again by the database). The version becomes approved only when a SECOND, different doctor approves it (never its author);
+         *     one reject closes it. Idempotent on the key; audited by the database. 404 if you cannot see the version, 403 unless you are a doctor of its clinic. Nothing is approved by default.
+         */
+        post: operations["decide_red_flag_rule_v1_staff_console_red_flag_rules__rule_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/console/reviewer-stats": {
         parameters: {
             query?: never;
@@ -1129,6 +1176,31 @@ export interface paths {
         get: operations["list_possible_duplicates_v1_staff_identity_possible_duplicates_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/medications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Medications
+         * @description One patient's medication statements, newest first (code, flag, times, whether superseded). 404 if the clinic is not visible to you, 403 unless you are a nurse or doctor there. Read-only.
+         */
+        get: operations["list_medications_v1_staff_medications_get"];
+        put?: never;
+        /**
+         * Record Medication
+         * @description Record a medication statement (a code from the clinic's vocabulary, a verified flag, times) for a patient of the clinic. Append-only: a correction or a stop is a new row naming the one it supersedes. Idempotent on the key.
+         *     404 if the clinic or patient is not visible, 403 unless you are a nurse or doctor there, 409 if the row is superseded already or the key belongs to another row, 422 for a code outside the clinic's vocabulary or bad times, 503 until the clinic's vocabulary setting exists.
+         */
+        post: operations["record_medication_v1_staff_medications_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2459,7 +2531,7 @@ export interface components {
              * Alert Class
              * @enum {string}
              */
-            alert_class: "red_flag_overdue" | "task_overdue" | "task_escalated" | "dead_letters" | "queue_age" | "canary_approved" | "spend_runaway" | "delivery_failed" | "fallback_spike" | "tracing_cap";
+            alert_class: "red_flag_overdue" | "task_overdue" | "task_escalated" | "dead_letters" | "queue_age" | "canary_approved" | "spend_runaway" | "delivery_failed" | "fallback_spike" | "tracing_cap" | "identity_revoked_suspect";
             /**
              * Alert Id
              * Format: uuid
@@ -3913,7 +3985,7 @@ export interface components {
              * Role
              * @enum {string}
              */
-            role: "front_desk" | "nurse" | "doctor" | "admin" | "auditor" | "business_owner";
+            role: "front_desk" | "front_desk_supervisor" | "nurse" | "doctor" | "admin" | "auditor" | "business_owner";
         };
         /** InviteOut */
         InviteOut: {
@@ -3933,7 +4005,7 @@ export interface components {
              * Role
              * @enum {string}
              */
-            role: "front_desk" | "nurse" | "doctor" | "admin" | "auditor" | "business_owner";
+            role: "front_desk" | "front_desk_supervisor" | "nurse" | "doctor" | "admin" | "auditor" | "business_owner";
         };
         /** LabelsIn */
         LabelsIn: {
@@ -4023,6 +4095,75 @@ export interface components {
             roles: components["schemas"]["RoleGrant"][];
             /** Status */
             status: string;
+        };
+        /** MedicationIn */
+        MedicationIn: {
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /** Code */
+            code: string;
+            /**
+             * Patient Id
+             * Format: uuid
+             */
+            patient_id: string;
+            /** Supersedes Id */
+            supersedes_id?: string | null;
+            /**
+             * Valid From
+             * Format: date-time
+             */
+            valid_from: string;
+            /** Valid To */
+            valid_to?: string | null;
+            /** Verified */
+            verified: boolean;
+        };
+        /** MedicationList */
+        MedicationList: {
+            /** Medications */
+            medications: components["schemas"]["MedicationRowOut"][];
+        };
+        /** MedicationOut */
+        MedicationOut: {
+            /** Created */
+            created: boolean;
+            /**
+             * Medication Id
+             * Format: uuid
+             */
+            medication_id: string;
+        };
+        /** MedicationRowOut */
+        MedicationRowOut: {
+            /** Code */
+            code: string;
+            /**
+             * Medication Id
+             * Format: uuid
+             */
+            medication_id: string;
+            /**
+             * Recorded At
+             * Format: date-time
+             */
+            recorded_at: string;
+            /** Superseded */
+            superseded: boolean;
+            /** Supersedes Id */
+            supersedes_id: string | null;
+            /**
+             * Valid From
+             * Format: date-time
+             */
+            valid_from: string;
+            /** Valid To */
+            valid_to: string | null;
+            /** Verified */
+            verified: boolean;
         };
         /** MergeDetailOut */
         MergeDetailOut: {
@@ -4811,7 +4952,7 @@ export interface components {
              * Assigned Role
              * @enum {string}
              */
-            assigned_role: "nurse" | "doctor" | "front_desk";
+            assigned_role: "nurse" | "doctor" | "front_desk" | "front_desk_supervisor";
             /**
              * Status
              * @enum {string}
@@ -5017,7 +5158,7 @@ export interface components {
              * Assigned Role
              * @enum {string}
              */
-            assigned_role: "nurse" | "doctor" | "front_desk";
+            assigned_role: "nurse" | "doctor" | "front_desk" | "front_desk_supervisor";
             /**
              * Clinic Id
              * Format: uuid
@@ -5078,7 +5219,7 @@ export interface components {
              * Assigned Role
              * @enum {string}
              */
-            assigned_role: "nurse" | "doctor" | "front_desk";
+            assigned_role: "nurse" | "doctor" | "front_desk" | "front_desk_supervisor";
             /**
              * Clinic Id
              * Format: uuid
@@ -5222,6 +5363,11 @@ export interface components {
          */
         RevokeIdentityOut: {
             /**
+             * Admin Alert
+             * @enum {string}
+             */
+            admin_alert: "raised" | "not_for_this_reason" | "not_configured" | "on_record";
+            /**
              * Confirmed
              * @constant
              */
@@ -5250,7 +5396,7 @@ export interface components {
              * Role
              * @enum {string}
              */
-            role: "front_desk" | "nurse" | "doctor" | "admin" | "auditor" | "business_owner";
+            role: "front_desk" | "front_desk_supervisor" | "nurse" | "doctor" | "admin" | "auditor" | "business_owner";
         };
         /** RoleChangeOut */
         RoleChangeOut: {
@@ -5270,7 +5416,7 @@ export interface components {
              * Role
              * @enum {string}
              */
-            role: "front_desk" | "nurse" | "doctor" | "admin" | "auditor" | "business_owner";
+            role: "front_desk" | "front_desk_supervisor" | "nurse" | "doctor" | "admin" | "auditor" | "business_owner";
         };
         /** RoleGrant */
         RoleGrant: {
@@ -5285,6 +5431,40 @@ export interface components {
             clinic_origin: string | null;
             /** Role */
             role: string;
+        };
+        /** RuleDecisionIn */
+        RuleDecisionIn: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "reject";
+        };
+        /** RuleDecisionOut */
+        RuleDecisionOut: {
+            /**
+             * Result
+             * @enum {string}
+             */
+            result: "recorded" | "approved" | "rejected" | "already_decided" | "not_draft" | "origin_mismatch" | "author_cannot_decide" | "empty_rule" | "rejected_earlier" | "platform_rule";
+        };
+        /** RuleDecisionRowOut */
+        RuleDecisionRowOut: {
+            /**
+             * Decided At
+             * Format: date-time
+             */
+            decided_at: string;
+            /**
+             * Decided By
+             * Format: uuid
+             */
+            decided_by: string;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "reject";
         };
         /** RuleDoneIn */
         RuleDoneIn: {
@@ -5303,6 +5483,75 @@ export interface components {
             episode_rule_id: string;
             /** Recorded */
             recorded: boolean;
+        };
+        /**
+         * RuleDraftIn
+         * @description The RESTRICTED language: literal phrases and token sets, nothing else (no regular expression exists in it). Matching is on word boundaries after the engine's normalisation.
+         */
+        RuleDraftIn: {
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /** Phrases */
+            phrases?: string[];
+            /** Rule Code */
+            rule_code: string;
+            /** Token Sets */
+            token_sets?: string[][];
+        };
+        /** RuleDraftOut */
+        RuleDraftOut: {
+            /**
+             * Rule Id
+             * Format: uuid
+             */
+            rule_id: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "draft_unreviewed";
+        };
+        /** RuleVersionList */
+        RuleVersionList: {
+            /** Rules */
+            rules: components["schemas"]["RuleVersionOut"][];
+        };
+        /** RuleVersionOut */
+        RuleVersionOut: {
+            /** Approved At */
+            approved_at: string | null;
+            /** Decisions */
+            decisions: components["schemas"]["RuleDecisionRowOut"][];
+            /** Has Vitals Criteria */
+            has_vitals_criteria: boolean;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "live" | "test" | "eval" | "canary";
+            /** Patterns */
+            patterns: string[];
+            /** Phrases */
+            phrases: string[];
+            /** Rule Code */
+            rule_code: string;
+            /**
+             * Rule Id
+             * Format: uuid
+             */
+            rule_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft_unreviewed" | "approved" | "retired";
+            /** Token Sets */
+            token_sets: string[][];
+            /** Version Id */
+            version_id: number;
         };
         /** RunOut */
         RunOut: {
@@ -8759,6 +9008,202 @@ export interface operations {
             };
         };
     };
+    list_red_flag_rules_v1_staff_console_red_flag_rules_get: {
+        parameters: {
+            query: {
+                clinic_id: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleVersionList"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+        };
+    };
+    author_red_flag_rule_v1_staff_console_red_flag_rules_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuleDraftIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleDraftOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+        };
+    };
+    decide_red_flag_rule_v1_staff_console_red_flag_rules__rule_id__decision_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuleDecisionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleDecisionOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+        };
+    };
     reviewer_stats_v1_staff_console_reviewer_stats_get: {
         parameters: {
             query: {
@@ -9441,6 +9886,147 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+        };
+    };
+    list_medications_v1_staff_medications_get: {
+        parameters: {
+            query: {
+                clinic_id: string;
+                patient_id: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MedicationList"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+        };
+    };
+    record_medication_v1_staff_medications_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MedicationIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MedicationOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+            /** @description Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -11399,7 +11985,7 @@ export interface operations {
             query?: {
                 status?: ("open" | "acknowledged" | "resolved") | null;
                 kind?: string | null;
-                assigned_role?: ("nurse" | "doctor" | "front_desk") | null;
+                assigned_role?: ("nurse" | "doctor" | "front_desk" | "front_desk_supervisor") | null;
                 limit?: number;
             };
             header?: never;

@@ -255,6 +255,9 @@ The audit log stays auditor only. Run stays offered to front desk, nurse and doc
 - `POST /v1/staff/referrals/{document_id}/run` says only "403 if you may not start a run". The console offers Run to front desk, nurse and doctor
   and lets the backend decide; please say which roles may.
 - The audit rows span every clinic the auditor audits; the console shows them all with the clinic id. Should the route take `clinic_id`?
+- `GET /v1/staff/console/red-flag-rules` does not say who wrote a version, so the console cannot hide Approve and Reject from the author; it hides them from anyone who already decided and shows the database's `author_cannot_decide` refusal. If the author id (or a "you wrote this" flag) can be returned, the console will hide the buttons from the author too. There is no retire route; `retired` is shown as a status only.
+- A person holding front desk and the supervisor role chooses the role per sign-in like any other pair. The supervisor sees only the task inbox in the console; confirm that is the intent (the alerts route does not list the supervisor).
+- **Requested from the backend:** an `authored_by_you` flag (boolean) on each rule version in `GET /v1/staff/console/red-flag-rules`. When it is in the snapshot the console will hide Approve and Reject from the author (keeping the confirmation and the `author_cannot_decide` refusal as the fallback). Also requested, when built: the withdraw route and the two-person retire route, so their buttons can be added.
 
 ## Decisions recorded here for later readers
 

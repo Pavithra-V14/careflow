@@ -18,7 +18,7 @@ export interface Section {
 
 const SECTIONS: readonly Section[] = [
   { id: 'referrals', path: '/referrals', labelKey: 'nav.referrals', roles: ['front_desk', 'nurse', 'doctor'] },
-  { id: 'tasks', path: '/tasks', labelKey: 'nav.tasks', roles: ['front_desk', 'nurse', 'doctor', 'admin'] },
+  { id: 'tasks', path: '/tasks', labelKey: 'nav.tasks', roles: ['front_desk', 'front_desk_supervisor', 'nurse', 'doctor', 'admin'] },
   { id: 'patients', path: '/patients', labelKey: 'nav.patients', roles: ['front_desk', 'nurse', 'doctor'] },
   { id: 'identity', path: '/identity', labelKey: 'nav.identity', roles: ['front_desk', 'nurse', 'doctor'] },
   { id: 'scheduling', path: '/scheduling', labelKey: 'nav.scheduling', roles: ['front_desk', 'nurse', 'doctor', 'admin'] },
@@ -35,12 +35,13 @@ const SECTIONS: readonly Section[] = [
 ];
 
 /**
- * The admin section's tabs and who sees each. The doctor sees only Autonomy (the two-person switch); the rest are admin only.
+ * The admin section's tabs and who sees each. The doctor sees Autonomy (the two-person switch) and Red-flag rules (the two-doctor approval); the rest are admin only.
  * A convenience: the backend decides, and every tab still shows "not available to your role" on a 403.
  */
 export const ADMIN_TABS = [
   { id: 'accounts', roles: ['admin'] },
   { id: 'autonomy', roles: ['admin', 'doctor'] },
+  { id: 'rules', roles: ['admin', 'doctor'] },
   { id: 'reviewer', roles: ['admin'] },
   { id: 'cost', roles: ['admin'] },
   { id: 'voice', roles: ['admin'] },
@@ -58,8 +59,12 @@ export const CAN_CONFIRM_IDENTITY = ['front_desk'] as const;
 export const CAN_DECIDE_CARE_PLAN = ['doctor'] as const;
 /** Care-gap writes: record a barrier, start an episode, resolve, mark a rule done, re-check a sample (owner: nurse and doctor only). */
 export const CAN_RECORD_CARE_GAP = ['nurse', 'doctor'] as const;
+/** Read and record a patient's medication statements (nurse and doctor, per the route docs; the backend decides). */
+export const CAN_USE_MEDICATIONS = ['nurse', 'doctor'] as const;
 /** Record a result (nurse or doctor). */
 export const CAN_RECORD_RESULT = ['nurse', 'doctor'] as const;
+/** Approve or reject a draft red-flag rule: doctors only (two different doctors). Admins read the list and decide nothing. */
+export const CAN_DECIDE_RULE = ['doctor'] as const;
 export const CAN_RELEASE_HOLD = ['front_desk'] as const;
 /** Hold, book, cancel and join the waitlist, and mark an offer delivered (the routes say front desk; the backend decides). */
 export const CAN_SCHEDULE = ['front_desk'] as const;

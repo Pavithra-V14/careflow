@@ -41,9 +41,12 @@ export type StaffRole = InviteIn['role'];
 export type RoleChangeIn = components['schemas']['RoleChangeIn'];
 export type AutonomySetIn = components['schemas']['AutonomySetIn'];
 export type AutonomyDecision = components['schemas']['AutonomyResolveIn']['decision'];
+export type RuleDraftIn = components['schemas']['RuleDraftIn'];
+export type RuleDecision = components['schemas']['RuleDecisionIn']['decision'];
 export type VoicePurgeIn = components['schemas']['VoicePurgeIn'];
 export type CarePlanIn = components['schemas']['CarePlanIn'];
 export type ResultIn = components['schemas']['ResultIn'];
+export type MedicationIn = components['schemas']['MedicationIn'];
 export type CarePlanAction = components['schemas']['CarePlanConfirmIn']['action'];
 export type SlotIn = components['schemas']['SlotIn'];
 export type HoldIn = components['schemas']['HoldIn'];
@@ -118,6 +121,8 @@ export const OPERATIONS = {
   createCarePlan: { method: 'post', path: '/v1/staff/care-plans' },
   confirmCarePlan: { method: 'post', path: '/v1/staff/care-plans/{plan_id}/confirm' },
   recordResult: { method: 'post', path: '/v1/staff/results' },
+  listMedications: { method: 'get', path: '/v1/staff/medications' },
+  recordMedication: { method: 'post', path: '/v1/staff/medications' },
   // ---- backfill: an offer run for a freed slot (nothing is sent to a patient) ----
   startBackfill: { method: 'post', path: '/v1/staff/scheduling/backfills' },
   backfillState: { method: 'get', path: '/v1/staff/scheduling/backfills/{slot_id}' },
@@ -191,6 +196,9 @@ export const OPERATIONS = {
   autonomyHistory: { method: 'get', path: '/v1/staff/console/autonomy/history' },
   proposeAutonomy: { method: 'post', path: '/v1/staff/console/autonomy/proposals' },
   resolveAutonomyProposal: { method: 'post', path: '/v1/staff/console/autonomy/proposals/{proposal_id}/resolve' },
+  listRedFlagRules: { method: 'get', path: '/v1/staff/console/red-flag-rules' },
+  authorRedFlagRule: { method: 'post', path: '/v1/staff/console/red-flag-rules' },
+  decideRedFlagRule: { method: 'post', path: '/v1/staff/console/red-flag-rules/{rule_id}/decision' },
   reviewerStats: { method: 'get', path: '/v1/staff/console/reviewer-stats' },
   costCanvas: { method: 'get', path: '/v1/staff/console/cost-canvas' },
   listVoiceSessions: { method: 'get', path: '/v1/staff/voice/sessions' },
@@ -400,6 +408,8 @@ export function createApi(options: ApiOptions) {
     createCarePlan: (body: CarePlanIn, o?: WriteOptions) => client.POST('/v1/staff/care-plans', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
     confirmCarePlan: (planId: string, action: CarePlanAction, o?: WriteOptions) =>
       client.POST('/v1/staff/care-plans/{plan_id}/confirm', { params: { path: { plan_id: planId }, header: { 'X-Idempotency-Key': key(o) } }, body: { action } }),
+    listMedications: (clinicId: string, patientId: string) => client.GET('/v1/staff/medications', { params: { query: { clinic_id: clinicId, patient_id: patientId } } }),
+    recordMedication: (body: MedicationIn, o?: WriteOptions) => client.POST('/v1/staff/medications', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
     recordResult: (body: ResultIn, o?: WriteOptions) => client.POST('/v1/staff/results', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
 
     // ---- backfill: an offer run for a freed slot. Nothing here sends anything to a patient. -----------------------------------
@@ -524,6 +534,10 @@ export function createApi(options: ApiOptions) {
       client.POST('/v1/staff/console/autonomy/proposals', { params: { header: { 'X-Idempotency-Key': key(o) } }, body: { clinic_id: clinicId, proposer_role: proposerRole } }),
     resolveAutonomyProposal: (proposalId: string, decision: AutonomyDecision, o?: WriteOptions) =>
       client.POST('/v1/staff/console/autonomy/proposals/{proposal_id}/resolve', { params: { path: { proposal_id: proposalId }, header: { 'X-Idempotency-Key': key(o) } }, body: { decision } }),
+    listRedFlagRules: (clinicId: string) => client.GET('/v1/staff/console/red-flag-rules', { params: { query: { clinic_id: clinicId } } }),
+    authorRedFlagRule: (body: RuleDraftIn, o?: WriteOptions) => client.POST('/v1/staff/console/red-flag-rules', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    decideRedFlagRule: (ruleId: string, decision: RuleDecision, o?: WriteOptions) =>
+      client.POST('/v1/staff/console/red-flag-rules/{rule_id}/decision', { params: { path: { rule_id: ruleId }, header: { 'X-Idempotency-Key': key(o) } }, body: { decision } }),
     reviewerStats: (clinicId: string, days?: number) => client.GET('/v1/staff/console/reviewer-stats', { params: { query: { clinic_id: clinicId, ...(days ? { days } : {}) } } }),
     costCanvas: (clinicId: string, days?: number) => client.GET('/v1/staff/console/cost-canvas', { params: { query: { clinic_id: clinicId, ...(days ? { days } : {}) } } }),
     listVoiceSessions: (clinicId: string) => client.GET('/v1/staff/voice/sessions', { params: { query: { clinic_id: clinicId } } }),

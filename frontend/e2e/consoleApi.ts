@@ -92,7 +92,7 @@ export function createConsoleApi(role: string, options: ConsoleOptions = {}, ses
     }
 
     if (method === 'GET' && path === '/v1/staff/review-tasks') {
-      if (!['front_desk', 'nurse', 'doctor', 'admin'].includes(role)) return no(403);
+      if (!['front_desk', 'front_desk_supervisor', 'nurse', 'doctor', 'admin'].includes(role)) return no(403);
       const want = query.get('status') ?? 'open';
       return page(tasks().filter((t) => t.status === want));
     }
@@ -222,6 +222,18 @@ export function createConsoleApi(role: string, options: ConsoleOptions = {}, ses
     if (method === 'POST' && path === '/v1/staff/care-gaps/barriers') return CLINICAL.includes(role) ? [201, { barrier_id: ID.candidate, created: true }] : no(403);
     if (method === 'GET' && path === '/v1/staff/accounts') return role === 'admin' ? page([{ account_id: ID.user, roles: ['nurse'], status: 'active' }, { account_id: ID.candidate, roles: ['admin'], status: 'suspended' }]) : no(403);
     if (method === 'POST' && path === '/v1/staff/accounts/invite') return role === 'admin' ? [503, { detail: LEAK }] : no(403);
+    if (method === 'GET' && path === '/v1/staff/medications') {
+      if (!['nurse', 'doctor'].includes(role)) return no(403);
+      return ok({ medications: [{ code: 'PLACEHOLDER-CODE-1', medication_id: ID.merge, recorded_at: '2026-11-10T05:00:00Z', superseded: false, supersedes_id: null, valid_from: '2026-11-01T05:00:00Z', valid_to: null, verified: true }, { code: 'PLACEHOLDER-CODE-2', medication_id: ID.doc, recorded_at: '2026-11-09T05:00:00Z', superseded: true, supersedes_id: null, valid_from: '2026-10-01T05:00:00Z', valid_to: '2026-10-30T05:00:00Z', verified: false }] });
+    }
+    if (method === 'POST' && path === '/v1/staff/medications') return ['nurse', 'doctor'].includes(role) ? ok({ created: true, medication_id: ID.patient2 }) : no(403);
+    if (method === 'GET' && path === '/v1/staff/console/red-flag-rules') {
+      if (!['admin', 'doctor'].includes(role)) return no(403);
+      const base = { approved_at: null, has_vitals_criteria: false, origin: 'test', patterns: ['PLACEHOLDER-PATTERN-A'], token_sets: [['placeholder-word-a', 'placeholder-word-b']], phrases: ['PLACEHOLDER-PHRASE-A'], rule_code: 'placeholder_rule', status: 'draft_unreviewed' };
+      return ok({ rules: [{ ...base, rule_id: ID.merge, version_id: 1, decisions: [{ decided_at: '2026-11-10T05:00:00Z', decided_by: ID.user, decision: 'approve' }] }, { ...base, rule_id: ID.doc, version_id: 2, decisions: [] }, { ...base, rule_id: ID.patient2, version_id: 3, status: 'approved', approved_at: '2026-11-11T05:00:00Z', decisions: [] }] });
+    }
+    if (method === 'POST' && path === '/v1/staff/console/red-flag-rules') return role === 'doctor' ? ok({ rule_id: ID.patient2, status: 'draft_unreviewed' }) : no(403);
+    if (method === 'POST' && path.startsWith('/v1/staff/console/red-flag-rules/') && path.endsWith('/decision')) return role === 'doctor' ? ok({ result: 'recorded' }) : no(403);
     if (method === 'GET' && path === '/v1/staff/console/autonomy') return [...READERS, 'admin'].includes(role) ? ok({ clinic_id: ID.clinic, configured: false, mode: 'shadow' }) : no(403);
     if (method === 'GET' && path === '/v1/staff/console/autonomy/proposals') return ['admin', 'doctor'].includes(role) ? ok({ proposals: [{ created_at: '2026-11-09T05:00:00Z', proposal_id: ID.merge, proposed_by: ID.user, proposer_role: role === 'admin' ? 'doctor' : 'admin' }] }) : no(403);
     if (method === 'GET' && path === '/v1/staff/console/autonomy/history') return ['admin', 'doctor'].includes(role) ? ok({ items: [{ at: '2026-11-08T05:00:00Z', by: ID.user, decided_at: null, decided_by: null, kind: 'proposal', mode: 'autonomous', outcome: 'pending', proposer_role: 'doctor' }, { at: '2026-11-01T05:00:00Z', by: ID.user, decided_at: null, decided_by: null, kind: 'mode_change', mode: 'assisted', outcome: null, proposer_role: null }] }) : no(403);

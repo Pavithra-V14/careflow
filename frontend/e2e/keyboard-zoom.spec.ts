@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { ID } from './consoleApi';
-import { LANGS, go, openConsole } from './helpers';
+import { LANGS, go, openConsole, sweep } from './helpers';
 
 // Polish pass: the heaviest screens, keyboard only and at 200% zoom. MOCK ONLY (e2e/consoleApi.ts).
 // Keyboard: Tab reaches every control the page offers, each focused control shows a visible focus indicator, and focus is never trapped.
@@ -10,11 +10,13 @@ const HEAVY: [role: string, name: string, hash: string][] = [
   ['front_desk', 'scheduling-slots', '#/scheduling/slots'],
   ['front_desk', 'scheduling-offers', '#/scheduling/offers'],
   ['front_desk', 'patient-record', `#/patients/${ID.patient}`],
+  ['nurse', 'patient-record-medications', `#/patients/${ID.patient}`],
   ['nurse', 'referral-detail', `#/referrals/${ID.doc}`],
   ['nurse', 'care-gaps', '#/care/gaps'],
   ['admin', 'admin-accounts', '#/admin/accounts'],
   ['admin', 'admin-cost', '#/admin/cost'],
   ['admin', 'dashboard', '#/dashboard'],
+  ['doctor', 'rules-doctor', '#/admin/rules'],
 ];
 
 for (const lang of LANGS) {
@@ -64,4 +66,70 @@ for (const lang of LANGS) {
       expect(results.violations.map((v) => v.id), `${name} [${lang}] at 200%`).toEqual([]);
     });
   }
+}
+
+// The two-doctor approval by keyboard alone: Enter on Approve opens a confirmation that shows the content, Escape cancels with nothing sent,
+// and Tab never reaches the page behind it.
+for (const lang of LANGS) {
+  test(`red-flag rules: approve by keyboard, confirmation first, Escape cancels [${lang}]`, async ({ page }) => {
+    const mock = await openConsole(page, 'doctor', lang);
+    await go(page, '#/admin/rules', /\S/);
+    const approve = page.locator('main button').filter({ hasText: lang === 'en' ? /^Approve/ : /^ஒப்புக்கொள்/ }).first();
+    await approve.focus();
+    await page.keyboard.press('Enter');
+    const dialog = page.locator('dialog[open]');
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText('PLACEHOLDER-PHRASE-A');
+    for (let i = 0; i < 6; i++) {
+      await page.keyboard.press('Tab');
+      // Inside the dialog, or out in the browser's own controls (document.body); never on the page behind it, which is inert.
+      expect(await page.evaluate(() => document.activeElement === document.body || !!document.activeElement?.closest('dialog[open]')), 'focus never lands on the page behind the dialog').toBe(true);
+    }
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    expect(mock).toBeTruthy();
+  });
+}
+
+// axe, no horizontal scroll, no CSP violation at 320, 768 and 1280 for the new screens.
+for (const lang of LANGS) {
+  for (const [role, name, hash] of [['doctor', 'rules-doctor', '#/admin/rules'], ['admin', 'rules-admin', '#/admin/rules'], ['front_desk_supervisor', 'tasks-supervisor', '#/tasks'], ['nurse', 'medications-nurse', `#/patients/${ID.patient}`]] as const) {
+    test(`all three widths: ${role} ${name} [${lang}]`, async ({ page }) => {
+      await openConsole(page, role, lang);
+      await go(page, hash, /\S/);
+      await expect(page.locator('main')).not.toContainText(/Loading…|ஏற்றுகிறது…/);
+      await sweep(page, `f10-${name}`, lang);
+    });
+  }
+}
+
+// Rule authoring by keyboard alone, and axe at 320 / 768 / 1280 with the form and then the review step open. Placeholder words only.
+for (const lang of LANGS) {
+  test(`rule authoring: keyboard only, review before save, accessible at all widths [${lang}]`, async ({ page }) => {
+    await openConsole(page, 'doctor', lang);
+    await go(page, '#/admin/rules', /\S/);
+    const open = page.locator('main button').filter({ hasText: lang === 'en' ? 'Write a new rule version' : 'புதிய விதிப் பதிப்பை எழுது' });
+    await open.focus();
+    await page.keyboard.press('Enter');
+    const dialog = page.locator('dialog[open]');
+    await expect(dialog).toBeVisible();
+    const fields = dialog.locator('input[type=text], textarea');
+    await expect(fields).toHaveCount(3);
+    await fields.nth(0).focus();
+    await page.keyboard.type('placeholder_rule');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('placeholder phrase one');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('wordA wordB');
+    await sweep(page, `f10-authoring-form`, lang);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const primary = dialog.locator('button').last();
+    await primary.focus();
+    await page.keyboard.press('Enter'); // Review the draft
+    await expect(dialog).toContainText('wordA + wordB');
+    await sweep(page, `f10-authoring-review`, lang);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.keyboard.press('Escape'); // closes with nothing saved
+    await expect(dialog).toHaveCount(0);
+  });
 }

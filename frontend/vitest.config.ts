@@ -16,5 +16,7 @@ export default defineConfig({
     // No test needs a stylesheet applied (tokens.test.ts reads the file directly), and processing CSS for every file cost about a third of
     // each cold-start render. Measured: the first test of a file pays about 0.7 s of one-off start-up and the rest are 0.1 to 0.8 s.
     css: false,
+    // Same reason: a slow machine must not turn a passing test into a timeout (each test still ends as soon as it is done).
+    testTimeout: 30_000,
   },
 });
