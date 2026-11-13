@@ -28,10 +28,24 @@ Reading: request time is roughly 1.6 s plus 0.55 s per statement. A route of 12 
 
 Not an option: the claims-setting statement at the start of every request is part of the row-level-security design (rule 8) and is not touched to save time.
 
-## Per-route statement counts
+## Per-route times and statement counts (recording of 2026-11-13, 10:12 to 10:17Z, front desk, MFA off for the run)
 
-Pending: the frontend window's short recording of Prepare offer, Send, mark-delivered, hold, book and cancel. The demo access log now has a timing line per request (method, route pattern, status, milliseconds; `careflow/request_timing.py`). When the recording exists, the statement count of each route goes here (milliseconds divided by about 0.55 s, checked against the code).
+Server times from the timing log; the browser saw the same durations, so all of the time is on the server (database distance), none in the browser or network to the backend. Statement counts are ESTIMATED from the time with (ms - 1600) / 550; they are not counted from the code except where noted.
 
-| Route pattern | Requests | Median ms | Slowest ms | Statements |
+| Route pattern | Requests | Median ms | Slowest ms | About statements |
 |---|---|---|---|---|
-| (to be filled from the recording) | | | | |
+| POST /v1/staff/scheduling/backfills/{slot_id}/decide (Send) | 1 | 51128 | 51128 | 90 |
+| POST /v1/staff/scheduling/backfills (Prepare offer) | 1 | 50668 | 50668 | 89 |
+| GET /v1/staff/scheduling/backfills/{slot_id} | 3 | 8361 | 8760 | 12 |
+| POST /v1/staff/scheduling/offers/{hold_id}/mark-delivered | 1 | 8465 | 8465 | 12 |
+| POST /v1/staff/scheduling/slots/{slot_id}/book | 1 | 8064 | 8064 | 12 |
+| POST /v1/staff/patients/search | 3 | 6452 | 7287 | 9 |
+| POST /v1/staff/scheduling/slots/{slot_id}/hold | 1 | 6532 | 6532 | 9 |
+| POST /v1/staff/scheduling/bookings/{booking_id}/cancel | 1 | 4982 | 4982 | 6 |
+| GET /v1/staff/messages/threads/{thread_id}/messages | 1 | 3779 | 3779 | 4 |
+| GET /v1/staff/scheduling/waitlist | 3 | 2535 | 4002 | 2 |
+| GET /v1/staff/scheduling/bookings | 2 | 2857 | 3829 | 2 |
+| GET /v1/iam/me | 8 | 2902 | 3590 | 2 |
+| GET /v1/staff/scheduling/slots, providers, locations, visit-types, offers | 5 to 11 each | 2.6 to 3.0 s | 3.5 s | 2 |
+
+Where the two 50 s calls go: the backfill run is an agent graph with a database-backed checkpointer (careflow/checkpointer.py). Each graph step reads and writes checkpoints, blobs and pending writes, and each of those operations sets the caller's claims and runs several statements. At 0.55 s a statement, about 90 statements is 50 s. With a round trip of 1 to 2 ms (backend beside the database) the same run is well under a second. The 12-statement routes (book, mark-delivered, backfill status) are plain per-route statement chains, about 8 s here.
