@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-1551 of 1551 strings are unreviewed.
+1558 of 1558 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -945,9 +945,9 @@ Terms standardised: proposal, resolve / resolved.
 | `medications.col.to` | To | முடிவு | ok |
 | `medications.col.verified` | Verified | சரிபார்க்கப்பட்டது | ok |
 | `medications.conflict` | That row was already replaced, or this request clashes with an earlier one. Reload and try again. | அந்த வரிசை ஏற்கெனவே மாற்றப்பட்டுவிட்டது, அல்லது இந்தக் கோரிக்கை முந்தையதுடன் முரண்படுகிறது. மீண்டும் ஏற்றி முயலவும். | ok |
-| `medications.correct` | Correct or stop | திருத்து அல்லது நிறுத்து | ok |
-| `medications.correctBody` | This adds a new row that replaces the row below. The old row stays on record, marked as replaced. | இது கீழே உள்ள வரிசையை மாற்றும் புதிய வரிசையைச் சேர்க்கிறது. பழைய வரிசை, மாற்றப்பட்டது எனக் குறிக்கப்பட்டு பதிவில் இருக்கும். | ok |
-| `medications.correctTitle` | Correct or stop this medication statement? | இந்த மருந்து அறிக்கையைத் திருத்தவா அல்லது நிறுத்தவா? | ok |
+| `medications.correct` | Correct this entry | இந்தப் பதிவைத் திருத்து | ok |
+| `medications.correctBody` | Use this when the entry below was recorded wrongly. It adds a new row that replaces the row below. The old row stays on record, marked as replaced. | கீழே உள்ள பதிவு தவறாகப் பதிவு செய்யப்பட்டிருந்தால் இதைப் பயன்படுத்தவும். இது கீழே உள்ள வரிசையை மாற்றும் புதிய வரிசையைச் சேர்க்கிறது. பழைய வரிசை, மாற்றப்பட்டது எனக் குறிக்கப்பட்டு பதிவில் இருக்கும். | ok |
+| `medications.correctTitle` | Correct this medication entry? | இந்த மருந்துப் பதிவைத் திருத்தலாமா? | ok |
 | `medications.current` | Current | தற்போதையது | ok |
 | `medications.done` | The medication statement was recorded. | மருந்து அறிக்கை பதிவு செய்யப்பட்டது. | ok |
 | `medications.empty` | No medication statements are recorded for this patient. | இந்த நோயாளிக்கு மருந்து அறிக்கைகள் எதுவும் பதிவு செய்யப்படவில்லை. | ok |
@@ -960,11 +960,18 @@ Terms standardised: proposal, resolve / resolved.
 | `medications.recordTitle` | Record a medication statement? | மருந்து அறிக்கையைப் பதிவு செய்யலாமா? | ok |
 | `medications.replaces` | Replaces | மாற்றுவது | ok |
 | `medications.save` | Record | பதிவு செய் | ok |
+| `medications.stop` | Stop this medicine | இந்த மருந்தை நிறுத்து | ok |
+| `medications.stopBody` | This adds a new row with an end time for the medicine below. The old row stays on record, marked as replaced. Nothing else is changed. | இது கீழே உள்ள மருந்துக்கு முடிவு நேரத்துடன் ஒரு புதிய வரிசையைச் சேர்க்கிறது. பழைய வரிசை, மாற்றப்பட்டது எனக் குறிக்கப்பட்டு பதிவில் இருக்கும். வேறு எதுவும் மாறாது. | ok |
+| `medications.stopDone` | The stop was recorded. | நிறுத்தம் பதிவு செய்யப்பட்டது. | ok |
+| `medications.stopSave` | Record stop | நிறுத்தத்தைப் பதிவு செய் | ok |
+| `medications.stopTitle` | Record that this medicine was stopped? | இந்த மருந்து நிறுத்தப்பட்டது எனப் பதிவு செய்யலாமா? | ok |
+| `medications.stoppedAt` | Stopped at | நிறுத்தப்பட்ட நேரம் | ok |
+| `medications.stoppedAtHint` | The time the medicine was stopped. It is required. | மருந்து நிறுத்தப்பட்ட நேரம். இது கட்டாயம். | ok |
 | `medications.superseded` | Replaced by a later row | பிந்தைய வரிசையால் மாற்றப்பட்டது | ok |
 | `medications.title` | Medications | மருந்துகள் | ok |
 | `medications.validFrom` | From | தொடக்கம் | ok |
 | `medications.validTo` | To (leave empty if no end is recorded) | முடிவு (முடிவு நேரம் பதிவு செய்யப்படாவிட்டால் காலியாக விடவும்) | ok |
-| `medications.validToHint` | An empty end is saved as "no end recorded". It is not read as "still taking". | காலியான முடிவு "முடிவு பதிவு செய்யப்படவில்லை" என்று சேமிக்கப்படும். அது "இன்னும் எடுத்துக்கொள்கிறார்" என்று கருதப்படாது. | ok |
+| `medications.validToHint` | An empty end is saved as "no end recorded". It is not read as "still taking". | காலியான முடிவு "முடிவு பதிவு செய்யப்படவில்லை" என்று சேமிக்கப்படும். அது "இன்னும் எடுத்துக்கொள்ளப்படுகிறது" என்று கருதப்படாது. | ok |
 | `medications.verified` | Verified | சரிபார்க்கப்பட்டது | ok |
 | `nav.access` | Break-glass | அவசரகால அணுகல் | ok |
 | `nav.admin` | Admin | நிர்வாகம் | ok |

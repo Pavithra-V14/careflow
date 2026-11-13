@@ -4,14 +4,14 @@
 
 ## What this is
 
-CareFlow is a clinic system with a staff console (nurses, doctors, front desk, administrators) and a patient portal. Every screen has an English and a Tamil version. The Tamil was written by an AI model. This pack lists every Tamil string (1551) next to its English so a native Tamil speaker can check it before anyone relies on it. The strings are interface text only. There is no patient data in this file.
+CareFlow is a clinic system with a staff console (nurses, doctors, front desk, administrators) and a patient portal. Every screen has an English and a Tamil version. The Tamil was written by an AI model. This pack lists every Tamil string (1558) next to its English so a native Tamil speaker can check it before anyone relies on it. The strings are interface text only. There is no patient data in this file.
 
 The pack was regenerated on 2026-11-13 and now includes the newest screens (red-flag rules, supervisor, medications, rule drafting). The file to review is [tamil-review.md](tamil-review.md). Part 7 is the full table. Parts 1 to 3 are the strings the AI was least sure about, safety-related ones first.
 
 ## What to do
 
-1. Start with **Part 1** (50 strings). These are the red-flag, result, decision, erasure, consent and identity-merge words, where a wrong word could mislead a nurse or a patient. If you work in a clinic, these are the ones to read first.
-2. Then **Part 2** (75 strings: wrong meaning, wrong register, inconsistent term) and **Part 4** (terms used inconsistently: please pick one Tamil word for each English term).
+1. Start with **Part 1** (51 strings). These are the red-flag, result, decision, erasure, consent and identity-merge words, where a wrong word could mislead a nurse or a patient. If you work in a clinic, these are the ones to read first.
+2. Then **Part 2** (78 strings: wrong meaning, wrong register, inconsistent term) and **Part 4** (terms used inconsistently: please pick one Tamil word for each English term).
 3. Then read **Part 7**, the full table, as far as your time allows. In the last column write **OK** if the Tamil is right, or write the **full corrected Tamil**. Leave a row empty if you did not look at it. Do not write OK for something you only skimmed.
 4. In **Part 5** (register), tell us which polite form you want on the patient pages. Patients should be addressed respectfully and plainly.
 

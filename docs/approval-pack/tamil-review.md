@@ -1,8 +1,8 @@
 # Tamil review pack (AI-prepared, NOT reviewed by a native speaker)
 
-Prepared 2026-11-13. Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 1551 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
+Prepared 2026-11-13. Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 1558 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
 
-**Regenerated 2026-11-13:** this version includes the 113 strings added since the first pack (red-flag rule list, approval and drafting screens, the front desk supervisor, the new alert label, the revoke alert lines and medications). They are written and second-passed in the same way and are just as unreviewed.
+**Regenerated 2026-11-13:** this version includes the 120 strings added since the first pack (red-flag rule list, approval and drafting screens, the front desk supervisor, the new alert label, the revoke alert lines and medications). They are written and second-passed in the same way and are just as unreviewed.
 
 ## What the second pass looked at
 
@@ -12,11 +12,11 @@ Meaning errors, register for patients, medical or safety terms, unsafe ambiguity
 - **B** wrong or odd meaning, wrong register, or an inconsistent term. Needs a native speaker.
 - **C** minor wording, or an administrator-only technical label.
 
-How it was done, honestly: all 1551 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and every string of four words or more and every short string that differs from its English was read once by the AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
+How it was done, honestly: all 1558 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and every string of four words or more and every short string that differs from its English was read once by the AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
 
-Automatic checks: 1551 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
+Automatic checks: 1558 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
 
-Notes: 50 grade A, 75 grade B, 29 grade C (154 rows with a note; some notes cover a group of similar strings, named in the note).
+Notes: 51 grade A, 78 grade B, 31 grade C (160 rows with a note; some notes cover a group of similar strings, named in the note).
 
 ## Part 1. Strings that most need a native speaker (safety first)
 
@@ -63,10 +63,11 @@ Notes: 50 grade A, 75 grade B, 29 grade C (154 rows with a note; some notes cove
 | `admin.rules.result.author_cannot_decide` | You wrote this version, so you cannot decide it. A different doctor must. | இந்தப் பதிப்பை நீங்கள் எழுதினீர்கள், எனவே இதில் முடிவெடுக்க முடியாது. வேறொரு மருத்துவர் முடிவெடுக்க வேண்டும். | Tells the author they cannot decide their own rule. Check it is firm and not polite advice. |
 | `admin.rules.author.confirmBody` | This saves exactly what is shown below as a draft. A draft is never active, and it is approved only when two different doctors approve it. You cannot approve a draft you wrote. | கீழே காட்டப்பட்டுள்ளதையே இது வரைவாகச் சேமிக்கிறது. வரைவு ஒருபோதும் செயலில் இருக்காது; இரண்டு வெவ்வேறு மருத்துவர்கள் ஒப்புக்கொண்டால் மட்டுமே அது அங்கீகரிக்கப்படும். நீங்கள் எழுதிய வரைவை நீங்களே அங்கீகரிக்க முடியாது. | Says the draft is never active and needs two different doctors, and that you cannot approve your own. Same wording checks as admin.rules.draftNote. |
 | `admin.rules.author.saved` | The draft was saved. It is not approved and it is not active. | வரைவு சேமிக்கப்பட்டது. அது அங்கீகரிக்கப்படவில்லை, செயலிலும் இல்லை. | "Not approved and not active": check both halves are unmistakable. |
-| `medications.validToHint` | An empty end is saved as "no end recorded". It is not read as "still taking". | காலியான முடிவு "முடிவு பதிவு செய்யப்படவில்லை" என்று சேமிக்கப்படும். அது "இன்னும் எடுத்துக்கொள்கிறார்" என்று கருதப்படாது. | "Saved as no end recorded; not read as still taking." The Tamil uses a masculine verb (எடுத்துக்கொள்கிறார்) for a patient of unknown gender, and "still taking" is a clinical statement. Needs a native clinician to reword neutrally. |
 | `medications.noEnd` | No end recorded | முடிவு நேரம் பதிவு செய்யப்படவில்லை | "No end recorded" rendered முடிவு நேரம் பதிவு செய்யப்படவில்லை: it must never read as "ongoing". Check. |
-| `medications.correct` | Correct or stop | திருத்து அல்லது நிறுத்து | "Correct or stop" rendered திருத்து அல்லது நிறுத்து. In English and Tamil "stop" could mean stopping the medicine or stopping the record. Needs a clinician to choose wording. |
-| `medications.correctTitle` | Correct or stop this medication statement? | இந்த மருந்து அறிக்கையைத் திருத்தவா அல்லது நிறுத்தவா? | Same "stop" ambiguity as medications.correct. |
+| `medications.correct` | Correct this entry | இந்தப் பதிவைத் திருத்து | "Correct this entry" rendered இந்தப் பதிவைத் திருத்து: for a recording mistake only. Check a clinician would read it as "I recorded this wrongly" and not as "change the treatment". Wording is item 35 on docs/design/clinician-sheet.md. |
+| `medications.stop` | Stop this medicine | இந்த மருந்தை நிறுத்து | "Stop this medicine" rendered இந்த மருந்தை நிறுத்து: the patient stopped taking it. Check it cannot be read as "stop giving it now" as an instruction to the patient. Wording is item 35 on docs/design/clinician-sheet.md. |
+| `medications.stopTitle` | Record that this medicine was stopped? | இந்த மருந்து நிறுத்தப்பட்டது எனப் பதிவு செய்யலாமா? | "Record that this medicine was stopped?" rendered இந்த மருந்து நிறுத்தப்பட்டது எனப் பதிவு செய்யலாமா?: it records a fact, it does not order a stop. Check that is clear. |
+| `medications.validToHint` | An empty end is saved as "no end recorded". It is not read as "still taking". | காலியான முடிவு "முடிவு பதிவு செய்யப்படவில்லை" என்று சேமிக்கப்படும். அது "இன்னும் எடுத்துக்கொள்ளப்படுகிறது" என்று கருதப்படாது. | The "still taking" statement was reworded without a gendered verb (இன்னும் எடுத்துக்கொள்ளப்படுகிறது, passive). A native clinician should confirm it reads naturally and clearly says an empty end is NOT read as ongoing. Item 36 on docs/design/clinician-sheet.md. |
 
 ### 3. Erasure, privacy, consent and patient rights
 
@@ -166,7 +167,7 @@ Notes: 50 grade A, 75 grade B, 29 grade C (154 rows with a note; some notes cove
 | `admin.rules.author.err.phraseChars` | Phrase line {{line}} has a control character or an invisible character. Retype it. | சொற்றொடர் வரி {{line}} இல் கட்டுப்பாட்டு எழுத்து அல்லது கண்ணுக்குத் தெரியாத எழுத்து உள்ளது. மீண்டும் தட்டச்சு செய்யவும். | "Control character or an invisible character": technical, check it is understandable by a doctor and that retyping is the right advice. |
 | `admin.rules.author.err.tokenChars` | Token set line {{line}} has a control character or an invisible character. Retype it. | சொல் தொகுப்பு வரி {{line}} இல் கட்டுப்பாட்டு எழுத்து அல்லது கண்ணுக்குத் தெரியாத எழுத்து உள்ளது. மீண்டும் தட்டச்சு செய்யவும். | Same as phraseChars. |
 | `admin.rules.author.err.sameWords` | Token set line {{line}} needs at least two different words. | சொல் தொகுப்பு வரி {{line}} இல் குறைந்தது இரண்டு வெவ்வேறு சொற்கள் வேண்டும். | "At least two different words" for a token set: check clarity. |
-| `medications.correctBody` | This adds a new row that replaces the row below. The old row stays on record, marked as replaced. | இது கீழே உள்ள வரிசையை மாற்றும் புதிய வரிசையைச் சேர்க்கிறது. பழைய வரிசை, மாற்றப்பட்டது எனக் குறிக்கப்பட்டு பதிவில் இருக்கும். | "Replaces the row below; the old row stays, marked replaced": check மாற்றும் (replace) versus "change". |
+| `medications.correctBody` | Use this when the entry below was recorded wrongly. It adds a new row that replaces the row below. The old row stays on record, marked as replaced. | கீழே உள்ள பதிவு தவறாகப் பதிவு செய்யப்பட்டிருந்தால் இதைப் பயன்படுத்தவும். இது கீழே உள்ள வரிசையை மாற்றும் புதிய வரிசையைச் சேர்க்கிறது. பழைய வரிசை, மாற்றப்பட்டது எனக் குறிக்கப்பட்டு பதிவில் இருக்கும். | "Replaces the row below; the old row stays, marked replaced": check மாற்றும் (replace) versus "change". |
 | `medications.superseded` | Replaced by a later row | பிந்தைய வரிசையால் மாற்றப்பட்டது | "Replaced by a later row" rendered பிந்தைய வரிசையால் மாற்றப்பட்டது: check it does not read as "changed medicine". |
 | `medications.verified` | Verified | சரிபார்க்கப்பட்டது | சரிபார்க்கப்பட்டது (verified): check who verified is not implied. |
 | `medications.title` | Medications | மருந்துகள் | மருந்துகள் (medications) as a heading may read as a list of what the patient takes now, but it lists statements incl. stopped ones. |
@@ -179,6 +180,9 @@ Notes: 50 grade A, 75 grade B, 29 grade C (154 rows with a note; some notes cove
 | `patients.revoke.alert.not_configured` | No administrator alert was raised: the alert settings are not configured yet. | நிர்வாகி எச்சரிக்கை எழுப்பப்படவில்லை: எச்சரிக்கை அமைப்புகள் இன்னும் அமைக்கப்படவில்லை. | Settings not configured; check clarity. |
 | `admin.tab.rules` | Red-flag rules | சிவப்புக் கொடி விதிகள் | "Red-flag rules" tab: literal சிவப்புக் கொடி (see the red flag theme); check the term clinicians use. |
 | `admin.rules.intro` | The red-flag rule versions of this clinic, with the decisions made on each. Every phrase and pattern is shown exactly as the system holds it. This screen cannot write or change a rule. | இந்த மருத்துவமனையின் சிவப்புக் கொடி விதிப் பதிப்புகளும், ஒவ்வொன்றிலும் எடுக்கப்பட்ட முடிவுகளும். ஒவ்வொரு சொற்றொடரும் வடிவமும் அமைப்பில் உள்ளபடியே காட்டப்படுகின்றன. இந்தத் திரையில் விதியை எழுதவோ மாற்றவோ முடியாது. | "Shown exactly as the system holds it": check it conveys that the screen cannot change a rule. |
+| `medications.correctTitle` | Correct this medication entry? | இந்த மருந்துப் பதிவைத் திருத்தலாமா? | Confirmation question for a correction; check it against medications.correct. |
+| `medications.stopBody` | This adds a new row with an end time for the medicine below. The old row stays on record, marked as replaced. Nothing else is changed. | இது கீழே உள்ள மருந்துக்கு முடிவு நேரத்துடன் ஒரு புதிய வரிசையைச் சேர்க்கிறது. பழைய வரிசை, மாற்றப்பட்டது எனக் குறிக்கப்பட்டு பதிவில் இருக்கும். வேறு எதுவும் மாறாது. | Adds a row with an end time; the old row stays; nothing else changes. Check clarity. |
+| `medications.stopSave` | Record stop | நிறுத்தத்தைப் பதிவு செய் | "Record stop" rendered நிறுத்தத்தைப் பதிவு செய்: check it reads as recording, not ordering. |
 
 ## Part 3. Minor wording and technical labels (grade C)
 
@@ -213,6 +217,8 @@ Notes: 50 grade A, 75 grade B, 29 grade C (154 rows with a note; some notes cove
 | `medications.conflict` | That row was already replaced, or this request clashes with an earlier one. Reload and try again. | அந்த வரிசை ஏற்கெனவே மாற்றப்பட்டுவிட்டது, அல்லது இந்தக் கோரிக்கை முந்தையதுடன் முரண்படுகிறது. மீண்டும் ஏற்றி முயலவும். | Technical conflict message. |
 | `medications.codeHint` | A code from this clinic's own list. Letters, numbers, dots, dashes and underscores only. | இந்த மருத்துவமனையின் சொந்தப் பட்டியலில் உள்ள குறியீடு. எழுத்துகள், எண்கள், புள்ளிகள், கோடுகள், அடிக்கோடுகள் மட்டும். | Allowed characters for a code. |
 | `roles.front_desk_supervisor` | Front desk supervisor | வரவேற்பு மேசை மேற்பார்வையாளர் | வரவேற்பு மேசை மேற்பார்வையாளர்: consistent with வரவேற்பு மேசை but the project also uses முன்பணியாளர் for front desk. |
+| `medications.stoppedAt` | Stopped at | நிறுத்தப்பட்ட நேரம் | நிறுத்தப்பட்ட நேரம் (stopped at). |
+| `medications.stopDone` | The stop was recorded. | நிறுத்தம் பதிவு செய்யப்பட்டது. | நிறுத்தம் பதிவு செய்யப்பட்டது. |
 
 ## Part 4. Terms used inconsistently
 
@@ -220,12 +226,12 @@ Notes: 50 grade A, 75 grade B, 29 grade C (154 rows with a note; some notes cove
 |---|---|---|
 | approve | ஒப்புக்கொள் (verb), ஒப்புதல் (noun) (54) | The verb also means "admit/agree"; some places use ஒப்புதல் அளி. |
 | acknowledge | ஏற்றுக்கொள் ("accept") (15) | Same verb as approve; the action only records that you have seen something. |
-| record / log / transcript / register | பதிவு everywhere (123) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
-| result / decision / end | முடிவு everywhere (61) | One word for a clinical result, a person's decision and an end time. |
+| record / log / transcript / register | பதிவு everywhere (127) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
+| result / decision / end | முடிவு everywhere (62) | One word for a clinical result, a person's decision and an end time. |
 | role | பங்கு (14) | Also means "share"; பணி is used for "task". |
 | merge / link / connect / attach | இணை / இணைப்பு (50) | Merging two patient records, linking a portal account, attaching a note: one word. |
 | red flag | சிவப்புக் கொடி (literal) (19) | Check the wording clinicians use. |
-| hold (a slot or a referral) | நிறுத்து / நிறுத்தம் (stop) and ஒதுக்கீடு (allocation) (39) | Two or three words for one idea. |
+| hold (a slot or a referral) | நிறுத்து / நிறுத்தம் (stop) and ஒதுக்கீடு (allocation) (43) | Two or three words for one idea. |
 | task / job | பணி (66) | A review task and a queued job share the word. |
 | approved (a status) and approve (a button) | அங்கீகரிக்கப்பட்டது (status) and ஒப்புக்கொள் (button) (14) | Two word families for one idea in the red-flag rule screens. |
 | patient | நோயாளி and நோயாளர் (73) | Two spellings. |
@@ -234,7 +240,7 @@ Notes: 50 grade A, 75 grade B, 29 grade C (154 rows with a note; some notes cove
 | confidence | நம்பிக்கை (2) | Means belief or hope; the strings mean how sure the system is. |
 | sample (a sampled decision) | மாதிரி (5) | Reads as a laboratory specimen. |
 | revoke / take back, and "cannot be undone" | திரும்பப் பெறு for both (16) | The same verb for "revoke" and "cannot be reversed". |
-| fresh (code) | புதிய ("new") (23) | Means a recently entered code, not a new one. |
+| fresh (code) | புதிய ("new") (24) | Means a recently entered code, not a new one. |
 | screen (the rules read text) | பரிசோதனை (6) | The word for a medical examination or test. |
 | escalate | உயர்நிலைக்கு அனுப்பு ("send to a higher level") (5) | Loses the sense of raising urgency. |
 | authenticator | அங்கீகார செயலி (app) / அங்கீகார குறியீடு (code) (15) | Consistent; check it is the word staff use. |
@@ -279,7 +285,7 @@ These are the same in English and Tamil by design, and a Tamil-speaking patient 
 - `tasks.kind.screening_unassessable`
 - `tasks.kind.triage_proposal`
 
-## Part 7. All 1551 strings
+## Part 7. All 1558 strings
 
 Fill in the last column. Write **OK**, or write the full corrected Tamil (keep every {{placeholder}} exactly as it is). Leave a row empty if you have not looked at it.
 
@@ -1170,9 +1176,9 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `medications.col.to` | To | முடிவு | no issue found | |
 | `medications.col.verified` | Verified | சரிபார்க்கப்பட்டது | no issue found | |
 | `medications.conflict` | That row was already replaced, or this request clashes with an earlier one. Reload and try again. | அந்த வரிசை ஏற்கெனவே மாற்றப்பட்டுவிட்டது, அல்லது இந்தக் கோரிக்கை முந்தையதுடன் முரண்படுகிறது. மீண்டும் ஏற்றி முயலவும். | C: Technical conflict message. | |
-| `medications.correct` | Correct or stop | திருத்து அல்லது நிறுத்து | A: "Correct or stop" rendered திருத்து அல்லது நிறுத்து. In English and Tamil "stop" could mean stopping the medicine or stopping the record. Needs a clinician to choose wording. | |
-| `medications.correctBody` | This adds a new row that replaces the row below. The old row stays on record, marked as replaced. | இது கீழே உள்ள வரிசையை மாற்றும் புதிய வரிசையைச் சேர்க்கிறது. பழைய வரிசை, மாற்றப்பட்டது எனக் குறிக்கப்பட்டு பதிவில் இருக்கும். | B: "Replaces the row below; the old row stays, marked replaced": check மாற்றும் (replace) versus "change". | |
-| `medications.correctTitle` | Correct or stop this medication statement? | இந்த மருந்து அறிக்கையைத் திருத்தவா அல்லது நிறுத்தவா? | A: Same "stop" ambiguity as medications.correct. | |
+| `medications.correct` | Correct this entry | இந்தப் பதிவைத் திருத்து | A: "Correct this entry" rendered இந்தப் பதிவைத் திருத்து: for a recording mistake only. Check a clinician would read it as "I recorded this wrongly" and not as "change the treatment". Wording is item 35 on docs/design/clinician-sheet.md. | |
+| `medications.correctBody` | Use this when the entry below was recorded wrongly. It adds a new row that replaces the row below. The old row stays on record, marked as replaced. | கீழே உள்ள பதிவு தவறாகப் பதிவு செய்யப்பட்டிருந்தால் இதைப் பயன்படுத்தவும். இது கீழே உள்ள வரிசையை மாற்றும் புதிய வரிசையைச் சேர்க்கிறது. பழைய வரிசை, மாற்றப்பட்டது எனக் குறிக்கப்பட்டு பதிவில் இருக்கும். | B: "Replaces the row below; the old row stays, marked replaced": check மாற்றும் (replace) versus "change". | |
+| `medications.correctTitle` | Correct this medication entry? | இந்த மருந்துப் பதிவைத் திருத்தலாமா? | B: Confirmation question for a correction; check it against medications.correct. | |
 | `medications.current` | Current | தற்போதையது | no issue found | |
 | `medications.done` | The medication statement was recorded. | மருந்து அறிக்கை பதிவு செய்யப்பட்டது. | no issue found | |
 | `medications.empty` | No medication statements are recorded for this patient. | இந்த நோயாளிக்கு மருந்து அறிக்கைகள் எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
@@ -1185,11 +1191,18 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `medications.recordTitle` | Record a medication statement? | மருந்து அறிக்கையைப் பதிவு செய்யலாமா? | no issue found | |
 | `medications.replaces` | Replaces | மாற்றுவது | no issue found | |
 | `medications.save` | Record | பதிவு செய் | no issue found | |
+| `medications.stop` | Stop this medicine | இந்த மருந்தை நிறுத்து | A: "Stop this medicine" rendered இந்த மருந்தை நிறுத்து: the patient stopped taking it. Check it cannot be read as "stop giving it now" as an instruction to the patient. Wording is item 35 on docs/design/clinician-sheet.md. | |
+| `medications.stopBody` | This adds a new row with an end time for the medicine below. The old row stays on record, marked as replaced. Nothing else is changed. | இது கீழே உள்ள மருந்துக்கு முடிவு நேரத்துடன் ஒரு புதிய வரிசையைச் சேர்க்கிறது. பழைய வரிசை, மாற்றப்பட்டது எனக் குறிக்கப்பட்டு பதிவில் இருக்கும். வேறு எதுவும் மாறாது. | B: Adds a row with an end time; the old row stays; nothing else changes. Check clarity. | |
+| `medications.stopDone` | The stop was recorded. | நிறுத்தம் பதிவு செய்யப்பட்டது. | C: நிறுத்தம் பதிவு செய்யப்பட்டது. | |
+| `medications.stopSave` | Record stop | நிறுத்தத்தைப் பதிவு செய் | B: "Record stop" rendered நிறுத்தத்தைப் பதிவு செய்: check it reads as recording, not ordering. | |
+| `medications.stopTitle` | Record that this medicine was stopped? | இந்த மருந்து நிறுத்தப்பட்டது எனப் பதிவு செய்யலாமா? | A: "Record that this medicine was stopped?" rendered இந்த மருந்து நிறுத்தப்பட்டது எனப் பதிவு செய்யலாமா?: it records a fact, it does not order a stop. Check that is clear. | |
+| `medications.stoppedAt` | Stopped at | நிறுத்தப்பட்ட நேரம் | C: நிறுத்தப்பட்ட நேரம் (stopped at). | |
+| `medications.stoppedAtHint` | The time the medicine was stopped. It is required. | மருந்து நிறுத்தப்பட்ட நேரம். இது கட்டாயம். | no issue found | |
 | `medications.superseded` | Replaced by a later row | பிந்தைய வரிசையால் மாற்றப்பட்டது | B: "Replaced by a later row" rendered பிந்தைய வரிசையால் மாற்றப்பட்டது: check it does not read as "changed medicine". | |
 | `medications.title` | Medications | மருந்துகள் | B: மருந்துகள் (medications) as a heading may read as a list of what the patient takes now, but it lists statements incl. stopped ones. | |
 | `medications.validFrom` | From | தொடக்கம் | no issue found | |
 | `medications.validTo` | To (leave empty if no end is recorded) | முடிவு (முடிவு நேரம் பதிவு செய்யப்படாவிட்டால் காலியாக விடவும்) | no issue found | |
-| `medications.validToHint` | An empty end is saved as "no end recorded". It is not read as "still taking". | காலியான முடிவு "முடிவு பதிவு செய்யப்படவில்லை" என்று சேமிக்கப்படும். அது "இன்னும் எடுத்துக்கொள்கிறார்" என்று கருதப்படாது. | A: "Saved as no end recorded; not read as still taking." The Tamil uses a masculine verb (எடுத்துக்கொள்கிறார்) for a patient of unknown gender, and "still taking" is a clinical statement. Needs a native clinician to reword neutrally. | |
+| `medications.validToHint` | An empty end is saved as "no end recorded". It is not read as "still taking". | காலியான முடிவு "முடிவு பதிவு செய்யப்படவில்லை" என்று சேமிக்கப்படும். அது "இன்னும் எடுத்துக்கொள்ளப்படுகிறது" என்று கருதப்படாது. | A: The "still taking" statement was reworded without a gendered verb (இன்னும் எடுத்துக்கொள்ளப்படுகிறது, passive). A native clinician should confirm it reads naturally and clearly says an empty end is NOT read as ongoing. Item 36 on docs/design/clinician-sheet.md. | |
 | `medications.verified` | Verified | சரிபார்க்கப்பட்டது | B: சரிபார்க்கப்பட்டது (verified): check who verified is not implied. | |
 | `nav.access` | Break-glass | அவசரகால அணுகல் | no issue found | |
 | `nav.admin` | Admin | நிர்வாகம் | no issue found | |

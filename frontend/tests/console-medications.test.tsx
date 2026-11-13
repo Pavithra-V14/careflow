@@ -38,7 +38,8 @@ describe('medications on the patient record', () => {
     expect(rows[1]).toHaveTextContent('No'); // verified: false is shown as No
     expect(rows[1]).toHaveTextContent(`Replaces ${ID.doc.slice(0, 8)}…`);
     // Only a current row offers a correction.
-    expect(within(rows[0] as HTMLElement).getByRole('button', { name: 'Correct or stop PLACEHOLDER-CODE-1' })).toBeInTheDocument();
+    expect(within(rows[0] as HTMLElement).getByRole('button', { name: 'Correct this entry PLACEHOLDER-CODE-1' })).toBeInTheDocument();
+    expect(within(rows[0] as HTMLElement).getByRole('button', { name: 'Stop this medicine PLACEHOLDER-CODE-1' })).toBeInTheDocument(); // two separate actions
     expect(within(rows[1] as HTMLElement).queryByRole('button')).toBeNull();
     const q = calls.find((c) => c.path === '/v1/staff/medications');
     expect(q?.query.get('clinic_id')).toBe(CLINIC_A);
@@ -82,8 +83,8 @@ describe('medications on the patient record', () => {
   it('a correction names the row it replaces and sends that id; the end time is sent only when typed', async () => {
     const user = userEvent.setup();
     const { calls } = await open('nurse', [listRoute([row()]), recordRoute('ok')]);
-    await user.click(await screen.findByRole('button', { name: 'Correct or stop PLACEHOLDER-CODE-1' }));
-    const dialog = screen.getByRole('dialog', { name: 'Correct or stop this medication statement?' });
+    await user.click(await screen.findByRole('button', { name: 'Correct this entry PLACEHOLDER-CODE-1' }));
+    const dialog = screen.getByRole('dialog', { name: 'Correct this medication entry?' });
     expect(dialog).toHaveTextContent('PLACEHOLDER-CODE-1');
     await user.type(within(dialog).getByLabelText('Code'), 'PLACEHOLDER-CODE-1');
     await user.type(within(dialog).getByLabelText('From'), '2026-11-01T05:00');
@@ -92,6 +93,51 @@ describe('medications on the patient record', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Record' }));
     await screen.findByText('The medication statement was recorded.');
     expect(writes(calls)[0]?.body).toMatchObject({ supersedes_id: MED, valid_to: '2026-11-12T05:00:00.000Z' });
+  });
+
+  it('a stop is its own action with its own confirmation: the code and start come from the row, the end time and verified answer are typed by the person, one write names the old row', async () => {
+    const user = userEvent.setup();
+    const { calls } = await open('doctor', [listRoute([row()]), recordRoute('ok')]);
+    await user.click(await screen.findByRole('button', { name: 'Stop this medicine PLACEHOLDER-CODE-1' }));
+    const dialog = screen.getByRole('dialog', { name: 'Record that this medicine was stopped?' });
+    expect(within(dialog).queryByLabelText('Code')).toBeNull(); // not retyped
+    expect(dialog).toHaveTextContent('PLACEHOLDER-CODE-1');
+    const save = within(dialog).getByRole('button', { name: 'Record stop' });
+    expect(save).toBeDisabled();
+    for (const r of within(dialog).getAllByRole('radio')) expect(r).not.toBeChecked();
+    expect((within(dialog).getByLabelText('Stopped at') as HTMLInputElement).value).toBe('');
+    await user.type(within(dialog).getByLabelText('Stopped at'), '2026-11-12T05:00');
+    expect(save).toBeDisabled(); // verified still unanswered
+    await user.click(within(dialog).getByRole('radio', { name: 'Yes' }));
+    expect(writes(calls)).toHaveLength(0);
+    await user.click(save);
+    await screen.findByText('The stop was recorded.');
+    expect(writes(calls)).toHaveLength(1);
+    expect(writes(calls)[0]?.body).toEqual({ clinic_id: CLINIC_A, patient_id: ID.patient, code: 'PLACEHOLDER-CODE-1', verified: true, valid_from: '2026-11-01T05:00:00Z', valid_to: '2026-11-12T05:00:00.000Z', supersedes_id: MED });
+    expect(writes(calls)[0]?.key).toBeTruthy();
+  });
+
+  it('cancelling a stop or a correction writes nothing', async () => {
+    const user = userEvent.setup();
+    const { calls } = await open('nurse', [listRoute([row()]), recordRoute('ok')]);
+    await user.click(await screen.findByRole('button', { name: 'Stop this medicine PLACEHOLDER-CODE-1' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: 'Correct this entry PLACEHOLDER-CODE-1' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+    expect(writes(calls)).toHaveLength(0);
+  });
+
+  it('shows the two actions in Tamil, and the "no end" hint without a gendered verb', async () => {
+    const user = userEvent.setup();
+    await openConsole({ role: 'nurse', hash: `/patients/${ID.patient}`, lang: 'ta', routes: [patientRoute, listRoute([row()])], me: { clinic_time_zone: 'UTC' } });
+    expect(await screen.findByRole('button', { name: 'இந்தப் பதிவைத் திருத்து PLACEHOLDER-CODE-1' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'இந்த மருந்தை நிறுத்து PLACEHOLDER-CODE-1' }));
+    expect(within(screen.getByRole('dialog')).getByText('நிறுத்தப்பட்ட நேரம்')).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: 'மருந்தைப் பதிவு செய்' }));
+    const hint = within(screen.getByRole('dialog')).getByText(/முடிவு பதிவு செய்யப்படவில்லை/);
+    expect(hint.textContent).not.toContain('எடுத்துக்கொள்கிறார்'); // a gendered verb for a patient whose gender is not known
+    expect(hint.textContent).toContain('எடுத்துக்கொள்ளப்படுகிறது');
   });
 
   it.each([
