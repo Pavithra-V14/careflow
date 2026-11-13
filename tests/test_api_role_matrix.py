@@ -1181,7 +1181,7 @@ def new_confirmed_patient(ids, *, clinic=None):
 
 
 def _revoke_body(patient, replayed, review_task):
-    return lambda b: b == {"patient_id": str(patient), "confirmed": False, "replayed": replayed, "review_task": review_task}
+    return lambda b: b == {"patient_id": str(patient), "confirmed": False, "replayed": replayed, "review_task": review_task, "admin_alert": "on_record" if review_task == "on_record" else "not_configured"}
 
 
 def patient_revoke_cases(ids) -> list[tuple]:
@@ -3251,6 +3251,34 @@ def autonomy_resolve_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(), {"decision": "approve"})
 
 
+# ---- red-flag rule approval (migration 0072): list for doctors and admins; the decision is a doctor act. The two-doctor flows against real draft rules are in tests/test_rule_approval_db_live.py. ----
+
+RULES = "/v1/staff/console/red-flag-rules"
+RULE_DECISION = RULES + "/{rule_id}/decision"
+RULE_VISIBLE_REFUSED = ("front_desk_a", "nurse_a", "business_owner_a", "auditor_a", "multi")  # (doctor and admin read the list; multi is a nurse here)
+
+
+def rules_list_cases(ids) -> list[tuple]:
+    path = lambda **o: RULES + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
+    cases = _console_clinic_cases(ids, path, allowed=("doctor_a", "admin_a"), ok_status=200, ok_body=lambda b: set(b) == {"rules"}, visible_refused=RULE_VISIBLE_REFUSED)
+    cases += [
+        _case(ids, "an unknown clinic is not found", "doctor_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "limit=0 is rejected", "doctor_a", 422, path(limit=0), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
+def rule_decision_cases(ids) -> list[tuple]:
+    path = lambda: RULE_DECISION.format(rule_id=uuid.uuid4())
+    cases = [_case(ids, f"{p} cannot decide a rule version that does not exist", p, 404, path(), json={"decision": "approve"}, body=_fixed(404)) for p in ids.people]
+    cases += [
+        _case(ids, "an unknown decision is rejected", "doctor_a", 422, path(), json={"decision": "maybe"}, body=_fixed(422)),
+        _case(ids, "an extra field is rejected", "doctor_a", 422, path(), json={"decision": "approve", "extra": 1}, body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "doctor_a", 422, path(), json={"decision": "approve"}, key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), {"decision": "approve"})
+
+
 # ---- break-glass access (migration 0058; BUILD-SPEC.md 18.4) ------------------------------------------------------------------------------------------------------------------------------------------------
 # Front desk, nurse and doctor open a time-limited grant for one patient (a reason code from the clinic's owner-kept list); the holder reads that patient's messages (this world has no encryption keys, so the
 # read answers 503 after the grant is found; the decrypting path and the database behaviour are in tests/test_break_glass_db_live.py); an admin of the clinic who did not open it reviews. Opening writes
@@ -3677,6 +3705,8 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", AUTONOMY_PROPOSALS): autonomy_propose_cases,
     ("GET", AUTONOMY_PROPOSALS): autonomy_proposals_list_cases,
     ("POST", AUTONOMY_RESOLVE): autonomy_resolve_cases,
+    ("GET", RULES): rules_list_cases,
+    ("POST", RULE_DECISION): rule_decision_cases,
     ("GET", AUTONOMY): autonomy_get_cases,
     ("POST", AUTONOMY): autonomy_set_cases,
     ("GET", DASHBOARD): dashboard_cases,
@@ -4389,7 +4419,7 @@ def test_a_revoke_writes_one_event_one_audit_row_and_with_the_task_settings_conf
     try:
         key = _new_key()
         ok = client.post(REVOKE.format(patient_id=patient), headers={**bearer(mint(fd)), "X-Idempotency-Key": key}, json=REASON)
-        assert ok.status_code == 200 and ok.json() == {"patient_id": str(patient), "confirmed": False, "replayed": False, "review_task": "raised"}
+        assert ok.status_code == 200 and ok.json() == {"patient_id": str(patient), "confirmed": False, "replayed": False, "review_task": "raised", "admin_alert": "not_configured"}
         again = client.post(REVOKE.format(patient_id=patient), headers={**bearer(mint(fd)), "X-Idempotency-Key": key}, json=REASON)
         assert again.json()["replayed"] is True and again.json()["review_task"] == "on_record"
     finally:
@@ -4404,7 +4434,7 @@ def test_a_revoke_writes_one_event_one_audit_row_and_with_the_task_settings_conf
     (row,) = _run(_fetch(audit, str(patient)))  # one row: the replay wrote none
     details = without_scope(row["details"])
     assert (row["actor_id"], row["actor_role"], row["clinic_id"]) == (fd, "front_desk", ids.clinic_a)
-    assert details == {"reason": "wrong_person", "replayed": False, "review_task": "raised"}
+    assert details == {"reason": "wrong_person", "replayed": False, "review_task": "raised", "admin_alert": "not_configured"}
 
 
 def test_with_the_task_settings_unset_the_revoke_is_recorded_and_says_no_task_was_raised(client, ids):
@@ -4417,6 +4447,35 @@ def test_with_the_task_settings_unset_the_revoke_is_recorded_and_says_no_task_wa
     (row,) = _run(_fetch("select details from audit.log where resource_id = $1 and action = 'patient.revoke_identity'", str(patient)))
     details = without_scope(row["details"])
     assert details["review_task"] == "not_configured"  # the audit row says so too
+
+
+def test_with_the_alert_reasons_listed_a_revoke_raises_one_admin_alert_bound_to_the_event_and_the_task_can_go_to_the_supervisor_role(client, ids):
+    from careflow import app as app_module
+    from careflow.mpi import RevokeTaskSettings
+
+    patient = new_confirmed_patient(ids)
+    fd = ids.people["front_desk_a"][0]
+    # test inputs only: stand-ins for the clinician-owned settings, not recommendations
+    client.app.dependency_overrides[app_module.revoke_task_settings] = lambda: RevokeTaskSettings(_env_file=None, priority="standard", assigned_role="front_desk_supervisor", alert_reasons="wrong_person")
+    try:
+        key = _new_key()
+        ok = client.post(REVOKE.format(patient_id=patient), headers={**bearer(mint(fd)), "X-Idempotency-Key": key}, json=REASON)
+        assert ok.status_code == 200 and ok.json() == {"patient_id": str(patient), "confirmed": False, "replayed": False, "review_task": "raised", "admin_alert": "raised"}
+        again = client.post(REVOKE.format(patient_id=patient), headers={**bearer(mint(fd)), "X-Idempotency-Key": key}, json=REASON)
+        assert again.json()["admin_alert"] == "on_record"
+        other = new_confirmed_patient(ids)
+        mistaken = client.post(REVOKE.format(patient_id=other), headers={**bearer(mint(fd)), "X-Idempotency-Key": _new_key()}, json={"reason": "mistaken_click"})
+        assert mistaken.json()["admin_alert"] == "not_for_this_reason"
+    finally:
+        client.app.dependency_overrides.pop(app_module.revoke_task_settings, None)
+    (event,) = _run(_fetch("select id::text as id from mpi.identity_confirmations where patient_id = $1 and kind = 'revoke'", patient))
+    alerts = _run(_fetch("select class, audience_role, alert_count, ref from ops.alerts where ref = $1", event["id"]))
+    assert [(a["class"], a["audience_role"], a["alert_count"]) for a in alerts] == [("identity_revoked_suspect", "admin", 1)]  # one alert, for an admin, carrying the event id only
+    assert _run(_fetch("select count(*) as n from ops.alerts where class = 'identity_revoked_suspect' and ref in (select id::text from mpi.identity_confirmations where patient_id = $1)", other))[0]["n"] == 0
+    tasks = _run(_fetch("select assigned_role from agents.review_tasks where provenance ->> 'patient_id' = $1", str(patient)))
+    assert [t["assigned_role"] for t in tasks] == ["front_desk_supervisor"]
+    admin_alerts = client.get(CONSOLE_ALERTS + f"?clinic_id={ids.clinic_a}", headers=bearer(mint(ids.people["admin_a"][0])))
+    assert admin_alerts.status_code == 200 and any(i["alert_class"] == "identity_revoked_suspect" and i["ref"] == event["id"] for i in admin_alerts.json()["items"])
 
 
 def test_acknowledging_and_releasing_a_hold_write_one_audit_row_each_as_the_person_with_ids_only_and_a_replay_writes_none(client, ids):

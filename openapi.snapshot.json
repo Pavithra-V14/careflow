@@ -80,7 +80,8 @@
               "spend_runaway",
               "delivery_failed",
               "fallback_spike",
-              "tracing_cap"
+              "tracing_cap",
+              "identity_revoked_suspect"
             ],
             "title": "Alert Class",
             "type": "string"
@@ -3601,6 +3602,7 @@
           "role": {
             "enum": [
               "front_desk",
+              "front_desk_supervisor",
               "nurse",
               "doctor",
               "admin",
@@ -3639,6 +3641,7 @@
           "role": {
             "enum": [
               "front_desk",
+              "front_desk_supervisor",
               "nurse",
               "doctor",
               "admin",
@@ -5711,7 +5714,8 @@
             "enum": [
               "nurse",
               "doctor",
-              "front_desk"
+              "front_desk",
+              "front_desk_supervisor"
             ],
             "title": "Assigned Role",
             "type": "string"
@@ -6193,7 +6197,8 @@
             "enum": [
               "nurse",
               "doctor",
-              "front_desk"
+              "front_desk",
+              "front_desk_supervisor"
             ],
             "title": "Assigned Role",
             "type": "string"
@@ -6337,7 +6342,8 @@
             "enum": [
               "nurse",
               "doctor",
-              "front_desk"
+              "front_desk",
+              "front_desk_supervisor"
             ],
             "title": "Assigned Role",
             "type": "string"
@@ -6687,6 +6693,16 @@
         "additionalProperties": false,
         "description": "Ids, a flag and a closed word. `review_task`: `raised` (a nurse or doctor will re-check what was linked), `not_configured` (the revoke is recorded but NO task was raised, because the\nclinician-owned task settings are unset) or `on_record` (nothing new was written by this call).",
         "properties": {
+          "admin_alert": {
+            "enum": [
+              "raised",
+              "not_for_this_reason",
+              "not_configured",
+              "on_record"
+            ],
+            "title": "Admin Alert",
+            "type": "string"
+          },
           "confirmed": {
             "const": false,
             "title": "Confirmed",
@@ -6715,7 +6731,8 @@
           "patient_id",
           "confirmed",
           "replayed",
-          "review_task"
+          "review_task",
+          "admin_alert"
         ],
         "title": "RevokeIdentityOut",
         "type": "object"
@@ -6731,6 +6748,7 @@
           "role": {
             "enum": [
               "front_desk",
+              "front_desk_supervisor",
               "nurse",
               "doctor",
               "admin",
@@ -6768,6 +6786,7 @@
           "role": {
             "enum": [
               "front_desk",
+              "front_desk_supervisor",
               "nurse",
               "doctor",
               "admin",
@@ -6830,6 +6849,80 @@
         "title": "RoleGrant",
         "type": "object"
       },
+      "RuleDecisionIn": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "RuleDecisionIn",
+        "type": "object"
+      },
+      "RuleDecisionOut": {
+        "additionalProperties": false,
+        "properties": {
+          "result": {
+            "enum": [
+              "recorded",
+              "approved",
+              "rejected",
+              "already_decided",
+              "not_draft",
+              "origin_mismatch",
+              "author_cannot_decide",
+              "empty_rule",
+              "rejected_earlier",
+              "platform_rule"
+            ],
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "RuleDecisionOut",
+        "type": "object"
+      },
+      "RuleDecisionRowOut": {
+        "additionalProperties": false,
+        "properties": {
+          "decided_at": {
+            "format": "date-time",
+            "title": "Decided At",
+            "type": "string"
+          },
+          "decided_by": {
+            "format": "uuid",
+            "title": "Decided By",
+            "type": "string"
+          },
+          "decision": {
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision",
+          "decided_by",
+          "decided_at"
+        ],
+        "title": "RuleDecisionRowOut",
+        "type": "object"
+      },
       "RuleDoneIn": {
         "additionalProperties": false,
         "properties": {
@@ -6863,6 +6956,111 @@
           "recorded"
         ],
         "title": "RuleDoneOut",
+        "type": "object"
+      },
+      "RuleVersionList": {
+        "additionalProperties": false,
+        "properties": {
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/RuleVersionOut"
+            },
+            "title": "Rules",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rules"
+        ],
+        "title": "RuleVersionList",
+        "type": "object"
+      },
+      "RuleVersionOut": {
+        "additionalProperties": false,
+        "properties": {
+          "approved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
+          },
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/RuleDecisionRowOut"
+            },
+            "title": "Decisions",
+            "type": "array"
+          },
+          "has_vitals_criteria": {
+            "title": "Has Vitals Criteria",
+            "type": "boolean"
+          },
+          "origin": {
+            "enum": [
+              "live",
+              "test",
+              "eval",
+              "canary"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "patterns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Patterns",
+            "type": "array"
+          },
+          "phrases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Phrases",
+            "type": "array"
+          },
+          "rule_code": {
+            "title": "Rule Code",
+            "type": "string"
+          },
+          "rule_id": {
+            "format": "uuid",
+            "title": "Rule Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "draft_unreviewed",
+              "approved",
+              "retired"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version_id": {
+            "title": "Version Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rule_id",
+          "rule_code",
+          "version_id",
+          "status",
+          "origin",
+          "phrases",
+          "patterns",
+          "has_vitals_criteria",
+          "approved_at",
+          "decisions"
+        ],
+        "title": "RuleVersionOut",
         "type": "object"
       },
       "RunOut": {
@@ -12273,6 +12471,200 @@
         ]
       }
     },
+    "/v1/staff/console/red-flag-rules": {
+      "get": {
+        "description": "The clinic's own red-flag rule versions with the decisions made on each, so an approver sees exactly what they are approving. 404 if the clinic is not visible to you, 403 unless you are a doctor or admin there. Read-only.",
+        "operationId": "list_red_flag_rules_v1_staff_console_red_flag_rules_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Clinic Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleVersionList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Red Flag Rules",
+        "tags": [
+          "staff console"
+        ]
+      }
+    },
+    "/v1/staff/console/red-flag-rules/{rule_id}/decision": {
+      "post": {
+        "description": "Approve or reject a DRAFT red-flag rule version as a doctor of its clinic with a verified second factor (checked again by the database). The version becomes approved only when a SECOND, different doctor approves it (never its author);\none reject closes it. Idempotent on the key; audited by the database. 404 if you cannot see the version, 403 unless you are a doctor of its clinic. Nothing is approved by default.",
+        "operationId": "decide_red_flag_rule_v1_staff_console_red_flag_rules__rule_id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Rule Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 173,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleDecisionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleDecisionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Decide Red Flag Rule",
+        "tags": [
+          "staff console"
+        ]
+      }
+    },
     "/v1/staff/console/reviewer-stats": {
       "get": {
         "description": "Each reviewer's decisions, approval rate and median time-to-decide over the last `days`, with the rubber-stamp verdict (`not_configured` while the policy setting is unset). Admin only. 404 if the clinic is not visible to you, 403 unless you are admin there.",
@@ -16310,7 +16702,8 @@
                   "enum": [
                     "nurse",
                     "doctor",
-                    "front_desk"
+                    "front_desk",
+                    "front_desk_supervisor"
                   ],
                   "type": "string"
                 },

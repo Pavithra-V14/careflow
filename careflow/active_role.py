@@ -24,7 +24,7 @@ CLAIM: Final = "careflow_active"
 REFUSAL_STATUS: Final = 403
 REFUSAL_BODY: Final = {"detail": "active role not available"}
 # The roles a grant can carry (the grants table role check, migrations 0001 and 0006). Anything else is refused before the database is asked.
-ROLES: Final = frozenset({"front_desk", "nurse", "doctor", "admin", "business_owner", "auditor", "queue_worker"})
+ROLES: Final = frozenset({"front_desk", "front_desk_supervisor", "nurse", "doctor", "admin", "business_owner", "auditor", "queue_worker"})
 MAX_HEADER_CHARS: Final = 64  # a canonical uuid (36) + ":" + the longest role (14) is 51
 _SHAPE = re.compile(r"\A([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):([a-z_]+)\Z")
 

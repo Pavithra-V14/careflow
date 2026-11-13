@@ -89,6 +89,7 @@ from careflow import (
     reply_interpretation,
     review_tasks,
     rights_sql,
+    rule_approval_sql,
     visit_readiness_content,
     visit_readiness_sql,
     voice_sql,
@@ -1209,6 +1210,7 @@ class RevokeIdentityOut(_Out):
     confirmed: Literal[False]
     replayed: bool
     review_task: Literal["raised", "not_configured", "on_record"]
+    admin_alert: Literal["raised", "not_for_this_reason", "not_configured", "on_record"]  # whether an admin alert was raised: only for the reasons the required setting CAREFLOW_REVOKE_ALERT_REASONS lists (unset = never)
 
 
 def revoke_task_settings() -> mpi.RevokeTaskSettings:
@@ -1242,10 +1244,10 @@ async def revoke_patient_identity(
         raise HTTPException(status_code=409, detail="this record is merged into another record; act on that record") from None
     await write_audit(
         conn, clinic_id=row[0], origin=origin, actor_id=uuid.UUID(claims["sub"]), actor_role="front_desk", action="patient.revoke_identity", resource_type="patient",
-        resource_id=patient_id, details={"reason": body.reason, "replayed": result.replayed, "review_task": result.review_task},
+        resource_id=patient_id, details={"reason": body.reason, "replayed": result.replayed, "review_task": result.review_task, "admin_alert": result.admin_alert},
         idempotency_key=f"audit:revoke-identity:{patient_id}:{idempotency_key}",
     )
-    return RevokeIdentityOut(patient_id=result.patient_id, confirmed=False, replayed=result.replayed, review_task=result.review_task)
+    return RevokeIdentityOut(patient_id=result.patient_id, confirmed=False, replayed=result.replayed, review_task=result.review_task, admin_alert=result.admin_alert)
 
 
 # ---- review tasks: list, open, acknowledge, resolve (careflow/review_tasks.py; docs/design/review-task-routes.md) --------------------------------------------
@@ -1254,7 +1256,7 @@ async def revoke_patient_identity(
 # Only the kinds in `review_tasks.RESOLVABLE_KINDS` close here; the rest close through their own route or wait for a clinician's decision (409, never closed quietly).
 
 staff_review_tasks = APIRouter(prefix="/v1/staff/review-tasks", tags=["staff review tasks"])
-TASK_READERS: Final = ("front_desk", "nurse", "doctor", "admin")
+TASK_READERS: Final = ("front_desk", "front_desk_supervisor", "nurse", "doctor", "admin")
 
 
 class ReviewTaskOut(_Out):
@@ -1264,7 +1266,7 @@ class ReviewTaskOut(_Out):
     clinic_id: uuid.UUID
     kind: str
     priority: Literal["immediate", "standard"]
-    assigned_role: Literal["nurse", "doctor", "front_desk"]
+    assigned_role: Literal["nurse", "doctor", "front_desk", "front_desk_supervisor"]
     status: Literal["open", "acknowledged", "resolved"]
     created_at: datetime
     acknowledged_by: uuid.UUID | None
@@ -1308,7 +1310,7 @@ async def _task_reader(conn: AsyncConnection, claims: dict[str, Any]) -> None:
 @staff_review_tasks.get("", response_model=ReviewTaskList)
 async def list_review_tasks(
     conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), status: Literal["open", "acknowledged", "resolved"] | None = None,
-    kind: Annotated[str | None, Query(pattern=r"^[a-z][a-z0-9_]{0,63}$")] = None, assigned_role: Literal["nurse", "doctor", "front_desk"] | None = None, limit: Limit = 100,
+    kind: Annotated[str | None, Query(pattern=r"^[a-z][a-z0-9_]{0,63}$")] = None, assigned_role: Literal["nurse", "doctor", "front_desk", "front_desk_supervisor"] | None = None, limit: Limit = 100,
 ) -> ReviewTaskList:
     """The tasks you may see, immediate before standard, then oldest first. 403 unless you hold a staff role."""
     await _task_reader(conn, claims)
@@ -1343,7 +1345,7 @@ async def _transition(
     except review_tasks.NotResolvableHere:
         raise HTTPException(status_code=409, detail="this kind of task is closed through its own route") from None
     await write_audit(
-        conn, clinic_id=done.clinic_id, origin=done.origin, actor_id=by, actor_role=await _acting_role(conn, claims, done.clinic_id, ("nurse", "doctor", "front_desk")),
+        conn, clinic_id=done.clinic_id, origin=done.origin, actor_id=by, actor_role=await _acting_role(conn, claims, done.clinic_id, ("nurse", "doctor", "front_desk", "front_desk_supervisor")),
         action=f"review_task.{action}", resource_type="review-task", resource_id=task_id, details={"kind": done.kind, "replayed": done.replayed},
         idempotency_key=f"audit:review-task-{action}:{task_id}:{idempotency_key}",
     )
@@ -2617,8 +2619,8 @@ async def cancel_patient_erasure_route(request_id: uuid.UUID, idempotency_key: I
 # function that checks the caller itself, writes the audit row in the same transaction and refuses with ONE generic error (mapped to the fixed answers below). The sign-in is created through the Auth admin
 # PORT (careflow/auth_admin.py): with none configured the invite route answers 503. An e-mail address is never stored, logged, audited or returned. queue_worker can never be granted here.
 
-STAFF_GRANTABLE: Final = ("front_desk", "nurse", "doctor", "admin", "auditor", "business_owner")
-GrantableRole = Literal["front_desk", "nurse", "doctor", "admin", "auditor", "business_owner"]
+STAFF_GRANTABLE: Final = ("front_desk", "front_desk_supervisor", "nurse", "doctor", "admin", "auditor", "business_owner")
+GrantableRole = Literal["front_desk", "front_desk_supervisor", "nurse", "doctor", "admin", "auditor", "business_owner"]
 staff_accounts = APIRouter(prefix="/v1/staff/accounts", tags=["staff accounts"])
 
 
@@ -3241,7 +3243,7 @@ class ReferralOut(_Out):
 
 class ReferralHoldOut(_Out):
     task_id: uuid.UUID
-    assigned_role: Literal["nurse", "doctor", "front_desk"]
+    assigned_role: Literal["nurse", "doctor", "front_desk", "front_desk_supervisor"]
     status: Literal["open", "acknowledged", "resolved"]
 
 
@@ -3833,6 +3835,80 @@ async def autonomy_history(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str,
         resource_id=clinic_id, details={"items": len(items[:limit])}, idempotency_key=f"audit:autonomy-history:{uuid.uuid4()}",
     )
     return AutonomyHistory(items=items[:limit])
+
+
+# ---- red-flag rule approval: two different doctors (migration 0072; BUILD-SPEC.md 12.5, 20.2; pre-launch item 19) --------------------------------------------------------------------------------------------
+# MECHANISM ONLY: no rule content is written here. A rule version arrives as a draft; two DIFFERENT doctors of its clinic, each with a verified second factor, approve it; only then does it count in the
+# `clinical` profile. One reject closes the version. The database function writes the ledger and the audit rows; admins read, they do not decide.
+
+RULE_VIEWERS = ("doctor", "admin")
+RULE_DECIDERS = ("doctor",)
+RuleDecisionWord = Literal["recorded", "approved", "rejected", "already_decided", "not_draft", "origin_mismatch", "author_cannot_decide", "empty_rule", "rejected_earlier", "platform_rule"]
+
+
+class RuleDecisionIn(_Body):
+    decision: Literal["approve", "reject"]
+
+
+class RuleDecisionOut(_Out):
+    result: RuleDecisionWord
+
+
+class RuleDecisionRowOut(_Out):
+    decision: Literal["approve", "reject"]
+    decided_by: uuid.UUID
+    decided_at: datetime
+
+
+class RuleVersionOut(_Out):
+    rule_id: uuid.UUID
+    rule_code: str
+    version_id: int
+    status: Literal["draft_unreviewed", "approved", "retired"]
+    origin: Literal["live", "test", "eval", "canary"]
+    phrases: list[str]
+    patterns: list[str]
+    has_vitals_criteria: bool
+    approved_at: datetime | None
+    decisions: list[RuleDecisionRowOut]
+
+
+class RuleVersionList(_Out):
+    rules: list[RuleVersionOut]
+
+
+@staff_console.get("/red-flag-rules", response_model=RuleVersionList)
+async def list_red_flag_rules(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 200) -> RuleVersionList:
+    """The clinic's own red-flag rule versions with the decisions made on each, so an approver sees exactly what they are approving. 404 if the clinic is not visible to you, 403 unless you are a doctor or admin there. Read-only."""
+    await _console_clinic(conn, clinic_id, RULE_VIEWERS)
+    versions = await rule_approval_sql.list_versions(conn, clinic_id, limit=limit)
+    return RuleVersionList(
+        rules=[
+            RuleVersionOut(
+                rule_id=v.rule_id, rule_code=v.rule_code, version_id=v.version_id, status=v.status, origin=v.origin, phrases=v.phrases, patterns=v.patterns, has_vitals_criteria=v.has_vitals_criteria,
+                approved_at=v.approved_at, decisions=[RuleDecisionRowOut(**d) for d in v.decisions],
+            )
+            for v in versions
+        ]
+    )
+
+
+@staff_console.post("/red-flag-rules/{rule_id}/decision", response_model=RuleDecisionOut)
+async def decide_red_flag_rule(rule_id: uuid.UUID, body: RuleDecisionIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> RuleDecisionOut:
+    """Approve or reject a DRAFT red-flag rule version as a doctor of its clinic with a verified second factor (checked again by the database). The version becomes approved only when a SECOND, different doctor approves it (never its author);
+    one reject closes it. Idempotent on the key; audited by the database. 404 if you cannot see the version, 403 unless you are a doctor of its clinic. Nothing is approved by default."""
+    visible, clinic_id = await rule_approval_sql.rule_clinic(conn, rule_id)
+    if not visible:
+        raise HTTPException(status_code=404, detail="not found")
+    held = await _clinic_role_held(conn, clinic_id, RULE_DECIDERS) if clinic_id is not None else await _any_role_held(conn, RULE_DECIDERS)
+    if not held:
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    try:
+        result = await rule_approval_sql.decide(conn, rule_id=rule_id, decision=body.decision, idempotency_key=idempotency_key)
+    except rule_approval_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return RuleDecisionOut(result=result)  # type: ignore[arg-type]
+
 
 
 class EpisodeIn(_Body):

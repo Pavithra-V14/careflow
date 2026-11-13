@@ -20,7 +20,7 @@ CarePlanProgress = Literal[
 CareGapSource = Literal["overdue_recurrence", "after_the_fact_review", "unresolved_barrier"]
 
 # ops.alerts.class (migration 0039)
-AlertClass = Literal["red_flag_overdue", "task_overdue", "task_escalated", "dead_letters", "queue_age", "canary_approved", "spend_runaway", "delivery_failed", "fallback_spike", "tracing_cap"]
+AlertClass = Literal["red_flag_overdue", "task_overdue", "task_escalated", "dead_letters", "queue_age", "canary_approved", "spend_runaway", "delivery_failed", "fallback_spike", "tracing_cap", "identity_revoked_suspect"]
 
 # msg.messages.sender_kind and topic (migrations 0011, 0050)
 SenderKind = Literal["patient", "staff", "system"]
