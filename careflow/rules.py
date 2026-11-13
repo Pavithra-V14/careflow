@@ -128,10 +128,11 @@ class Rule:
     status: str
     phrases: tuple[str, ...]  # already normalised
     patterns: tuple[re.Pattern[str], ...]
+    token_sets: tuple[tuple[str, ...], ...] = ()  # each set: every (already normalised) token must appear as a whole word, in any order
 
     @property
     def has_criteria(self) -> bool:
-        return bool(self.phrases or self.patterns)
+        return bool(self.phrases or self.patterns or self.token_sets)
 
 
 @dataclass(frozen=True)
@@ -140,7 +141,7 @@ class Match:
     rule_code: str
     version_id: int
     rule_status: str
-    kind: Literal["phrase", "pattern"]
+    kind: Literal["phrase", "pattern", "token_set"]
     index: int  # which phrase / pattern of the rule fired
     start: int  # offsets into the NORMALISED text; the text itself is never recorded
     end: int
@@ -174,9 +175,16 @@ def compile_rule(row: Mapping[str, Any]) -> tuple[Rule | None, str | None]:
             if not isinstance(pattern, str) or not pattern.strip() or len(pattern) > MAX_PATTERN_CHARS:
                 raise ValueError("pattern is blank or longer than the limit")
             compiled.append(re.compile(pattern, re.IGNORECASE | re.UNICODE))
+        sets = []
+        for raw_set in row.get("token_sets") or []:
+            tokens = tuple(t for t in (normalize_text(x) for x in raw_set) if t)
+            if any(" " in t for t in tokens):
+                raise ValueError("a token is one word")
+            if tokens:
+                sets.append(tokens)
     except (re.error, ValueError, TypeError):
         return None, f"rule {row['rule_code']} v{row['version_id']} could not be compiled"
-    return Rule(row["id"], row["rule_code"], row["version_id"], row["status"], phrases, tuple(compiled)), None
+    return Rule(row["id"], row["rule_code"], row["version_id"], row["status"], phrases, tuple(compiled), tuple(sets)), None
 
 
 def rule_set_hash(chosen: "list[Mapping[str, Any]]") -> str:
@@ -213,6 +221,16 @@ def select_active_versions(rows: list[Mapping[str, Any]], profile: Profile) -> t
 # ---- scanning (pure, shared by text and voice) -----------------------------------------------------
 
 
+def _first_whole_word(haystack: str, token: str) -> tuple[int, int] | None:
+    """The first occurrence of `token` on word boundaries, or None."""
+    at = haystack.find(token)
+    while at != -1:
+        if _on_boundaries(haystack, at, at + len(token)):
+            return at, at + len(token)
+        at = haystack.find(token, at + 1)
+    return None
+
+
 def scan_normalized(rules: tuple[Rule, ...], haystack: str) -> list[Match]:
     """Every match of every rule in already-normalised text, ordered by position."""
     found: list[Match] = []
@@ -230,6 +248,10 @@ def scan_normalized(rules: tuple[Rule, ...], haystack: str) -> list[Match]:
                     break
                 if m.end() > m.start():  # an empty match carries no information
                     found.append(Match(rule.id, rule.rule_code, rule.version_id, rule.status, "pattern", i, m.start(), m.end()))
+        for i, tokens in enumerate(rule.token_sets):
+            spans = [_first_whole_word(haystack, t) for t in tokens]
+            if all(sp is not None for sp in spans):
+                found.append(Match(rule.id, rule.rule_code, rule.version_id, rule.status, "token_set", i, min(sp[0] for sp in spans if sp), max(sp[1] for sp in spans if sp)))
     return sorted(found, key=lambda x: (x.start, x.end, x.rule_code, x.kind, x.index))
 
 
@@ -327,7 +349,7 @@ class RedFlagEngine:
         resolved = profile if profile in USABLE_STATUSES else resolve_profile(profile)
         result = await conn.execute(
             text(
-                """select id, clinic_id, rule_code, version_id, status, phrases, patterns
+                """select id, clinic_id, rule_code, version_id, status, phrases, patterns, token_sets
                    from kb.red_flag_rules
                    where (clinic_id = :c or clinic_id is null) and origin = :o"""
             ),

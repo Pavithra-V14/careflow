@@ -3869,6 +3869,7 @@ class RuleVersionOut(_Out):
     origin: Literal["live", "test", "eval", "canary"]
     phrases: list[str]
     patterns: list[str]
+    token_sets: list[list[str]]
     has_vitals_criteria: bool
     approved_at: datetime | None
     decisions: list[RuleDecisionRowOut]
@@ -3886,12 +3887,47 @@ async def list_red_flag_rules(clinic_id: uuid.UUID, conn: TxConn, claims: dict[s
     return RuleVersionList(
         rules=[
             RuleVersionOut(
-                rule_id=v.rule_id, rule_code=v.rule_code, version_id=v.version_id, status=v.status, origin=v.origin, phrases=v.phrases, patterns=v.patterns, has_vitals_criteria=v.has_vitals_criteria,
+                rule_id=v.rule_id, rule_code=v.rule_code, version_id=v.version_id, status=v.status, origin=v.origin, phrases=v.phrases, patterns=v.patterns, token_sets=v.token_sets, has_vitals_criteria=v.has_vitals_criteria,
                 approved_at=v.approved_at, decisions=[RuleDecisionRowOut(**d) for d in v.decisions],
             )
             for v in versions
         ]
     )
+
+
+class RuleDraftIn(_Body):
+    """The RESTRICTED language: literal phrases and token sets, nothing else (no regular expression exists in it). Matching is on word boundaries after the engine's normalisation."""
+
+    clinic_id: uuid.UUID
+    rule_code: str = Field(pattern=r"^[a-z][a-z0-9_]{0,62}$")
+    phrases: list[Annotated[str, Field(min_length=1, max_length=200)]] = Field(default_factory=list, max_length=100)
+    token_sets: list[Annotated[list[Annotated[str, Field(min_length=1, max_length=40, pattern=r"^\S+$")]], Field(min_length=2, max_length=10)]] = Field(default_factory=list, max_length=50)
+
+
+class RuleDraftOut(_Out):
+    rule_id: uuid.UUID
+    status: Literal["draft_unreviewed"]
+
+
+@staff_console.post("/red-flag-rules", response_model=RuleDraftOut, status_code=201)
+async def author_red_flag_rule(body: RuleDraftIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> RuleDraftOut:
+    """A doctor writes a DRAFT red-flag rule version for the clinic in the restricted language (literal phrases and token sets; no regular expression). It is NEVER active: a draft counts only in the demo profile,
+    and it becomes approved only through the two-doctor decision, by a doctor who is not its author. A new version of an existing rule code is the next number. Idempotent on the key. 404 if the clinic is not visible to you,
+    403 unless you are a doctor there, 409 if the key belongs to a different draft, 422 for a shape outside the language (limits, no criterion). Nothing is approved by default."""
+    await _console_clinic(conn, body.clinic_id, RULE_DECIDERS)
+    if not body.phrases and not body.token_sets:
+        raise HTTPException(status_code=422, detail="request rejected")
+    try:
+        rule_id = await rule_approval_sql.author_draft(
+            conn, clinic_id=body.clinic_id, rule_code=body.rule_code, phrases=body.phrases, token_sets=body.token_sets, idempotency_key=idempotency_key
+        )
+    except rule_approval_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    except rule_approval_sql.BadShape:
+        raise HTTPException(status_code=422, detail="request rejected") from None
+    except rule_approval_sql.KeyConflict:
+        raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request") from None
+    return RuleDraftOut(rule_id=rule_id, status="draft_unreviewed")
 
 
 @staff_console.post("/red-flag-rules/{rule_id}/decision", response_model=RuleDecisionOut)
