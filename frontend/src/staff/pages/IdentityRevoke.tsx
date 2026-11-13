@@ -18,13 +18,21 @@ export const REVOKE_REASONS: readonly RevokeReason[] = ['wrong_person', 'planted
 type TaskOutcome = components['schemas']['RevokeIdentityOut']['review_task'];
 const isOutcome = (v: unknown): v is TaskOutcome => v === 'raised' || v === 'not_configured' || v === 'on_record';
 
-export type RevokeOutcome = TaskOutcome | 'unknown';
+type RevokeOutcome = TaskOutcome | 'unknown';
+
+type AlertOutcome = components['schemas']['RevokeIdentityOut']['admin_alert'];
+const isAlert = (v: unknown): v is AlertOutcome => v === 'raised' || v === 'not_for_this_reason' || v === 'not_configured' || v === 'on_record';
+/** What a revoke reported: the review task word and the admin alert word (`null` for an alert word this console does not know: nothing is said about it). */
+export interface RevokeResult {
+  task: RevokeOutcome;
+  alert: AlertOutcome | null;
+}
 
 /**
  * The result is reported through `onDone`, not shown here: after a revoke the record is no longer verified, so the page stops
  * rendering this control, and a message held inside it would vanish with it.
  */
-export function IdentityRevoke({ patientId, onDone }: { patientId: string; onDone: (outcome: RevokeOutcome) => void }) {
+export function IdentityRevoke({ patientId, onDone }: { patientId: string; onDone: (result: RevokeResult) => void }) {
   const { t } = useTranslation();
   const { api } = useAuth();
   const queryClient = useQueryClient();
@@ -35,7 +43,7 @@ export function IdentityRevoke({ patientId, onDone }: { patientId: string; onDon
   const revoke = useIdempotentWrite(
     (r: RevokeReason, key) => unwrap(api.revokeIdentity(patientId, r, { idempotencyKey: key })),
     (result) => {
-      onDone(isOutcome(result.review_task) ? result.review_task : 'unknown'); // an unknown word is never read as "raised"
+      onDone({ task: isOutcome(result.review_task) ? result.review_task : 'unknown', alert: isAlert(result.admin_alert) ? result.admin_alert : null }); // an unknown word is never read as "raised"
       setOpen(false);
       void queryClient.invalidateQueries();
     },

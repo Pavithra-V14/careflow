@@ -71,6 +71,8 @@ const ID = '3f2b8c1e-6a4d-4e1b-9d0a-1c2d3e4f5a6b';
 const INVOCATIONS: Record<keyof typeof OPERATIONS, (api: Api, o?: WriteOptions) => Promise<unknown>> = {
   getMe: (api) => api.getMe(),
   getReadyz: (api) => api.getReadyz(),
+  listRedFlagRules: (api) => api.listRedFlagRules(ID),
+  decideRedFlagRule: (api, o) => api.decideRedFlagRule(ID, 'approve', o),
   proposeMerge: (api, o) => api.proposeMerge(body<ProposeMergeIn>('ProposeMergeIn'), o),
   approveMerge: (api, o) => api.approveMerge(ID, o),
   unmerge: (api, o) => api.unmerge(ID, o),

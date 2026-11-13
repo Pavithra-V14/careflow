@@ -41,6 +41,7 @@ export type StaffRole = InviteIn['role'];
 export type RoleChangeIn = components['schemas']['RoleChangeIn'];
 export type AutonomySetIn = components['schemas']['AutonomySetIn'];
 export type AutonomyDecision = components['schemas']['AutonomyResolveIn']['decision'];
+export type RuleDecision = components['schemas']['RuleDecisionIn']['decision'];
 export type VoicePurgeIn = components['schemas']['VoicePurgeIn'];
 export type CarePlanIn = components['schemas']['CarePlanIn'];
 export type ResultIn = components['schemas']['ResultIn'];
@@ -191,6 +192,8 @@ export const OPERATIONS = {
   autonomyHistory: { method: 'get', path: '/v1/staff/console/autonomy/history' },
   proposeAutonomy: { method: 'post', path: '/v1/staff/console/autonomy/proposals' },
   resolveAutonomyProposal: { method: 'post', path: '/v1/staff/console/autonomy/proposals/{proposal_id}/resolve' },
+  listRedFlagRules: { method: 'get', path: '/v1/staff/console/red-flag-rules' },
+  decideRedFlagRule: { method: 'post', path: '/v1/staff/console/red-flag-rules/{rule_id}/decision' },
   reviewerStats: { method: 'get', path: '/v1/staff/console/reviewer-stats' },
   costCanvas: { method: 'get', path: '/v1/staff/console/cost-canvas' },
   listVoiceSessions: { method: 'get', path: '/v1/staff/voice/sessions' },
@@ -524,6 +527,9 @@ export function createApi(options: ApiOptions) {
       client.POST('/v1/staff/console/autonomy/proposals', { params: { header: { 'X-Idempotency-Key': key(o) } }, body: { clinic_id: clinicId, proposer_role: proposerRole } }),
     resolveAutonomyProposal: (proposalId: string, decision: AutonomyDecision, o?: WriteOptions) =>
       client.POST('/v1/staff/console/autonomy/proposals/{proposal_id}/resolve', { params: { path: { proposal_id: proposalId }, header: { 'X-Idempotency-Key': key(o) } }, body: { decision } }),
+    listRedFlagRules: (clinicId: string) => client.GET('/v1/staff/console/red-flag-rules', { params: { query: { clinic_id: clinicId } } }),
+    decideRedFlagRule: (ruleId: string, decision: RuleDecision, o?: WriteOptions) =>
+      client.POST('/v1/staff/console/red-flag-rules/{rule_id}/decision', { params: { path: { rule_id: ruleId }, header: { 'X-Idempotency-Key': key(o) } }, body: { decision } }),
     reviewerStats: (clinicId: string, days?: number) => client.GET('/v1/staff/console/reviewer-stats', { params: { query: { clinic_id: clinicId, ...(days ? { days } : {}) } } }),
     costCanvas: (clinicId: string, days?: number) => client.GET('/v1/staff/console/cost-canvas', { params: { query: { clinic_id: clinicId, ...(days ? { days } : {}) } } }),
     listVoiceSessions: (clinicId: string) => client.GET('/v1/staff/voice/sessions', { params: { query: { clinic_id: clinicId } } }),

@@ -17,7 +17,8 @@ function flatten(tree, prefix = '') {
   return Object.entries(tree).flatMap(([k, v]) => (typeof v === 'string' ? [[prefix + k, v]] : flatten(v, `${prefix}${k}.`)));
 }
 
-const all = (lang) => merge(merge(merge(merge(merge(merge(merge(merge(merge(merge(merge(merge(merge(read(`${lang}.json`), read(`console.${lang}.json`)), read(`f4.${lang}.json`)), read(`f6.${lang}.json`)), read(`f7.${lang}.json`)), read(`f8.${lang}.json`)), read(`f9.${lang}.json`)), read(`f10.${lang}.json`)), read(`f12.${lang}.json`)), read(`f11.${lang}.json`)), read(`f13.${lang}.json`)), read(`f14.${lang}.json`)), read(`f15.${lang}.json`)), read(`f16.${lang}.json`));
+const FILES = ['', 'console.', 'f4.', 'f6.', 'f7.', 'f8.', 'f9.', 'f10.', 'f12.', 'f11.', 'f13.', 'f14.', 'f15.', 'f16.', 'f17.'];
+const all = (lang) => FILES.map((p) => read(`${p}${lang}.json`)).reduce((a, b) => merge(a, b));
 const en = Object.fromEntries(flatten(all('en')));
 const ta = Object.fromEntries(flatten(all('ta')));
 const reviewed = new Set(read('ta-reviewed.json').reviewed);

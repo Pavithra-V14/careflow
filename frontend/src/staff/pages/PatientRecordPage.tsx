@@ -13,7 +13,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Badge, PageHeading, PlaceholderNote, Time, UUID, useWord } from '../ui/bits';
 import { NotAvailableToRole, ProblemText, QueryView } from '../ui/states';
 import { NotFoundPage } from './NotFoundPage';
-import { IdentityRevoke, type RevokeOutcome } from './IdentityRevoke';
+import { IdentityRevoke, type RevokeResult } from './IdentityRevoke';
 
 export function PatientRecordPage() {
   const { patientId = '' } = useParams();
@@ -34,7 +34,7 @@ function RecordView({ patientId }: { patientId: string }) {
   const query = useApiQuery(['patient', patientId], () => unwrap(api.openPatient(patientId)));
   const [confirming, setConfirming] = useState(false);
   // Kept here, not in the revoke control: once revoked the record is unverified and that control is no longer rendered.
-  const [revoked, setRevoked] = useState<RevokeOutcome | null>(null);
+  const [revoked, setRevoked] = useState<RevokeResult | null>(null);
 
   const confirm = useIdempotentWrite(
     (_: void, key) => unwrap(api.confirmIdentity(patientId, { idempotencyKey: key })),
@@ -91,15 +91,17 @@ function RecordView({ patientId }: { patientId: string }) {
             {revoked && (
               // `on_record` means NOTHING NEW was recorded (a replayed key, or the record was already unverified): it must not be
               // shown as "revoked", and an unknown word is never read as success either. Both get a neutral box, not the green one.
-              <div role="status" className={revoked === 'raised' || revoked === 'not_configured' ? 'state state-ok' : 'state'}>
-                {revoked === 'raised' || revoked === 'not_configured' ? (
+              <div role="status" className={revoked.task === 'raised' || revoked.task === 'not_configured' ? 'state state-ok' : 'state'}>
+                {revoked.task === 'raised' || revoked.task === 'not_configured' ? (
                   <>
                     <p>{t('patients.revoke.done')}</p>
-                    <p>{t(`patients.revoke.task.${revoked}`)}</p>
+                    <p>{t(`patients.revoke.task.${revoked.task}`)}</p>
                   </>
                 ) : (
-                  <p>{revoked === 'on_record' ? t('patients.revoke.task.on_record') : t('patients.revoke.accepted')}</p>
+                  <p>{revoked.task === 'on_record' ? t('patients.revoke.task.on_record') : t('patients.revoke.accepted')}</p>
                 )}
+                {/* The admin alert is told for every outcome the API reports; an alert word this console does not know says nothing. */}
+                {revoked.alert && revoked.alert !== 'on_record' && <p>{t(`patients.revoke.alert.${revoked.alert}`)}</p>}
               </div>
             )}
 

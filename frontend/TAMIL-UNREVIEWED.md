@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-1438 of 1438 strings are unreviewed.
+1490 of 1490 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -295,6 +295,52 @@ Terms standardised: proposal, resolve / resolved.
 | `admin.reviewer.verdicts.review` | Needs a look | பார்க்க வேண்டும் | ok |
 | `admin.reviewer.verdicts.too_few` | Too few decisions | முடிவுகள் மிகக் குறைவு | ok |
 | `admin.reviewer.window` | The last {{days}} days. | கடந்த {{days}} நாட்கள். | ok |
+| `admin.rules.approve` | Approve | ஒப்புக்கொள் | ok |
+| `admin.rules.approveBody` | You are approving exactly the content shown below. The version becomes approved only if a second, different doctor also approves it. The person who wrote a version cannot decide it. | கீழே காட்டப்பட்டுள்ள உள்ளடக்கத்தையே நீங்கள் ஒப்புக்கொள்கிறீர்கள். இரண்டாவது, வேறொரு மருத்துவரும் ஒப்புக்கொண்டால் மட்டுமே இந்தப் பதிப்பு அங்கீகரிக்கப்படும். ஒரு பதிப்பை எழுதியவர் அதில் முடிவெடுக்க முடியாது. | ok |
+| `admin.rules.approveTitle` | Approve this red-flag rule version? | இந்தச் சிவப்புக் கொடி விதிப் பதிப்பை ஒப்புக்கொள்ளலாமா? | ok |
+| `admin.rules.approvedAt` | Approved at | அங்கீகரிக்கப்பட்ட நேரம் | ok |
+| `admin.rules.col.at` | When | எப்போது | ok |
+| `admin.rules.col.by` | Decided by (account id) | முடிவெடுத்தவர் (கணக்கு அடையாளம்) | ok |
+| `admin.rules.col.decision` | Decision | முடிவு | ok |
+| `admin.rules.decisionWords.approve` | Approved | ஒப்புக்கொண்டார் | ok |
+| `admin.rules.decisionWords.reject` | Rejected | நிராகரித்தார் | ok |
+| `admin.rules.decisions` | Decisions so far | இதுவரை எடுத்த முடிவுகள் | ok |
+| `admin.rules.empty` | There are no red-flag rule versions to show. | காட்ட சிவப்புக் கொடி விதிப் பதிப்புகள் இல்லை. | ok |
+| `admin.rules.intro` | The red-flag rule versions of this clinic, with the decisions made on each. Every phrase and pattern is shown exactly as the system holds it. This screen cannot write or change a rule. | இந்த மருத்துவமனையின் சிவப்புக் கொடி விதிப் பதிப்புகளும், ஒவ்வொன்றிலும் எடுக்கப்பட்ட முடிவுகளும். ஒவ்வொரு சொற்றொடரும் வடிவமும் அமைப்பில் உள்ளபடியே காட்டப்படுகின்றன. இந்தத் திரையில் விதியை எழுதவோ மாற்றவோ முடியாது. | ok |
+| `admin.rules.listLabel` | Red-flag rule versions | சிவப்புக் கொடி விதிப் பதிப்புகள் | ok |
+| `admin.rules.noDecisions` | Nobody has decided on this version yet. | இந்தப் பதிப்பில் இதுவரை யாரும் முடிவெடுக்கவில்லை. | ok |
+| `admin.rules.none` | None | இல்லை | ok |
+| `admin.rules.origin` | Environment | சூழல் | ok |
+| `admin.rules.origins.canary` | Canary | கேனரி | ok |
+| `admin.rules.origins.eval` | Evaluation | மதிப்பீடு | ok |
+| `admin.rules.origins.live` | Live | நேரடி | ok |
+| `admin.rules.origins.test` | Test | சோதனை | ok |
+| `admin.rules.patterns` | Patterns | வடிவங்கள் | ok |
+| `admin.rules.phrases` | Phrases | சொற்றொடர்கள் | ok |
+| `admin.rules.readOnly` | You can read these rules and who decided on them. Only doctors decide. | இந்த விதிகளையும் அவற்றில் முடிவெடுத்தவர்களையும் நீங்கள் படிக்கலாம். மருத்துவர்கள் மட்டுமே முடிவெடுப்பார்கள். | ok |
+| `admin.rules.reject` | Reject | நிராகரி | ok |
+| `admin.rules.rejectBody` | One rejection closes this version for good. It cannot be approved afterwards. | ஒரு நிராகரிப்பு இந்தப் பதிப்பை நிரந்தரமாக மூடிவிடும். அதன் பிறகு இதை ஒப்புக்கொள்ள முடியாது. | ok |
+| `admin.rules.rejectTitle` | Reject this red-flag rule version? | இந்தச் சிவப்புக் கொடி விதிப் பதிப்பை நிராகரிக்கலாமா? | ok |
+| `admin.rules.result.already_decided` | You already decided on this version the other way. Nothing changed. | இந்தப் பதிப்பில் நீங்கள் ஏற்கெனவே எதிர்த் திசையில் முடிவெடுத்துவிட்டீர்கள். எதுவும் மாறவில்லை. | ok |
+| `admin.rules.result.approved` | Your approval was recorded and this version is now approved. | உங்கள் ஒப்புதல் பதிவு செய்யப்பட்டது; இந்தப் பதிப்பு இப்போது அங்கீகரிக்கப்பட்டுள்ளது. | ok |
+| `admin.rules.result.author_cannot_decide` | You wrote this version, so you cannot decide it. A different doctor must. | இந்தப் பதிப்பை நீங்கள் எழுதினீர்கள், எனவே இதில் முடிவெடுக்க முடியாது. வேறொரு மருத்துவர் முடிவெடுக்க வேண்டும். | ok |
+| `admin.rules.result.empty_rule` | This version has no phrases, patterns or vital-sign criteria, so it cannot be approved. | இந்தப் பதிப்பில் சொற்றொடர்கள், வடிவங்கள் அல்லது உடல்நிலை அளவீட்டு நிபந்தனைகள் எதுவும் இல்லை, எனவே இதை ஒப்புக்கொள்ள முடியாது. | ok |
+| `admin.rules.result.not_draft` | This version is not a draft any more, so nothing was recorded. | இந்தப் பதிப்பு இப்போது வரைவு அல்ல, எனவே எதுவும் பதிவு செய்யப்படவில்லை. | ok |
+| `admin.rules.result.origin_mismatch` | This version belongs to a different environment than this clinic, so nothing was recorded. | இந்தப் பதிப்பு இந்த மருத்துவமனையின் சூழலைச் சேர்ந்தது அல்ல, எனவே எதுவும் பதிவு செய்யப்படவில்லை. | ok |
+| `admin.rules.result.platform_rule` | This rule applies to every clinic. Who may approve it has not been decided, so nothing was approved here. | இந்த விதி எல்லா மருத்துவமனைகளுக்கும் பொருந்தும். இதை யார் ஒப்புக்கொள்ளலாம் என்பது இன்னும் முடிவு செய்யப்படவில்லை, எனவே இங்கே எதுவும் அங்கீகரிக்கப்படவில்லை. | ok |
+| `admin.rules.result.recorded` | Your approval was recorded. The version is not approved yet: a second, different doctor must approve it. | உங்கள் ஒப்புதல் பதிவு செய்யப்பட்டது. இந்தப் பதிப்பு இன்னும் அங்கீகரிக்கப்படவில்லை: இரண்டாவது, வேறொரு மருத்துவர் ஒப்புக்கொள்ள வேண்டும். | ok |
+| `admin.rules.result.rejected` | Your rejection was recorded. This version is closed. | உங்கள் நிராகரிப்பு பதிவு செய்யப்பட்டது. இந்தப் பதிப்பு மூடப்பட்டது. | ok |
+| `admin.rules.result.rejected_earlier` | A doctor already rejected this version, so it cannot be approved. | ஒரு மருத்துவர் ஏற்கெனவே இந்தப் பதிப்பை நிராகரித்துவிட்டார், எனவே இதை ஒப்புக்கொள்ள முடியாது. | ok |
+| `admin.rules.result.unknown` | The system answered with a result this screen does not know. Nothing is shown as approved. Reload the page to see the current state. | இந்தத் திரைக்குத் தெரியாத ஒரு முடிவை அமைப்பு தெரிவித்தது. எதுவும் அங்கீகரிக்கப்பட்டதாகக் காட்டப்படவில்லை. தற்போதைய நிலையைப் பார்க்க பக்கத்தை மீண்டும் ஏற்றவும். | ok |
+| `admin.rules.status` | Status | நிலை | ok |
+| `admin.rules.statuses.approved` | Approved | அங்கீகரிக்கப்பட்டது | ok |
+| `admin.rules.statuses.draft_unreviewed` | Draft, not approved | வரைவு, அங்கீகரிக்கப்படவில்லை | ok |
+| `admin.rules.statuses.retired` | Retired | நிறுத்தப்பட்டது | ok |
+| `admin.rules.twoDoctors` | A draft version becomes approved only when two different doctors approve it, each with a fresh authenticator code. One rejection closes the version. Nothing is approved by default. | வரைவுப் பதிப்பு, இரண்டு வெவ்வேறு மருத்துவர்கள் ஒவ்வொருவரும் புதிய அங்கீகார குறியீட்டுடன் ஒப்புக்கொண்டால் மட்டுமே அங்கீகரிக்கப்படும். ஒரு நிராகரிப்பு அந்தப் பதிப்பை மூடிவிடும். இயல்பாக எதுவும் அங்கீகரிக்கப்படுவதில்லை. | ok |
+| `admin.rules.vitals` | Vital-sign criteria | உடல்நிலை அளவீட்டு நிபந்தனைகள் | ok |
+| `admin.rules.vitalsNo` | This version has no vital-sign criteria. | இந்தப் பதிப்பில் உடல்நிலை அளவீட்டு நிபந்தனைகள் இல்லை. | ok |
+| `admin.rules.vitalsYes` | This version has vital-sign criteria. | இந்தப் பதிப்பில் உடல்நிலை அளவீட்டு நிபந்தனைகள் உள்ளன. | ok |
+| `admin.rules.youDecided` | You have already decided on this version. | இந்தப் பதிப்பில் நீங்கள் ஏற்கெனவே முடிவெடுத்துவிட்டீர்கள். | ok |
 | `admin.stepUp` | This needs a fresh authenticator code. You will be asked for it. | இதற்குப் புதிய அங்கீகார குறியீடு தேவை. அது உங்களிடம் கேட்கப்படும். | ok |
 | `admin.tab.accounts` | Staff accounts | பணியாளர் கணக்குகள் | ok |
 | `admin.tab.autonomy` | Autonomy | தன்னாட்சி | ok |
@@ -302,6 +348,7 @@ Terms standardised: proposal, resolve / resolved.
 | `admin.tab.grievances` | Grievances | குறைகள் | ok |
 | `admin.tab.recovery` | Staff recovery | பணியாளர் மீட்பு | ok |
 | `admin.tab.reviewer` | Reviewer statistics | மதிப்பாய்வாளர் புள்ளிவிவரங்கள் | ok |
+| `admin.tab.rules` | Red-flag rules | சிவப்புக் கொடி விதிகள் | ok |
 | `admin.tab.voice` | Voice transcripts | குரல் பதிவுகள் | ok |
 | `admin.tabs` | Admin sections | நிர்வாகப் பிரிவுகள் | ok |
 | `admin.title` | Admin | நிர்வாகம் | ok |
@@ -338,6 +385,7 @@ Terms standardised: proposal, resolve / resolved.
 | `alerts.class.dead_letters` | Failed jobs waiting | தோல்வியுற்ற பணிகள் காத்திருக்கின்றன | ok |
 | `alerts.class.delivery_failed` | Delivery failed | வழங்கல் தோல்வியடைந்தது | ok |
 | `alerts.class.fallback_spike` | Fallback spike | மாற்று வழி பயன்பாடு அதிகரிப்பு | ok |
+| `alerts.class.identity_revoked_suspect` | An identity confirmation was revoked as suspect | அடையாள உறுதிப்படுத்தல் சந்தேகத்தின் பேரில் திரும்பப் பெறப்பட்டது | ok |
 | `alerts.class.queue_age` | Queue is old | வரிசை பழையதாகிவிட்டது | ok |
 | `alerts.class.red_flag_overdue` | Red-flag task overdue | சிவப்புக் கொடிப் பணி தாமதமானது | ok |
 | `alerts.class.spend_runaway` | Spending is running away | செலவு கட்டுப்பாட்டை மீறுகிறது | ok |
@@ -956,6 +1004,9 @@ Terms standardised: proposal, resolve / resolved.
 | `patients.register.unavailable` | Registering is not set up yet (encryption keys are not configured). Nothing was saved. | பதிவு செய்வது இன்னும் அமைக்கப்படவில்லை (குறியாக்க விசைகள் அமைக்கப்படவில்லை). எதுவும் சேமிக்கப்படவில்லை. | ok |
 | `patients.results` | Search results | தேடல் முடிவுகள் | ok |
 | `patients.revoke.accepted` | The request was accepted. Check the record for its current state. | கோரிக்கை ஏற்கப்பட்டது. பதிவின் தற்போதைய நிலையைச் சரிபார்க்கவும். | ok |
+| `patients.revoke.alert.not_configured` | No administrator alert was raised: the alert settings are not configured yet. | நிர்வாகி எச்சரிக்கை எழுப்பப்படவில்லை: எச்சரிக்கை அமைப்புகள் இன்னும் அமைக்கப்படவில்லை. | ok |
+| `patients.revoke.alert.not_for_this_reason` | No administrator alert was raised for this reason. | இந்தக் காரணத்திற்கு நிர்வாகி எச்சரிக்கை எழுப்பப்படவில்லை. | ok |
+| `patients.revoke.alert.raised` | An alert was sent to the administrators. | நிர்வாகிகளுக்கு எச்சரிக்கை அனுப்பப்பட்டது. | ok |
 | `patients.revoke.body` | This moves the record back to unverified, so a match on it is reviewed by a person. Nothing that is already linked is undone. | இது பதிவை மீண்டும் சரிபார்க்கப்படாத நிலைக்கு மாற்றுகிறது; அதனால் அதில் ஏற்படும் பொருத்தத்தை ஒரு நபர் மதிப்பாய்வு செய்வார். ஏற்கனவே இணைக்கப்பட்டவை எதுவும் மாற்றப்படாது. | minor drift; flag (unnatural): Awkward phrasing on a message describing what the system will do. |
 | `patients.revoke.button` | Revoke confirmation | உறுதிப்படுத்தலைத் திரும்பப் பெறு | ok |
 | `patients.revoke.chooseFirst` | Choose a reason first. | முதலில் ஒரு காரணத்தைத் தேர்ந்தெடுக்கவும். | ok |
@@ -1237,6 +1288,7 @@ Terms standardised: proposal, resolve / resolved.
 | `roles.business_owner` | Business owner | வணிக உரிமையாளர் | ok |
 | `roles.doctor` | Doctor | மருத்துவர் | ok |
 | `roles.front_desk` | Front desk | வரவேற்பு மேசை | ok |
+| `roles.front_desk_supervisor` | Front desk supervisor | வரவேற்பு மேசை மேற்பார்வையாளர் | ok |
 | `roles.guardian` | Guardian | பாதுகாவலர் | ok |
 | `roles.nurse` | Nurse | செவிலியர் | ok |
 | `roles.patient` | Patient | நோயாளர் | ok |

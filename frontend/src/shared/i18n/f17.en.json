@@ -1,0 +1,82 @@
+{
+  "roles": {
+    "front_desk_supervisor": "Front desk supervisor"
+  },
+  "alerts": {
+    "class": {
+      "identity_revoked_suspect": "An identity confirmation was revoked as suspect"
+    }
+  },
+  "patients": {
+    "revoke": {
+      "alert": {
+        "raised": "An alert was sent to the administrators.",
+        "not_for_this_reason": "No administrator alert was raised for this reason.",
+        "not_configured": "No administrator alert was raised: the alert settings are not configured yet."
+      }
+    }
+  },
+  "admin": {
+    "tab": {
+      "rules": "Red-flag rules"
+    },
+    "rules": {
+      "intro": "The red-flag rule versions of this clinic, with the decisions made on each. Every phrase and pattern is shown exactly as the system holds it. This screen cannot write or change a rule.",
+      "twoDoctors": "A draft version becomes approved only when two different doctors approve it, each with a fresh authenticator code. One rejection closes the version. Nothing is approved by default.",
+      "readOnly": "You can read these rules and who decided on them. Only doctors decide.",
+      "listLabel": "Red-flag rule versions",
+      "empty": "There are no red-flag rule versions to show.",
+      "status": "Status",
+      "statuses": {
+        "draft_unreviewed": "Draft, not approved",
+        "approved": "Approved",
+        "retired": "Retired"
+      },
+      "origin": "Environment",
+      "origins": {
+        "live": "Live",
+        "test": "Test",
+        "eval": "Evaluation",
+        "canary": "Canary"
+      },
+      "approvedAt": "Approved at",
+      "phrases": "Phrases",
+      "patterns": "Patterns",
+      "vitals": "Vital-sign criteria",
+      "vitalsYes": "This version has vital-sign criteria.",
+      "vitalsNo": "This version has no vital-sign criteria.",
+      "none": "None",
+      "decisions": "Decisions so far",
+      "noDecisions": "Nobody has decided on this version yet.",
+      "col": {
+        "by": "Decided by (account id)",
+        "decision": "Decision",
+        "at": "When"
+      },
+      "decisionWords": {
+        "approve": "Approved",
+        "reject": "Rejected"
+      },
+      "approve": "Approve",
+      "reject": "Reject",
+      "approveTitle": "Approve this red-flag rule version?",
+      "rejectTitle": "Reject this red-flag rule version?",
+      "approveBody": "You are approving exactly the content shown below. The version becomes approved only if a second, different doctor also approves it. The person who wrote a version cannot decide it.",
+      "rejectBody": "One rejection closes this version for good. It cannot be approved afterwards.",
+      "youDecided": "You have already decided on this version.",
+      "result": {
+        "recorded": "Your approval was recorded. The version is not approved yet: a second, different doctor must approve it.",
+        "approved": "Your approval was recorded and this version is now approved.",
+        "rejected": "Your rejection was recorded. This version is closed.",
+        "already_decided": "You already decided on this version the other way. Nothing changed.",
+        "not_draft": "This version is not a draft any more, so nothing was recorded.",
+        "origin_mismatch": "This version belongs to a different environment than this clinic, so nothing was recorded.",
+        "author_cannot_decide": "You wrote this version, so you cannot decide it. A different doctor must.",
+        "empty_rule": "This version has no phrases, patterns or vital-sign criteria, so it cannot be approved.",
+        "rejected_earlier": "A doctor already rejected this version, so it cannot be approved.",
+        "platform_rule": "This rule applies to every clinic. Who may approve it has not been decided, so nothing was approved here.",
+        "unknown": "The system answered with a result this screen does not know. Nothing is shown as approved. Reload the page to see the current state."
+      }
+    }
+  }
+}

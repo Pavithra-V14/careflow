@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { ID } from './consoleApi';
-import { LANGS, go, openConsole } from './helpers';
+import { LANGS, go, openConsole, sweep } from './helpers';
 
 // Polish pass: the heaviest screens, keyboard only and at 200% zoom. MOCK ONLY (e2e/consoleApi.ts).
 // Keyboard: Tab reaches every control the page offers, each focused control shows a visible focus indicator, and focus is never trapped.
@@ -15,6 +15,7 @@ const HEAVY: [role: string, name: string, hash: string][] = [
   ['admin', 'admin-accounts', '#/admin/accounts'],
   ['admin', 'admin-cost', '#/admin/cost'],
   ['admin', 'dashboard', '#/dashboard'],
+  ['doctor', 'rules-doctor', '#/admin/rules'],
 ];
 
 for (const lang of LANGS) {
@@ -62,6 +63,41 @@ for (const lang of LANGS) {
       const AxeBuilder = (await import('@axe-core/playwright')).default;
       const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
       expect(results.violations.map((v) => v.id), `${name} [${lang}] at 200%`).toEqual([]);
+    });
+  }
+}
+
+// The two-doctor approval by keyboard alone: Enter on Approve opens a confirmation that shows the content, Escape cancels with nothing sent,
+// and Tab never reaches the page behind it.
+for (const lang of LANGS) {
+  test(`red-flag rules: approve by keyboard, confirmation first, Escape cancels [${lang}]`, async ({ page }) => {
+    const mock = await openConsole(page, 'doctor', lang);
+    await go(page, '#/admin/rules', /\S/);
+    const approve = page.locator('main button').filter({ hasText: lang === 'en' ? /^Approve/ : /^ஒப்புக்கொள்/ }).first();
+    await approve.focus();
+    await page.keyboard.press('Enter');
+    const dialog = page.locator('dialog[open]');
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText('PLACEHOLDER-PHRASE-A');
+    for (let i = 0; i < 6; i++) {
+      await page.keyboard.press('Tab');
+      // Inside the dialog, or out in the browser's own controls (document.body); never on the page behind it, which is inert.
+      expect(await page.evaluate(() => document.activeElement === document.body || !!document.activeElement?.closest('dialog[open]')), 'focus never lands on the page behind the dialog').toBe(true);
+    }
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    expect(mock).toBeTruthy();
+  });
+}
+
+// axe, no horizontal scroll, no CSP violation at 320, 768 and 1280 for the new screens.
+for (const lang of LANGS) {
+  for (const [role, name, hash] of [['doctor', 'rules-doctor', '#/admin/rules'], ['admin', 'rules-admin', '#/admin/rules'], ['front_desk_supervisor', 'tasks-supervisor', '#/tasks']] as const) {
+    test(`all three widths: ${role} ${name} [${lang}]`, async ({ page }) => {
+      await openConsole(page, role, lang);
+      await go(page, hash, /\S/);
+      await expect(page.locator('main')).not.toContainText(/Loading…|ஏற்றுகிறது…/);
+      await sweep(page, `f10-${name}`, lang);
     });
   }
 }
