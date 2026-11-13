@@ -7022,7 +7022,8 @@
           "decision": {
             "enum": [
               "approve",
-              "reject"
+              "reject",
+              "retire"
             ],
             "title": "Decision",
             "type": "string"
@@ -7042,8 +7043,10 @@
               "recorded",
               "approved",
               "rejected",
+              "retired",
               "already_decided",
               "not_draft",
+              "not_approved",
               "origin_mismatch",
               "author_cannot_decide",
               "empty_rule",
@@ -7076,7 +7079,8 @@
           "decision": {
             "enum": [
               "approve",
-              "reject"
+              "reject",
+              "retire"
             ],
             "title": "Decision",
             "type": "string"
@@ -12931,7 +12935,7 @@
     },
     "/v1/staff/console/red-flag-rules/{rule_id}/decision": {
       "post": {
-        "description": "Approve or reject a DRAFT red-flag rule version as a doctor of its clinic with a verified second factor (checked again by the database). The version becomes approved only when a SECOND, different doctor approves it (never its author);\none reject closes it. Idempotent on the key; audited by the database. 404 if you cannot see the version, 403 unless you are a doctor of its clinic. Nothing is approved by default.",
+        "description": "Approve or reject a DRAFT red-flag rule version, or RETIRE an APPROVED one, as a doctor of its clinic with a verified second factor (checked again by the database). A draft becomes approved only when a SECOND, different doctor approves it (never its author);\none reject closes it. An approved version is retired only when TWO different doctors (any two, the author and approvers included) each record `retire`; a retired version never comes back (a new version is the way back), and a retired NEWEST version switches off the whole rule code. Idempotent on the key; audited by the database. 404 if you cannot see the version, 403 unless you are a doctor of its clinic. Nothing is approved by default.",
         "operationId": "decide_red_flag_rule_v1_staff_console_red_flag_rules__rule_id__decision_post",
         "parameters": [
           {

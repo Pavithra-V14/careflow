@@ -3274,6 +3274,7 @@ def rule_decision_cases(ids) -> list[tuple]:
     cases = [_case(ids, f"{p} cannot decide a rule version that does not exist", p, 404, path(), json={"decision": "approve"}, body=_fixed(404)) for p in ids.people]
     cases += [
         _case(ids, "an unknown decision is rejected", "doctor_a", 422, path(), json={"decision": "maybe"}, body=_fixed(422)),
+        _case(ids, "no doctor can retire a version that does not exist", "doctor_a", 404, path(), json={"decision": "retire"}, body=_fixed(404)),
         _case(ids, "an extra field is rejected", "doctor_a", 422, path(), json={"decision": "approve", "extra": 1}, body=_fixed(422)),
         _case(ids, "missing X-Idempotency-Key is rejected", "doctor_a", 422, path(), json={"decision": "approve"}, key=None, body=_fixed(422)),
     ]

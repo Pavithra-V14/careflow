@@ -1,4 +1,4 @@
-# Red-flag rules: authoring, approval and withdrawal (migrations 0072, 0076, 0077)
+# Red-flag rules: authoring, approval and withdrawal (migrations 0072, 0076, 0077, 0078)
 
 Mechanism only. No rule content is written by the build; the words in the tests are meaningless markers. A rule's content is the clinicians' (`# CLINICAL-PLACEHOLDER: needs clinician sign-off`).
 
@@ -6,8 +6,8 @@ Mechanism only. No rule content is written by the build; the words in the tests 
 
 **Decided by the owner (2026-11-13).** Doctors only approve. Platform-wide rules (no clinic) are refused by this door. The ordinary second-factor check applies to authoring, approving and withdrawing (no extra fresh-factor prompt). One person holding two doctor accounts can supply both approvals: a launch condition (checklist 58a).
 
-**Not built.** Retiring an APPROVED version has no route today: the guard allows `approved -> retired` only for the migrator, and the decision route knows only `approve` and `reject`. Making a retirement a two-person decision needs that route to be extended first; until then an approved rule can only be superseded by a newer approved version.
+**Retiring an approved version (0078).** Two DIFFERENT doctors of the clinic (any two: the author and the approvers included) each record `retire` through the same decision route, with a second factor; nothing is retired by one person. Only an approved version can be retired; a retired version never comes back (no transition leaves `retired`; a new version is the way back). A retired NEWEST version switches off the whole rule code, including an older approved version; retiring an older version while a newer approved one exists changes nothing in force. The ledger stays append-only (one approve-or-reject row and one retire row per doctor per version); the guard refuses `approved -> retired` without two retire decisions, for the owner too, and no longer allows `draft -> retired` (a draft is withdrawn).
 
 **Known harmless quirk.** The reviewed-content hash gained a token-sets segment in 0076. A version whose first approval was recorded under 0072 and whose second under 0076 has two ledger rows with different hashes for identical content. The decision function does not compare them, so nothing breaks; no real rule exists yet, so none is affected.
 
-**Deploy ordering.** The app refuses to start on a database that has not applied the migrations its code needs (`careflow/schema_check.py`, through 0077 today): migrate first, then start (`docs/first-run-guide.md`).
+**Deploy ordering.** The app refuses to start on a database that has not applied the migrations its code needs (`careflow/schema_check.py`, through 0078 today): migrate first, then start (`docs/first-run-guide.md`).

@@ -47,7 +47,8 @@ def test_every_required_object_is_created_by_the_migration_it_names():
         bare = name.split("(")[0]
         schema, obj = bare.split(".")
         sql = file.read_text(encoding="utf-8")
-        assert re.search(rf"create (or replace )?{'function' if kind == 'proc' else 'table'} {schema}\.{obj}\b", sql), (prefix, name)
+        what = "function" if kind == "proc" else "(table|unique index|index)"
+        assert re.search(rf"create (or replace )?{what} ({schema}\.)?{obj}\b", sql), (prefix, name)
 
 
 async def test_a_database_with_everything_starts():

@@ -3845,11 +3845,11 @@ async def autonomy_history(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str,
 
 RULE_VIEWERS = ("doctor", "admin")
 RULE_DECIDERS = ("doctor",)
-RuleDecisionWord = Literal["recorded", "approved", "rejected", "already_decided", "not_draft", "origin_mismatch", "author_cannot_decide", "empty_rule", "rejected_earlier", "platform_rule"]
+RuleDecisionWord = Literal["recorded", "approved", "rejected", "retired", "already_decided", "not_draft", "not_approved", "origin_mismatch", "author_cannot_decide", "empty_rule", "rejected_earlier", "platform_rule"]
 
 
 class RuleDecisionIn(_Body):
-    decision: Literal["approve", "reject"]
+    decision: Literal["approve", "reject", "retire"]
 
 
 class RuleDecisionOut(_Out):
@@ -3857,7 +3857,7 @@ class RuleDecisionOut(_Out):
 
 
 class RuleDecisionRowOut(_Out):
-    decision: Literal["approve", "reject"]
+    decision: Literal["approve", "reject", "retire"]
     decided_by: uuid.UUID
     decided_at: datetime
 
@@ -3952,8 +3952,8 @@ async def withdraw_red_flag_draft(rule_id: uuid.UUID, idempotency_key: Idempoten
 
 @staff_console.post("/red-flag-rules/{rule_id}/decision", response_model=RuleDecisionOut)
 async def decide_red_flag_rule(rule_id: uuid.UUID, body: RuleDecisionIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> RuleDecisionOut:
-    """Approve or reject a DRAFT red-flag rule version as a doctor of its clinic with a verified second factor (checked again by the database). The version becomes approved only when a SECOND, different doctor approves it (never its author);
-    one reject closes it. Idempotent on the key; audited by the database. 404 if you cannot see the version, 403 unless you are a doctor of its clinic. Nothing is approved by default."""
+    """Approve or reject a DRAFT red-flag rule version, or RETIRE an APPROVED one, as a doctor of its clinic with a verified second factor (checked again by the database). A draft becomes approved only when a SECOND, different doctor approves it (never its author);
+    one reject closes it. An approved version is retired only when TWO different doctors (any two, the author and approvers included) each record `retire`; a retired version never comes back (a new version is the way back), and a retired NEWEST version switches off the whole rule code. Idempotent on the key; audited by the database. 404 if you cannot see the version, 403 unless you are a doctor of its clinic. Nothing is approved by default."""
     visible, clinic_id = await rule_approval_sql.rule_clinic(conn, rule_id)
     if not visible:
         raise HTTPException(status_code=404, detail="not found")

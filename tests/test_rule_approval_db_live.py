@@ -215,6 +215,78 @@ async def test_a_newer_draft_never_replaces_an_approved_version_and_a_newer_appr
     assert await active_codes(db, w, "clinical") == [("zz_ver", 2)]
 
 
+async def approved_rule(db, w, code="zz_ret", version=1, phrases=("zzmarker",)):
+    rid = await draft(db, w, code=code, version=version, phrases=phrases)
+    assert await as_app(db, w["doc1"], DECIDE, r=rid, d="approve", k=f"{code}{version}a") == [("recorded",)]
+    assert await as_app(db, w["doc2"], DECIDE, r=rid, d="approve", k=f"{code}{version}b") == [("approved",)]
+    return rid
+
+
+async def test_retiring_an_approved_rule_takes_two_different_doctors_and_one_person_retires_nothing(db):
+    w = await world(db)
+    rid = await approved_rule(db, w)
+    assert await active_codes(db, w, "clinical") == [("zz_ret", 1)]
+    assert await as_app(db, w["doc1"], DECIDE, r=rid, d="retire", k="r1") == [("recorded",)]  # an approver may retire too
+    assert await status_of(db, rid) == "approved" and await active_codes(db, w, "clinical") == [("zz_ret", 1)]
+    assert await as_app(db, w["doc1"], DECIDE, r=rid, d="retire", k="r1b") == [("recorded",)]  # the same person again is still one
+    assert await as_app(db, w["doc1"], DECIDE, r=rid, d="retire", k="r1") == [("recorded",)]  # a replay
+    assert await status_of(db, rid) == "approved"
+    assert await as_app(db, w["doc3"], DECIDE, r=rid, d="retire", k="r3") == [("retired",)]  # a different doctor (the draft-author rule does not apply)
+    assert await status_of(db, rid) == "retired" and await active_codes(db, w, "clinical") == [] and await active_codes(db, w, "demo") == []
+    assert await as_app(db, w["doc3"], DECIDE, r=rid, d="retire", k="r3") == [("retired",)]
+    assert await as_app(db, w["doc2"], DECIDE, r=rid, d="retire", k="r2") == [("not_approved",)]
+    audits = [r[0] for r in await owner(db, "select action from audit.log where resource_id = :r order by id", r=str(rid))]
+    assert audits[-2:] == ["red_flag_rule.retire_recorded", "red_flag_rule.retire"] and "red_flag_rule.approve" in audits
+    ledger = (await db.execute(text("select decision, decided_by, content_hash from kb.red_flag_rule_decisions where rule_id = :r and decision = 'retire'"), {"r": rid})).all()
+    assert {r.decided_by for r in ledger} == {w["doc1"], w["doc3"]} and len({r.content_hash for r in ledger}) == 1
+
+
+async def test_who_may_retire_and_what_cannot_be_retired(db):
+    w = await world(db)
+    rid = await approved_rule(db, w, code="zz_who")
+    for who in ("nurse", "admin", "outsider_doc"):
+        assert await as_app(db, w[who], DECIDE, r=rid, d="retire", k=f"x-{who}") == "42501", who
+    assert await as_app(db, w["doc1"], DECIDE, aal2=False, r=rid, d="retire", k="x-noaal") == "42501"
+    assert await owner(db, "select count(*) from kb.red_flag_rule_decisions where rule_id = :r and decision = 'retire'", r=rid) == [(0,)]
+    unapproved = await draft(db, w, code="zz_draft_only")
+    assert await as_app(db, w["doc1"], DECIDE, r=unapproved, d="retire", k="x-draft") == [("not_approved",)]  # a draft is withdrawn, not retired
+    platform = await draft(db, w, code="zz_plat", clinic=None)
+    assert await as_app(db, w["doc1"], DECIDE, r=platform, d="retire", k="x-plat") == [("platform_rule",)]
+    other = await approved_rule(db, w, code="zz_key")
+    assert await as_app(db, w["doc1"], DECIDE, r=other, d="retire", k="x-same") == [("recorded",)]
+    assert await as_app(db, w["doc1"], DECIDE, r=rid, d="retire", k="x-same") == "42501"  # a key used for another rule
+
+
+async def test_a_retired_newest_version_switches_off_the_rule_but_retiring_an_older_one_changes_nothing_and_a_new_version_is_the_way_back(db):
+    w = await world(db)
+    v1 = await approved_rule(db, w, code="zz_ver", version=1, phrases=("zzone",))
+    v2 = await approved_rule(db, w, code="zz_ver", version=2, phrases=("zztwo",))
+    assert await active_codes(db, w, "clinical") == [("zz_ver", 2)]
+    await as_app(db, w["doc1"], DECIDE, r=v1, d="retire", k="o1")
+    assert await as_app(db, w["doc2"], DECIDE, r=v1, d="retire", k="o2") == [("retired",)]
+    assert await active_codes(db, w, "clinical") == [("zz_ver", 2)]  # the older version retired: nothing in force changes
+    await as_app(db, w["doc1"], DECIDE, r=v2, d="retire", k="n1")
+    assert await as_app(db, w["doc3"], DECIDE, r=v2, d="retire", k="n3") == [("retired",)]
+    assert await active_codes(db, w, "clinical") == []  # the newest retired: the rule is off
+    v3 = await approved_rule(db, w, code="zz_ver", version=3, phrases=("zzthree",))
+    assert await active_codes(db, w, "clinical") == [("zz_ver", 3)]  # a new version is the way back
+    assert v3 is not None
+
+
+async def test_the_guard_refuses_a_retirement_that_did_not_go_through_two_doctors_and_a_retired_version_never_comes_back(db):
+    w = await world(db)
+    rid = await approved_rule(db, w, code="zz_guard")
+    assert await owner(db, "update kb.red_flag_rules set status = 'retired', retired_at = now() where id = :r", r=rid) == "23001"  # not even the owner, without two retire decisions
+    drafty = await draft(db, w, code="zz_drafty")
+    assert await owner(db, "update kb.red_flag_rules set status = 'retired', retired_at = now() where id = :r", r=drafty) == "23001"  # a draft is withdrawn, never retired
+    await as_app(db, w["doc1"], DECIDE, r=rid, d="retire", k="g1")
+    await as_app(db, w["doc3"], DECIDE, r=rid, d="retire", k="g3")
+    assert await status_of(db, rid) == "retired"
+    for change in ("status = 'approved'", "status = 'draft_unreviewed'", "status = 'withdrawn', withdrawn_by = approved_by_1, withdrawn_at = now()"):
+        assert await owner(db, f"update kb.red_flag_rules set {change} where id = :r", r=rid) in ("23001", "23514"), change
+    assert await as_app(db, w["doc1"], "update kb.red_flag_rules set status = 'approved' where id = :r", r=rid) == "42501"
+
+
 async def test_the_content_is_never_edited_the_ledger_is_append_only_and_the_application_cannot_write(db):
     w = await world(db)
     rid = await draft(db, w)

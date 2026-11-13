@@ -16,7 +16,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 RESULTS: Final = (
-    "recorded", "approved", "rejected", "already_decided", "not_draft", "origin_mismatch", "author_cannot_decide", "empty_rule", "rejected_earlier", "platform_rule",
+    "recorded", "approved", "rejected", "retired", "already_decided", "not_draft", "not_approved", "origin_mismatch", "author_cannot_decide", "empty_rule", "rejected_earlier", "platform_rule",
 )
 
 

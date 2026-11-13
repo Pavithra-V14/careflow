@@ -17,6 +17,7 @@ REQUIRED: Final = (
     ("0075", "ops.record_session_spend(uuid,text,text,text,numeric,numeric,text)", "proc"),
     ("0076", "kb.author_red_flag_rule_draft(uuid,text,text[],jsonb,text)", "proc"),
     ("0077", "kb.withdraw_red_flag_draft(uuid,text)", "proc"),
+    ("0078", "kb.red_flag_rule_decisions_one_per_person_kind", "rel"),
 )
 
 
