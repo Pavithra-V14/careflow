@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '../shared/i18n/LanguageSwitcher';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 import type { AuthPort } from './auth/port';
+import { DevMfaBanner } from './components/DevMfaBanner';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { OfflineBanner } from './components/OfflineBanner';
 import { Console } from './screens/Console';
@@ -54,6 +55,7 @@ export function App({ port, apiBaseUrl }: { port: AuthPort | null; apiBaseUrl: s
         <LanguageSwitcher />
       </header>
       <OfflineBanner />
+      <DevMfaBanner />
       <main id="main" tabIndex={-1}>
         <ErrorBoundary>
           {port ? (

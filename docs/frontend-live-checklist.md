@@ -252,3 +252,7 @@ and a front-desk account, to see both sides of every role-dependent screen.
 4. Your OK to open the headed browser window on your machine, and to leave the dev server running.
 5. For the portal: the project's Supabase phone sign-in configured, and a test number that can receive a code. The code is yours to type; it
    never reaches a script or a log.
+
+## Dev-only: skip the staff second factor (VITE_DEV_SKIP_STAFF_MFA) - SWITCH OFF BEFORE ANY REAL USE
+
+For a live pass on the DEV project with password-only accounts. Start the dev server from a shell that sets `VITE_DEV_SKIP_STAFF_MFA=1` (never in a file). *You should see:* the banner "DEVELOPMENT ONLY: the second factor (authenticator) is skipped in this build" on the sign-in page and on every staff page, and after the password you go straight to the console with no authenticator screen. Without the variable, none of that happens and the normal enrolment, challenge and step-up screens apply. Screens whose routes still refuse without a second factor are recorded as "not tested live: needs second factor", not as failures. Never use it with real patients.

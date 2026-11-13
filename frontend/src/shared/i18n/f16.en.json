@@ -1,4 +1,5 @@
 {
+  "devMfa": { "banner": "DEVELOPMENT ONLY: the second factor (authenticator) is skipped in this build. Do not use it with real patients. It must be switched off before any real use." },
   "nav": {
     "erasure": "Erasure requests",
     "audit": "Audit log"

@@ -5,7 +5,7 @@ import { CONFIG_GLOBAL, FLAGS_GLOBAL, assertNoSecretShapedValues, pickExposedEnv
 import { buildCsp, injectCspMeta } from './csp.ts';
 
 // Two entry points (patient, staff), one token package, one i18n setup, one API client.
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command }) => {
   // The empty prefix makes loadEnv return every name; pickExposedEnv then keeps ONLY the allowlist.
   // Do not turn this into envPrefix: a broad prefix would expose every matching name.
   const exposed = pickExposedEnv(loadEnv(mode, process.cwd(), ''));
@@ -29,7 +29,16 @@ export default defineConfig(({ mode }) => {
     // Explicit and narrow on purpose: nothing in this project uses VITE_ names, and a broad prefix would leak.
     envPrefix: 'VITE_',
     // Flags are compile-time constants, never environment variables. mergeActions is on ONLY in `--mode e2e` (mock browser tests).
-    define: { [CONFIG_GLOBAL]: JSON.stringify(exposed), [FLAGS_GLOBAL]: JSON.stringify({ mergeActions: mode === 'e2e', erasureActions: mode === 'e2e' }) },
+    // devSkipStaffMfa: DEV ONLY. True only for the dev server (command 'serve', mode 'development') AND only when the starting shell set
+    // VITE_DEV_SKIP_STAFF_MFA=1. It reads process.env, never a file (loadEnv is not used for it), and is false in every build.
+    define: {
+      [CONFIG_GLOBAL]: JSON.stringify(exposed),
+      [FLAGS_GLOBAL]: JSON.stringify({
+        mergeActions: mode === 'e2e',
+        erasureActions: mode === 'e2e',
+        devSkipStaffMfa: command === 'serve' && mode === 'development' && process.env.VITE_DEV_SKIP_STAFF_MFA === '1',
+      }),
+    },
     build: {
       rollupOptions: {
         input: {
