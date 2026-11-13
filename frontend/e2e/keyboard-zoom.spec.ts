@@ -10,6 +10,7 @@ const HEAVY: [role: string, name: string, hash: string][] = [
   ['front_desk', 'scheduling-slots', '#/scheduling/slots'],
   ['front_desk', 'scheduling-offers', '#/scheduling/offers'],
   ['front_desk', 'patient-record', `#/patients/${ID.patient}`],
+  ['nurse', 'patient-record-medications', `#/patients/${ID.patient}`],
   ['nurse', 'referral-detail', `#/referrals/${ID.doc}`],
   ['nurse', 'care-gaps', '#/care/gaps'],
   ['admin', 'admin-accounts', '#/admin/accounts'],
@@ -92,7 +93,7 @@ for (const lang of LANGS) {
 
 // axe, no horizontal scroll, no CSP violation at 320, 768 and 1280 for the new screens.
 for (const lang of LANGS) {
-  for (const [role, name, hash] of [['doctor', 'rules-doctor', '#/admin/rules'], ['admin', 'rules-admin', '#/admin/rules'], ['front_desk_supervisor', 'tasks-supervisor', '#/tasks']] as const) {
+  for (const [role, name, hash] of [['doctor', 'rules-doctor', '#/admin/rules'], ['admin', 'rules-admin', '#/admin/rules'], ['front_desk_supervisor', 'tasks-supervisor', '#/tasks'], ['nurse', 'medications-nurse', `#/patients/${ID.patient}`]] as const) {
     test(`all three widths: ${role} ${name} [${lang}]`, async ({ page }) => {
       await openConsole(page, role, lang);
       await go(page, hash, /\S/);

@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-1490 of 1490 strings are unreviewed.
+1521 of 1521 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -905,6 +905,37 @@ Terms standardised: proposal, resolve / resolved.
 | `landing.privacy.readNotice` | Read the privacy notice | தனியுரிமை அறிவிப்பைப் படிக்கவும் | ok |
 | `languages.en` | English | English | kept in English by design |
 | `languages.ta` | தமிழ் | தமிழ் | kept in English by design |
+| `medications.code` | Code | குறியீடு | ok |
+| `medications.codeHint` | A code from this clinic's own list. Letters, numbers, dots, dashes and underscores only. | இந்த மருத்துவமனையின் சொந்தப் பட்டியலில் உள்ள குறியீடு. எழுத்துகள், எண்கள், புள்ளிகள், கோடுகள், அடிக்கோடுகள் மட்டும். | ok |
+| `medications.col.action` | Action | செயல் | ok |
+| `medications.col.code` | Code | குறியீடு | ok |
+| `medications.col.from` | From | தொடக்கம் | ok |
+| `medications.col.recorded` | Recorded | பதிவு செய்யப்பட்டது | ok |
+| `medications.col.state` | State | நிலை | ok |
+| `medications.col.to` | To | முடிவு | ok |
+| `medications.col.verified` | Verified | சரிபார்க்கப்பட்டது | ok |
+| `medications.conflict` | That row was already replaced, or this request clashes with an earlier one. Reload and try again. | அந்த வரிசை ஏற்கெனவே மாற்றப்பட்டுவிட்டது, அல்லது இந்தக் கோரிக்கை முந்தையதுடன் முரண்படுகிறது. மீண்டும் ஏற்றி முயலவும். | ok |
+| `medications.correct` | Correct or stop | திருத்து அல்லது நிறுத்து | ok |
+| `medications.correctBody` | This adds a new row that replaces the row below. The old row stays on record, marked as replaced. | இது கீழே உள்ள வரிசையை மாற்றும் புதிய வரிசையைச் சேர்க்கிறது. பழைய வரிசை, மாற்றப்பட்டது எனக் குறிக்கப்பட்டு பதிவில் இருக்கும். | ok |
+| `medications.correctTitle` | Correct or stop this medication statement? | இந்த மருந்து அறிக்கையைத் திருத்தவா அல்லது நிறுத்தவா? | ok |
+| `medications.current` | Current | தற்போதையது | ok |
+| `medications.done` | The medication statement was recorded. | மருந்து அறிக்கை பதிவு செய்யப்பட்டது. | ok |
+| `medications.empty` | No medication statements are recorded for this patient. | இந்த நோயாளிக்கு மருந்து அறிக்கைகள் எதுவும் பதிவு செய்யப்படவில்லை. | ok |
+| `medications.invalid` | The code is not in this clinic's list, or the times are not valid. Nothing was recorded. | குறியீடு இந்த மருத்துவமனையின் பட்டியலில் இல்லை, அல்லது நேரங்கள் சரியாக இல்லை. எதுவும் பதிவு செய்யப்படவில்லை. | ok |
+| `medications.noEnd` | No end recorded | முடிவு நேரம் பதிவு செய்யப்படவில்லை | ok |
+| `medications.notSetUp` | This clinic's list of medication codes is not set up yet. Nothing was recorded. | இந்த மருத்துவமனையின் மருந்துக் குறியீடுகளின் பட்டியல் இன்னும் அமைக்கப்படவில்லை. எதுவும் பதிவு செய்யப்படவில்லை. | ok |
+| `medications.note` | The medication statements recorded for this patient, newest first. Nothing is edited or deleted: a correction or a stop is a new row that replaces the old one. Codes are shown exactly as recorded. | இந்த நோயாளிக்காகப் பதிவு செய்யப்பட்ட மருந்து அறிக்கைகள், புதியவை முதலில். எதுவும் திருத்தப்படுவதோ நீக்கப்படுவதோ இல்லை: திருத்தம் அல்லது நிறுத்தம் என்பது பழைய வரிசையை மாற்றும் புதிய வரிசை. குறியீடுகள் பதிவு செய்யப்பட்டபடியே காட்டப்படுகின்றன. | ok |
+| `medications.record` | Record a medication | மருந்தைப் பதிவு செய் | ok |
+| `medications.recordBody` | This adds a new row to the patient's record. It cannot be edited afterwards; a later change is another new row. | இது நோயாளியின் பதிவில் புதிய வரிசையைச் சேர்க்கிறது. பிறகு இதைத் திருத்த முடியாது; பின்னர் ஏற்படும் மாற்றம் மற்றொரு புதிய வரிசையாகும். | ok |
+| `medications.recordTitle` | Record a medication statement? | மருந்து அறிக்கையைப் பதிவு செய்யலாமா? | ok |
+| `medications.replaces` | Replaces | மாற்றுவது | ok |
+| `medications.save` | Record | பதிவு செய் | ok |
+| `medications.superseded` | Replaced by a later row | பிந்தைய வரிசையால் மாற்றப்பட்டது | ok |
+| `medications.title` | Medications | மருந்துகள் | ok |
+| `medications.validFrom` | From | தொடக்கம் | ok |
+| `medications.validTo` | To (leave empty if no end is recorded) | முடிவு (முடிவு நேரம் பதிவு செய்யப்படாவிட்டால் காலியாக விடவும்) | ok |
+| `medications.validToHint` | An empty end is saved as "no end recorded". It is not read as "still taking". | காலியான முடிவு "முடிவு பதிவு செய்யப்படவில்லை" என்று சேமிக்கப்படும். அது "இன்னும் எடுத்துக்கொள்கிறார்" என்று கருதப்படாது. | ok |
+| `medications.verified` | Verified | சரிபார்க்கப்பட்டது | ok |
 | `nav.access` | Break-glass | அவசரகால அணுகல் | ok |
 | `nav.admin` | Admin | நிர்வாகம் | ok |
 | `nav.alerts` | Alerts | எச்சரிக்கைகள் | ok |

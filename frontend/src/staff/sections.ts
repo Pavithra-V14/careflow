@@ -59,6 +59,8 @@ export const CAN_CONFIRM_IDENTITY = ['front_desk'] as const;
 export const CAN_DECIDE_CARE_PLAN = ['doctor'] as const;
 /** Care-gap writes: record a barrier, start an episode, resolve, mark a rule done, re-check a sample (owner: nurse and doctor only). */
 export const CAN_RECORD_CARE_GAP = ['nurse', 'doctor'] as const;
+/** Read and record a patient's medication statements (nurse and doctor, per the route docs; the backend decides). */
+export const CAN_USE_MEDICATIONS = ['nurse', 'doctor'] as const;
 /** Record a result (nurse or doctor). */
 export const CAN_RECORD_RESULT = ['nurse', 'doctor'] as const;
 /** Approve or reject a draft red-flag rule: doctors only (two different doctors). Admins read the list and decide nothing. */
