@@ -185,22 +185,20 @@ jobs:
           # are seconds from that run (matrix parts estimated at half of a matrix grown by this batch's routes). tests/test_ci_shards.py requires every live test file to appear in
           # exactly one shard, except the matrix, which must appear as complete parts.
           - shard: 1  # run 42258778879 (2026-11-06): the two-part matrix hit the 60-minute limit with the 0047-0050 routes, so the matrix is now THREE parts (shards 1, 2, 7); about 2200 s of matrix + 240
-            matrix_part: "1/3"
+            matrix_part: "1/4"
             files: >-
               tests/test_api_role_matrix.py
               tests/test_api_screen_message_live.py
               tests/test_api_read_message_live.py
-          - shard: 2  # matrix part 2 of 3 + rotation 319 + binding 44 + staff roles 19
-            matrix_part: "2/3"
+          - shard: 2  # matrix part 2 of 4 + rotation 319 + binding 44 + staff roles 19
+            matrix_part: "2/4"
             files: >-
-              tests/test_rls_spend_and_approval_live.py
-              tests/test_scheduling_live.py
               tests/test_api_role_matrix.py
               tests/test_patient_binding_live.py
               tests/test_staff_roles_concurrency_live.py
               tests/test_rotation_live.py
-          - shard: 7  # matrix part 3 of 3 (run 43162154517 measured 58 min with queue 370 + spend 362 + scheduling 299, which moved to shards 2 and 5 on 2026-11-12)
-            matrix_part: "3/3"
+          - shard: 7  # matrix part 3 of 4 (run 43162154517 measured 58 min with queue 370 + spend 362 + scheduling 299, which moved to shards 2 and 5 on 2026-11-12)
+            matrix_part: "3/4"
             files: >-
               tests/test_api_role_matrix.py
           - shard: 3  # about 41 min (run 41842559711 measured 51.0 min job time, 2745 s of tests: referrals 1316 + identity 483 + mpi worker 315 + triage 234 + checkpoints 225 + msg 212 + docs 209 + real token 32 + storage policies 20; mpi worker and triage moved to shard 6 on 2026-11-04, about 550 s). The secret key reaches THIS shard only (storage policies and real token stay here).
@@ -275,6 +273,12 @@ jobs:
               tests/test_care_gaps_db_live.py
               tests/test_voice_db_live.py
               tests/test_alerts_live.py
+          - shard: 10  # matrix part 4 of 4 + scheduling 299 + spend 362. Added 2026-11-12: run 43171766379 measured shard 1 at 60 minutes (cancelled at 98%) and shard 2 at 53, so the matrix is FOUR parts (shards 1, 2, 7, 10).
+            matrix_part: "4/4"
+            files: >-
+              tests/test_api_role_matrix.py
+              tests/test_scheduling_live.py
+              tests/test_rls_spend_and_approval_live.py
     env:
       CAREFLOW_ENV: ci
       CAREFLOW_PROFILE: demo
