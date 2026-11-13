@@ -66,6 +66,11 @@ The decisions followed the user's explicit instruction, on fictional dev data. A
 | 3. Hold task (referral hold a2a7ba07 on 16e5a640) | "Someone else is holding this task. Only the person who acknowledged it can close it." | none (Resolve not offered) | Pass. Acknowledged by account 67625a81…, so the doctor cannot resolve it. Before this pass the console offered Resolve and got 409 eight times (a frontend defect, fixed). |
 | Acknowledge another task | acknowledged earlier by "You" (fc27d7e1, 200) | POST `/acknowledge` 200 | Pass. |
 
+Re-test after the backend fix (df04754: "resume a run cut off before its review pause"; cause: on this slow link the worker's time budget cut two runs after the proposal was saved, so the retried job saw "finished"):
+- Run pressed again on 8524ed0e (11:23:58Z) and 16e5a640 (11:24:08Z), both 200. Approve on 8524ed0e: POST `/review` 200 at 11:27:02Z (49.7 s), screen "The decision was recorded." and the referral then shows State "completed" (after the decision, which is right). PASS.
+- Reject on 16e5a640 (11:43Z): NOT TESTED. The page loaded but the decision form never appeared for over 2 minutes and no error showed, so the reviewer-view read for that referral did not finish. Asked careflow-cb to check its log for 11:43 to 11:46Z. Open.
+- Cross-referral state bug found by this re-test (frontend, fixed, regression test added): moving from one referral to the next kept the first one's "The run was queued" / "The decision was recorded" messages and hid the next one's decision form. The detail pages (referral, task, merge, patient record) are now keyed by id.
+
 Reason codes: the clinic has none configured (`GET /console/reason-codes` configured=false), so no reason was collected or sent; the console shows a marked placeholder.
 
 Frontend defects found and fixed in this pass (tests added):
