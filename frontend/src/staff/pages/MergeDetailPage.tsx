@@ -18,7 +18,7 @@ type Merge = components['schemas']['MergeDetailOut'];
 
 export function MergeDetailPage() {
   const { mergeId = '' } = useParams();
-  return UUID.test(mergeId) ? <Detail mergeId={mergeId} /> : <NotFoundPage />;
+  return UUID.test(mergeId) ? <Detail key={mergeId} mergeId={mergeId} /> : <NotFoundPage />;
 }
 
 function Who({ id, me }: { id: string | null; me: string }) {

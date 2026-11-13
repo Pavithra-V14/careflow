@@ -26,6 +26,8 @@ const detail = (over: Record<string, unknown> = {}) => ({
 });
 const detailRoute = (over: Record<string, unknown> = {}): Routes[number] => ['get', `/v1/staff/referrals/${ID.doc}`, () => json(detail(over))];
 const reviewPath = `/v1/staff/referrals/${ID.doc}/review`;
+// The decision is offered only once the reviewer view can be read (live pass 2026-11-13): a referral with no run answers 404 there.
+const viewRoute: Routes[number] = ['get', `/v1/staff/referrals/${ID.doc}/review-view`, () => json({ alternatives: [], confidence: null, engine: null, evidence: [], kind: 'triage_proposal', on_approve: 'a', on_edit: 'e', on_reject: 'r', proposal: { abstained: false, mode: 'shadow', candidate_count: 1 }, reason_codes: [], task_id: ID.task, triggering_rule: null })];
 const review = (answers: number[]): Routes[number] => ['post', reviewPath, (req) => {
   const s = answers.shift() ?? 200;
   const body = req.body as { decision: string };
@@ -35,7 +37,7 @@ const review = (answers: number[]): Routes[number] => ['post', reviewPath, (req)
 describe('referral review decision (nurse, doctor)', () => {
   it('chooses nothing for the person and writes nothing until they confirm', async () => {
     const user = userEvent.setup();
-    const { calls } = await openConsole({ role: 'nurse', hash: `/referrals/${ID.doc}`, routes: [detailRoute(), review([])] });
+    const { calls } = await openConsole({ role: 'nurse', hash: `/referrals/${ID.doc}`, routes: [detailRoute(), viewRoute, review([])] });
     const group = await screen.findByRole('group', { name: 'Decision' });
     const radios = within(group).getAllByRole('radio');
     expect(radios.map((r) => (r as HTMLInputElement).value)).toEqual(['approve', 'edit', 'reject']);
@@ -65,7 +67,7 @@ describe('referral review decision (nurse, doctor)', () => {
 
   it('offers approve and reject only: "edit" is shown as Coming soon, cannot be chosen, and is never sent', async () => {
     const user = userEvent.setup();
-    const { calls } = await openConsole({ role: 'doctor', hash: `/referrals/${ID.doc}`, routes: [detailRoute(), review([])] });
+    const { calls } = await openConsole({ role: 'doctor', hash: `/referrals/${ID.doc}`, routes: [detailRoute(), viewRoute, review([])] });
     const group = await screen.findByRole('group', { name: 'Decision' });
     const radios = within(group).getAllByRole('radio') as HTMLInputElement[];
     expect(radios.filter((r) => !r.disabled).map((r) => r.value)).toEqual(['approve', 'reject']);
@@ -86,7 +88,7 @@ describe('referral review decision (nurse, doctor)', () => {
 
   it('shows the reasons only as a marked clinician placeholder, and collects and sends none', async () => {
     const user = userEvent.setup();
-    const { calls } = await openConsole({ role: 'doctor', hash: `/referrals/${ID.doc}`, routes: [detailRoute(), review([])] });
+    const { calls } = await openConsole({ role: 'doctor', hash: `/referrals/${ID.doc}`, routes: [detailRoute(), viewRoute, review([])] });
     const placeholder = await screen.findByText('PLACEHOLDER - clinician to define');
     expect(placeholder).toHaveAttribute('data-placeholder');
     expect(screen.queryByRole('textbox')).toBeNull();
@@ -106,7 +108,7 @@ describe('referral review decision (nurse, doctor)', () => {
       decided = true; // the next read of the referral says a decision exists
       return json({ decision: 'approve', document_id: ID.doc, replayed: false });
     }];
-    await openConsole({ role: 'nurse', hash: `/referrals/${ID.doc}`, routes: [get, post] });
+    await openConsole({ role: 'nurse', hash: `/referrals/${ID.doc}`, routes: [get, viewRoute, post] });
     await user.click(await screen.findByRole('radio', { name: 'Approve' }));
     await user.click(screen.getByRole('button', { name: 'Record decision' }));
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Record decision' }));
@@ -117,7 +119,7 @@ describe('referral review decision (nurse, doctor)', () => {
 
   it('retries a failed record with the SAME key, but a changed decision is a new request with a new key', async () => {
     const user = userEvent.setup();
-    const { calls } = await openConsole({ role: 'nurse', hash: `/referrals/${ID.doc}`, routes: [detailRoute(), review([503, 503, 200])] });
+    const { calls } = await openConsole({ role: 'nurse', hash: `/referrals/${ID.doc}`, routes: [detailRoute(), viewRoute, review([503, 503, 200])] });
     await user.click(await screen.findByRole('radio', { name: 'Approve' }));
     await user.click(screen.getByRole('button', { name: 'Record decision' }));
     const go = () => within(screen.getByRole('dialog')).getByRole('button', { name: 'Record decision' });
@@ -139,7 +141,7 @@ describe('referral review decision (nurse, doctor)', () => {
   it('says a conflict plainly, a 403 as "not available", and never shows backend text', async () => {
     const user = userEvent.setup();
     const answers = [409, 403];
-    await openConsole({ role: 'nurse', hash: `/referrals/${ID.doc}`, routes: [detailRoute(), review(answers)] });
+    await openConsole({ role: 'nurse', hash: `/referrals/${ID.doc}`, routes: [detailRoute(), viewRoute, review(answers)] });
     await user.click(await screen.findByRole('radio', { name: 'Approve' }));
     await user.click(screen.getByRole('button', { name: 'Record decision' }));
     const go = () => within(screen.getByRole('dialog')).getByRole('button', { name: 'Record decision' });
@@ -366,5 +368,14 @@ describe('merge detail (read-only while merge actions are off)', () => {
     const b = await openConsole({ hash: '/identity/merges/xyz' });
     expect(screen.getByRole('heading', { level: 1, name: 'Not found' })).toBeInTheDocument();
     expect(b.calls.map((c) => c.path)).toEqual(['/v1/iam/me']);
+  });
+});
+
+describe('referral review decision is offered only when the proposal can be read', () => {
+  it.each([404, 409])('shows a calm note and NO decision form when the reviewer view answers %i (no run yet, or not paused for review)', async (code) => {
+    await openConsole({ role: 'doctor', hash: `/referrals/${ID.doc}`, routes: [detailRoute(), ['get', `/v1/staff/referrals/${ID.doc}/review-view`, () => fail(code)]] });
+    expect(await screen.findByText(/The decision is offered only when the proposal can be shown/)).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Decision' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Record decision' })).toBeNull();
   });
 });

@@ -32,6 +32,49 @@ Signed in with the password only: the banner showed and no enrolment screen appe
 
 Doctor writes (review a referral proposal, acknowledge and resolve a task, record a decision) were not done.
 
+## Nurse and admin read-only walks, redone (password only, dev-only switch ON)
+
+- Nurse (pavithra.v2022ece@sece.ac.in, role "Nurse"): 54 calls, 0 mismatches. 403s only on routes the walk visits directly that a nurse is not offered (portal claims, voice sessions, possible duplicates).
+- Admin (same account, role "Admin", a separate sign-in because the role is chosen per sign-in): 50 calls, 0 mismatches. 403s: portal claims, voice sessions (needs second factor per the backend list), possible duplicates.
+- Both: empty lists (review tasks, holds, bookings, alerts, autonomy history), so those row shapes are unchecked in these two walks.
+
+## Doctor writes, recorded by hand (13 Nov 2026, about 10:50 to 10:56Z), human decisions clicked by the user
+
+52 calls; every write carried a key; 0 schema mismatches. The writes mostly did NOT succeed:
+
+| Call | Status seen |
+|---|---|
+| POST `/referrals/{id}/review` | 404 four times, then 409 twice; again 404 four times and 409 twice later |
+| POST `/referrals/{id}/run` | 200 twice (between the 404s and the 409s) |
+| GET `/referrals/{id}/review-view` | 404 |
+| POST `/review-tasks/{id}/acknowledge` | 200 once |
+| POST `/review-tasks/{id}/resolve` | 409 eight times |
+
+Not yet explained. Asked careflow-cb for the meaning and the exact `detail` of each, and asked the user for the screen text. No frontend defect is claimed until the screen text is known: the console shows fixed messages per problem kind, never the backend text, so the wording on screen has to be compared with the "You should see" lines. Open.
+
+## Doctor writes, scripted (13 Nov 2026, 11:03 to 11:18Z, password only; the user only signed in)
+
+The decisions followed the user's explicit instruction, on fictional dev data. Any decision row made here must NOT be used as a training label (project rule 9: only real human decisions are labels).
+
+| Step | Screen text | Route, status, backend `detail` | Verdict and cause |
+|---|---|---|---|
+| Survey of 4 referrals | the referral with no proposal (8524ed0e) showed "There is no proposal to show for this referral." and "The decision is offered only when the proposal can be shown. If this referral was only just run, wait a moment and reload the page." | GET `/review-view` 404, "not found" | Expected (no run yet). The gating added in this pass hid the decision form. |
+| 1. Run the waiting referral (8524ed0e) | "The run was queued. Job: 7a784bc6…" | POST `/run` 200, 3.4 s | Pass. The reviewer view became readable about 60 s later (about 20 s in the earlier run). |
+| 2a. Approve 404d7f72 (seeded) | confirmation "Record this decision? You are about to record the decision "Approve" for this referral. It is kept under your name.", then "That could not be found." | POST `/review` 404, "not found" | Expected. Backend: the seeded proposals have no graph thread, so review-view reads the proposal (200) while the review route finds no run (404). A seed limitation, not a route defect. Run must not be pressed on seeded referrals (it would fail and dead-letter). |
+| 2b. Approve 8524ed0e (clean run) | "The referral is not waiting for a decision, or a different decision is already recorded. Refresh and try again." | POST `/review` 409, "this referral is not waiting for a decision", 9.4 s, response 11:17:40.951Z | BACKEND DEFECT (backend agrees it is one if this answers 409): the form was offered and the review view answered 200, but the referral page showed State "completed" afterwards. 16e5a640 has the same stuck state. Sent to careflow-cb with the exact time. Re-test when they say it is deployed. |
+| Reject | not reached: no second decidable referral exists (only 16e5a640 and 8524ed0e have a graph thread, and both answer 409) | | Not tested: cannot run until the backend fix. |
+| 3. Hold task (referral hold a2a7ba07 on 16e5a640) | "Someone else is holding this task. Only the person who acknowledged it can close it." | none (Resolve not offered) | Pass. Acknowledged by account 67625a81…, so the doctor cannot resolve it. Before this pass the console offered Resolve and got 409 eight times (a frontend defect, fixed). |
+| Acknowledge another task | acknowledged earlier by "You" (fc27d7e1, 200) | POST `/acknowledge` 200 | Pass. |
+
+Reason codes: the clinic has none configured (`GET /console/reason-codes` configured=false), so no reason was collected or sent; the console shows a marked placeholder.
+
+Frontend defects found and fixed in this pass (tests added):
+1. The decision form was offered on a referral with no run, or whose run was not ready (404 and 409 on `/review`). It now appears only when the reviewer view can be read, with a calm note otherwise.
+2. Run was offered on every referral, though it does nothing once a run exists. Nurse and doctor now see it only when the reviewer view says there is no proposal (404); front desk cannot read that view, so it still sees Run and the backend decides.
+3. Resolve was offered on a task acknowledged by someone else (409 eight times). It is now replaced by a short explanation.
+
+Nurse and admin read-only walks (scripted by the same tool, password only) were already done earlier in this pass: nurse 54 calls and admin 50 calls, both with 0 mismatches.
+
 ## Front desk (pavithravenkatesh341@gmail.com), read-only walk
 
 Result: 50 calls, 0 schema mismatches, 0 notes. Report: `frontend/live-report/live-report-front_desk.md` (git-ignored).

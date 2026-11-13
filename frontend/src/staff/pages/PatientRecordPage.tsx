@@ -17,7 +17,7 @@ import { IdentityRevoke, type RevokeOutcome } from './IdentityRevoke';
 
 export function PatientRecordPage() {
   const { patientId = '' } = useParams();
-  return UUID.test(patientId) ? <RecordView patientId={patientId} /> : <NotFoundPage />;
+  return UUID.test(patientId) ? <RecordView key={patientId} patientId={patientId} /> : <NotFoundPage />;
 }
 
 function confirmProblem(problem: ApiProblem, conflict: string) {

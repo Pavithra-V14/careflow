@@ -156,6 +156,7 @@ describe('offline write keeps what the person chose', () => {
     };
     const routes: Routes = [
       ['get', `/v1/staff/referrals/${ID.doc}`, () => json(detail)],
+      ['get', `/v1/staff/referrals/${ID.doc}/review-view`, () => json({ alternatives: [], confidence: null, engine: null, evidence: [], kind: 'triage_proposal', on_approve: 'a', on_edit: 'e', on_reject: 'r', proposal: { abstained: false, mode: 'shadow', candidate_count: 1 }, reason_codes: [], task_id: ID.task, triggering_rule: null })],
       ['post', `/v1/staff/referrals/${ID.doc}/review`, (req) => json({ decision: (req.body as { decision: string }).decision, document_id: ID.doc, replayed: false })],
     ];
     const { calls } = await openConsole({ role: 'nurse', hash: `/referrals/${ID.doc}`, routes });

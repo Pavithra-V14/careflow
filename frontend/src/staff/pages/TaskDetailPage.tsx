@@ -16,7 +16,7 @@ import { isUrgentTask } from './TasksPage';
 
 export function TaskDetailPage() {
   const { taskId = '' } = useParams();
-  return UUID.test(taskId) ? <Detail taskId={taskId} /> : <NotFoundPage />;
+  return UUID.test(taskId) ? <Detail key={taskId} taskId={taskId} /> : <NotFoundPage />;
 }
 
 /** Provenance holds ids and closed words only (migration 0007). Only plain values are shown, clipped; anything nested is not. */
@@ -73,7 +73,10 @@ function Detail({ taskId }: { taskId: string }) {
       <QueryView query={query}>
         {(task) => {
           const urgent = isUrgentTask(task);
-          const closable = task.resolvable === true;
+          // Only the person who acknowledged a task can close it (backend answer, live pass 2026-11-13): another person gets 409.
+          // An unknown holder is not "someone else", so Resolve stays offered then and the backend decides.
+          const heldByOther = task.status === 'acknowledged' && !!task.acknowledged_by && task.acknowledged_by !== account.accountId;
+          const closable = task.resolvable === true && !heldByOther;
           const documentId = typeof task.provenance.document_id === 'string' && UUID.test(task.provenance.document_id) ? task.provenance.document_id : null;
           return (
             <>
@@ -148,7 +151,12 @@ function Detail({ taskId }: { taskId: string }) {
                   )}
                 </div>
               )}
-              {task.status !== 'resolved' && !closable && (
+              {task.status !== 'resolved' && heldByOther && task.resolvable === true && (
+                <p role="status" className="state state-empty">
+                  {t('tasksHeld.byOther')}
+                </p>
+              )}
+              {task.status !== 'resolved' && !closable && !(heldByOther && task.resolvable === true) && (
                 // The backend closes this kind through its own route, or only once a clinician defines what closing needs.
                 // The console never offers a quiet "resolve" for it.
                 <div className="state state-empty">

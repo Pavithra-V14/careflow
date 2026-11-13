@@ -7,6 +7,8 @@ export const LEAK = 'LEAK-SENTINEL-backend-text';
 export const ID = {
   clinic: '3f2b8c1e-6a4d-4e1b-9d0a-1c2d3e4f5a6b',
   doc: '11111111-1111-4111-8111-111111111111',
+  // A referral with no run yet: its reviewer view answers 404, and only then is Run offered.
+  docNew: '33333333-3333-4333-8333-333333333333',
   task: '33333333-3333-4333-8333-333333333333',
   taskRed: '44444444-4444-4444-8444-444444444444',
   patient: '66666666-6666-4666-8666-666666666666',
@@ -245,6 +247,7 @@ export function createConsoleApi(role: string, options: ConsoleOptions = {}, ses
     const reviewView = m(/^\/v1\/staff\/referrals\/([^/]+)\/review-view$/);
     if (method === 'GET' && reviewView) {
       if (!REVIEWERS.includes(role)) return no(403);
+      if (path.includes(ID.docNew)) return no(404);
       return ok({ alternatives: [{ label: 'card-placeholder@1', probability: null }, { label: 'card-other@2', probability: 0.25 }], confidence: null, engine: null, evidence: [{ field: 'reason', source: 'letter', crop_ref: null }], kind: 'triage_proposal', on_approve: 'Approve text from the API', on_edit: 'Edit text from the API', on_reject: 'Reject text from the API', proposal: { abstained: false, mode: 'shadow', candidate_count: 1 }, reason_codes: ['reason_a', 'reason_b'], task_id: ID.task, triggering_rule: null });
     }
     if (method === 'GET' && path.startsWith('/v1/staff/scheduling/')) {
