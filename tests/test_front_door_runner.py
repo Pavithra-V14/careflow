@@ -78,7 +78,17 @@ async def test_a_crashed_run_is_continued_from_its_checkpoint_not_started_again(
     assert payload is None  # resume from the last completed step
 
 
-@pytest.mark.parametrize("state", [({"status": "triage_proposed"}, ("review",)), ({"status": "reviewed"}, ()), ({"status": "red_flag_escalated"}, ())])
+async def test_a_run_cut_off_after_a_step_saved_its_work_but_before_the_next_checkpoint_is_resumed(monkeypatch):
+    """Regression (live, 2026-11-13): `next` is empty because the step has saved writes, yet the step is listed in `tasks`: the thread is NOT finished."""
+    graph = Graph({"status": "triage_proposed"}, ())
+    graph.state.tasks = (SimpleNamespace(name="propose_triage", result={"status": "triage_proposed"}),)
+    h, _ = handler(graph, monkeypatch=monkeypatch)
+    await h(ctx())
+    ((payload, _),) = graph.invoked
+    assert payload is None
+
+
+@pytest.mark.parametrize("state", [({"status": "triage_proposed"}, ("review",)),({"status": "reviewed"}, ()), ({"status": "red_flag_escalated"}, ())])
 async def test_a_thread_paused_for_a_person_or_already_finished_is_left_alone_and_the_job_completes(monkeypatch, state):
     graph = Graph(*state)
     h, _ = handler(graph, monkeypatch=monkeypatch)
