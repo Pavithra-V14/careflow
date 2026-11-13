@@ -42,7 +42,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Final, Literal
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, IntegrityError
@@ -487,6 +487,8 @@ async def confirm_identity(
 REVOKE_REASONS: Final = ("wrong_person", "planted_or_suspect", "mistaken_click")  # a CLOSED operational vocabulary (no free text); listed in docs/design/clinician-sheet.md
 REVOKE_TASK_KIND: Final = "identity_confirmation_revoked"
 TaskStatus = Literal["raised", "not_configured", "on_record"]
+AlertStatus = Literal["raised", "not_for_this_reason", "not_configured", "on_record"]
+REVOKE_ALERT_CLASS: Final = "identity_revoked_suspect"
 
 
 class InvalidRevokeReason(IngestionError):
@@ -503,7 +505,20 @@ class RevokeTaskSettings(BaseSettings):
     # CLINICAL-PLACEHOLDER: needs clinician sign-off  (the review task's priority: 'immediate' or 'standard')
     priority: Literal["immediate", "standard"] | None = Field(default=None, validation_alias=AliasChoices("CAREFLOW_REVOKE_TASK_PRIORITY", "priority"))
     # CLINICAL-PLACEHOLDER: needs clinician sign-off  (who re-checks what was linked meanwhile: 'nurse' or 'doctor')
-    assigned_role: Literal["nurse", "doctor"] | None = Field(default=None, validation_alias=AliasChoices("CAREFLOW_REVOKE_TASK_ROLE", "assigned_role"))
+    assigned_role: Literal["nurse", "doctor", "front_desk_supervisor"] | None = Field(default=None, validation_alias=AliasChoices("CAREFLOW_REVOKE_TASK_ROLE", "assigned_role"))
+    # CLINICAL-PLACEHOLDER: needs clinician sign-off  (WHICH revoke reasons also raise an alert for an admin: a comma-separated subset of REVOKE_REASONS; unset = never)
+    alert_reasons: str = Field(default="", validation_alias=AliasChoices("CAREFLOW_REVOKE_ALERT_REASONS", "alert_reasons"))  # kept as text: a list in an environment variable is not JSON
+
+    @field_validator("alert_reasons")
+    @classmethod
+    def _alert_reasons(cls, value: str) -> str:
+        if any(w.strip() and w.strip() not in REVOKE_REASONS for w in value.split(",")):
+            raise ValueError("CAREFLOW_REVOKE_ALERT_REASONS may only list the revoke reasons")  # a misspelt word must not silently turn the alert off
+        return value
+
+    @property
+    def alert_reason_set(self) -> frozenset[str]:
+        return frozenset(w.strip() for w in self.alert_reasons.split(",") if w.strip())
 
     @property
     def configured(self) -> bool:
@@ -515,6 +530,24 @@ class RevokeResult:
     patient_id: uuid.UUID
     replayed: bool
     review_task: TaskStatus
+    admin_alert: AlertStatus = "on_record"
+
+
+async def _raise_revoke_alert(conn: AsyncConnection, *, clinic_id: uuid.UUID, origin: Origin, event_id: uuid.UUID) -> None:
+    """One alert for an ADMIN, bound to the revoke event just written (migration 0073): the event id and a count of one, nothing else. NO `returning` and NO `on conflict`: front desk may insert this
+    alert but cannot read it. A duplicate for the same event is a replay."""
+    try:
+        async with conn.begin_nested():
+            await conn.execute(
+                text(
+                    """insert into ops.alerts (clinic_id, origin, class, audience_role, alert_count, ref, idempotency_key)
+                       values (:c, :o, :cls, 'admin', 1, :ref, :k)"""
+                ),
+                {"c": clinic_id, "o": origin, "cls": REVOKE_ALERT_CLASS, "ref": str(event_id), "k": f"identity-revoked-alert:{event_id}"},
+            )
+    except DBAPIError as exc:
+        if getattr(exc.orig, "sqlstate", None) != "23505":
+            raise
 
 
 async def revoke_identity(
@@ -533,7 +566,7 @@ async def revoke_identity(
     if by_key is not None:
         if by_key[0] != patient_id or by_key[1] != clinic_id or by_key[2] != "revoke":
             raise IdempotencyConflict("this idempotency key was used for a different request")
-        return RevokeResult(patient_id, True, "on_record")
+        return RevokeResult(patient_id, True, "on_record", "on_record")
     row = (await conn.execute(text("select registered_via from mpi.patients where id = :p and clinic_id = :c and erased_at is null"), {"p": patient_id, "c": clinic_id})).first()
     if row is None:
         raise PatientNotFound("not found")
@@ -541,7 +574,7 @@ async def revoke_identity(
     latest = await _latest_event(conn, patient_id)
     verified = (latest[0] == "confirm") if latest is not None else (row[0] == "front_desk")
     if not verified:
-        return RevokeResult(patient_id, True, "on_record")  # already unverified: nothing to revoke
+        return RevokeResult(patient_id, True, "on_record", "on_record")  # already unverified: nothing to revoke
     confirmed_at = latest[2] if latest is not None else None
     event_id = uuid.uuid4()
     try:
@@ -561,8 +594,11 @@ async def revoke_identity(
             raise IdempotencyConflict("this idempotency key was used for a different request") from exc
         raise
     settings = task or RevokeTaskSettings()
+    alert: AlertStatus = "not_configured" if not settings.alert_reason_set else ("raised" if reason in settings.alert_reason_set else "not_for_this_reason")
+    if alert == "raised":
+        await _raise_revoke_alert(conn, clinic_id=clinic_id, origin=origin, event_id=event_id)
     if not settings.configured:
-        return RevokeResult(patient_id, False, "not_configured")
+        return RevokeResult(patient_id, False, "not_configured", alert)
     provenance = {
         "patient_id": str(patient_id), "revoke_event_id": str(event_id), "reason": reason,
         "confirmed_at": confirmed_at.isoformat() if confirmed_at is not None else None, "record_created_by": row[0],
@@ -583,7 +619,7 @@ async def revoke_identity(
     except DBAPIError as exc:
         if getattr(exc.orig, "sqlstate", None) != "23505":  # a duplicate task for this revoke event is a replay; anything else rolls the revoke back
             raise
-    return RevokeResult(patient_id, False, "raised")
+    return RevokeResult(patient_id, False, "raised", alert)
 
 
 # ---- patient lookup and the verified-status read (owner package 2026-10-30) ----------------------------------------------------------------------------

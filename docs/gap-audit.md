@@ -42,7 +42,7 @@ Everything not listed here is built and tested (against the real database, as pu
 |---|---|---|
 | Retrieval pipeline end to end (§10) | FAKE | BM25 and fusion are pure code; no embeddings, Qdrant, reranker or chunking against real documents; the real-PDF spike is open |
 | Protocol cards (§10.2, §20.2) | DECISION | `kb.cards` does not exist; every card, threshold and `intake_question` is clinician content |
-| Red-flag rules content and the 100% recall gate (§5.2, §14.3) | DECISION | Mechanism only; rules need two named clinician approvers; no approval route exists (checklist 19) |
+| Red-flag rules content and the 100% recall gate (§5.2, §14.3) | DECISION | BUILT (0072): the two-doctor approval route and database function (versioned, append-only ledger, aal2, nothing approved by default, a draft is never in force in `clinical`). NOT built: authoring (rules still arrive from the migrator; patterns have no execution timeout yet), approval of a platform-wide rule, retiring a version through a route. The rule CONTENT and the recall bar are the clinicians' (checklist 19, 21) |
 | Retrieval quality gate and abstention (§10.8, §10.9) | UNMEASURED | Needs the gold set and thresholds |
 | Instruction-injection classifier (§11.1) | PARTIAL | Heuristics only; the hard gate needs a clinician-authored adversarial set (checklist 41) |
 | PII masking before retrieval (§11.3) | PARTIAL | Heuristic masker exists; not wired to a real retriever |
@@ -89,6 +89,7 @@ Everything not listed here is built and tested (against the real database, as pu
 | Short-lived signed tokens per job from agents to tool servers (§18.4) | PARTIAL | The tool servers run in process behind the worker identity; a per-job signed token between separate processes is not built |
 | Patient OTP rate limits, CAPTCHA, device list (§18.1) | DECISION | These live in the hosted Auth project's settings, which no migration controls; the owner must set and evidence them |
 | Staff invite flow with the Auth admin API | DECISION | The admin call stays unwired by the owner |
+| Front-desk supervisor role and admin alert on a revoke (checklist 23, clinician items 23 and 24) | BUILT (0073), settings unset | The role adds to front desk and sees one task kind; the alert class `identity_revoked_suspect` goes to admins. WHO re-checks and WHICH reasons alert are required settings (`CAREFLOW_REVOKE_TASK_ROLE`, `CAREFLOW_REVOKE_ALERT_REASONS`) nobody has set; the reason list itself (item 23) is still the closed three-word list |
 | Slot, provider and location creation (§17.1) | PARTIAL | Set-up routes exist for front desk and admin; who owns them is an owner decision (checklist 45) |
 
 ## 19 to 21. UI, consent, governance, testing

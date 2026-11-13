@@ -23,14 +23,14 @@ Items 1 to 18 keep the numbers of `phase2-status.md` ("PRE-LAUNCH BLOCKERS"); 19
 | 13 | Durable spend ledger for a real reply-interpretation call | OPEN | O (a new grant needs sign-off) + E | build the definer-function variant in `spend-ledger-options.md` when a real call is wanted | phase2-status 13 |
 | 14 | (same as 2) | see 2 | | | |
 | 15 | (same as 9) | see 9 | | | |
-| 16 | Key-squatting hole in review-task inserts | IN PROGRESS: 0026 bound the FRONT-DESK `unmerge_review` clause to a merge; the nurse, doctor and worker insert clauses still do not pin `status`/`acknowledged_by` or the key (review 2026-11-04, L4, L5) | E (a new migration; reviewer pass) | fix-forward migration binding the remaining clauses | phase2-status 16 |
+| 16 | Key-squatting hole in review-task inserts | IN PROGRESS (0073 now pins `status` and `acknowledged_by` on the nurse, doctor and worker clause; the KEY binding for those roles is still open): 0026 bound the FRONT-DESK `unmerge_review` clause to a merge; the nurse, doctor and worker insert clauses still do not pin `status`/`acknowledged_by` or the key (review 2026-11-04, L4, L5) | E (a new migration; reviewer pass) | fix-forward migration binding the remaining clauses | phase2-status 16 |
 | 17 | Privacy owner's written confirmation of the patient-view field list; a shared (not per-process) open rate limiter | OPEN | P + E | the written confirmation; a shared limiter | patient-view-fields.md |
 | 18 | Document storage is synthetic-only | OPEN | O + P + H | region decision (India region in production), the privacy owner's written confirmation, scanner (item 2), the recorded spike, and the 0027 storage policies applied in production | phase2-status 18; uploads-supabase-storage.md |
 
 ## B. Recorded on branches not yet merged
 | # | Item | Status | Owner | What closes it | Source |
 |---|---|---|---|---|---|
-| 19 | No API route exists to approve a red-flag rule with its two named approvers; the demo runs on a seeded DRAFT rule (profile `demo` only) | OPEN | C + O + E | design the approval route with the clinicians (two named approvers) before any clinical use | branch `seed-demo-and-fake-front-door`, phase2-status 19 |
+| 19 | Approving a red-flag rule with two named approvers: the route and database function are BUILT (0072: `GET /v1/staff/console/red-flag-rules`, `POST .../{rule_id}/decision`; two different doctors, a second factor, append-only ledger, nothing approved by default). The demo still runs on a seeded DRAFT rule (profile `demo` only). OPEN: which roles may approve and whether a platform-wide rule may be approved (owner), the rule content (clinicians), authoring | OPEN | C + O + E | design the approval route with the clinicians (two named approvers) before any clinical use | branch `seed-demo-and-fake-front-door`, phase2-status 19 |
 | 20 | Hosted provider adapters (Gemini, Jev via OpenRouter, Sarvam) are approved for SYNTHETIC DEMO ONLY; Jev output is never evidence; the Jev downstream model is unpinned | OPEN | V + O | an agreement and `phi_approved` registry rows for a vision and a decision route before clinical use | branch `c1-providers` (numbered 19 there; renumbered here) |
 
 ## C. Clinician decisions that gate real behaviour (clinician-sheet.md)
@@ -38,7 +38,7 @@ Items 1 to 18 keep the numbers of `phase2-status.md` ("PRE-LAUNCH BLOCKERS"); 19
 |---|---|---|---|---|
 | 21 | Red-flag rules and the 100% recall gate; protocol cards, retrieval gold set and thresholds; the priority levels (sheet items A, B, C) | OPEN | C | signed answers, two named approvers for rules |
 | 22 | Offer wording, accept-confidence threshold, expiry and backfill counts, scheduling-task urgency (items 16 to 22) | OPEN | C | signed answers |
-| 23 | Revoke reasons list and who re-checks and how urgently (items 23, 24); no front-desk supervisor role and no admin alert exist today | OPEN | C; O for any new role or feature | signed answers, then wiring built once with the final list (and a migration if `other` is chosen) |
+| 23 | Revoke reasons list and who re-checks and how urgently (items 23, 24); the front-desk supervisor role and the admin alert are BUILT (0073) and switched on only by the required settings `CAREFLOW_REVOKE_TASK_ROLE` and `CAREFLOW_REVOKE_ALERT_REASONS` | OPEN | C; O for any new role or feature | signed answers, then wiring built once with the final list (and a migration if `other` is chosen) |
 | 24 | Closing a red-flag review task (item 25); what a reviewer may edit in a triage proposal (item 26) | OPEN (safe defaults: no route closes one; edit refused) | C | signed answers |
 
 ## D. Phase 4 to 10 launch work (BUILD-SPEC Appendix D)

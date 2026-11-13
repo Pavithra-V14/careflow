@@ -26,8 +26,9 @@
 | A | A nurse gets a task; urgency depends on the reason (suspect record faster, mistaken click slower). | Uses a role that exists today. Nurses carry more of the queue. |
 | B | A doctor gets the task for every reason. | Most senior look; slowest and most expensive. |
 | C | A nurse for most reasons, a doctor when the reason is `planted_or_suspect`. | Matches effort to risk; two routing rules to maintain. |
+| D | The front-desk supervisor role (built 2026-11-13, migration 0073) takes the task, optionally with an alert to an admin for the reasons the clinician names. | Keeps clinical staff out of a data-quality re-check; the supervisor sees only this kind of task. The role must be given to a named person, and the clinic must decide which reasons also alert an admin (`CAREFLOW_REVOKE_ALERT_REASONS`). |
 
-**Safe default:** no task is raised, the screen says so, and nobody re-checks. (The original sheet suggested a front-desk supervisor or an admin; neither role exists today and adding one is a new feature, so it is not offered here.)
+**Safe default:** no task is raised, the screen says so, and nobody re-checks. (The front-desk supervisor role and the admin alert now exist but are switched on only by the settings `CAREFLOW_REVOKE_TASK_ROLE` and `CAREFLOW_REVOKE_ALERT_REASONS`, so option D is available.)
 **Suggested: C**, because a suspect or planted record is the case where a wrong link does the most harm.
 **Questions:** what counts as "linked in the meantime" for the clinic (messages, referrals, bookings)? How soon must the re-check happen, in hours? (That number is the clinic's.)
 

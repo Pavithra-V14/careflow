@@ -17,7 +17,7 @@ def _check_list(migration: str, column_pattern: str) -> set[str]:
 
 
 def test_the_alert_classes_are_the_database_check_list():
-    assert set(get_args(api_enums.AlertClass)) == _check_list("0039_alerts_and_review_reason_codes.sql", r"class")
+    assert set(get_args(api_enums.AlertClass)) == _check_list("0073_front_desk_supervisor_and_revoke_alert.sql", r"add constraint alerts_class_check")  # the latest definition of the list (0073 widened 0039)
 
 
 def test_the_stored_care_plan_statuses_are_the_database_check_list_plus_erased():
