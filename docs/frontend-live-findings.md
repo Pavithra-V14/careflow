@@ -13,6 +13,25 @@ Earlier decision (user): MFA stays on; the sign-ins earlier in this pass used a 
 - Sign-in with a second factor: verified live (front desk signed in several times; `/v1/iam/me` answered 200 each time).
 - The step-up prompt (401 with `WWW-Authenticate: step-up`, "recent authenticator code" dialog): NOT verified live yet. No write so far answered 401 step-up, and the erasure write buttons are off in this build. The statement "step-up verified live" is not made here until a real 401 step-up has been seen.
 
+## Nurse and admin (pavithra.v2022ece@sece.ac.in)
+
+The nurse sign-in window showed "Set up your authenticator app" instead of skipping it, so the dev-only switch was not active in that window. The switch was built and worked for front desk (banner shown, no enrolment). Likely cause (not proven): my `git checkout`/merge of main at 3:58 pm rewrote `vite.config.ts`, and the dev server restarted itself ("vite.config.ts changed, restarting server") around that time. The user then enrolled this account with their phone and typed codes. Decision (user): from here on the doctor and every other pass use enrolment and typed codes; the dev-only switch stays in the code, off by default, dev-only.
+
+The nurse read-only walk then recorded nothing: the browser window was closed before the sign-in finished (`.session-bar` never appeared). Nurse and admin screens are NOT walked yet. Redo needed (one sign-in as the nurse account, which is now enrolled; pick the nurse role, then the admin role).
+
+## Doctor (pavithravenkatesh1974@gmail.com), read-only walk, password only (dev-only skip switch ON)
+
+Signed in with the password only: the banner showed and no enrolment screen appeared. 52 calls, 0 schema mismatches, 0 notes. Shell: "Active role: Doctor", TEST, Operating profile Demo.
+
+| Check | Expected | Seen | Verdict |
+|---|---|---|---|
+| Referrals, tasks, scheduling lists, offers (with `message_id`) | 200 | 200 | pass |
+| Reviewer view `GET /referrals/{id}/review-view` | 200, or 404 when there is no proposal | 404 for the referral the walk opened | note: documented as a valid answer; the screen text was not read |
+| Dashboard, portal claims, accounts, reviewer stats, cost canvas, voice sessions, recovery, grievances, possible duplicates | 403 for a doctor | 403 | pass. The walk tool visits every route directly; the console itself does not offer these to a doctor (Identity shows no duplicates list: `CAN_SEE_DUPLICATES` is front desk only). |
+| Empty lists (row shapes unchecked) | | review tasks, holds, bookings, alerts, autonomy history | coverage gap |
+
+Doctor writes (review a referral proposal, acknowledge and resolve a task, record a decision) were not done.
+
 ## Front desk (pavithravenkatesh341@gmail.com), read-only walk
 
 Result: 50 calls, 0 schema mismatches, 0 notes. Report: `frontend/live-report/live-report-front_desk.md` (git-ignored).
