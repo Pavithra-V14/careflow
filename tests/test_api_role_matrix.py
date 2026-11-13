@@ -254,6 +254,7 @@ async def _cleanup(ids, conn=None):
                     "and not exists (select 1 from ops.care_barriers b where b.patient_id = p.id) "
                     "and not exists (select 1 from ops.care_episodes ce where ce.patient_id = p.id) "
                     "and not exists (select 1 from clinical.results cr where cr.patient_id = p.id) "
+                    "and not exists (select 1 from clinical.medications md where md.patient_id = p.id) "
                     "and not exists (select 1 from ops.care_plans cp where cp.patient_id = p.id) "
                     "and not exists (select 1 from clinical.notes n where n.patient_id = p.id) "
                     "and not exists (select 1 from iam.break_glass_grants bg where bg.patient_id = p.id) "
@@ -3279,6 +3280,39 @@ def rule_decision_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(), {"decision": "approve"})
 
 
+# ---- medications (migration 0074): nurse and doctor record and read; with the vocabulary setting unset the record route answers the visible 503 after the role check. The success path is the standalone test below. ----
+
+MEDICATIONS = "/v1/staff/medications"
+MED_UNAVAILABLE = lambda b: b == {"detail": "medications are unavailable: not configured"}
+MED_VISIBLE_REFUSED = ("front_desk_a", "admin_a", "business_owner_a", "auditor_a")
+
+
+def medication_record_cases(ids) -> list[tuple]:
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "patient_id": str(ids.patients_a[43]), "code": "DEMO-M1", "verified": True, "valid_from": "2026-01-01T00:00:00Z", **o}
+    cases = [_case(ids, f"{p} is told medications are not configured, and nothing is written", p, 503, MEDICATIONS, json=body(), body=MED_UNAVAILABLE) for p in ("nurse_a", "doctor_a", "multi")]
+    cases += [_case(ids, f"{p} sees the clinic but is refused", p, 403, MEDICATIONS, json=body(), body=NOT_YOUR_ROLE) for p in MED_VISIBLE_REFUSED]
+    others = [p for p in ids.people if p not in ("nurse_a", "doctor_a", "multi", *MED_VISIBLE_REFUSED)]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused with the one not-found", p, 404, MEDICATIONS, json=body(), body=_fixed(404)) for p in others]
+    cases += [
+        _case(ids, "an unknown clinic is not found", "nurse_a", 404, MEDICATIONS, json=body(clinic_id=str(uuid.uuid4())), body=_fixed(404)),
+        _case(ids, "a code with a bad shape is rejected", "nurse_a", 422, MEDICATIONS, json=body(code="bad code"), body=_fixed(422)),
+        _case(ids, "verified is required (no default)", "nurse_a", 422, MEDICATIONS, json={k: v for k, v in body().items() if k != "verified"}, body=_fixed(422)),
+        _case(ids, "an extra field is rejected (no dose, no free text)", "nurse_a", 422, MEDICATIONS, json=body(dose="x"), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "nurse_a", 422, MEDICATIONS, json=body(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, MEDICATIONS, body())
+
+
+def medication_list_cases(ids) -> list[tuple]:
+    path = lambda **o: MEDICATIONS + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, "patient_id": ids.patients_a[43], **o}.items())
+    cases = _console_clinic_cases(ids, path, allowed=("nurse_a", "doctor_a", "multi"), ok_status=200, ok_body=lambda b: set(b) == {"medications"}, visible_refused=MED_VISIBLE_REFUSED)
+    cases += [
+        _case(ids, "an unknown clinic is not found", "nurse_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "limit=0 is rejected", "nurse_a", 422, path(limit=0), key=None, body=_fixed(422)),
+        _case(ids, "a missing patient id is rejected", "nurse_a", 422, MEDICATIONS + f"?clinic_id={ids.clinic_a}", key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
 # ---- break-glass access (migration 0058; BUILD-SPEC.md 18.4) ------------------------------------------------------------------------------------------------------------------------------------------------
 # Front desk, nurse and doctor open a time-limited grant for one patient (a reason code from the clinic's owner-kept list); the holder reads that patient's messages (this world has no encryption keys, so the
 # read answers 503 after the grant is found; the decrypting path and the database behaviour are in tests/test_break_glass_db_live.py); an admin of the clinic who did not open it reviews. Opening writes
@@ -3707,6 +3741,8 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", AUTONOMY_RESOLVE): autonomy_resolve_cases,
     ("GET", RULES): rules_list_cases,
     ("POST", RULE_DECISION): rule_decision_cases,
+    ("POST", MEDICATIONS): medication_record_cases,
+    ("GET", MEDICATIONS): medication_list_cases,
     ("GET", AUTONOMY): autonomy_get_cases,
     ("POST", AUTONOMY): autonomy_set_cases,
     ("GET", DASHBOARD): dashboard_cases,
@@ -4436,6 +4472,33 @@ def test_a_revoke_writes_one_event_one_audit_row_and_with_the_task_settings_conf
     assert (row["actor_id"], row["actor_role"], row["clinic_id"]) == (fd, "front_desk", ids.clinic_a)
     assert details == {"reason": "wrong_person", "replayed": False, "review_task": "raised", "admin_alert": "not_configured"}
 
+
+def test_with_the_vocabulary_set_a_medication_is_recorded_replayed_superseded_and_listed_and_a_code_outside_the_vocabulary_is_refused(client, ids):
+    from careflow import app as app_module
+
+    nurse = ids.people["nurse_a"][0]
+    patient = ids.patients_a[44]
+    client.app.dependency_overrides[app_module.medication_codes] = lambda: frozenset({"DEMO-M1"})  # a test stand-in for the clinic's vocabulary, not a recommendation
+    try:
+        body = {"clinic_id": str(ids.clinic_a), "patient_id": str(patient), "code": "DEMO-M1", "verified": True, "valid_from": "2026-01-01T00:00:00Z"}
+        key = _new_key()
+        ok = client.post(MEDICATIONS, headers={**bearer(mint(nurse)), "X-Idempotency-Key": key}, json=body)
+        assert ok.status_code == 201 and ok.json()["created"] is True
+        first = ok.json()["medication_id"]
+        again = client.post(MEDICATIONS, headers={**bearer(mint(nurse)), "X-Idempotency-Key": key}, json=body)
+        assert again.status_code == 201 and again.json() == {"medication_id": first, "created": False}
+        stop = client.post(MEDICATIONS, headers={**bearer(mint(nurse)), "X-Idempotency-Key": _new_key()}, json={**body, "supersedes_id": first, "valid_to": "2026-02-01T00:00:00Z", "valid_from": "2026-01-01T00:00:00Z"})
+        assert stop.status_code == 201
+        twice = client.post(MEDICATIONS, headers={**bearer(mint(nurse)), "X-Idempotency-Key": _new_key()}, json={**body, "supersedes_id": first})
+        assert twice.status_code == 409  # a row is superseded at most once
+        outside = client.post(MEDICATIONS, headers={**bearer(mint(nurse)), "X-Idempotency-Key": _new_key()}, json={**body, "code": "NOT-IN-LIST"})
+        assert outside.status_code == 422
+        listed = client.get(MEDICATIONS + f"?clinic_id={ids.clinic_a}&patient_id={patient}", headers=bearer(mint(nurse)))
+        assert listed.status_code == 200 and [(m["superseded"], m["verified"]) for m in listed.json()["medications"]] == [(False, True), (True, True)]
+    finally:
+        client.app.dependency_overrides.pop(app_module.medication_codes, None)
+    audits = _run(_fetch("select details from audit.log where action = 'medication.record' and resource_id = $1", first))
+    assert len(audits) == 1 and set(without_scope(audits[0]["details"])) == {"verified", "supersedes"}  # ids and flags only
 
 def test_with_the_task_settings_unset_the_revoke_is_recorded_and_says_no_task_was_raised(client, ids):
     patient = new_confirmed_patient(ids)

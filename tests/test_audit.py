@@ -170,7 +170,7 @@ async def test_each_backfill_route_audits_through_the_one_helper_after_the_step_
 
 CONSOLE_ROUTES = {"acknowledge_alert": "alert.acknowledge"}
 PRODUCER_ROUTES = {
-    "set_autonomy": ("autonomy.set", "set_mode"), "create_care_plan": ("care_plan.create", "create_plan"), "start_visit_readiness": ("readiness.start", "start"), "propose_autonomous_mode": ("autonomy.propose", "propose_autonomous"), "reply_visit_readiness": ("readiness.reply", "reply"), "record_result": ("result.record", "record_result"), "confirm_care_plan": ("care_plan.confirm", "confirm"), "create_care_episode": ("care_gap.episode_create", "create_episode"), "record_rule_done": ("care_gap.rule_done", "record_done"),
+    "set_autonomy": ("autonomy.set", "set_mode"), "create_care_plan": ("care_plan.create", "create_plan"), "start_visit_readiness": ("readiness.start", "start"), "propose_autonomous_mode": ("autonomy.propose", "propose_autonomous"), "reply_visit_readiness": ("readiness.reply", "reply"), "record_result": ("result.record", "record_result"), "record_medication": ("medication.record", "record_medication"), "confirm_care_plan": ("care_plan.confirm", "confirm"), "create_care_episode": ("care_gap.episode_create", "create_episode"), "record_rule_done": ("care_gap.rule_done", "record_done"),
     "recheck_care_sample": ("care_gap.sample_recheck", "recheck_sample"),
 }  # (migration 0048)
 CARE_GAP_ROUTES = {"record_barrier": ("care_gap.barrier_record", "record_barrier"), "resolve_barrier": ("care_gap.barrier_resolve", "resolve_barrier")}

@@ -77,6 +77,7 @@ from careflow import (
     demo_phase4,
     identity,
     learning_labels,
+    medications_sql,
     metrics_catalog,
     mpi,
     notes_sql,
@@ -4432,6 +4433,90 @@ async def record_result(body: ResultIn, idempotency_key: IdempotencyKey, request
     return ResultOut(result_id=result_id, created=created, wake_queued=wake_queued)
 
 
+# ---- medications (migration 0074; BUILD-SPEC.md 9.5): append-only statements of a code, a verified flag and times. MECHANISM ONLY: no dose or free text; the vocabulary is the required setting CAREFLOW_MEDICATION_CODES (503 until set) ----------
+
+staff_medications = APIRouter(prefix="/v1/staff/medications", tags=["staff medications"])
+MEDICATION_ROLES = ("nurse", "doctor")
+
+
+def medication_codes() -> frozenset[str] | None:
+    return medications_sql.allowed_codes()
+
+
+class MedicationIn(_Body):
+    clinic_id: uuid.UUID
+    patient_id: uuid.UUID
+    code: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$")
+    verified: bool
+    valid_from: datetime
+    valid_to: datetime | None = None
+    supersedes_id: uuid.UUID | None = None  # a correction, or a stop (the same code with a valid_to), names the row it replaces
+
+
+class MedicationOut(_Out):
+    medication_id: uuid.UUID
+    created: bool
+
+
+class MedicationRowOut(_Out):
+    medication_id: uuid.UUID
+    code: str
+    verified: bool
+    valid_from: datetime
+    valid_to: datetime | None
+    recorded_at: datetime
+    supersedes_id: uuid.UUID | None
+    superseded: bool
+
+
+class MedicationList(_Out):
+    medications: list[MedicationRowOut]
+
+
+@staff_medications.post("", response_model=MedicationOut, status_code=201)
+async def record_medication(
+    body: MedicationIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), codes: frozenset[str] | None = Depends(medication_codes),
+) -> MedicationOut:
+    """Record a medication statement (a code from the clinic's vocabulary, a verified flag, times) for a patient of the clinic. Append-only: a correction or a stop is a new row naming the one it supersedes. Idempotent on the key.
+    404 if the clinic or patient is not visible, 403 unless you are a nurse or doctor there, 409 if the row is superseded already or the key belongs to another row, 422 for a code outside the clinic's vocabulary or bad times, 503 until the clinic's vocabulary setting exists."""
+    origin = await _console_clinic(conn, body.clinic_id, MEDICATION_ROLES)
+    if codes is None:
+        raise HTTPException(status_code=503, detail="medications are unavailable: not configured")
+    if body.code not in codes or (body.valid_to is not None and body.valid_to <= body.valid_from):
+        raise HTTPException(status_code=422, detail="request rejected")
+    actor = uuid.UUID(claims["sub"])
+    try:
+        medication_id, created = await medications_sql.record_medication(
+            conn, clinic_id=body.clinic_id, origin=origin, patient_id=body.patient_id, code=body.code, verified=body.verified, valid_from=body.valid_from, valid_to=body.valid_to,
+            supersedes_id=body.supersedes_id, recorded_by=actor, idempotency_key=f"medication:{idempotency_key}",
+        )
+    except medications_sql.Refused:
+        raise HTTPException(status_code=409, detail="this medication statement was refused") from None
+    except DBAPIError as exc:
+        if care_gap_sql.sqlstate(exc) == "42501":
+            raise HTTPException(status_code=403, detail="your role may not do this") from None
+        raise
+    if created:
+        await write_audit(
+            conn, clinic_id=body.clinic_id, origin=origin, actor_id=actor, actor_role=await _acting_role(conn, claims, body.clinic_id, MEDICATION_ROLES), action="medication.record", resource_type="medication",
+            resource_id=medication_id, details={"verified": body.verified, "supersedes": body.supersedes_id is not None}, idempotency_key=f"audit:medication-record:{medication_id}",
+        )
+    return MedicationOut(medication_id=medication_id, created=created)
+
+
+@staff_medications.get("", response_model=MedicationList)
+async def list_medications(clinic_id: uuid.UUID, patient_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 100) -> MedicationList:
+    """One patient's medication statements, newest first (code, flag, times, whether superseded). 404 if the clinic is not visible to you, 403 unless you are a nurse or doctor there. Read-only."""
+    await _console_clinic(conn, clinic_id, MEDICATION_ROLES)
+    rows = await medications_sql.list_for_patient(conn, clinic_id=clinic_id, patient_id=patient_id, limit=limit)
+    return MedicationList(
+        medications=[
+            MedicationRowOut(medication_id=r.id, code=r.code, verified=r.verified, valid_from=r.valid_from, valid_to=r.valid_to, recorded_at=r.recorded_at, supersedes_id=r.supersedes_id, superseded=r.superseded)
+            for r in rows
+        ]
+    )
+
+
 # ---- Portal claim resolution and consent notice publication (migration 0051; BUILD-SPEC.md 17.2, 20.1) --------------------------------------------------------------------------------------------------------
 #
 # A claim that found no single confirmed record becomes a pending request; a FRONT-DESK person of the clinic resolves it (audited by the database): approve binds the claimant's account to a CONFIRMED, unbound
@@ -5515,6 +5600,7 @@ def create_app(
     app.include_router(staff_portal_claims)
     app.include_router(staff_care_plans)
     app.include_router(staff_results)
+    app.include_router(staff_medications)
     app.include_router(staff_break_glass)
     app.include_router(portal_rights)
     app.include_router(staff_grievances)
@@ -5522,7 +5608,7 @@ def create_app(
     app.include_router(staff_notes)
     app.include_router(health)
     app.include_router(public_config)
-    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, portal, staff_voice, staff_care_plans, staff_results, staff_portal_claims, staff_visits, staff_break_glass, portal_rights, staff_grievances, staff_recovery, staff_notes])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
+    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, portal, staff_voice, staff_care_plans, staff_results, staff_medications, staff_portal_claims, staff_visits, staff_break_glass, portal_rights, staff_grievances, staff_recovery, staff_notes])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
     return app
 
 

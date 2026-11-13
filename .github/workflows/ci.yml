@@ -254,6 +254,8 @@ jobs:
               tests/test_retention_report_db_live.py
               tests/test_rule_approval_db_live.py
               tests/test_front_desk_supervisor_db_live.py
+              tests/test_medications_db_live.py
+              tests/test_session_spend_db_live.py
           - shard: 8  # PART 3 of 3 of the header dimension, plus the Phase 11 database files (migrations 0047 to 0050)
             matrix_part: "3/4"
             files: >-
