@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { CLINIC_A, json } from './helpers/fakes';
+import { ACCOUNT_ID, CLINIC_A, json } from './helpers/fakes';
 import { ID, LEAK, fail, list, openConsole, writes, type Routes } from './helpers/console';
 import { urgentFirst } from '../src/staff/pages/TasksPage';
 
@@ -193,5 +193,21 @@ describe('task detail', () => {
     const c = await openConsole({ hash: '/tasks/12345' });
     expect(screen.getByRole('heading', { level: 1, name: 'Not found' })).toBeInTheDocument();
     expect(c.calls.map((x) => x.path)).toEqual(['/v1/iam/me']);
+  });
+});
+
+// Live pass 2026-11-13: only the person who acknowledged a task can resolve it; another person got 409 eight times. The console no longer offers it.
+describe('resolve on a task held by someone else', () => {
+  const OTHER = '11111111-2222-4333-8444-555555555555';
+  it('offers no Resolve, and says why, when another person acknowledged the task', async () => {
+    await openConsole({ role: 'nurse', hash: `/tasks/${ID.task}`, routes: [detailRoute({ kind: 'referral_hold', assigned_role: 'nurse', status: 'acknowledged', acknowledged_by: OTHER, acknowledged_at: '2026-10-30T05:30:00Z' })] });
+    expect(await screen.findByText(/Someone else is holding this task/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Resolve' })).toBeNull();
+  });
+
+  it('still offers Resolve to the person who acknowledged it', async () => {
+    await openConsole({ role: 'nurse', hash: `/tasks/${ID.task}`, routes: [detailRoute({ kind: 'referral_hold', assigned_role: 'nurse', status: 'acknowledged', acknowledged_by: ACCOUNT_ID, acknowledged_at: '2026-10-30T05:30:00Z' })] });
+    expect(await screen.findByRole('button', { name: 'Resolve' })).toBeInTheDocument();
+    expect(screen.queryByText(/Someone else is holding this task/)).toBeNull();
   });
 });

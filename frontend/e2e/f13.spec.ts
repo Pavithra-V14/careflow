@@ -39,7 +39,7 @@ for (const lang of LANGS) {
 
   test(`the Run button on a referral, its confirmation and its result [${lang}]`, async ({ page }) => {
     await openConsole(page, 'nurse', lang);
-    await go(page, `#/referrals/${ID.doc}`, /\S/);
+    await go(page, `#/referrals/${ID.docNew}`, /\S/);
     await page.getByRole('button', { name: text(lang, 'Run the referral', 'பரிந்துரையை இயக்கு') }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
     await sweep(page, 'f13-run-dialog', lang);

@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-1436 of 1436 strings are unreviewed.
+1438 of 1438 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -1180,6 +1180,7 @@ Terms standardised: proposal, resolve / resolved.
 | `referrals.noHolds` | No holds. | நிறுத்தங்கள் இல்லை. | minor drift |
 | `referrals.noProposal` | There is no proposal for this referral. | இந்தப் பரிந்துரைக்கு முன்மொழிவு இல்லை. | ok |
 | `referrals.notDecided` | Not decided yet | இன்னும் முடிவு செய்யப்படவில்லை | ok |
+| `referrals.notReady` | The decision is offered only when the proposal can be shown. If this referral was only just run, wait a moment and reload the page. | முன்மொழிவைக் காட்ட முடிந்தால் மட்டுமே முடிவு வழங்கப்படும். இந்தப் பரிந்துரை இப்போதுதான் இயக்கப்பட்டிருந்தால், சிறிது நேரம் காத்திருந்து பக்கத்தை மீண்டும் ஏற்றவும். | ok |
 | `referrals.open` | Open referral | பரிந்துரையைத் திற | ok |
 | `referrals.proposal` | Triage proposal | வகைப்படுத்தல் முன்மொழிவு | corrected after AI review (term standardised); blind re-check: minor-drift |
 | `referrals.proposalAbstained` | Abstained | முன்மொழிவு அளிக்கவில்லை | corrected after AI review (meaning problem); blind re-check: minor-drift |
@@ -1469,6 +1470,7 @@ Terms standardised: proposal, resolve / resolved.
 | `tasks.urgent` | Urgent | அவசரம் | ok |
 | `tasks.urgentNote` | Shown first because of its kind or priority. | வகை அல்லது முன்னுரிமை காரணமாக முதலில் காட்டப்படுகிறது. | ok |
 | `tasks.you` | You | நீங்கள் | ok |
+| `tasksHeld.byOther` | Someone else is holding this task. Only the person who acknowledged it can close it. | இந்தப் பணியை வேறொருவர் வைத்திருக்கிறார். அதை ஏற்றுக்கொண்டவர் மட்டுமே இதை மூட முடியும். | ok |
 | `time.zoneNote` | Times are in the clinic time zone: {{zone}}. | நேரங்கள் மருத்துவமனையின் நேர மண்டலத்தில் உள்ளன: {{zone}}. | ok |
 | `time.zoneNotePlaceholder` | Times are in the clinic time zone: {{zone}} (demo placeholder: the clinic has not set one). | நேரங்கள் மருத்துவமனையின் நேர மண்டலத்தில் உள்ளன: {{zone}} (டெமோ இடஒதுக்கீடு: மருத்துவமனை ஒன்றை அமைக்கவில்லை). | ok |
 | `upload.another` | Upload another | மற்றொன்றைப் பதிவேற்று | ok |

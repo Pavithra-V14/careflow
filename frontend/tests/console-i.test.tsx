@@ -156,10 +156,12 @@ describe('Run on the referral detail', () => {
   const detail = { clinic_id: CLINIC_A, content_type: 'application/pdf', created_at: '2026-10-30T05:00:00Z', decided: false, document_id: ID.doc, holds: [], open_holds: 0, proposal: null, proposal_id: null, proposal_visible: false, registered_by: ID.user, run_state: 'received', size_bytes: 2048 };
   const open: Routes[number] = ['get', `/v1/staff/referrals/${ID.doc}`, () => json(detail)];
   const runPath = `/v1/staff/referrals/${ID.doc}/run`;
+  // Nurse and doctor are offered Run only when the reviewer view says there is no proposal (404). Front desk cannot read it.
+  const noProposal: Routes[number] = ['get', `/v1/staff/referrals/${ID.doc}/review-view`, () => fail(404)];
 
   it.each(['front_desk', 'nurse', 'doctor'])('is offered to %s, asks first, queues once with a key', async (role) => {
     const user = userEvent.setup();
-    const { calls } = await openConsole({ role, hash: `/referrals/${ID.doc}`, routes: [open, ['post', runPath, () => json({ job_id: ID.task, replayed: false })]] });
+    const { calls } = await openConsole({ role, hash: `/referrals/${ID.doc}`, routes: [open, noProposal, ['post', runPath, () => json({ job_id: ID.task, replayed: false })]] });
     await user.click(await screen.findByRole('button', { name: 'Run the referral' }));
     expect(writes(calls)).toHaveLength(0);
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Run the referral' }));
@@ -181,6 +183,34 @@ describe('Run on the referral detail', () => {
     expect(await screen.findByText(/Runs cannot be started yet/)).toBeInTheDocument();
     expect(screen.queryByText(LEAK)).toBeNull();
     b.unmount();
+  });
+
+  it.each(['nurse', 'doctor'])('is NOT offered to %s once the reviewer view shows a proposal (Run does nothing there)', async (role) => {
+    const view = { alternatives: [], confidence: null, engine: null, evidence: [], kind: 'triage_proposal', on_approve: 'a', on_edit: 'e', on_reject: 'r', proposal: { abstained: false, mode: 'shadow', candidate_count: 1 }, reason_codes: [], task_id: ID.task, triggering_rule: null };
+    const { calls } = await openConsole({ role, hash: `/referrals/${ID.doc}`, routes: [open, ['get', `/v1/staff/referrals/${ID.doc}/review-view`, () => json(view)]] });
+    await screen.findByText('Registered by');
+    await waitFor(() => expect(calls.some((c) => c.path.endsWith('/review-view'))).toBe(true));
+    await new Promise((r) => setTimeout(r, 100)); // let the answer land: the button must stay away, not merely not have arrived yet
+    expect(screen.queryByRole('button', { name: 'Run the referral' })).toBeNull();
+  });
+
+  it('does not carry a message or form state from one referral to the next (regression, live pass 2026-11-13)', async () => {
+    const user = userEvent.setup();
+    const other: Routes[number] = ['get', `/v1/staff/referrals/${ID.doc2}`, () => json({ ...detail, document_id: ID.doc2 })];
+    await openConsole({ role: 'front_desk', hash: `/referrals/${ID.doc}`, routes: [open, other, ['post', runPath, () => json({ job_id: ID.task, replayed: false })]] });
+    // Visit both first, so each is cached: that is when the first one's state used to survive the move (a cached page does not reload).
+    await screen.findByText(ID.doc);
+    window.location.hash = `#/referrals/${ID.doc2}`;
+    await screen.findByText(ID.doc2);
+    window.location.hash = `#/referrals/${ID.doc}`;
+    await screen.findByText(ID.doc);
+    await user.click(await screen.findByRole('button', { name: 'Run the referral' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Run the referral' }));
+    expect(await screen.findByText(/The run was queued/)).toBeInTheDocument();
+    window.location.hash = `#/referrals/${ID.doc2}`;
+    await screen.findByText(ID.doc2);
+    await waitFor(() => expect(screen.queryByText(/The run was queued/)).toBeNull());
+    expect(await screen.findByRole('button', { name: 'Run the referral' })).toBeInTheDocument();
   });
 
   it('is not offered to an admin', async () => {

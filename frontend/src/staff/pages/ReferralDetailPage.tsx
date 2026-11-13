@@ -18,8 +18,9 @@ import { formatNumber } from '../../shared/i18n/format';
 
 export function ReferralDetailPage() {
   const { documentId = '' } = useParams();
+  // Keyed by id: moving from one referral to another must not carry the first one's messages or form state over (live pass 2026-11-13).
   // A malformed id is "not found" without asking the server.
-  return UUID.test(documentId) ? <Detail documentId={documentId} /> : <NotFoundPage />;
+  return UUID.test(documentId) ? <Detail key={documentId} documentId={documentId} /> : <NotFoundPage />;
 }
 
 function Detail({ documentId }: { documentId: string }) {
@@ -31,6 +32,14 @@ function Detail({ documentId }: { documentId: string }) {
   // Kept here, not in the form: once recorded the referral reads as decided and the form is no longer rendered.
   const [recorded, setRecorded] = useState(false);
   const query = useApiQuery(['referral', documentId], () => unwrap(api.openReferral(documentId)));
+  // The same query ReviewerView uses (deduplicated). The decision is offered ONLY once the proposal can be read: a referral that has no
+  // run yet answers 404, and one whose run is not paused for review answers 409 on the decision (live pass, 2026-11-13).
+  const view = useApiQuery(['review-view', documentId], () => unwrap(api.reviewView(documentId)), hasRole(CAN_REVIEW_REFERRAL));
+  // "No proposal yet" is remembered: while the view reloads (after a Run, say) react-query briefly drops its error state, and the Run button
+  // and its "queued" message must not vanish with it. It is forgotten only once the view can be read.
+  const [noProposalYet, setNoProposalYet] = useState(false);
+  if (view.isError && view.error.kind === 'not_found' && !noProposalYet) setNoProposalYet(true);
+  if (view.isSuccess && noProposalYet) setNoProposalYet(false);
 
   return (
     <section aria-labelledby="referral-title">
@@ -52,7 +61,7 @@ function Detail({ documentId }: { documentId: string }) {
               </dd>
               <dt>{t('referrals.col.type')}</dt>
               <dd>
-                {TYPE_LABEL[r.content_type] ?? r.content_type} · {formatNumber(Math.max(1, Math.round(r.size_bytes / 1024)), lang)} KB
+                {TYPE_LABEL[r.content_type] ?? r.content_type} Â· {formatNumber(Math.max(1, Math.round(r.size_bytes / 1024)), lang)} KB
               </dd>
               <dt>{t('referrals.registeredBy')}</dt>
               <dd>
@@ -62,7 +71,10 @@ function Detail({ documentId }: { documentId: string }) {
               <dd>{word('referrals.runState', r.run_state)}</dd>
             </dl>
 
-            {hasRole(CAN_RUN_REFERRAL) && <ReferralRun documentId={documentId} />}
+            {/* Run does nothing on a referral that already has a run (backend answer, live pass 2026-11-13), so it is offered only when the
+                reviewer view says there is no proposal (404). A role that cannot read the reviewer view (front desk) cannot tell, so Run is
+                still offered there and the backend decides. While the view is loading nothing is offered. */}
+            {hasRole(CAN_RUN_REFERRAL) && (!hasRole(CAN_REVIEW_REFERRAL) || noProposalYet) && <ReferralRun documentId={documentId} />}
 
             <h2>{t('referrals.holds')}</h2>
             {r.holds.length === 0 ? (
@@ -76,7 +88,7 @@ function Detail({ documentId }: { documentId: string }) {
                     <Link to={`/tasks/${h.task_id}`}>
                       <ShortId id={h.task_id} />
                     </Link>{' '}
-                    · {t(`roles.${h.assigned_role}`, { defaultValue: h.assigned_role })} · <Badge tone={h.status === 'resolved' ? 'ok' : 'warn'}>{t(`tasks.status.${h.status}`)}</Badge>
+                    Â· {t(`roles.${h.assigned_role}`, { defaultValue: h.assigned_role })} Â· <Badge tone={h.status === 'resolved' ? 'ok' : 'warn'}>{t(`tasks.status.${h.status}`)}</Badge>
                   </li>
                 ))}
               </ul>
@@ -106,7 +118,7 @@ function Detail({ documentId }: { documentId: string }) {
                   <ul className="plain">
                     {r.proposal.candidates.map((c) => (
                       <li key={`${c.card_id}:${c.version}`}>
-                        {t('referrals.card')} <code>{c.card_id}</code> · {t('referrals.version')} {formatNumber(c.version, lang)}
+                        {t('referrals.card')} <code>{c.card_id}</code> Â· {t('referrals.version')} {formatNumber(c.version, lang)}
                       </li>
                     ))}
                   </ul>
@@ -126,8 +138,12 @@ function Detail({ documentId }: { documentId: string }) {
               <p role="status" className="state state-empty">
                 {t('referrals.review.decidedNote')}
               </p>
-            ) : (
+            ) : view.isSuccess ? (
               <ReferralReview documentId={documentId} onDone={() => setRecorded(true)} />
+            ) : view.isPending ? null : (
+              <p role="status" className="state state-empty">
+                {t('referrals.notReady')}
+              </p>
             ))}
           </>
         )}

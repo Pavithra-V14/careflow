@@ -81,7 +81,9 @@
       "rateLimited": "Too many records opened in a short time. Wait a moment and try again."
     }
   },
+  "tasksHeld": { "byOther": "Someone else is holding this task. Only the person who acknowledged it can close it." },
   "referrals": {
+    "notReady": "The decision is offered only when the proposal can be shown. If this referral was only just run, wait a moment and reload the page.",
     "run": {
       "button": "Run the referral",
       "title": "Run this referral?",

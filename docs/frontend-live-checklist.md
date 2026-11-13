@@ -160,7 +160,7 @@ no workflow can start it.
 | Holds | `GET /v1/staff/scheduling/holds?status=` | `status` (default active), optional `clinic_id` | 200; 403; 404 clinic not readable | status words |
 | Release a hold | `POST /v1/staff/scheduling/holds/{hold_id}/release` | key, no body | 200; 409 (booked or expired, shown calmly); 403 | 409 wording |
 | Slots | `GET /v1/staff/scheduling/slots` | optional `clinic_id`, `provider_id`, `location_id` | 200; 404 clinic not readable; 403/5xx fixed messages | `status` words (open, held, ...); `hold_expires_at` null when open |
-| Hold a slot | `POST /v1/staff/scheduling/slots/{slot_id}/hold` | key, `duration_minutes`, optional `patient_id` | 200; 409 "changed in the meantime" | not run live yet: a write |
+| Hold a slot | `POST /v1/staff/scheduling/slots/{slot_id}/hold` | key, `duration_minutes`, optional `patient_id` | 200; 409 "changed in the meantime" | run live 2026-11-13 (front desk, synthetic patient, 200). "Minutes to hold" has NO default: type a number, the Hold button stays disabled until you do. |
 | Book a slot | `POST /v1/staff/scheduling/slots/{slot_id}/book` | key, `patient_id` | 200; 409 | not run live yet: a write |
 | Add a slot | `POST /v1/staff/scheduling/slots` | key, ids, ISO times | 200; 409 overlap; 422 bad range | not run live yet: a write |
 | Bookings | `GET /v1/staff/scheduling/bookings` | optional `clinic_id` | 200; 404 clinic not readable | rows, `has_more` |
