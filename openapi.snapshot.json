@@ -7274,7 +7274,8 @@
             "enum": [
               "draft_unreviewed",
               "approved",
-              "retired"
+              "retired",
+              "withdrawn"
             ],
             "title": "Status",
             "type": "string"
@@ -7308,6 +7309,24 @@
           "decisions"
         ],
         "title": "RuleVersionOut",
+        "type": "object"
+      },
+      "RuleWithdrawOut": {
+        "additionalProperties": false,
+        "properties": {
+          "result": {
+            "enum": [
+              "withdrawn",
+              "not_draft"
+            ],
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "RuleWithdrawOut",
         "type": "object"
       },
       "RunOut": {
@@ -13008,6 +13027,99 @@
           }
         ],
         "summary": "Decide Red Flag Rule",
+        "tags": [
+          "staff console"
+        ]
+      }
+    },
+    "/v1/staff/console/red-flag-rules/{rule_id}/withdraw": {
+      "post": {
+        "description": "Withdraw a DRAFT red-flag rule version as a doctor of its clinic with a verified second factor (checked again by the database). Only a draft: an approved version is never touched here (answer `not_draft`), and a withdrawn draft can never be approved. Audited by the database; a replay by the same doctor returns `withdrawn`. 404 if you cannot see the version, 403 unless you are a doctor of its clinic.",
+        "operationId": "withdraw_red_flag_draft_v1_staff_console_red_flag_rules__rule_id__withdraw_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Rule Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 173,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleWithdrawOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Withdraw Red Flag Draft",
         "tags": [
           "staff console"
         ]

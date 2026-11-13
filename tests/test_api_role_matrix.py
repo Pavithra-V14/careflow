@@ -3343,6 +3343,18 @@ def rule_author_cases(ids) -> list[tuple]:
     ]
     return cases + _unauthenticated(ids, RULES, body())
 
+RULE_WITHDRAW = RULES + "/{rule_id}/withdraw"
+
+
+def rule_withdraw_cases(ids) -> list[tuple]:
+    path = lambda: RULE_WITHDRAW.format(rule_id=uuid.uuid4())
+    cases = [_case(ids, f"{p} cannot withdraw a rule version that does not exist", p, 404, path(), key=_new_key(), body=_fixed(404)) for p in ids.people]
+    cases += [
+        _case(ids, "missing X-Idempotency-Key is rejected", "doctor_a", 422, path(), key=None, body=_fixed(422)),
+        _case(ids, "a rule id that is not a uuid is rejected", "doctor_a", 422, RULES + "/nope/withdraw", key=_new_key(), body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)
+
 # ---- break-glass access (migration 0058; BUILD-SPEC.md 18.4) ------------------------------------------------------------------------------------------------------------------------------------------------
 # Front desk, nurse and doctor open a time-limited grant for one patient (a reason code from the clinic's owner-kept list); the holder reads that patient's messages (this world has no encryption keys, so the
 # read answers 503 after the grant is found; the decrypting path and the database behaviour are in tests/test_break_glass_db_live.py); an admin of the clinic who did not open it reviews. Opening writes
@@ -3772,6 +3784,7 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", RULES): rules_list_cases,
     ("POST", RULES): rule_author_cases,
     ("POST", RULE_DECISION): rule_decision_cases,
+    ("POST", RULE_WITHDRAW): rule_withdraw_cases,
     ("POST", MEDICATIONS): medication_record_cases,
     ("GET", MEDICATIONS): medication_list_cases,
     ("GET", AUTONOMY): autonomy_get_cases,

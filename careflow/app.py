@@ -91,6 +91,7 @@ from careflow import (
     review_tasks,
     rights_sql,
     rule_approval_sql,
+    schema_check,
     visit_readiness_content,
     visit_readiness_sql,
     voice_sql,
@@ -3865,7 +3866,7 @@ class RuleVersionOut(_Out):
     rule_id: uuid.UUID
     rule_code: str
     version_id: int
-    status: Literal["draft_unreviewed", "approved", "retired"]
+    status: Literal["draft_unreviewed", "approved", "retired", "withdrawn"]
     origin: Literal["live", "test", "eval", "canary"]
     phrases: list[str]
     patterns: list[str]
@@ -3928,6 +3929,25 @@ async def author_red_flag_rule(body: RuleDraftIn, idempotency_key: IdempotencyKe
     except rule_approval_sql.KeyConflict:
         raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request") from None
     return RuleDraftOut(rule_id=rule_id, status="draft_unreviewed")
+
+
+class RuleWithdrawOut(_Out):
+    result: Literal["withdrawn", "not_draft"]
+
+
+@staff_console.post("/red-flag-rules/{rule_id}/withdraw", response_model=RuleWithdrawOut)
+async def withdraw_red_flag_draft(rule_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> RuleWithdrawOut:
+    """Withdraw a DRAFT red-flag rule version as a doctor of its clinic with a verified second factor (checked again by the database). Only a draft: an approved version is never touched here (answer `not_draft`), and a withdrawn draft can never be approved. Audited by the database; a replay by the same doctor returns `withdrawn`. 404 if you cannot see the version, 403 unless you are a doctor of its clinic."""
+    visible, clinic_id = await rule_approval_sql.rule_clinic(conn, rule_id)
+    if not visible or clinic_id is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _clinic_role_held(conn, clinic_id, RULE_DECIDERS):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    try:
+        result = await rule_approval_sql.withdraw_draft(conn, rule_id=rule_id, idempotency_key=idempotency_key)
+    except rule_approval_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return RuleWithdrawOut(result=result)  # type: ignore[arg-type]
 
 
 @staff_console.post("/red-flag-rules/{rule_id}/decision", response_model=RuleDecisionOut)
@@ -5460,6 +5480,8 @@ def create_app(
         app.state.issuer = cfg.issuer
         app.state.jwks = jwks or JWKSClient(cfg.jwks_url)
         app.state.engine = engine or make_app_engine(cfg.database_url_app, pool_size=5, max_overflow=5, pool_pre_ping=True)
+        if engine is None:  # a real engine built from the settings (tests inject their own): refuse to start on a database that has not applied the migrations this code needs
+            await schema_check.check(app.state.engine)
         app.state.vault = vault if vault is not None else _load_vault()
         app.state.active_key_version = cfg.active_key_version
         app.state.step_up_max_age_seconds = cfg.step_up_max_age_seconds

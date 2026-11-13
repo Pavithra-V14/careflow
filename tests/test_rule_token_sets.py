@@ -55,3 +55,12 @@ def test_the_stream_evaluator_finds_a_set_completed_across_chunks():
     stream = rules.StreamEvaluator(ruleset([["zzalpha", "zzbeta"]]))
     assert stream.feed("zzal").outcome != "red_flag" and stream.feed("pha ").outcome != "red_flag"
     assert stream.feed("and zzbeta").outcome == "red_flag" and stream.red_flag_seen
+
+
+def test_a_withdrawn_draft_neither_counts_nor_switches_off_an_older_approved_version():
+    old = {"id": uuid.uuid4(), "clinic_id": None, "rule_code": "zz_keep", "version_id": 1, "status": "approved", "phrases": ["zzone"], "patterns": [], "token_sets": []}
+    newer = {**old, "id": uuid.uuid4(), "version_id": 2, "status": "withdrawn", "phrases": ["zztwo"]}
+    chosen, passed = rules.select_active_versions([old, newer], "clinical")
+    assert [r["version_id"] for r in chosen] == [1] and passed == 0  # v1 stays in force; the withdrawn row is not even counted as a passed-over draft
+    retired = {**newer, "status": "retired"}
+    assert rules.select_active_versions([old, retired], "clinical")[0] == []  # (a RETIRED newest version does withdraw the rule: the reason a draft is withdrawn, not retired)

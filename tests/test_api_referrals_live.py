@@ -136,7 +136,7 @@ async def world():
     outer = await conn.begin()
     try:
         n = (await conn.execute(text(
-            "select count(*) from kb.red_flag_rules where origin = 'test' and status = 'approved' and (cardinality(phrases) > 0 or cardinality(patterns) > 0)"
+            "select count(*) from kb.red_flag_rules where origin = 'test' and status = 'approved' and (cardinality(phrases) > 0 or cardinality(patterns) > 0 or jsonb_array_length(token_sets) > 0)"
         ))).scalar_one()
         if n:
             pytest.fail(f"This suite assumes the database holds NO committed approved origin='test' red-flag rule with criteria (it inserts its own inside a rolled-back transaction); found {n}. Nothing was deleted.", pytrace=False)

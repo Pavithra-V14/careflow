@@ -62,7 +62,7 @@ async def _conn():
     try:
         if not (await conn.execute(text("select to_regclass('kb.red_flag_rules') is null"))).scalar_one():
             n = (await conn.execute(text(
-                "select count(*) from kb.red_flag_rules where origin = 'test' and status = 'approved' and (cardinality(phrases) > 0 or cardinality(patterns) > 0)"
+                "select count(*) from kb.red_flag_rules where origin = 'test' and status = 'approved' and (cardinality(phrases) > 0 or cardinality(patterns) > 0 or jsonb_array_length(token_sets) > 0)"
             ))).scalar_one()
             if n:  # read-only precondition; nothing is deleted
                 pytest.fail(f"This suite assumes the database holds NO committed approved origin='test' red-flag rule with criteria (it inserts its own inside a rolled-back transaction); found {n}. Such a rule changes what screenings and rule-set hashes the tests expect. Nothing was deleted: an engineer with the migrator credential must retire or remove those rules deliberately, then re-run.", pytrace=False)

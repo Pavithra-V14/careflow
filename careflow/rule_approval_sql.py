@@ -84,6 +84,17 @@ async def rule_clinic(conn: AsyncConnection, rule_id: uuid.UUID) -> tuple[bool, 
     return (False, None) if row is None else (True, row.clinic_id)
 
 
+async def withdraw_draft(conn: AsyncConnection, *, rule_id: uuid.UUID, idempotency_key: str) -> str:
+    """'withdrawn' or 'not_draft' (kb.withdraw_red_flag_draft, migration 0077). Raises Refused when the database refuses the caller."""
+    try:
+        async with conn.begin_nested():
+            return str((await conn.execute(text("select kb.withdraw_red_flag_draft(:r, :k)"), {"r": rule_id, "k": idempotency_key})).scalar())
+    except DBAPIError as exc:
+        if getattr(exc.orig, "sqlstate", None) == "42501":
+            raise Refused from None
+        raise
+
+
 class KeyConflict(Exception):
     """The idempotency key was used for a different draft."""
 
