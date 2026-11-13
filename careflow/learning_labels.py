@@ -7,6 +7,8 @@
 * AFTER-THE-FACT SAMPLING. About `CAREFLOW_AUTO_REVIEW_SAMPLE_RATE` (the spec says ~5%, a REQUIRED setting with no default) of auto-approved cases are pulled for a person to review afterwards, so the
   error rate of the automatic path is measured and not assumed. Unset means none are sampled and the report says so. The rate must be greater than 0 and at most 1.
 * Canary and test-origin decisions are never labels (they are not real cases).
+* A DEMO PROFILE OR SYNTHETIC-ONLY DEPLOYMENT NEVER EXPORTS LABELS, whatever the origin tag says (`deployment_may_export_labels`): only profile `clinical` with the explicit data policy `phi_approved`
+  does. Unset or unrecognised is not permissive (owner decision 2026-11-13: the decisions of the live demo pass are never labels).
 """
 
 import hashlib
@@ -53,6 +55,11 @@ def pseudonym(account_id: str, key: str) -> str:
     return hmac.new(key.encode(), account_id.encode(), hashlib.sha256).hexdigest()[:16]
 
 
+def deployment_may_export_labels(profile: str | None, data_policy: str | None) -> bool:
+    """True only for profile `clinical` AND data policy `phi_approved`, both stated explicitly. A demo, a synthetic-only deployment, an unset or an unrecognised value: no labels."""
+    return (profile or "").strip().lower() == "clinical" and (data_policy or "").strip().lower() == "phi_approved"
+
+
 def key_from(environ: Mapping[str, str] | None = None) -> str | None:
     raw = (environ if environ is not None else os.environ).get("CAREFLOW_LABEL_PSEUDONYM_KEY")
     return raw if raw and len(raw) >= 16 else None
@@ -70,10 +77,12 @@ def label_from(decision: Decision, key: str | None) -> Label:
     return Label(decision.proposal_id, decision.decision, decision.reason_code, pseudonym(decision.decided_by, key))
 
 
-def export(decisions: Iterable[Decision], key: str | None) -> tuple[list[Label], int]:
-    """(labels, how many were skipped as not human or not live). Without a key nothing is exported at all."""
+def export(decisions: Iterable[Decision], key: str | None, *, profile: str | None, data_policy: str | None) -> tuple[list[Label], int]:
+    """(labels, how many were skipped as not human or not live). Without a key nothing is exported at all, and nothing is exported from a demo or synthetic-only deployment."""
     if key is None:
         raise LabelError("the pseudonym key is not configured")
+    if not deployment_may_export_labels(profile, data_policy):
+        raise LabelError("no labels are exported from a demo or synthetic-only deployment")
     labels: list[Label] = []
     skipped = 0
     for d in decisions:

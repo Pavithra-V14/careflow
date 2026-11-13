@@ -184,12 +184,29 @@ def test_only_a_live_human_decision_is_a_label_and_the_reviewer_is_pseudonymized
             learning_labels.label_from(bad, key)
     with pytest.raises(learning_labels.AutoApprovedNotALabel):
         learning_labels.label_from(learning_labels.Decision("p", "approve", None, "u", "live", automatic=True), key)
-    labels, skipped = learning_labels.export([good, learning_labels.Decision("p", "approve", None, "u", "live", automatic=True)], key)
+    labels, skipped = learning_labels.export([good, learning_labels.Decision("p", "approve", None, "u", "live", automatic=True)], key, profile="clinical", data_policy="phi_approved")
     assert len(labels) == 1 and skipped == 1
     with pytest.raises(learning_labels.LabelError):
-        learning_labels.export([good], None)
+        learning_labels.export([good], None, profile="clinical", data_policy="phi_approved")
     assert "u" not in str(labels[0]) or "decided_by" not in str(labels[0])
     assert learning_labels.key_from({}) is None and learning_labels.key_from({"CAREFLOW_LABEL_PSEUDONYM_KEY": "short"}) is None
+
+
+def test_no_label_leaves_a_demo_or_synthetic_only_deployment_and_the_live_pass_decisions_are_never_labels():
+    """Owner decision 2026-11-13: the Approve on 8524ed0e and the Reject (reason other) on 16e5a640 were made in the demo profile on a test-origin clinic with synthetic data. Both are refused
+    as labels on origin, and even a live-tagged decision is refused when the deployment is a demo or synthetic-only (or either setting is unset or unrecognised)."""
+    key = "k" * 20
+    live_pass = [learning_labels.Decision("8524ed0e", "approve", None, "11111111-1111-1111-1111-111111111111", "test"), learning_labels.Decision("16e5a640", "reject", "other", "11111111-1111-1111-1111-111111111111", "test")]
+    for d in live_pass:
+        with pytest.raises(learning_labels.LabelError):
+            learning_labels.label_from(d, key)
+    assert learning_labels.export(live_pass, key, profile="clinical", data_policy="phi_approved") == ([], 2)  # even a real deployment skips test-origin decisions
+    live_tagged = learning_labels.Decision("p", "approve", None, "u", "live")
+    for profile, policy in (("demo", "synthetic_only"), ("demo", "phi_approved"), ("clinical", "synthetic_only"), ("clinical", None), (None, "phi_approved"), ("clinical", "anything"), ("", "")):
+        assert learning_labels.deployment_may_export_labels(profile, policy) is False
+        with pytest.raises(learning_labels.LabelError, match="demo or synthetic-only"):
+            learning_labels.export([live_tagged], key, profile=profile, data_policy=policy)
+    assert learning_labels.deployment_may_export_labels("clinical", "phi_approved") is True
 
 
 def test_the_after_the_fact_sample_is_about_the_configured_share_and_none_when_unset():
