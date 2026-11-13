@@ -17,11 +17,11 @@
     "current": "Current",
     "superseded": "Replaced by a later row",
     "replaces": "Replaces",
-    "correct": "Correct or stop",
+    "correct": "Correct this entry",
     "recordTitle": "Record a medication statement?",
-    "correctTitle": "Correct or stop this medication statement?",
+    "correctTitle": "Correct this medication entry?",
     "recordBody": "This adds a new row to the patient's record. It cannot be edited afterwards; a later change is another new row.",
-    "correctBody": "This adds a new row that replaces the row below. The old row stays on record, marked as replaced.",
+    "correctBody": "Use this when the entry below was recorded wrongly. It adds a new row that replaces the row below. The old row stays on record, marked as replaced.",
     "code": "Code",
     "codeHint": "A code from this clinic's own list. Letters, numbers, dots, dashes and underscores only.",
     "verified": "Verified",
@@ -32,6 +32,13 @@
     "done": "The medication statement was recorded.",
     "notSetUp": "This clinic's list of medication codes is not set up yet. Nothing was recorded.",
     "conflict": "That row was already replaced, or this request clashes with an earlier one. Reload and try again.",
-    "invalid": "The code is not in this clinic's list, or the times are not valid. Nothing was recorded."
+    "invalid": "The code is not in this clinic's list, or the times are not valid. Nothing was recorded.",
+    "stop": "Stop this medicine",
+    "stopTitle": "Record that this medicine was stopped?",
+    "stopBody": "This adds a new row with an end time for the medicine below. The old row stays on record, marked as replaced. Nothing else is changed.",
+    "stopSave": "Record stop",
+    "stoppedAt": "Stopped at",
+    "stoppedAtHint": "The time the medicine was stopped. It is required.",
+    "stopDone": "The stop was recorded."
   }
 }
