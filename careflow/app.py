@@ -145,6 +145,7 @@ from careflow.crypto import CryptoError, DemographicVault
 from careflow.db import make_app_engine, set_request_claims
 from careflow.dead_letters import raise_dead_letter_tasks
 from careflow.decision import DecisionService
+from careflow.decision_info import proposal_info
 from careflow.demo_phase3 import data_policy as _data_policy
 from careflow.demo_phase3 import (
     demo_allowed,
@@ -2182,6 +2183,8 @@ class ReviewViewOut(_Out):
     on_edit: str
     engine: str | None
     confidence: float | None
+    model_id: str | None
+    decision_rule: str | None
     triggering_rule: str | None
     reason_codes: list[str]
 
@@ -2203,10 +2206,11 @@ async def referral_review_view(document_id: uuid.UUID, request: Request, conn: T
     ).first()
     if p is None:
         raise HTTPException(status_code=404, detail="not found")
+    info = proposal_info(p.candidates)  # what a real decision left on the proposal (engine, model, confidence, rule; each alternative's probability rides on its candidate); None = not recorded
     view = build_reviewer_view(
-        task_id=str(p.review_task_id), kind=p.kind, origin=p.origin, candidates=p.candidates, abstained=p.abstained, mode=p.mode, reason_codes=request.app.state.reason_codes
+        task_id=str(p.review_task_id), kind=p.kind, origin=p.origin, candidates=p.candidates, abstained=p.abstained, mode=p.mode, engine=info["engine"], confidence=info["confidence"], reason_codes=request.app.state.reason_codes
     ).for_reviewer()
-    return ReviewViewOut(**{**view, "task_id": p.review_task_id})
+    return ReviewViewOut(**{**view, "task_id": p.review_task_id, "model_id": info["model_id"], "decision_rule": info["rule"]})
 
 
 async def _canary_check(conn: AsyncConnection, document_id: uuid.UUID, clinic_id: uuid.UUID, reviewer: uuid.UUID, decision: str) -> None:
@@ -5880,6 +5884,7 @@ class StaffPatientRequestOut(_Out):
     kind: Literal["erasure", "correction", "nominee"]
     field: Literal["name", "date_of_birth", "phone"] | None
     status: Literal["open", "acknowledged", "resolved", "declined"]
+    allowed_next: list[Literal["acknowledged", "resolved", "declined"]]  # the statuses the backend would accept next for this row (empty once resolved or declined)
     erasure_request_id: uuid.UUID | None
     created_at: datetime
 
@@ -5899,11 +5904,11 @@ class PatientRequestStatusOut(_Out):
 
 @patient_requests_staff.get("", response_model=StaffPatientRequestList)
 async def list_patient_requests(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 100) -> StaffPatientRequestList:
-    """The clinic's patient requests, oldest first (ids, a closed kind, the field NAME for a correction, status; no text). 404 if the clinic is not visible to you, 403 unless you are front desk there."""
+    """The clinic's patient requests, oldest first (ids, a closed kind, the field NAME for a correction, status, and `allowed_next`: the statuses the backend would accept next for that row, which only a front-desk person of the clinic may set; no text). 404 if the clinic is not visible to you, 403 unless you are front desk there."""
     await _console_clinic(conn, clinic_id, PATIENT_REQUEST_HANDLERS)
     rows = await portal_extras_sql.list_clinic_requests(conn, clinic_id, limit)
     return StaffPatientRequestList(
-        requests=[StaffPatientRequestOut(request_id=r.id, patient_id=r.patient_id, kind=r.kind, field=r.field, status=r.status, erasure_request_id=r.erasure_request_id, created_at=r.created_at) for r in rows]
+        requests=[StaffPatientRequestOut(request_id=r.id, patient_id=r.patient_id, kind=r.kind, field=r.field, status=r.status, allowed_next=portal_extras_sql.allowed_next(r.status), erasure_request_id=r.erasure_request_id, created_at=r.created_at) for r in rows]  # type: ignore[arg-type]
     )
 
 

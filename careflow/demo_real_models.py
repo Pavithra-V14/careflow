@@ -39,6 +39,7 @@ from careflow.decision import (
     DecisionService,
     InMemoryDecisionRecorder,
 )
+from careflow.decision_info import RULE_TOP_RANKED
 from careflow.demo_front_door import DemoTexts
 from careflow.extraction import ExtractionPipeline, PipelineTextSource
 from careflow.front_door_runner import FrontDoorComponents
@@ -66,7 +67,7 @@ MEMO: Final = 64
 _ATTEMPT_WORDS: Final = {
     "ok": "answered", "timeout": "timed out", "failed_transient": "provider error (retry-worthy)", "failed_permanent": "provider refused the request",
     "skipped_spend": "budget refused (a spend ceiling)", "skipped_breaker_open": "route paused after repeated failures", "skipped_no_adapter": "gate missing (no adapter built)",
-    "skipped_not_applicable": "route not applicable to this input",
+    "skipped_not_applicable": "route not applicable to this input", "answer_rejected": "answer rejected",
 }
 
 
@@ -88,6 +89,9 @@ def failure_reason(exc: BaseException) -> str:
                     runs[-1][1] += 1
                 else:
                     runs.append([outcome, 1])
+            if a.outcome == "answer_rejected" and a.detail:
+                parts.append(a.detail)  # the provider ANSWERED and our validation rejected it: the detail already says so (and why); it is not a provider error
+                continue
             words = [_ATTEMPT_WORDS.get(o, "failed") + (f" x{n}" if n > 1 else "") for o, n in runs]
             parts.append(", then ".join(words) + (f" [{a.detail}]" if a.detail else ""))
         return "; ".join(parts) or "no route was tried"
@@ -153,6 +157,8 @@ class DecisionTrace:
     engine: str | None = None
     seconds: float | None = None
     reason: str | None = None  # a fixed-words reason when the stage did not answer
+    probabilities: dict[str, float] | None = None  # each option's probability as the model gave it (option ids are the fictional card ids): metadata
+    model_id: str | None = None
 
 
 class DecisionRankedRetriever:
@@ -185,9 +191,16 @@ class DecisionRankedRetriever:
             self.last = DecisionTrace("unavailable", seconds=seconds, reason="the answer was not one of the options")  # an answer that is not one of the options is not an answer
             return found
         first = next(c for c in found.candidates if c.card_id == choice)
-        ordered: tuple[Candidate, ...] = (first, *(c for c in found.candidates if c is not first))
-        self.last = DecisionTrace("suggested", choice, result.value.confidence, result.value.engine, seconds)
-        return replace(found, candidates=ordered)
+        ordered = [first, *(c for c in found.candidates if c is not first)]
+        probs = result.value.probabilities
+        stamped: list[Candidate] = []
+        for rank, c in enumerate(ordered):  # the decision's fields ride on the candidates (closed fields only, careflow.decision_info): each one's probability; on the top one the engine, model, confidence and rule
+            extra: dict[str, object] = {"probability": probs[c.card_id]}
+            if rank == 0:
+                extra |= {"engine": result.value.engine, "model_id": result.model_id, "confidence": result.value.confidence, "rule": RULE_TOP_RANKED}
+            stamped.append(replace(c, extra=extra))
+        self.last = DecisionTrace("suggested", choice, result.value.confidence, result.value.engine, seconds, probabilities=dict(probs), model_id=result.model_id)
+        return replace(found, candidates=tuple(stamped))
 
 
 

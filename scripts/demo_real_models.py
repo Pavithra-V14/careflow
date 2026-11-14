@@ -268,7 +268,7 @@ async def run(env: dict[str, str], clinic: uuid.UUID, *, kind: str, flagged: boo
         trace = up.ranker.last if up.ranker is not None else None
         a, s = ledger.cost("decision")
         d_status, d_note = decision_stage(trace, status)
-        say(line("3 decision", mode_of(up.decision), d_status, trace.seconds if trace else None, f"${a:.6f} / ${s:.6f}", up.decision + ("; " + d_note if d_note else "") + (f"; suggested card {trace.chosen}, confidence {trace.confidence:.2f} (never calibrated)" if trace and trace.chosen else "")))
+        say(line("3 decision", mode_of(up.decision), d_status, trace.seconds if trace else None, f"${a:.6f} / ${s:.6f}", up.decision + ("; " + d_note if d_note else "") + (f"; suggested card {trace.chosen}, confidence {trace.confidence:.2f} (never calibrated); model {trace.model_id}; probabilities " + ", ".join(f"{k}={v:.2f}" for k, v in (trace.probabilities or {}).items()) + "; stored on the proposal for the review screen" if trace and trace.chosen else "")))
         say(line("run", "-", status, total, "", f"rules fired: {'YES' if fired else ('no' if 'rules' in events else 'NOT RUN')}"))
         if run_reasons(state):
             say(f"run reasons: {', '.join(run_reasons(state))}")

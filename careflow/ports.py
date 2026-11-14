@@ -33,6 +33,11 @@ class PermanentError(Exception):
     """A failure that retrying cannot fix (a refused request, a bad key). The gateway goes straight to the next route."""
 
 
+class AnswerRejected(PermanentError):
+    """The provider ANSWERED, and our own validation rejected the answer (malformed, an unlisted option, probabilities that do not add up, a choice that is not its own top option). Not a provider error: the gateway records
+    it as `answer_rejected`, and a person reviews the case. The message is fixed words plus, where useful, option ids and numbers (never the input text or a key)."""
+
+
 class RouteNotApplicable(Exception):
     """This engine cannot handle THIS input (an unsupported script, an over-long text). It is not a failure: the gateway skips the route
     without counting a model call or a breaker failure. An adapter that raises it must not have called its model."""

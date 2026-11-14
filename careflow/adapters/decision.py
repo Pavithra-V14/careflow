@@ -24,6 +24,7 @@ from typing import Final, Protocol
 from careflow.ports import (
     MAX_DECISION_OPTIONS,
     AdapterResult,
+    AnswerRejected,
     DataClass,
     DecisionRequest,
     DecisionResult,
@@ -44,22 +45,22 @@ MAX_LAYA_CHARS: Final = 2000  # a technical bound (the checkpoints read at most 
 
 def _validated(options: Sequence[str], probabilities: Mapping[str, float]) -> dict[str, float]:
     if set(probabilities) != set(options) or len(probabilities) != len(options):
-        raise PermanentError("the engine's probabilities do not cover exactly the offered options")
+        raise AnswerRejected("answer rejected: the probabilities do not cover exactly the offered options")
     out = {}
     for option in options:
         p = probabilities[option]
         if isinstance(p, bool) or not isinstance(p, int | float) or not math.isfinite(p) or p < 0 or p > 1:
-            raise PermanentError("the engine returned a probability outside 0..1")
+            raise AnswerRejected("answer rejected: a probability is outside 0 to 1")
         out[option] = float(p)
     if abs(sum(out.values()) - 1.0) > SUM_TOLERANCE:
-        raise PermanentError("the engine's probabilities do not sum to 1")
+        raise AnswerRejected("answer rejected: the probabilities do not add up to 1")
     return out
 
 
 def _decide_from(probs: dict[str, float], *, engine: str, calibrated: bool, route: str) -> DecisionResult:
     ranked = sorted(probs.items(), key=lambda kv: -kv[1])
     if len(ranked) > 1 and ranked[0][1] - ranked[1][1] <= TIE_TOLERANCE:
-        raise PermanentError("no unique top option")  # a tie is not a decision (unknown is not a value)
+        raise AnswerRejected("answer rejected: no unique top option")  # a tie is not a decision (unknown is not a value)
     choice, confidence = ranked[0]
     return DecisionResult(choice, probs, confidence, engine, calibrated, route)
 
@@ -174,7 +175,7 @@ class JevAdapter:
         reply = await self.client.decide(_to_jev_payload(request))
         probabilities = reply.get("probabilities") if isinstance(reply, Mapping) else None
         if not isinstance(probabilities, Mapping):
-            raise PermanentError("jev's reply has no probabilities")
+            raise AnswerRejected("answer rejected: the reply has no probabilities")
         probs = _validated(request.options, probabilities)  # type: ignore[arg-type]
         reported = reply.get("usage")  # a real client reports the tokens the provider counted; without it the estimate is HIGH (characters over 3, plus the fixed prompt and the reply cap): unknown is not cheap
         usage = Usage(len(request.text) // 3 + 400, 64)
@@ -182,7 +183,8 @@ class JevAdapter:
             used_in, used_out = reported.get("input_tokens"), reported.get("output_tokens")
             if isinstance(used_in, int) and isinstance(used_out, int) and not isinstance(used_in, bool) and not isinstance(used_out, bool) and used_in >= 0 and used_out >= 0:
                 usage = Usage(used_in, used_out)
-        return AdapterResult(_decide_from(probs, engine=self.name, calibrated=False, route="jev"), usage)
+        route = "jev+repair" if reply.get("repaired") is True else "jev"  # the route records that the answer was accepted only after the one repair request
+        return AdapterResult(_decide_from(probs, engine=self.name, calibrated=False, route=route), usage)
 
 
 # ---- the general LLM fallback ---------------------------------------------------------------------------------------------------------------
