@@ -34,6 +34,22 @@ const rows = keys.map((k) => ({ k, e: en[k] ?? '', t: ta[k] ?? '' }));
 const byKey = new Map(rows.map((r) => [r.k, r]));
 const ai = read('ta-ai-review.json');
 
+// ---- machine first pass (back-translation) ----------------------------------------------------------------------------------------
+// docs/approval-pack/tamil-machine-check.json (the counts and the fixes) and tamil-machine-check.tsv (key, grade, what looks wrong, suggested
+// fix). Written by an AI model from an independent back-translation of the Tamil, compared with the English afterwards. It is a first pass
+// only: not a native speaker, and it never marks a string reviewed.
+const mcMeta = JSON.parse(readFileSync(resolve(repo, 'docs/approval-pack/tamil-machine-check.json'), 'utf8'));
+const mcFlags = readFileSync(resolve(repo, 'docs/approval-pack/tamil-machine-check.tsv'), 'utf8')
+  .split('\n')
+  .filter(Boolean)
+  .map((l) => {
+    const [k, sev, why, fix] = l.split('\t');
+    return { k, sev, why, fix };
+  });
+const mcMissing = mcFlags.filter((f) => !rows.some((r) => r.k === f.k));
+if (mcMissing.length) throw new Error(`machine-check flags for keys that no longer exist: ${mcMissing.map((f) => f.k).join(', ')}`);
+const mcBy = new Map(mcFlags.map((f) => [f.k, f]));
+
 // ---- mechanical checks ------------------------------------------------------------------------------------------------------------
 const ph = (s) => (s.match(/\{\{\s*\w+\s*\}\}/g) ?? []).map((x) => x.replace(/\s/g, '')).sort().join(',');
 const phBad = rows.filter((r) => ph(r.e) !== ph(r.t));
@@ -111,10 +127,38 @@ const full = [
   '|---|---|---|---|---|',
   ...rows.map((r) => {
     const n = noteBy.get(r.k);
-    const ai2 = r.e === r.t ? 'kept in English by design' : [n ? `${n.sev}: ${n.text}` : 'no issue found', earlier(r.k)].filter(Boolean).join('; ');
+    const m = mcBy.get(r.k);
+    const ai2 = r.e === r.t ? 'kept in English by design' : [n ? `${n.sev}: ${n.text}` : 'no issue found', earlier(r.k), m ? `machine back-translation check: flagged ${m.sev} (Part 0)` : ''].filter(Boolean).join('; ');
     return `| \`${r.k}\` | ${esc(r.e)} | ${esc(r.t)} | ${esc(ai2)} | |`;
   }),
 ].join('\n');
+
+const mcRow = (f) => `| \`${f.k}\` | ${f.sev} | ${esc(byKey.get(f.k).e)} | ${esc(byKey.get(f.k).t)} | ${esc(f.why)} | ${esc(f.fix)} |`;
+const mcSection = `## Part 0. Machine first pass (back-translation)
+
+**Machine-checked on ${mcMeta.date}; NOT human-reviewed; the Tamil reader must still approve.** This is a first pass by an AI model, not a native speaker, and not a substitute for the human reviewer. No string was marked reviewed.
+
+How it was done: every Tamil string was back-translated to English on its own, without the English original in view, and only then compared with the original. Strings that are identical in English and Tamil on purpose (Part 6) were not translated, so they were not back-translated. A script also checked every string for lost or reordered {{placeholders}}, changed numbers, a lost negation, informal pronouns and a different number of sentences.
+
+| Count | Strings |
+|---|---|
+| Checked | ${mcMeta.checked} (${mcMeta.backTranslated} back-translated, ${mcMeta.keptInEnglish} left in English by design) |
+| Fixed (a clear defect) | ${mcMeta.fixed.length} |
+| Flagged for the human reviewer | ${mcFlags.length} (grade A: ${mcFlags.filter((f) => f.sev === 'A').length}, B: ${mcFlags.filter((f) => f.sev === 'B').length}, C: ${mcFlags.filter((f) => f.sev === 'C').length}) |
+| Strings added since this check, not covered | ${Math.max(0, rows.length - mcMeta.checked)} |
+
+Automatic findings: ${mcMeta.automatic.placeholderMismatches} placeholder mismatches, ${mcMeta.automatic.numberMismatches} changed numbers, ${mcMeta.automatic.lostNegations} lost negations, ${mcMeta.automatic.informalPronouns} informal pronouns, ${mcMeta.automatic.sentenceCountMismatches} string with a different number of sentences (fixed). ${mcMeta.candidatesReadSideBySide} strings whose back-translation overlapped little with the English, or that the script flagged, were read side by side; the rest agreed. Most of the low-overlap ones were synonyms ("Expires" and "Expiry", "Phone" and "Telephone") and are not listed.
+
+### Fixed
+
+${['| Key | English | Tamil before | Tamil now | What was wrong |', '|---|---|---|---|---|', ...mcMeta.fixed.map((f) => `| \`${f.key}\` | ${esc(byKey.get(f.key).e)} | ${esc(f.before)} | ${esc(byKey.get(f.key).t)} | ${esc(f.why)} |`)].join('\n')}
+
+### Flagged (left as they are, for the human reviewer)
+
+Grade A: a safety, privacy or patient-rights meaning could be misread. B: a wrong or unclear meaning, or a term that clashes with another. C: minor, or register.
+
+${['| Key | Grade | English | Tamil | What looks wrong | Suggested fix |', '|---|---|---|---|---|---|', ...mcFlags.map(mcRow)].join('\n')}
+`;
 
 const date = process.env.PACK_DATE ?? new Date().toISOString().slice(0, 10);
 const words = (s) => s.trim().split(/\s+/).length;
@@ -122,7 +166,7 @@ const longRows = rows.filter((r) => words(r.e) >= 4).length;
 
 const md = `# Tamil review pack (AI-prepared, NOT reviewed by a native speaker)
 
-Prepared ${date}. Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (\`frontend/src/shared/i18n/ta-reviewed.json\`) is still empty, and every one of the ${rows.length} Tamil strings stays on the unreviewed list (\`frontend/TAMIL-UNREVIEWED.md\`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
+Prepared ${date}. Machine-checked on ${mcMeta.date}; NOT human-reviewed; the Tamil reader must still approve (Part 0). Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (\`frontend/src/shared/i18n/ta-reviewed.json\`) is still empty, and every one of the ${rows.length} Tamil strings stays on the unreviewed list (\`frontend/TAMIL-UNREVIEWED.md\`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
 
 **Regenerated ${date}** by \`npm run i18n:pack\` from the strings as they are now, so it covers every current string, including the newest screens (patient voice setting, consent withdrawal and history, activating a staff account, withdrawing and retiring a red-flag rule). Each is written and second-passed in the same way and is just as unreviewed.
 
@@ -140,6 +184,7 @@ Automatic checks: ${rows.length} strings; ${empty.length} empty; the {{placehold
 
 Notes: ${A.length} grade A, ${B.length} grade B, ${C.length} grade C (${live.length} rows with a note; some notes cover a group of similar strings, named in the note).
 
+${mcSection}
 ## Part 1. Strings that most need a native speaker (safety first)
 
 ${groups.filter((g) => g.items.length).map((g) => `### ${g.title}\n\n${table(g.items)}`).join('\n\n')}
@@ -181,7 +226,7 @@ const readme = `# Tamil review: README for the reviewer
 
 CareFlow is a clinic system with a staff console (nurses, doctors, front desk, administrators) and a patient portal. Every screen has an English and a Tamil version. The Tamil was written by an AI model. This pack lists every Tamil string (${rows.length}) next to its English so a native Tamil speaker can check it before anyone relies on it. The strings are interface text only. There is no patient data in this file.
 
-The pack was regenerated on ${date} (\`npm run i18n:pack\`) and covers every string the screens use today. The file to review is [tamil-review.md](tamil-review.md). Part 7 is the full table. Parts 1 to 3 are the strings the AI was least sure about, safety-related ones first.
+The pack was regenerated on ${date} (\`npm run i18n:pack\`) and covers every string the screens use today. A machine first pass (every string back-translated to English without the original in view, then compared) is in **Part 0**: ${mcMeta.fixed.length} clear defect fixed, ${mcFlags.length} strings flagged for you. It is not a substitute for your review, and nothing in it is marked reviewed. The file to review is [tamil-review.md](tamil-review.md). Part 7 is the full table. Parts 1 to 3 are the strings the AI was least sure about, safety-related ones first.
 
 ## What to do
 

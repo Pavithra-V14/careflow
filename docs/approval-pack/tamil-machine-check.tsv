@@ -1,0 +1,35 @@
+admin.rules.approve	A	"Approve" on a red-flag rule version is ஒப்புக்கொள் (agree, admit). This button brings a safety rule into force with a second doctor; the Tamil does not clearly say "authorise". The back-translation read "agree".	Use one clear word for approve/authorise (for example அங்கீகரி, matching the status அங்கீகரிக்கப்பட்டது) on the button, the dialog and the table.
+admin.autonomy.approve	A	"Approve" an autonomy proposal is ஒப்புக்கொள் (agree, admit): same problem as the rule approval, on the switch that lets the system act without a person.	Same word as the rule approval, chosen by the reviewer.
+portal.consent.withdraw	A	Consent "Withdraw" is திரும்பப் பெறு (take back), the same verb used for revoke, withdraw a draft and "cannot be undone" elsewhere. Withdrawal is one click in the portal, so the word must be unmistakable.	A word that clearly means "I no longer consent", chosen by the reviewer; keep it different from the rule "withdraw".
+care.results.changes.amendment	A	"Amendment" of a result is மேம்படுத்தல் (improvement, upgrade). It suggests the result got better; it is a new measurement that replaces an earlier one, and it must stay distinct from "correction" (திருத்தம்).	A word meaning "a newer measurement replaces the older" that is not திருத்தம்; the reviewer chooses.
+backfill.hold	B	"Hold" (keep a slot for the current candidate) is நிறுத்தம் (stop, halt). A held slot is reserved, not stopped. The back-translation read "Stop".	ஒதுக்கி வை / ஒதுக்கீடு (reserve).
+tasks.kind.referral_hold	B	Task kind "Referral hold" is பரிந்துரை நிறுத்தம் (referral stop). It can be read as the referral being cancelled; it means a referral waiting on a person.	பரிந்துரை நிறுத்தி வைப்பு.
+admin.rules.decisionWords.retire	B	"Retired it" (a rule version) is நிறுத்தினார் (stopped it): the same root as "hold" (நிறுத்தம்) and "stop". Retire and hold mean different things for whether a rule is in force.	A word that means "took out of use", different from the one for hold.
+admin.rules.withdraw	B	"Withdraw this draft" is திரும்பப் பெறு, the same verb as consent withdrawal and revoke; a withdrawn draft is closed for good and is not the same as retired.	Keep distinct from the retire word and from the consent word; reviewer chooses.
+admin.grievances.acknowledge	B	"Acknowledge" a grievance is ஏற்றுக்கொள் (accept). Acknowledging only records that you have seen it; "accept" can be read as agreeing the complaint is right.	A word for "noted/seen" (for example பார்த்ததாகப் பதிவு செய்).
+admin.grievances.acknowledgeTitle	B	"Acknowledge this grievance?" is இந்தக் குறையை ஏற்றுக்கொள்ளவா? ("Accept this complaint?"): same problem.	Same word as the button.
+alerts.acknowledge	B	Alerts "Acknowledge" is ஏற்றுக்கொள் (accept): same problem.	Same word as the grievance button.
+tasks.acknowledge	B	Tasks "Acknowledge" is ஏற்றுக்கொள் (accept): same problem; the action takes ownership of the task.	Same family of word, reviewer chooses.
+admin.reviewer.col.decisions	B	"Decisions" in the reviewer statistics is முடிவுகள், which also means "results" and "ends". The back-translation read "Results".	தீர்மானங்கள் (decisions), or keep with a clarifying word.
+audit.end	B	"That is the end of the log for this search" ends with முடிவு, which also means "result": the back-translation read "this is the result of the record".	இந்தத் தேடலுக்கான பதிவு இத்துடன் முடிகிறது.
+dashboard.metric.fallback_and_abstention_spike	B	"Abstention" (the system declined to answer) is விலகல் (deviation, withdrawal); an administrator may read it as a deviation.	பதிலளிக்காமல் தவிர்த்தல் (declining to answer).
+dev.note	B	Developer panel "Development builds only" is உருவாக்கப் பதிப்புகளில் மட்டும் (build versions only); it can be read as production builds. The next string uses வளர்ச்சிக்கு மட்டும் for development.	வளர்ச்சிப் பதிப்புகளில் மட்டும்.
+portal.requests.status.declined	B	Patient-facing status "Declined" is ஏற்கப்படவில்லை (not accepted): it can read as "the system did not accept your request" rather than "the hospital declined it".	நிராகரிக்கப்பட்டது, or a gentler word for a patient; reviewer chooses.
+preq.status.declined	B	Staff table status "Declined" is ஏற்கப்படவில்லை (not accepted): same as the patient string.	Same word as the patient string, chosen by the reviewer.
+access.title	C	"Break-glass access" is அவசரகால அணுகல் (emergency access): loses that this is an emergency override of privacy that is reviewed afterwards.	Keep அவசரகால, and let the reviewer decide whether a short explanation is needed.
+nav.access	C	Navigation "Break-glass" is அவசரகால அணுகல் (emergency access): same.	Same as the page title.
+notes.addend	C	"Add an addendum" is இணைப்புக் குறிப்பு (attachment note); இணைப்பு can also mean an attached file or a link.	கூடுதல் குறிப்பு.
+notes.addendumTo	C	"addendum to" is இணைப்புக் குறிப்பு: same.	Same as above.
+patients.col.label	C	Patient-search "Label" is குறிப்பு (note); the label is a short tag, not a note.	அடையாளச் சொல் (reviewer chooses).
+scheduling.col.label	C	Scheduling "Label" is குறிப்பு (note): same.	Same as above.
+scheduling.col.slot	C	Scheduling column "Slot" is நேரம் (time), while the screens elsewhere say நேர இடம்.	நேர இடம்.
+roles.patient	C	Role "Patient" is நோயாளர் (collective, plural form) while most strings say நோயாளி (Part 4).	நோயாளி.
+dashboard.metric.index_freshness_lag	C	Metric "Index freshness lag" is குறியீட்டுப் புதுமைத் தாமதம்: குறியீடு here reads as "code", not "index". Administrator-only.	Reviewer chooses a word for "search index".
+scheduling.offerStatus.empty	C	Offer status "No candidates" is பொருத்தமானவை இல்லை ("no suitable ones"). An earlier pass removed an election word; the sense "no one is ranked" is not stated.	Reviewer chooses.
+profiles.clinical	C	Operating profile "Clinical" is மருத்துவப் பயன்பாடு ("medical use"); it means real clinical operation, as against the demo.	Reviewer chooses.
+common.signIn	C	Register: patient and staff sign-in use the archaic -க imperative (உள்நுழைக), while other patient buttons use the bare imperative and sentences use -ங்கள். Part 5.	One polite register, for example உள்நுழையுங்கள்.
+common.signOut	C	Register: வெளியேறுக (archaic -க imperative). Part 5.	வெளியேறுங்கள்.
+pages.signInTitle	C	Register: உள்நுழைக as a patient page title. Part 5.	One polite register.
+portal.signIn.title	C	Register: "உள்நுழைக அல்லது கணக்கை உருவாக்குக" mixes the archaic -க forms on the first patient page. Part 5.	உள்நுழையுங்கள் அல்லது கணக்கை உருவாக்குங்கள்.
+portal.signIn.change	C	Register: "வேறு எண்ணைப் பயன்படுத்து" is a bare imperative on a patient sign-in button; the sentences nearby use -ங்கள். Part 5.	வேறு எண்ணைப் பயன்படுத்துங்கள்.
+portal.signIn.send	C	Register: "எனக்குக் குறியீட்டை அனுப்பு" is a bare imperative on a patient button. Part 5.	எனக்குக் குறியீட்டை அனுப்புங்கள்.

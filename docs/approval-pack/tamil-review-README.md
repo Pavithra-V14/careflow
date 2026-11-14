@@ -6,7 +6,7 @@
 
 CareFlow is a clinic system with a staff console (nurses, doctors, front desk, administrators) and a patient portal. Every screen has an English and a Tamil version. The Tamil was written by an AI model. This pack lists every Tamil string (1778) next to its English so a native Tamil speaker can check it before anyone relies on it. The strings are interface text only. There is no patient data in this file.
 
-The pack was regenerated on 2026-11-14 (`npm run i18n:pack`) and covers every string the screens use today. The file to review is [tamil-review.md](tamil-review.md). Part 7 is the full table. Parts 1 to 3 are the strings the AI was least sure about, safety-related ones first.
+The pack was regenerated on 2026-11-14 (`npm run i18n:pack`) and covers every string the screens use today. A machine first pass (every string back-translated to English without the original in view, then compared) is in **Part 0**: 1 clear defect fixed, 35 strings flagged for you. It is not a substitute for your review, and nothing in it is marked reviewed. The file to review is [tamil-review.md](tamil-review.md). Part 7 is the full table. Parts 1 to 3 are the strings the AI was least sure about, safety-related ones first.
 
 ## What to do
 

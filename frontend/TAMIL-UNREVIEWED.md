@@ -1682,7 +1682,7 @@ Terms standardised: proposal, resolve / resolved.
 | `scheduling.offerStatus.unavailable` | Not set up yet | இன்னும் அமைக்கப்படவில்லை | ok |
 | `scheduling.offers` | Offers | வாய்ப்புகள் | minor drift; flag (ambiguous): Means opportunities rather than offers. |
 | `scheduling.offersListTitle` | Offers | வாய்ப்புகள் | ok |
-| `scheduling.offersNote` | A read-only view of the draft offer. It is computed when you ask and stored nowhere. Nothing is sent. | வரைவு வாய்ப்பின் படிக்க-மட்டும் பார்வை. நீங்கள் கேட்கும்போது கணக்கிடப்படுகிறது, எங்கும் சேமிக்கப்படுவதில்லை. | ok |
+| `scheduling.offersNote` | A read-only view of the draft offer. It is computed when you ask and stored nowhere. Nothing is sent. | வரைவு வாய்ப்பின் படிக்க-மட்டும் பார்வை. நீங்கள் கேட்கும்போது கணக்கிடப்படுகிறது, எங்கும் சேமிக்கப்படுவதில்லை. எதுவும் அனுப்பப்படாது. | ok |
 | `scheduling.patientChosen` | Patient chosen | நோயாளி தேர்ந்தெடுக்கப்பட்டார் | ok |
 | `scheduling.patientDob` | Date of birth | பிறந்த தேதி | ok |
 | `scheduling.patientFind` | Find | தேடு | ok |
