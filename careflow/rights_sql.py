@@ -41,7 +41,7 @@ async def file_grievance(conn: AsyncConnection, *, clinic_id: uuid.UUID, categor
 
 
 _LIST = (
-    "select g.id, g.clinic_id, g.category, g.body_ct, g.body_key_version, g.erased_at, g.created_at, "
+    "select g.id, g.clinic_id, g.category, g.body_ct, g.body_key_version, g.erased_at, g.created_at, g.source, "
     "case when exists (select 1 from iam.grievance_updates u where u.grievance_id = g.id and u.status = 'resolved') then 'resolved' "
     "when exists (select 1 from iam.grievance_updates u where u.grievance_id = g.id and u.status = 'acknowledged') then 'acknowledged' else 'open' end as status "
     "from iam.grievances g where {where} order by g.created_at desc, g.id limit :n"

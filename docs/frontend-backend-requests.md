@@ -302,7 +302,11 @@ Built in this pass (no new decision was needed):
 - **Revoke response:** `admin_alert` (`raised`, `not_for_this_reason`, `not_configured`, `on_record`) is on the revoke result; a new alert class `identity_revoked_suspect`; a new staff role `front_desk_supervisor`.
 - **Medications:** `POST` and `GET /v1/staff/medications` (a code from the clinic's vocabulary setting, a verified flag, times; no dose or free text).
 
-NOT built, and why (each needs a decision or a service first):
+Built on 2026-11-14 after the owner's decision (migration 0080, mechanism only, wording and word lists are required settings): **20** (`GET`/`PUT /v1/portal/profile`; the name comes from the patient's own record; sex words need `CAREFLOW_SEX_WORDS`), **22** (in-app notices only: `GET /v1/portal/notifications`, `POST .../{id}/read`; no e-mail, SMS or push), **24** (`POST`/`GET /v1/portal/requests`: kind erasure, correction or nominee, a closed field name for a correction, NO free text; front desk works them at `GET /v1/staff/patient-requests` and `POST .../{id}/status`, and may link the existing two-person erasure request), **26** (`POST /public/grievances`: no sign-in, a required per-address limit, an owner-managed hourly cap, an idempotency key of 32 or more characters, the same encrypted storage and admin flow as a signed-in grievance; the grievance list rows gain `source`), and the **voice consent notice** (`GET /v1/portal/voice/consent-notice`, a labelled placeholder in the demo pack).
+
+NOT built yet (the owner decided they are to be built as mechanism; each needs a design pass first): **21** family members and guardians, **27** card and template editor, **28** patient booking, **29** patient messaging, **30** patient visit readiness. Devices and push registration are skipped (they need an outside service).
+
+Older items, NOT built, and why (each needs a decision or a service first):
 
 - **5 (scan status on the referral list, a signed read URL):** no table records a malware verdict per document yet, and a signed read URL is a storage call that is only verified for the synthetic demo. Waits on the scanner decision (checklist 2).
 - **20 (profile: name, sex, preferred language):** new personal data fields: the privacy owner's field list (and the sex word list) must be decided first.

@@ -50,6 +50,10 @@ VARIABLES: Final = {
     "break_glass_max_reopens": "CAREFLOW_BREAK_GLASS_MAX_REOPENS",
     "grievance_categories": "CAREFLOW_GRIEVANCE_CATEGORIES",
     "erase_reasons": "CAREFLOW_ERASE_REASONS",
+    "voice_consent_notice": "CAREFLOW_VOICE_CONSENT_NOTICE",
+    "sex_words": "CAREFLOW_SEX_WORDS",
+    "public_grievance_ip_per_hour": "CAREFLOW_PUBLIC_GRIEVANCE_IP_PER_HOUR",
+    "message_max_per_minute": "CAREFLOW_MESSAGE_MAX_PER_MINUTE",
 }
 
 

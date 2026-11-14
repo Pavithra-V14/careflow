@@ -18,6 +18,7 @@ REQUIRED: Final = (
     ("0076", "kb.author_red_flag_rule_draft(uuid,text,text[],jsonb,text)", "proc"),
     ("0077", "kb.withdraw_red_flag_draft(uuid,text)", "proc"),
     ("0078", "kb.red_flag_rule_decisions_one_per_person_kind", "rel"),
+    ("0080", "iam.file_public_grievance(text,bytea,smallint,uuid,text)", "proc"),
 )
 
 

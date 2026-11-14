@@ -14,6 +14,8 @@ from fastapi import APIRouter, FastAPI
 from fastapi.routing import APIRoute
 
 DECLARABLE: Final = (401, 403, 404, 409, 422, 429, 503)
+# Routes outside /v1 that take a request body and so can answer the app's own 422 (they are public: no sign-in, so NO 401 is declared for them).
+PUBLIC_WITH_BODY: Final = frozenset({"/public/grievances"})
 DESCRIPTIONS: Final = {
     401: "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body.",
     403: "Authenticated, but this role may not do this. Fixed body.",
@@ -68,7 +70,7 @@ def install(app: FastAPI, routers: Iterable[APIRouter]) -> None:
         by_path_method: dict[tuple[str, str], APIRoute] = {}
         for router in routers:
             for route in router.routes:
-                if isinstance(route, APIRoute) and route.path.startswith("/v1"):
+                if isinstance(route, APIRoute) and (route.path.startswith("/v1") or route.path in PUBLIC_WITH_BODY):
                     for method in route.methods:
                         by_path_method[(route.path, method.lower())] = route
         for path, operations in schema["paths"].items():
@@ -76,7 +78,7 @@ def install(app: FastAPI, routers: Iterable[APIRouter]) -> None:
                 route = by_path_method.get((path, method))
                 if route is None:
                     continue
-                wanted = statuses_in(route.endpoint.__doc__) | {401} | ({422} if "422" in operation.get("responses", {}) else set())  # FastAPI's own 422 is replaced by the app's real shape
+                wanted = statuses_in(route.endpoint.__doc__) | ({401} if path.startswith("/v1") else set()) | ({422} if "422" in operation.get("responses", {}) else set())  # FastAPI's own 422 is replaced by the app's real shape
                 for status in sorted(wanted):
                     operation.setdefault("responses", {})[str(status)] = _response(status)  # replaces FastAPI's own 422 shape
         components = schema.setdefault("components", {}).setdefault("schemas", {})

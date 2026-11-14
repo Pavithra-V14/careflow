@@ -94,3 +94,15 @@ settings:
   erase_reasons:
     value: "demo_reason"
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  voice_consent_notice:
+    value: "DEMO ONLY - NOT A LEGAL NOTICE. This is a placeholder for the notice that counsel will supply about recording and processing your voice during a session. It says nothing about your rights."
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  sex_words:
+    value: "demo_word_a,demo_word_b"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  public_grievance_ip_per_hour:
+    value: "5"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  message_max_per_minute:
+    value: "10"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
