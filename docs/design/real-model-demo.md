@@ -4,6 +4,22 @@
 
 The app calls these providers only through the gateway, when a feature is wired to them (`docs/design/hosted-providers.md` lists what is and is not wired). This page is about getting the keys, the spend limits and the first check right.
 
+## The short version (use this)
+
+Create the three keys, then run ONE command; it asks you to paste each key (hidden), asks for the spend limits, writes only your `.env`, and runs the live check last. You never type a variable name and never see a key.
+
+1. **Gemini:** aistudio.google.com, sign in, make a NEW project used only for CareFlow dev, click **Get API key**, create the key in that project. **Spend limit: none to set; keep billing OFF** (with billing off it cannot charge).
+2. **OpenRouter (Jev):** openrouter.ai, sign in, **Settings**, then **Keys**, create a key named `careflow-dev`. **Spend limit: set a credit limit of a few dollars on the key and add only that much credit.**
+3. **Sarvam:** dashboard.sarvam.ai, sign in, **API Keys**, create a key named `careflow-dev`. **Spend limit: use the free credits; add no card yet; if the dashboard offers a usage limit, set it to a few dollars.**
+
+Then, in PowerShell in the folder that holds your `.env` (the demo run folder, `E:\Claude\careflow-run`, or the repository):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\set_provider_keys.ps1
+```
+
+It refuses to run (and writes nothing) if git tracks the `.env`, if the `.env` is inside a git folder and not ignored, or if the `.env` does not say `CAREFLOW_PROFILE=demo` and `CAREFLOW_DATA_POLICY=synthetic_only`. It asks for the three daily ceilings and the per-run cap (press Enter to accept the value shown). Its last step runs `scripts/provider_live_check.py`, shows only PASS or FAIL, time and cost with any key masked, and records today's date as the VERIFIED setting for each provider whose lines all PASS. Then restart the backend. The longer explanation below is for reference; you do not need it to set up.
+
 ## 1. The `.env` variable names (put them ONLY in the repository's `.env`)
 
 Never in `.env.cli`, never in CI secrets, never in the frontend, never in a chat. The values are yours.
