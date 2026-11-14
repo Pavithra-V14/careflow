@@ -8,7 +8,7 @@ import json
 from dataclasses import dataclass
 from typing import Final
 
-PURPOSES: Final = ("care_delivery", "ai_processing", "service_improvement")
+PURPOSES: Final = ("care_delivery", "ai_processing", "service_improvement", "voice_session")
 
 
 class ConsentSettingsError(Exception):

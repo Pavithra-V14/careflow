@@ -53,7 +53,7 @@ settings:
     value: '{"rules": {"demo_rule": {"interval_days": 30, "overdue_after_days": 5}}, "episodes": {"demo_episode": ["demo_rule"]}}'
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
   consent_notices:
-    value: '{"care_delivery": {"version": 1, "body": "DEMO ONLY - NOT A LEGAL NOTICE. Placeholder text for a synthetic demonstration. Counsel owns the real consent wording."}}'
+    value: '{"care_delivery": {"version": 1, "body": "DEMO ONLY - NOT A LEGAL NOTICE. Placeholder text for a synthetic demonstration. Counsel owns the real consent wording."}, "voice_session": {"version": 1, "body": "DEMO ONLY - NOT A LEGAL NOTICE. Placeholder for the notice counsel will supply about recording and processing your voice during a session. It says nothing about your rights."}}'
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
   visit_readiness_content:
     value: '{"facts": {"demo_fact_one": "DEMO ONLY - NOT A CLINICAL QUESTION. Placeholder question one?"}, "visit_types": {"DEMO visit type": {"intake": ["demo_fact_one"], "checklist": [{"id": "demo_item_one", "text": "DEMO ONLY - NOT A CLINICAL INSTRUCTION. Placeholder checklist item one: please confirm."}]}}}'
@@ -89,13 +89,10 @@ settings:
     value: "3"
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
   consent_labels:
-    value: '{"care_delivery": "DEMO ONLY - Care", "ai_processing": "DEMO ONLY - AI-assisted processing", "service_improvement": "DEMO ONLY - Service improvement"}'
+    value: '{"care_delivery": "DEMO ONLY - Care", "ai_processing": "DEMO ONLY - AI-assisted processing", "service_improvement": "DEMO ONLY - Service improvement", "voice_session": "DEMO ONLY - Voice session"}'
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
   erase_reasons:
     value: "demo_reason"
-    label: "DEMO ONLY - NOT A CLINICAL DECISION"
-  voice_consent_notice:
-    value: "DEMO ONLY - NOT A LEGAL NOTICE. This is a placeholder for the notice that counsel will supply about recording and processing your voice during a session. It says nothing about your rights."
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
   sex_words:
     value: "demo_word_a,demo_word_b"

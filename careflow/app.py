@@ -4233,20 +4233,6 @@ async def _patient_account(conn: AsyncConnection, claims: dict[str, Any], status
     return account_id, row.origin
 
 
-class VoiceConsentNoticeOut(_Out):
-    configured: bool  # false until counsel's notice is set: the frontend then shows nothing of its own
-    text: str | None
-    is_placeholder: bool  # true for the labelled demo placeholder (its text starts with DEMO ONLY)
-
-
-@portal_voice.get("/consent-notice", response_model=VoiceConsentNoticeOut)
-async def voice_consent_notice(request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> VoiceConsentNoticeOut:
-    """The notice shown before any audio is processed in a voice session (spec 23.4), exactly as configured: the wording is counsel's and is NOT written here; the demo pack carries a labelled placeholder. `configured` is false while it is unset. 403 unless you are an active patient account."""
-    await _patient_account(conn, claims)
-    text_ = request.app.state.voice_consent_notice
-    return VoiceConsentNoticeOut(configured=text_ is not None, text=text_, is_placeholder=text_ is not None and text_.startswith("DEMO ONLY"))
-
-
 @portal_voice.get("/preference", response_model=VoicePreferenceOut)
 async def get_voice_preference(conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> VoicePreferenceOut:
     """Your own voice preference (false until you choose). 403 unless you are an active patient account."""
@@ -4304,9 +4290,12 @@ class PortalMeOut(_Out):
     stage: Literal["registered", "new_patient", "pending_activation", "active"]  # spec 17.5, as far as this build can know it (see iam.patient_stage, migration 0062)
 
 
+ConsentPurpose = Literal["care_delivery", "ai_processing", "service_improvement", "voice_session"]  # closed (frontend request 31): `voice_session` is the notice read before a voice session
+
+
 class NoticeOut(_Out):
     notice_id: uuid.UUID
-    purpose: str
+    purpose: ConsentPurpose
     label: str | None  # the patient-facing name of the purpose (the required setting CAREFLOW_CONSENT_LABELS); null while counsel has supplied none
     version: int
     body: str
@@ -4318,7 +4307,7 @@ class NoticeList(_Out):
 
 
 class ConsentIn(_Body):
-    purpose: Literal["care_delivery", "ai_processing", "service_improvement"]
+    purpose: ConsentPurpose
     notice_id: uuid.UUID
     action: Literal["granted", "withdrawn"]
 
@@ -5823,7 +5812,6 @@ def create_app(
         app.state.voice_feature_on = voice_feature_on(os.environ)
         app.state.voice_engine = None  # no real voice engine exists (owner decision 2026-11-06): the session route answers 503
         app.state.voice_retention_days = _positive_int(p4env.get('CAREFLOW_VOICE_TRANSCRIPT_RETENTION_DAYS'))
-        app.state.voice_consent_notice = (p4env.get("CAREFLOW_VOICE_CONSENT_NOTICE") or "").strip() or None  # counsel's wording (a required setting); only a labelled demo placeholder exists
         app.state.retention_checkpoint_days = _positive_int(p4env.get("CAREFLOW_RETENTION_CHECKPOINT_DAYS"))  # required settings, no defaults: an unset period is not assessed
         app.state.retention_clinical_record_days = _positive_int(p4env.get("CAREFLOW_RETENTION_CLINICAL_RECORD_DAYS"))
         app.state.grievance_categories = _word_list(p4env.get("CAREFLOW_GRIEVANCE_CATEGORIES"))

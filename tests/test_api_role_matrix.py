@@ -3452,16 +3452,6 @@ def staff_patient_request_status_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(), body)
 
 
-VOICE_CONSENT_NOTICE = "/v1/portal/voice/consent-notice"
-
-
-def voice_consent_notice_cases(ids) -> list[tuple]:
-    cases = [_case(ids, "an active patient account reads the notice setting (unset here: nothing configured, no text)", "patient", 200, VOICE_CONSENT_NOTICE, key=None, body=lambda b: b == {"configured": False, "text": None, "is_placeholder": False})]
-    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, VOICE_CONSENT_NOTICE, key=None, body=NOT_A_PATIENT) for p in _non_patients(ids)]
-    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, VOICE_CONSENT_NOTICE, key=None, body=NOT_A_PATIENT))
-    return cases + _unauthenticated(ids, VOICE_CONSENT_NOTICE, None)[:4]
-
-
 # ---- break-glass access (migration 0058; BUILD-SPEC.md 18.4) ------------------------------------------------------------------------------------------------------------------------------------------------
 # Front desk, nurse and doctor open a time-limited grant for one patient (a reason code from the clinic's owner-kept list); the holder reads that patient's messages (this world has no encryption keys, so the
 # read answers 503 after the grant is found; the decrypting path and the database behaviour are in tests/test_break_glass_db_live.py); an admin of the clinic who did not open it reviews. Opening writes
@@ -3893,7 +3883,6 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", RULE_DECISION): rule_decision_cases,
     ("POST", RULE_WITHDRAW): rule_withdraw_cases,
     ("GET", PORTAL_PROFILE): portal_profile_get_cases,
-    ("GET", VOICE_CONSENT_NOTICE): voice_consent_notice_cases,
     ("PUT", PORTAL_PROFILE): portal_profile_put_cases,
     ("GET", PORTAL_NOTIFICATIONS): portal_notifications_list_cases,
     ("POST", PORTAL_NOTIFICATIONS + "/{notification_id}/read"): portal_notification_read_cases,

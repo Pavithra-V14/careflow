@@ -277,7 +277,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 | 23.1 | Gemini Live over a browser WebSocket | FAKE | No engine by owner decision; the session route answers 503 | `careflow/voice.py` |
 | 23.2 | Narrow scope per workflow; mid-session instruction updates | BUILT (scoped prompts) / UNMEASURED | Whether Gemini Live accepts mid-session updates is unverified (Appendix B) | `careflow/voice.py` |
 | 23.3 | Safety per 11.6 | BUILT (mechanism) | | `careflow/voice.py` |
-| 23.4 | Spoken and on-screen consent per session | BUILT (the notice endpoint, labelled placeholder) / DECISION | `GET /v1/portal/voice/consent-notice` returns the configured notice (`CAREFLOW_VOICE_CONSENT_NOTICE`; the demo pack carries a labelled DEMO ONLY placeholder); the wording and a per-session consent event type are counsel's | `careflow/app.py`, `config/demo-phase4.yaml` |
+| 23.4 | Spoken and on-screen consent per session | BUILT (a fourth consent purpose, labelled placeholder) / DECISION | `voice_session` is a consent notice purpose (migration 0081), served by the existing `GET /v1/portal/consents` (the setting `CAREFLOW_CONSENT_NOTICES`; the demo pack carries a labelled DEMO ONLY placeholder and label); with none published nothing can be consented to; the wording is counsel's; a per-session event type beyond the ordinary grant and withdrawal is counsel's | `careflow/consent_settings.py`, `config/demo-phase4.yaml`, migration 0081 |
 | 23.5 | Degradation and cost rows | BUILT / UNMEASURED | The mic button hides when the engine is off; the audio shadow price is unmeasured | `careflow/voice.py`, `cost_canvas.py` |
 
 ## 24. Care gap review (spec 24)
