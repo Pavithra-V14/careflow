@@ -335,6 +335,8 @@ The voice consent text must come only from the API. The frontend currently looks
 ### 32. What does null mean in the profile write? (requested 2026-11-14)
 `PUT /v1/portal/profile` takes `sex` and `preferred_language`, each a value or null. The description says it "sets values", but not whether null leaves a field alone or clears it. The portal sends ONLY the fields the person changed, never null, and offers no way to clear a value. Please say in the route description what null does and whether a person may clear a field; if clearing is allowed, say how the clinic's list (or none) applies. Until then clearing stays unbuilt.
 
+**32 (null in the profile write), answered 2026-11-14:** a field you leave out of `PUT /v1/portal/profile` is left as it is; a field you send as an explicit `null` is cleared, and a person may clear either one. Clearing needs no word from the clinic's list (a cleared sex is no value, not a word), so it works whether or not `CAREFLOW_SEX_WORDS` is set; a non-null sex word is still checked against the list (422 if not on it, 503 if the list is not configured). The route description says so.
+
 ## Decisions recorded here for later readers
 
 - **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;
