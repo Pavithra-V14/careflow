@@ -43,7 +43,10 @@ for (const lang of LANGS) {
     await openConsole(page, 'front_desk', lang);
     await go(page, '#/scheduling/slots', /\S/);
     await page.locator('main tbody tr').first().getByRole('button').nth(2).click();
+    // Wait for the run to load first: before that the toolbar is not the one with Send, and a click that early opens no dialog (slow CI runners).
+    await expect(page.locator('section[aria-labelledby^="bf-"] dl.facts')).toBeVisible();
     await page.locator('section[aria-labelledby^="bf-"] .toolbar button').first().click(); // Send
+    await expect(page.getByRole('dialog')).toBeVisible();
     await page.getByRole('dialog').locator('.dialog-actions button').nth(1).click();
     await expect(page.locator('section[aria-labelledby^="bf-"] textarea')).toBeVisible();
     // Type the reply, confirm saving it: the text leaves the page and the saved message is picked.
