@@ -8,6 +8,7 @@ import { ProblemText } from '../../staff/ui/states';
 import { PATHS } from '../paths';
 import { normalisePhone, type PortalAuth } from './auth';
 import { VoiceSection } from './VoiceSection';
+import { BookingSection, MessagesSection } from './PortalVisits';
 import { NotificationsSection, ProfileSection, PublicGrievanceSection, RequestsSection } from './PortalMore';
 import { ClaimSection, ConsentSection, GrievanceSection, MyDataSection } from './PortalSections';
 
@@ -248,6 +249,8 @@ function Account({ auth, apiBaseUrl, onSignedOut }: { auth: PortalAuth; apiBaseU
           <ProfileSection api={api} />
           <NotificationsSection api={api} />
           <RequestsSection api={api} />
+          <BookingSection api={api} />
+          <MessagesSection api={api} />
           <GrievanceSection api={api} />
           <VoiceSection api={api} />
           <MyDataSection api={api} />

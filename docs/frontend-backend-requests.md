@@ -283,10 +283,10 @@ PATIENT-WORKFLOWS H2 says any patient can reach the grievance channel without si
 ### 27. Protocol card and message-template editor routes (requested 2026-11-14)
 BUILD-SPEC 20.2 describes an admin card editor that validates against the card schema and runs the card's own test cases before publishing. No card or template routes are in the snapshot. Until they are, there is no screen. The console will invent no card or template content.
 
-### 28. Patient scheduling routes (requested 2026-11-14)
+### 28. Patient scheduling routes (requested 2026-11-14) - ROUTES LANDED (booking list, slots, book, cancel); screen built (F14)
 Slots, holds, bookings and cancel exist only under `/v1/staff`. Patient booking and cancelling (PATIENT-WORKFLOWS B1, B3, B5) need patient-scoped routes, with the server enforcing that only a future appointment can be cancelled.
 
-### 29. Patient messaging routes (requested 2026-11-14)
+### 29. Patient messaging routes (requested 2026-11-14) - ROUTES LANDED (send, threads, thread); screen built (F14)
 Threads and messages exist only under `/v1/staff`. The patient needs to list their own threads by topic, read an offer, send a reply, and see the account-stage limits (B2, B4, D1 to D3). A rejected attempt should look identical to a missing thread, as the workflows say.
 
 ### 30. Patient visit-readiness routes (requested 2026-11-14)

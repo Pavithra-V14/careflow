@@ -235,3 +235,20 @@ portal.notifications.kind.grievance_update	B	Long; check "செய்திக�
 portal.notifications.kind.request_update	B	Check "கோரிக்கைகளில் ஒன்றைப் பற்றிய புதிய தகவல்".
 portal.notifications.unread	C	A count after a label.
 portal.notifications.markRead	C	Button label.
+portal.booking.cancelBody	A	Says the time becomes free and nobody is contacted. "யாரையும் தொடர்பு கொள்ள மாட்டோம்" must read as a plain fact, not as a promise made on behalf of the hospital.
+portal.booking.cancelConflict	B	Long condition sentence: already cancelled or already started; check it is understood.
+portal.booking.bookConflict	B	Combines two reasons (time taken, or limit reached) in one sentence; check it reads clearly and is not accusing.
+portal.booking.bookRefused	B	Says this account cannot book this time; check it is neutral.
+portal.booking.off	B	Says online booking is not turned on yet; must read as a state, not a fault.
+portal.booking.alreadyBooked	B	Says the appointment was already booked for the patient (a repeat request); check it is not read as an error.
+portal.booking.status.confirmed	C	Status word.
+portal.booking.status.cancelled	C	Status word.
+portal.booking.openBody	C	Short explanation.
+portal.messages.confirmBody	B	"மறைகுறியாக்கப்பட்டு" (encrypted) is technical for a patient. The sentence must not suggest a reply time.
+portal.messages.sent	A	The one line shown after any send, whatever the safety screening found. It must not suggest a reply time or that anything was understood or acted on.
+portal.messages.refused	B	Long condition sentence; check it is understood.
+portal.messages.off	B	Says messages are not turned on yet; must read as a state, not a fault.
+portal.messages.topics.safety	B	A thread label set by the system, "பாதுகாப்பு" (safety); check it does not alarm a patient.
+portal.messages.topics.care	B	"என் சிகிச்சை" (my care) as a topic choice.
+portal.messages.sender.system	C	Label for a message sent by the system.
+portal.messages.sender.staff	C	Label for a message from the hospital.

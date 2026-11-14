@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { OPERATIONS, createApi, type Api, type WriteOptions, type ProposeMergeIn, type BeginUploadIn, type RegisterIn, type PatientSearchIn, type SlotIn, type HoldIn, type WaitlistJoinIn, type LocationIn, type ProviderIn, type VisitTypeIn, type CarePlanIn, type ResultIn, type BarrierIn, type EpisodeIn, type InviteIn, type RoleChangeIn, type AutonomySetIn, type VoicePurgeIn, type NoteIn, type BreakGlassOpenIn, type RecoveryRequestIn, type ConsentIn, type VoiceSessionIn, type ProfileIn, type PatientRequestIn, type PublicGrievanceIn, type ClaimIn, type GrievanceIn, type RecordReplyIn, type MedicationIn, type RuleDraftIn, type IngestIn } from '../src/shared/api/client';
+import { OPERATIONS, createApi, type Api, type WriteOptions, type ProposeMergeIn, type BeginUploadIn, type RegisterIn, type PatientSearchIn, type SlotIn, type HoldIn, type WaitlistJoinIn, type LocationIn, type ProviderIn, type VisitTypeIn, type CarePlanIn, type ResultIn, type BarrierIn, type EpisodeIn, type InviteIn, type RoleChangeIn, type AutonomySetIn, type VoicePurgeIn, type NoteIn, type BreakGlassOpenIn, type RecoveryRequestIn, type ConsentIn, type VoiceSessionIn, type ProfileIn, type PatientRequestIn, type PublicGrievanceIn, type PatientMessageIn, type ClaimIn, type GrievanceIn, type RecordReplyIn, type MedicationIn, type RuleDraftIn, type IngestIn } from '../src/shared/api/client';
 
 // Contract test (BUILD-SPEC 21): the client is driven for real; only the network transport is captured.
 // It asserts every method targets an endpoint that exists in the backend's schema, with its required
@@ -161,6 +161,13 @@ const INVOCATIONS: Record<keyof typeof OPERATIONS, (api: Api, o?: WriteOptions) 
   readNotification: (api, o) => api.readNotification(ID, o),
   listMyRequests: (api) => api.listMyRequests(),
   filePatientRequest: (api, o) => api.filePatientRequest(body<PatientRequestIn>('PatientRequestIn'), o),
+  listMyBookings: (api) => api.listMyBookings(),
+  cancelMyBooking: (api, o) => api.cancelMyBooking(ID, o),
+  listOpenSlots: (api) => api.listOpenSlots(ID),
+  bookOpenSlot: (api, o) => api.bookOpenSlot(ID, o),
+  sendPatientMessage: (api, o) => api.sendPatientMessage(body<PatientMessageIn>('PatientMessageIn'), o),
+  listMyThreads: (api) => api.listMyThreads(),
+  readMyThread: (api) => api.readMyThread(ID),
   filePublicGrievance: (api, o) => api.filePublicGrievance(body<PublicGrievanceIn>('PublicGrievanceIn'), o),
   fileGrievance: (api, o) => api.fileGrievance(body<GrievanceIn>('GrievanceIn'), o),
   myData: (api) => api.myData(),

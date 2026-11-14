@@ -30,6 +30,7 @@ export type VoiceSessionIn = components['schemas']['VoiceSessionIn'];
 export type ProfileIn = components['schemas']['ProfileIn'];
 export type PatientRequestIn = components['schemas']['PatientRequestIn'];
 export type PublicGrievanceIn = components['schemas']['PublicGrievanceIn'];
+export type PatientMessageIn = components['schemas']['PatientMessageIn'];
 export type NoteIn = components['schemas']['NoteIn'];
 export type BreakGlassOpenIn = components['schemas']['BreakGlassOpenIn'];
 export type BreakGlassOutcome = components['schemas']['BreakGlassReviewIn']['outcome'];
@@ -173,6 +174,13 @@ export const OPERATIONS = {
   listMyRequests: { method: 'get', path: '/v1/portal/requests' },
   filePatientRequest: { method: 'post', path: '/v1/portal/requests' },
   filePublicGrievance: { method: 'post', path: '/public/grievances' },
+  listMyBookings: { method: 'get', path: '/v1/portal/booking/bookings' },
+  cancelMyBooking: { method: 'post', path: '/v1/portal/booking/bookings/{booking_id}/cancel' },
+  listOpenSlots: { method: 'get', path: '/v1/portal/booking/slots' },
+  bookOpenSlot: { method: 'post', path: '/v1/portal/booking/slots/{slot_id}/book' },
+  sendPatientMessage: { method: 'post', path: '/v1/portal/messages' },
+  listMyThreads: { method: 'get', path: '/v1/portal/messages/threads' },
+  readMyThread: { method: 'get', path: '/v1/portal/messages/threads/{thread_id}' },
   // ---- visit readiness, portal claims, break-glass, recovery, notes, grievances ----
   readinessView: { method: 'get', path: '/v1/staff/visits/{visit_id}/readiness' },
   startReadiness: { method: 'post', path: '/v1/staff/visits/{visit_id}/readiness/start' },
@@ -502,6 +510,15 @@ export function createApi(options: ApiOptions) {
       client.POST('/v1/portal/notifications/{notification_id}/read', { params: { path: { notification_id: notificationId }, header: { 'X-Idempotency-Key': key(o) } } }),
     listMyRequests: () => client.GET('/v1/portal/requests'),
     filePatientRequest: (body: PatientRequestIn, o?: WriteOptions) => client.POST('/v1/portal/requests', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    listMyBookings: () => client.GET('/v1/portal/booking/bookings'),
+    cancelMyBooking: (bookingId: string, o?: WriteOptions) =>
+      client.POST('/v1/portal/booking/bookings/{booking_id}/cancel', { params: { path: { booking_id: bookingId }, header: { 'X-Idempotency-Key': key(o) } } }),
+    listOpenSlots: (clinicId: string) => client.GET('/v1/portal/booking/slots', { params: { query: { clinic_id: clinicId } } }),
+    bookOpenSlot: (slotId: string, o?: WriteOptions) =>
+      client.POST('/v1/portal/booking/slots/{slot_id}/book', { params: { path: { slot_id: slotId }, header: { 'X-Idempotency-Key': key(o) } } }),
+    sendPatientMessage: (body: PatientMessageIn, o?: WriteOptions) => client.POST('/v1/portal/messages', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    listMyThreads: () => client.GET('/v1/portal/messages/threads'),
+    readMyThread: (threadId: string) => client.GET('/v1/portal/messages/threads/{thread_id}', { params: { path: { thread_id: threadId } } }),
     filePublicGrievance: (body: PublicGrievanceIn, o?: WriteOptions) => client.POST('/public/grievances', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
     openVoiceSession: (body: VoiceSessionIn, o?: WriteOptions) => client.POST('/v1/portal/voice/sessions', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
 
