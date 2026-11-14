@@ -322,7 +322,7 @@ function ThreadMessages({ api, threadId }: { api: Api; threadId: string }) {
               <strong>{word('portal.messages.sender', m.sender)}</strong> · <Time value={m.created_at} />
               <br />
               {/* The text exactly as stored, as plain text. */}
-              {m.erased ? <em>{t('portal.erased')}</em> : m.text === null || !m.readable ? <em>{t('portal.unreadable')}</em> : <span style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{m.text}</span>}
+              {m.erased ? <em>{t('portal.erased')}</em> : m.text === null || !m.readable ? <em>{t('portal.unreadable')}</em> : <span className="pre-wrap">{m.text}</span>}
             </li>
           ))}
         </ol>

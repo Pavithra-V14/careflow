@@ -341,6 +341,9 @@ The voice consent text must come only from the API. The frontend currently looks
 
 **32 again, in plain words:** for each profile field, `sex` and `preferred_language`: leave it out of the request and the stored value stays; send `null` and it is cleared; send a value and it is set (a sex word must be on the clinic's list). The route description says so and `tests/test_profile_null_semantics.py` checks it.
 
+### 34. Idle sign-out durations (requested 2026-11-14, owner decision)
+BUILD-SPEC 18 to 21 give no idle duration for staff or patients. The frontend has the mechanism, OFF: after the configured minutes with no activity the session ends like any other sign-out. Please give the approved number of minutes for staff and for patients, and say whether a "still there?" warning should come first and for how long. They are set in `frontend/src/shared/idle.ts` as a reviewed edit; until then both are null and nobody is signed out for being idle. (This is a frontend-side setting; it is listed here so the owner's answer has a home.)
+
 ## Decisions recorded here for later readers
 
 - **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;

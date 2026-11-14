@@ -379,7 +379,7 @@ function DraftView({ draft }: { draft: components['schemas']['OfferDraftOut'] })
           )}
           <h4>{t('scheduling.draft.text')}</h4>
           <p className="hint">{t('scheduling.draft.forCandidate')} <ShortId id={data.draft.candidate_patient_id} /></p>
-          <blockquote style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{data.draft.template}</blockquote>
+          <blockquote className="pre-wrap">{data.draft.template}</blockquote>
           <dl className="facts">
             <dt>{t('scheduling.draft.holdLifetime')}</dt>
             <dd>{t('scheduling.draft.seconds', { n: formatNumber(data.draft.hold_lifetime_seconds, lang) })}</dd>
