@@ -63,3 +63,31 @@ async def test_a_read_with_the_same_arguments_inside_one_run_is_computed_once_an
     other = await memo.get("get_recent_results", {"patient": "q"}, read)
     assert first is again and other is not first and len(calls) == 2 and memo.hits == 1
     assert await sp.RunMemo().get("get_recent_results", {"patient": "p"}, read) is not first  # a new run does not see the old one
+
+
+def test_latency_is_reported_in_three_parts_never_blended():
+    from datetime import UTC, datetime, timedelta
+
+    t0 = datetime(2026, 1, 1, tzinfo=UTC)
+    parts = sp.latency_parts([("machine", t0, t0 + timedelta(seconds=5)), ("human_wait", t0, t0 + timedelta(hours=2)), ("external_wait", t0, t0 + timedelta(days=3)), ("machine", t0, t0 + timedelta(seconds=7))])
+    assert parts == {"machine": timedelta(seconds=12), "human_wait": timedelta(hours=2), "external_wait": timedelta(days=3)}
+    with pytest.raises(ValueError):
+        sp.latency_parts([("blended", t0, t0)])
+    with pytest.raises(ValueError):
+        sp.latency_parts([("machine", t0, t0 - timedelta(seconds=1))])
+
+
+@pytest.mark.asyncio
+async def test_the_gateway_reports_the_feature_plan_from_the_ledger_and_an_unusable_cap_changes_nothing():
+    import uuid
+
+    from careflow.gateway import Gateway, InMemorySpendLedger, SpendEntry, SpendLimits
+
+    ledger, clinic = InMemorySpendLedger(), uuid.uuid4()
+    gw = Gateway([], {}, ledger, SpendLimits(clinic_daily_usd=D("10")), origin="test")
+    assert (await gw.feature_plan(clinic)).disable == ()
+    await ledger.record(SpendEntry(clinic, "decision", "p", "m", "ordinary", D("8"), D("8"), "test", "k1"))
+    soft = await gw.feature_plan(clinic)
+    assert soft.disable == ("card_shortlist_ensemble", "reranker", "judge_sampling") and not soft.queue_non_urgent and soft.safety_limited is False
+    await ledger.record(SpendEntry(clinic, "decision", "p", "m", "ordinary", D("2"), D("2"), "test", "k2"))
+    assert (await gw.feature_plan(clinic)).queue_non_urgent

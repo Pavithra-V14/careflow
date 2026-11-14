@@ -51,6 +51,7 @@ from careflow.ports import (
     Unit,
     Usage,
 )
+from careflow.spend_policy import SpendPlan, soft_threshold_plan
 
 DATA_POLICIES: Final = ("synthetic_only", "phi_approved")
 BREAKER_FAILURES: Final = 10
@@ -298,6 +299,10 @@ class Gateway:
     breaker_failures: int = BREAKER_FAILURES
     breaker_probe_seconds: float = BREAKER_PROBE_SECONDS
     _breakers: dict[tuple[str, str], CircuitBreaker] = field(default_factory=dict, init=False, repr=False)
+
+    async def feature_plan(self, clinic_id: uuid.UUID) -> SpendPlan:
+        """What the clinic's spend so far asks for (15.2): at 80% of the daily total the decorative features go off in the spec's order, at the cap non-urgent jobs queue; the red-flag path and the safety net are never limited. An unknown total changes nothing."""
+        return soft_threshold_plan(await self.ledger.spent_today(clinic_id, self.origin), self.limits.clinic_daily_usd)
 
     def breaker(self, key: tuple[str, str]) -> CircuitBreaker:
         if key not in self._breakers:

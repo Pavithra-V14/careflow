@@ -1465,13 +1465,30 @@ async def draft_offer(
     )
 
 
+_message_limit_cache: dict[str, Any] = {}
+
+
+def message_limiter() -> "patient_view.OpenRateLimiter | None":
+    """Per-account message rate limit (BUILD-SPEC.md 11.5): at most CAREFLOW_MESSAGE_MAX_PER_MINUTE patient-facing messages written by one account in any 60 seconds. A required setting with NO default: unset or not a whole number from 1 to 10000 means NO limit is enforced (stated here, never guessed). One limiter per process, in memory."""
+    if "limiter" not in _message_limit_cache:
+        raw = (os.environ.get("CAREFLOW_MESSAGE_MAX_PER_MINUTE") or "").strip()
+        limit = int(raw) if raw.isdigit() and 1 <= int(raw) <= 10_000 else None
+        _message_limit_cache["limiter"] = patient_view.OpenRateLimiter(limit) if limit is not None else None
+    return _message_limit_cache["limiter"]
+
+
+def _charge_message_limit(limiter: "patient_view.OpenRateLimiter | None", actor: uuid.UUID) -> None:
+    if limiter is not None and not limiter.allow(actor):
+        raise HTTPException(status_code=429, detail="too many messages; wait a moment")
+
+
 @scheduling.post("/offers/send", response_model=SendOfferOut)
 async def send_offer_route(
     body: SendOfferIn, idempotency_key: IdempotencyKey, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims),
-    settings: SchedulingSettings = Depends(scheduling_settings),
+    settings: SchedulingSettings = Depends(scheduling_settings), limiter: "patient_view.OpenRateLimiter | None" = Depends(message_limiter),
 ) -> SendOfferOut:
     """Press send: hold the slot for the chosen ranked candidate and record the offer message. 404 for a clinic you cannot see, 403 unless you are front desk there, 409 if the slot is not open, the
-    candidate is not among the ranked ones, or the key was used for a different offer, 503 if the clinician-owned settings or the encryption keys are not configured."""
+    candidate is not among the ranked ones, or the key was used for a different offer, 429 over your per-minute message limit (a required setting; unset means no limit), 503 if the clinician-owned settings or the encryption keys are not configured."""
     vault: DemographicVault | None = request.app.state.vault
     key_version = _active_key_version(request) if vault is not None else None
     if vault is None or key_version is None:
@@ -1479,6 +1496,7 @@ async def send_offer_route(
         raise HTTPException(status_code=503, detail="offers are unavailable: encryption keys are not configured")
     origin = await _front_desk_gate(conn, claims, body.clinic_id)
     actor = uuid.UUID(claims["sub"])
+    _charge_message_limit(limiter, actor)
     try:
         with _scheduling_errors():
             sent = await offers.send_offer(
@@ -1652,10 +1670,13 @@ class RecordReplyOut(_Out):
 
 
 @scheduling.post("/offers/replies", response_model=RecordReplyOut, status_code=201)
-async def record_patient_reply_route(body: RecordReplyIn, idempotency_key: IdempotencyKey, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims)) -> RecordReplyOut:
+async def record_patient_reply_route(
+    body: RecordReplyIn, idempotency_key: IdempotencyKey, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims),
+    limiter: "patient_view.OpenRateLimiter | None" = Depends(message_limiter),
+) -> RecordReplyOut:
     """Record a reply the patient gave to the front desk (by phone or in person): it is stored encrypted as a patient message in the patient's appointments thread, and the deterministic red-flag rules screen it
     in the same transaction, before anything else (the reply and interpret routes then take its message id). A red flag or an unreadable reply raises the nurse task. 404 for a clinic you cannot see or a
-    patient who is not at it, 403 unless you are front desk there, 409 if the key was used for a different reply, 422 for a blank or over-long text, 503 if the encryption keys are not configured."""
+    patient who is not at it, 403 unless you are front desk there, 409 if the key was used for a different reply, 422 for a blank or over-long text, 429 over your per-minute message limit (a required setting; unset means no limit), 503 if the encryption keys are not configured."""
     vault: DemographicVault | None = request.app.state.vault
     key_version = _active_key_version(request) if vault is not None else None
     if vault is None or key_version is None:
@@ -1663,6 +1684,7 @@ async def record_patient_reply_route(body: RecordReplyIn, idempotency_key: Idemp
         raise HTTPException(status_code=503, detail="recording a reply is unavailable: encryption keys are not configured")
     origin = await _front_desk_gate(conn, claims, body.clinic_id)
     actor = uuid.UUID(claims["sub"])
+    _charge_message_limit(limiter, actor)
     try:
         recorded = await offers.record_patient_reply(
             conn, vault, key_version=key_version, clinic_id=body.clinic_id, origin=origin, patient_id=body.patient_id, body_text=body.text, actor_id=actor, idempotency_key=idempotency_key,

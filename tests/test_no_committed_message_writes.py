@@ -35,6 +35,7 @@ NEVER_COMMITTED = {
 MESSAGE_WRITING_ROUTES = re.compile(r"offers/send|OFFER_SEND")
 ROUTE_DRIVERS = {
     "test_api_offers_live.py": "an outer transaction, rolled back at the end",
+    "test_e2e_demo_flow_live.py": "the offers harness (imported from test_api_offers_live.py): an outer transaction, rolled back at the end",
     "test_api_role_matrix.py": "its cases reach the send route only while the clinician settings are unset (503, no write); the `ids` teardown fails if any message was committed",
 }
 

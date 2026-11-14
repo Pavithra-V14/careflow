@@ -19190,7 +19190,7 @@
     },
     "/v1/staff/scheduling/offers/replies": {
       "post": {
-        "description": "Record a reply the patient gave to the front desk (by phone or in person): it is stored encrypted as a patient message in the patient's appointments thread, and the deterministic red-flag rules screen it\nin the same transaction, before anything else (the reply and interpret routes then take its message id). A red flag or an unreadable reply raises the nurse task. 404 for a clinic you cannot see or a\npatient who is not at it, 403 unless you are front desk there, 409 if the key was used for a different reply, 422 for a blank or over-long text, 503 if the encryption keys are not configured.",
+        "description": "Record a reply the patient gave to the front desk (by phone or in person): it is stored encrypted as a patient message in the patient's appointments thread, and the deterministic red-flag rules screen it\nin the same transaction, before anything else (the reply and interpret routes then take its message id). A red flag or an unreadable reply raises the nurse task. 404 for a clinic you cannot see or a\npatient who is not at it, 403 unless you are front desk there, 409 if the key was used for a different reply, 422 for a blank or over-long text, 429 over your per-minute message limit (a required setting; unset means no limit), 503 if the encryption keys are not configured.",
         "operationId": "record_patient_reply_route_v1_staff_scheduling_offers_replies_post",
         "parameters": [
           {
@@ -19279,6 +19279,16 @@
             },
             "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
           },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Too many requests: the per-user limit was reached; wait and try again. Fixed body."
+          },
           "503": {
             "content": {
               "application/json": {
@@ -19303,7 +19313,7 @@
     },
     "/v1/staff/scheduling/offers/send": {
       "post": {
-        "description": "Press send: hold the slot for the chosen ranked candidate and record the offer message. 404 for a clinic you cannot see, 403 unless you are front desk there, 409 if the slot is not open, the\ncandidate is not among the ranked ones, or the key was used for a different offer, 503 if the clinician-owned settings or the encryption keys are not configured.",
+        "description": "Press send: hold the slot for the chosen ranked candidate and record the offer message. 404 for a clinic you cannot see, 403 unless you are front desk there, 409 if the slot is not open, the\ncandidate is not among the ranked ones, or the key was used for a different offer, 429 over your per-minute message limit (a required setting; unset means no limit), 503 if the clinician-owned settings or the encryption keys are not configured.",
         "operationId": "send_offer_route_v1_staff_scheduling_offers_send_post",
         "parameters": [
           {
@@ -19391,6 +19401,16 @@
               }
             },
             "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Too many requests: the per-user limit was reached; wait and try again. Fixed body."
           },
           "503": {
             "content": {

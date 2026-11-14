@@ -6,6 +6,7 @@
   * `tail_review` (15.4): the ids and costs of the costliest 5% of jobs, for the weekly admin summary. Ids and numbers only.
   * `grounding_rate` (14.4): the share of decision-relevant facts that passed the tiered checks; no value when none were checked.
   * `check_pinned_models` (5.3): which pinned model ids a provider's listing no longer shows. A provider whose listing could not be read is UNVERIFIABLE, never "vanished".
+  * `latency_parts` (14.4): machine time, human wait and external wait summed separately, never blended.
   * `RunMemo` (6.2): request-scoped memoisation of tool reads within ONE run; discarded with the run.
 """
 
@@ -14,6 +15,7 @@ import json
 import math
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Final
 
@@ -79,6 +81,19 @@ def check_pinned_models(pinned: Mapping[str, frozenset[str]], listed: Mapping[st
         if gone:
             vanished[provider] = gone
     return DeprecationReport(vanished, frozenset(unverifiable))
+
+
+LATENCY_KINDS: Final = ("machine", "human_wait", "external_wait")
+
+
+def latency_parts(intervals: Sequence[tuple[str, datetime, datetime]]) -> dict[str, timedelta]:
+    """Latency per completed task in THREE parts, never blended (14.4): machine time, human wait, external wait (a patient reply, a pending result). A kind outside the three or an interval that ends before it starts is an error."""
+    totals = {k: timedelta(0) for k in LATENCY_KINDS}
+    for kind, start, end in intervals:
+        if kind not in totals or end < start:
+            raise ValueError("an interval has an unknown kind or ends before it starts")
+        totals[kind] += end - start
+    return totals
 
 
 class RunMemo:
