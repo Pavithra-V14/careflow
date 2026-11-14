@@ -17,7 +17,7 @@ function flatten(tree, prefix = '') {
   return Object.entries(tree).flatMap(([k, v]) => (typeof v === 'string' ? [[prefix + k, v]] : flatten(v, `${prefix}${k}.`)));
 }
 
-const FILES = ['', 'console.', 'f4.', 'f6.', 'f7.', 'f8.', 'f9.', 'f10.', 'f12.', 'f11.', 'f13.', 'f14.', 'f15.', 'f16.', 'f17.', 'f18.', 'f19.', 'f20.', 'f21.', 'f22.', 'f23.', 'f24.', 'f25.', 'f26.', 'f27.'];
+const FILES = ['', 'console.', 'f4.', 'f6.', 'f7.', 'f8.', 'f9.', 'f10.', 'f12.', 'f11.', 'f13.', 'f14.', 'f15.', 'f16.', 'f17.', 'f18.', 'f19.', 'f20.', 'f21.', 'f22.', 'f23.', 'f24.', 'f25.', 'f26.', 'f27.', 'f28.'];
 const all = (lang) => FILES.map((p) => read(`${p}${lang}.json`)).reduce((a, b) => merge(a, b));
 const en = Object.fromEntries(flatten(all('en')));
 const ta = Object.fromEntries(flatten(all('ta')));

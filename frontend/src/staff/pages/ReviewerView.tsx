@@ -18,7 +18,8 @@ const fraction = (v: unknown): number | null => (typeof v === 'number' && Number
 
 function useFraction() {
   const lang = useLang();
-  return (v: number): string => `${formatNumber(Math.round(v * 100), lang)}%`;
+  // Up to one decimal place, so a figure such as 87.6% is not rounded to something the system did not say.
+  return (v: number): string => `${formatNumber(Math.round(v * 1000) / 10, lang)}%`;
 }
 
 export function ReviewerView({ documentId }: { documentId: string }) {
@@ -66,7 +67,8 @@ export function ReviewerView({ documentId }: { documentId: string }) {
           <dt>{t('review.rule')}</dt>
           <dd>{text(v.triggering_rule) ?? notRecorded}</dd>
           <dt>{t('review.mode')}</dt>
-          <dd>{text(proposal.mode) ? word('referrals.mode', text(proposal.mode)) : notRecorded}</dd>
+          {/* The mode word (for example shadow) exactly as the API sent it. */}
+          <dd>{text(proposal.mode) ?? notRecorded}</dd>
           <dt>{t('review.abstained')}</dt>
           <dd>{abstained === null ? notRecorded : abstained ? t('common.yes') : t('common.no')}</dd>
           <dt>{t('review.candidateCount')}</dt>
@@ -140,6 +142,8 @@ export function ReviewerView({ documentId }: { documentId: string }) {
   return (
     <section aria-labelledby={`rv-${documentId}`}>
       <h2 id={`rv-${documentId}`}>{t('review.viewTitle')}</h2>
+      {/* Whatever the system proposed is a suggestion, never a decision: said above the figures, whenever there is something to show. */}
+      {query.isSuccess && <p className="hint">{t('review.suggestion')}</p>}
       {body}
     </section>
   );

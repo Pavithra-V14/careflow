@@ -106,9 +106,10 @@ function Detail({ documentId }: { documentId: string }) {
               </p>
             ) : (
               <>
+                <p className="hint">{t('review.suggestion')}</p>
                 <dl className="facts">
                   <dt>{t('referrals.proposalMode')}</dt>
-                  <dd>{word('referrals.mode', r.proposal.mode)}</dd>
+                  <dd>{r.proposal.mode}</dd>
                   <dt>{t('referrals.proposalAbstained')}</dt>
                   <dd>{r.proposal.abstained ? t('common.yes') : t('common.no')}</dd>
                   <dt>{t('referrals.col.decision')}</dt>

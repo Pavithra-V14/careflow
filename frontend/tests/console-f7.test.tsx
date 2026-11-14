@@ -298,6 +298,27 @@ describe('reviewer view and reason codes', () => {
     expect(facts.getByText('Approve text from the API')).toBeInTheDocument();
   });
 
+  it('labels the proposal a suggestion, and shows the mode, engine and figures exactly as sent', async () => {
+    await openConsole({ role: 'nurse', hash: `/referrals/${ID.doc}`, routes: base({ confidence: 0.876, engine: 'model-label-x', proposal: { abstained: false, mode: 'shadow', candidate_count: 2 }, alternatives: [{ label: 'card-x@3', probability: 0.4321 }] }) });
+    await screen.findByText('Approve text from the API');
+    const section = screen.getByRole('heading', { name: 'Reviewer view' }).closest('section') as HTMLElement;
+    expect(within(section).getByText(/This is a suggestion made by the system.*It is not a decision: a person decides\./)).toBeInTheDocument();
+    expect(within(section).getByText('shadow')).toBeInTheDocument(); // the mode word as sent, not reworded
+    expect(within(section).getByText('model-label-x')).toBeInTheDocument();
+    expect(within(section).getByText('87.6%')).toBeInTheDocument(); // not rounded to 88%
+    expect(within(section).getByText('43.2%')).toBeInTheDocument();
+    const detailSection = screen.getByRole('heading', { level: 2, name: 'Triage proposal' }).parentElement as HTMLElement;
+    expect(within(detailSection).getAllByText(/This is a suggestion made by the system/).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('shows an unknown mode as "Not recorded" in the reviewer view', async () => {
+    await openConsole({ role: 'nurse', hash: `/referrals/${ID.doc}`, routes: base({ proposal: { abstained: false, candidate_count: 2 } }) });
+    await screen.findByText('Approve text from the API');
+    const section = screen.getByRole('heading', { name: 'Reviewer view' }).closest('section') as HTMLElement;
+    const mode = within(section).getByText('Mode').nextElementSibling as HTMLElement;
+    expect(mode).toHaveTextContent('Not recorded');
+  });
+
   it('shows a known confidence as a percentage', async () => {
     await openConsole({ role: 'nurse', hash: `/referrals/${ID.doc}`, routes: base({ confidence: 0.8, engine: 'engine-x', triggering_rule: 'rule-x' }) });
     expect(await screen.findByText('80%')).toBeInTheDocument();

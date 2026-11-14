@@ -116,6 +116,10 @@ test('walk every screen, read-only, and record each call', async ({ page }) => {
       incomplete.push(name);
     }
   };
+  let seenPatientLink: string | null = null;
+  const noteLink = async () => {
+    if (seenPatientLink === null) seenPatientLink = await optionalHref(page.locator('main a[href^="#/patients/"]'));
+  };
   const optionalHref = async (locator: ReturnType<Page['locator']>) => ((await locator.count()) > 0 ? await locator.first().getAttribute('href', { timeout: 5000 }) : null);
 
   try {
@@ -158,6 +162,8 @@ test('walk every screen, read-only, and record each call', async ({ page }) => {
       ['bookings', '#/scheduling/bookings'],
       ['waitlist', '#/scheduling/waitlist'],
       ['alerts', '#/alerts'],
+      ['patient requests (front desk)', '#/requests'],
+      ['admin red-flag rules', '#/admin/rules'],
       ['dashboard', '#/dashboard'],
       ['care gaps', '#/care/gaps'],
       ['care plans', '#/care/plans'],
@@ -171,8 +177,31 @@ test('walk every screen, read-only, and record each call', async ({ page }) => {
       ['admin recovery', '#/admin/recovery'],
       ['admin grievances', '#/admin/grievances'],
     ] as const) {
-      await step(name, () => visit(name, hash));
+      await step(name, async () => {
+        await visit(name, hash);
+        await noteLink();
+      });
     }
+    // The rule authoring form is OPENED to see it render, and never saved: a rule is clinical content and the walk writes nothing.
+    await step('rule authoring form (opened, not saved)', async () => {
+      await visit('admin red-flag rules', '#/admin/rules');
+      await clickIf('rule authoring form (opened, not saved)', page.locator('main button', { hasText: /write a new rule version|புதிய விதிப் பதிப்பை எழுது/i }));
+    });
+    // Referral details: up to six, so a referral that has a proposal (and its reviewer view) is more likely to be among them.
+    await step('referral details (up to six)', async () => {
+      await visit('referrals list (for details)', '#/referrals');
+      const hrefs: string[] = [];
+      const links = page.locator('main tbody a');
+      const total = Math.min(await links.count(), 6);
+      for (let i = 0; i < total; i += 1) {
+        const href = await links.nth(i).getAttribute('href', { timeout: 5000 });
+        if (href) hrefs.push(href);
+      }
+      for (const [i, href] of hrefs.entries()) {
+        await visit(`referral detail ${i + 1}`, href);
+        await noteLink();
+      }
+    });
     let patientLink: string | null = null;
     await step('identity merges', async () => {
       await visit('identity merges', '#/identity/merges');
@@ -183,7 +212,8 @@ test('walk every screen, read-only, and record each call', async ({ page }) => {
       await visit('identity duplicates', '#/identity/duplicates');
       await clickIf('duplicates (resolved)', page.getByRole('button', { name: 'Resolved', exact: true }));
     });
-    if (patientLink) await step('patient record', () => visit('patient record (opened from a merge)', patientLink as string));
+    const toOpen = (patientLink as string | null) ?? (seenPatientLink as string | null);
+    if (toOpen) await step('patient record', () => visit('patient record (with its medications panel, read-only)', toOpen));
   } finally {
     // What the shell itself shows (closed words: the role label and the LIVE / TEST / unknown badge), so a clinic_origin the console
     // does not recognise (the database also allows eval and canary) is visible in the report as "Environment unknown".
@@ -198,6 +228,12 @@ test('walk every screen, read-only, and record each call', async ({ page }) => {
     save(calls, shell ? `${base}. The shell showed: ${shell}` : base);
   }
   if (incomplete.length > 0) console.log(`>>> Steps that did not complete (nothing from the page is recorded): ${incomplete.join(', ')}`);
+
+  // A walk where the backend refuses every staff route proves nothing: say so loudly instead of reporting a pass. A password-only session
+  // gets 401 (WWW-Authenticate: mfa) on every staff route except /v1/iam/me when the backend requires a second factor (CAREFLOW_REQUIRE_AAL2).
+  const refused = calls.filter((c) => c.status === 401 && c.template !== '/v1/iam/me');
+  if (refused.length > 0) console.log(`>>> ${refused.length} call(s) answered 401: the backend is refusing this sign-in on every staff screen (a password-only session needs CAREFLOW_REQUIRE_AAL2 off, which is allowed only in demo with synthetic data). Nothing was walked.`);
+  expect(refused.length, 'the backend refused this sign-in (401) on staff routes: nothing was walked').toBe(0);
 
   // The walk must never change anything. A write here means the recorder or a screen did something it should not.
   const writes = calls.filter((c) => !['GET', 'HEAD'].includes(c.method));
