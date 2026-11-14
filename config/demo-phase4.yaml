@@ -103,3 +103,6 @@ settings:
   message_max_per_minute:
     value: "10"
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  public_read_ip_per_minute:
+    value: "30"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"

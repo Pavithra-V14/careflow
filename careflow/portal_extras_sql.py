@@ -21,6 +21,7 @@ from careflow.care_gap_sql import sqlstate
 
 SEX_SETTING: Final = "CAREFLOW_SEX_WORDS"
 PUBLIC_IP_SETTING: Final = "CAREFLOW_PUBLIC_GRIEVANCE_IP_PER_HOUR"
+PUBLIC_READ_SETTING: Final = "CAREFLOW_PUBLIC_READ_IP_PER_MINUTE"  # the per-address limit on the public READ routes (the category list); required, no default
 LANGUAGES: Final = ("en", "ta")  # spec 19.4: English or Tamil
 _WORD = re.compile(r"^[a-z][a-z_]{0,19}$")
 
@@ -53,16 +54,21 @@ def public_ip_limit(environ: Mapping[str, str] | None = None) -> int | None:
     return int(raw) if raw.isdigit() and 1 <= int(raw) <= 1000 else None
 
 
-class HourlyLimiter:
-    """At most `limit` events per key in any 3600 seconds (a sliding window, in memory, per process)."""
+def public_read_limit(environ: Mapping[str, str] | None = None) -> int | None:
+    raw = ((environ if environ is not None else os.environ).get(PUBLIC_READ_SETTING) or "").strip()
+    return int(raw) if raw.isdigit() and 1 <= int(raw) <= 1000 else None
 
-    def __init__(self, limit: int, clock: Callable[[], float] = time.monotonic) -> None:
-        self._limit, self._clock = limit, clock
+
+class HourlyLimiter:
+    """At most `limit` events per key in any `window` seconds (3600 unless told otherwise; a sliding window, in memory, per process)."""
+
+    def __init__(self, limit: int, clock: Callable[[], float] = time.monotonic, window: float = 3600.0) -> None:
+        self._limit, self._clock, self._window = limit, clock, window
         self._events: dict[str, deque[float]] = defaultdict(deque)
 
     def allow(self, key: str) -> bool:
         now, window = self._clock(), self._events[key]
-        while window and now - window[0] >= 3600.0:
+        while window and now - window[0] >= self._window:
             window.popleft()
         if len(window) >= self._limit:
             return False
