@@ -271,6 +271,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 | 22.4 | Barrier classification; rebooking hands off to Scheduling; social barriers to front desk | BUILT (partial) | The classifier is a port; the rebooking hand-off raises a front-desk task | `careflow/visit_readiness.py`, `care_gaps.py` |
 | 22.5 | No new tool server; a `readiness` topic | BUILT | | migration 0050 |
 | 22.x | Lead-time trigger; a patient-facing channel for replies | NOT BUILT / DECISION | Owner decision: a nurse or doctor relays replies; the trigger is a producer design | `docs/design/phase7-visit-readiness.md` |
+| 22.6 | Patient visit preparation: the patient sees the clinic's own checklist for their own upcoming visit and marks items done (deferred item 30) | BUILT (mechanism), OFF by default; tested offline and by live database tests in CI | Items are the clinic's own checklist (`CAREFLOW_VISIT_READINESS_CONTENT`); nothing is invented; with none configured the patient is told "Nothing to prepare for this visit."; the database holds only closed item ids and done flags (migration 0089, `careflow/visit_prep_sql.py`); switch `CAREFLOW_PATIENT_VISIT_PREP=on` | `docs/design/threat-model.md` |
 
 ## 23. Voice (spec 23)
 
