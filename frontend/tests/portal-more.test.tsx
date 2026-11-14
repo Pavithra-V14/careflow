@@ -38,7 +38,7 @@ function backend(s: State = {}) {
     if (key === 'get /v1/portal/grievances') return json({ grievances: [] });
     if (key === 'get /v1/portal/grievance-categories') return json({ categories: ['access'] });
     if (key === 'get /v1/portal/voice/preference') return json({ voice_enabled: false });
-    if (key === 'get /v1/portal/profile') return s.profile ?? json(profileBody());
+    if (key === 'get /v1/portal/profile') return s.profile?.clone() ?? json(profileBody());
     if (key === 'put /v1/portal/profile') return s.putProfile ?? json(profileBody({ sex: 'female', preferred_language: 'ta' }));
     if (key === 'get /v1/portal/notifications')
       return (
@@ -88,7 +88,17 @@ describe('your details', () => {
     expect(put[0]?.key).toBeTruthy();
   });
 
-  it('says so when the hospital has no list of choices yet, and tells a 503 and a 422 in fixed words', async () => {
+  it('sends only the field that changed and leaves the other out, and never offers to clear one', async () => {
+    const user = userEvent.setup();
+    const calls = stubApi(backend({ profile: json(profileBody({ sex: 'male', preferred_language: 'en' })) }));
+    await mount();
+    await user.selectOptions(await screen.findByLabelText('Preferred language'), 'ta');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await screen.findByText('Your details were saved.');
+    expect(posts(calls, '/v1/portal/profile')[0]?.body).toEqual({ preferred_language: 'ta' });
+  });
+
+  it('says so when the hospital has no list of choices yet', async () => {
     stubApi(backend({ profile: json(profileBody({ sex_words: [] })) }));
     await mount();
     expect(await screen.findByText("The hospital has not set up a list of choices yet.")).toBeInTheDocument();

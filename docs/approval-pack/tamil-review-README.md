@@ -24,7 +24,7 @@ The pack was regenerated on 2026-11-14 (`npm run i18n:pack`) and covers every st
 
 ## How long it should take
 
-This is an estimate by the preparer, not a measured time. Part 1 and Part 2 together: about 2 to 3 hours. The full table: roughly 9 to 11 hours in all, best done in sittings of about 2 hours, because most of it is short labels (about 15 minutes per 100 labels) and about 719 sentences (about 40 seconds each). If you can only give two to three hours, do Parts 1, 2, 4 and 5.
+This is an estimate by the preparer, not a measured time. Part 1 and Part 2 together: about 2 to 3 hours. The full table: roughly 9 to 11 hours in all, best done in sittings of about 2 hours, because most of it is short labels (about 15 minutes per 100 labels) and about 718 sentences (about 40 seconds each). If you can only give two to three hours, do Parts 1, 2, 4 and 5.
 
 ## How to send corrections back
 

@@ -80,8 +80,8 @@
       }
     },
     "grievance": {
-      "title": "Send a request or a complaint",
-      "body": "Use this for access, correction, erasure, a nominee, or any other request. A person at the hospital reads it.",
+      "title": "Send a complaint",
+      "body": "Use this to send a complaint. To ask for your record to be erased, a detail corrected or a nominee recorded, use the section above. A person at the hospital reads it.",
       "category": "Category",
       "categoryHint": "A code from the hospital's list (lowercase letters, digits and underscores). The hospital tells you which codes exist.",
       "text": "What you want to tell us",

@@ -1192,7 +1192,7 @@ Terms standardised: proposal, resolve / resolved.
 | `portal.consent.withdrawn` | Withdrawn | திரும்பப் பெறப்பட்டது | ok |
 | `portal.consent.withdrawnDone` | Your consent was withdrawn. You can grant it again at any time. | உங்கள் ஒப்புதல் திரும்பப் பெறப்பட்டது. எப்போது வேண்டுமானாலும் மீண்டும் வழங்கலாம். | ok |
 | `portal.erased` | Erased | அழிக்கப்பட்டது | ok |
-| `portal.grievance.body` | Use this for access, correction, erasure, a nominee, or any other request. A person at the hospital reads it. | அணுகல், திருத்தம், அழித்தல், பரிந்துரைக்கப்பட்டவர், அல்லது வேறு எந்தக் கோரிக்கைக்கும் இதைப் பயன்படுத்துங்கள். மருத்துவமனையில் ஒருவர் இதைப் படிப்பார். | ok |
+| `portal.grievance.body` | Use this to send a complaint. To ask for your record to be erased, a detail corrected or a nominee recorded, use the section above. A person at the hospital reads it. | புகாரை அனுப்ப இதைப் பயன்படுத்துங்கள். உங்கள் பதிவை அழிக்க, ஒரு விவரத்தைத் திருத்த அல்லது ஒரு நியமனதாரரைப் பதிவு செய்யக் கேட்க, மேலே உள்ள பகுதியைப் பயன்படுத்துங்கள். மருத்துவமனையில் ஒருவர் இதைப் படிப்பார். | ok |
 | `portal.grievance.category` | Category | வகை | ok |
 | `portal.grievance.categoryHint` | A code from the hospital's list (lowercase letters, digits and underscores). The hospital tells you which codes exist. | மருத்துவமனையின் பட்டியலிலிருந்து ஒரு குறியீடு (சிற்றெழுத்துகள், எண்கள், அடிக்கோடுகள்). எந்தக் குறியீடுகள் உள்ளன என்பதை மருத்துவமனை உங்களுக்குச் சொல்லும். | ok |
 | `portal.grievance.categoryRefused` | That category is not on the hospital's list. Nothing was sent. | அந்த வகை மருத்துவமனையின் பட்டியலில் இல்லை. எதுவும் அனுப்பப்படவில்லை. | ok |
@@ -1207,7 +1207,7 @@ Terms standardised: proposal, resolve / resolved.
 | `portal.grievance.status.open` | Open | திறந்தது | ok |
 | `portal.grievance.status.resolved` | Resolved | தீர்க்கப்பட்டது | ok |
 | `portal.grievance.text` | What you want to tell us | எங்களிடம் நீங்கள் சொல்ல விரும்புவது | ok |
-| `portal.grievance.title` | Send a request or a complaint | கோரிக்கை அல்லது புகாரை அனுப்புங்கள் | ok |
+| `portal.grievance.title` | Send a complaint | புகாரை அனுப்புங்கள் | ok |
 | `portal.grievance.unavailable` | This is not available right now (the category list or the encryption is not set up). Nothing was sent. | இது இப்போது கிடைக்கவில்லை (வகைப் பட்டியல் அல்லது குறியாக்கம் அமைக்கப்படவில்லை). எதுவும் அனுப்பப்படவில்லை. | ok |
 | `portal.hospital` | Hospital: {{name}} | மருத்துவமனை: {{name}} | ok |
 | `portal.linked.label` | Linked to a record | ஒரு பதிவுடன் இணைக்கப்பட்டுள்ளது | ok |
