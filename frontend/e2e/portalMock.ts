@@ -16,6 +16,10 @@ export interface PortalScenario {
   granted?: boolean;
   /** The patient is already linked to a record. */
   bound?: boolean;
+  /** The voice setting starts on. */
+  voiceOn?: boolean;
+  /** Opening a voice session answers 503 (voice not set up) instead of opening one. */
+  voiceUnavailable?: boolean;
 }
 
 const b64url = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
@@ -28,6 +32,7 @@ export async function installPortalMock(page: Page, scenario: PortalScenario = {
   let stage: 'none' | 'registered' | 'pending_activation' | 'active' = scenario.start ?? 'none';
   let granted = scenario.granted ?? false;
   let bound = scenario.bound ?? false;
+  let voiceOn = scenario.voiceOn ?? false;
   const calls: { method: string; path: string; key: string | null; body: unknown }[] = [];
   const session = () => ({ access_token: jwt(), token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 3600, refresh_token: 'mock-refresh', user: { id: 'mock-patient', aud: 'authenticated', role: 'authenticated', phone: GOOD_PHONE, app_metadata: {}, user_metadata: {}, created_at: '2026-01-01T00:00:00Z' } });
 
@@ -96,6 +101,12 @@ export async function installPortalMock(page: Page, scenario: PortalScenario = {
     if (method === 'GET' && path === '/v1/portal/my-data') {
       return reply(route, 200, { account_status: 'active', bookings: [], consents: [{ action: 'granted', notice_version: 3, occurred_at: '2026-11-09T05:00:00Z', purpose: 'care_delivery' }], grievances: [], messages: [], records: [], stage: 'active', truncated: false });
     }
+    if (method === 'GET' && path === '/v1/portal/voice/preference') return reply(route, 200, { voice_enabled: voiceOn });
+    if (method === 'PUT' && path === '/v1/portal/voice/preference') {
+      voiceOn = (body as { voice_enabled: boolean }).voice_enabled;
+      return reply(route, 200, { voice_enabled: voiceOn });
+    }
+    if (method === 'POST' && path === '/v1/portal/voice/sessions') return scenario.voiceUnavailable ? refuse(route, 503) : reply(route, 201, { created: true, mic: 'ok', session_id: '44444444-4444-4444-8444-444444444444' });
     return refuse(route, 404);
   });
 

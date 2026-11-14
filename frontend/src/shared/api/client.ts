@@ -26,6 +26,7 @@ type ThreadTopic = NonNullable<ThreadQuery['topic']>;
 export type ConsentIn = components['schemas']['ConsentIn'];
 export type ClaimIn = components['schemas']['ClaimIn'];
 export type GrievanceIn = components['schemas']['GrievanceIn'];
+export type VoiceSessionIn = components['schemas']['VoiceSessionIn'];
 export type NoteIn = components['schemas']['NoteIn'];
 export type BreakGlassOpenIn = components['schemas']['BreakGlassOpenIn'];
 export type BreakGlassOutcome = components['schemas']['BreakGlassReviewIn']['outcome'];
@@ -158,6 +159,9 @@ export const OPERATIONS = {
   listMyGrievances: { method: 'get', path: '/v1/portal/grievances' },
   fileGrievance: { method: 'post', path: '/v1/portal/grievances' },
   myData: { method: 'get', path: '/v1/portal/my-data' },
+  getVoicePreference: { method: 'get', path: '/v1/portal/voice/preference' },
+  putVoicePreference: { method: 'put', path: '/v1/portal/voice/preference' },
+  openVoiceSession: { method: 'post', path: '/v1/portal/voice/sessions' },
   // ---- visit readiness, portal claims, break-glass, recovery, notes, grievances ----
   readinessView: { method: 'get', path: '/v1/staff/visits/{visit_id}/readiness' },
   startReadiness: { method: 'post', path: '/v1/staff/visits/{visit_id}/readiness/start' },
@@ -207,7 +211,7 @@ export const OPERATIONS = {
   // ---- review console ----
   reviewView: { method: 'get', path: '/v1/staff/referrals/{document_id}/review-view' },
   reasonCodes: { method: 'get', path: '/v1/staff/console/reason-codes' },
-} as const satisfies Record<string, { method: 'get' | 'post'; path: keyof paths }>;
+} as const satisfies Record<string, { method: 'get' | 'post' | 'put'; path: keyof paths }>;
 
 interface ApiOptions {
   baseUrl: string;
@@ -474,6 +478,10 @@ export function createApi(options: ApiOptions) {
     fileGrievance: (body: GrievanceIn, o?: WriteOptions) => client.POST('/v1/portal/grievances', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
     // Everything held about the person: only on their click, saved as one file, never cached.
     myData: () => client.GET('/v1/portal/my-data'),
+    // Voice (patient, active account): the person's own on/off setting, and opening one scoped session after the per-session consent.
+    getVoicePreference: () => client.GET('/v1/portal/voice/preference'),
+    putVoicePreference: (voiceEnabled: boolean, o?: WriteOptions) => client.PUT('/v1/portal/voice/preference', { params: { header: { 'X-Idempotency-Key': key(o) } }, body: { voice_enabled: voiceEnabled } }),
+    openVoiceSession: (body: VoiceSessionIn, o?: WriteOptions) => client.POST('/v1/portal/voice/sessions', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
 
     // ---- visit readiness, portal claims, break-glass, recovery, notes, grievances ---------------------------------------------
     readinessView: (visitId: string) => client.GET('/v1/staff/visits/{visit_id}/readiness', { params: { path: { visit_id: visitId } } }),
