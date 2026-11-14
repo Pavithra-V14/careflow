@@ -30,6 +30,7 @@ from careflow.ports import (
 HOST: Final = "https://generativelanguage.googleapis.com"
 MODEL_RE: Final = re.compile(r"\Agemini-[a-z0-9][a-z0-9.\-]{1,40}\Z")
 MAX_IMAGE_BYTES: Final = 15 * 1024 * 1024
+MAX_OUTPUT_TOKENS: Final = 8192  # a bound on the answer (a model that loops on a hard page would otherwise run until the wall-clock timeout); a cut-off answer is finishReason MAX_TOKENS, which this adapter refuses as incomplete (a technical bound, not a clinical value)
 CONTENT_TYPES: Final = frozenset({"image/png", "image/jpeg"})
 INSTRUCTION: Final = (
     "Transcribe all the text in this image exactly as written, in reading order. Output only the transcription. "
@@ -55,7 +56,7 @@ class GeminiVisionAdapter:
             raise PermanentError("the image is empty or larger than the allowed size")
         body = {
             "contents": [{"role": "user", "parts": [{"text": INSTRUCTION}, {"inline_data": {"mime_type": request.content_type, "data": base64.b64encode(request.image).decode("ascii")}}]}],
-            "generationConfig": {"temperature": 0},
+            "generationConfig": {"temperature": 0, "maxOutputTokens": MAX_OUTPUT_TOKENS},
         }
         answer = await post_json(self._http, f"{HOST}/v1beta/models/{self._model}:generateContent", headers={"x-goog-api-key": self._key}, body=body, seconds=self._seconds)
         text = _text_of(answer)

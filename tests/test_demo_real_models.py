@@ -45,6 +45,7 @@ from careflow.ports import (
 )
 from careflow.provider_setup import ProviderSet
 from tests.test_front_door import Holds, Proposer, Recorder
+from tests.test_providers import KEY, Mock, json_reply
 from tests.test_referral import CLINIC, DOC, Conn, Engine, Ingestor
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -377,7 +378,7 @@ def test_the_script_prints_only_metadata_never_a_letters_text_a_key_or_a_model_w
     source = (ROOT / "scripts" / "demo_real_models.py").read_text(encoding="utf-8")
     code = "\n".join(line for line in source.splitlines() if not line.lstrip().startswith("#"))
     assert "_API_KEY" not in code and "KEY\"" not in code  # the script never names or reads a provider key itself
-    assert not re.search(r"say\([^)]*((?<!up)\.text\b|page\b|letter_text|answer)", code.replace("page:", ""))  # nothing printed is a letter or an answer (`up.text` is the stage's fixed-words label)
+    assert not re.search(r"say\([^)]*((?<!up)\.text\b|page\b|letter_text|answer)", code.replace("page:", "").replace("len(page)", ""))  # nothing printed is a letter or an answer (`up.text` is the stage's fixed-words label)
     assert "SWITCH" in code and "worker_context" in code and "order_is_safe" in code
 
 
@@ -386,3 +387,166 @@ def test_the_app_upgrades_only_under_the_gate_and_before_the_handlers_are_regist
     at = source.index("demo_real_models.allowed(os.environ, resolve_profile())")
     assert at < source.index("handlers = {FRONT_DOOR_TASK") and "demo_real_models.upgrade_components" in source[at : at + 900]
     assert "demo_real_models.allowed(" in source[at - 100 : at + 60] and "components is not None" in source[at - 60 : at + 40]
+
+
+
+# ---- the live run of 2026-11-14: stage 1 took 123 s, ended extraction_unavailable, and the rules looked "clear" -------------------------------------------------------
+
+
+
+from careflow.adapters.gemini import GeminiVisionAdapter
+from careflow.gateway import (
+    AllRoutesFailed,
+    NoApprovedRoute,
+    RoleDailyCeilings,
+    RouteAttempt,
+)
+from careflow.ports import VisionRequest
+
+
+def vision_gateway(adapter, *, paid=False, ceiling=Decimal(0), timeout=60.0):
+    price = Decimal("0.001") if paid else Decimal(0)
+    row = ModelRow("vlm", "gemini", "gemini-test-1", "synthetic_only", 1, price, price, Decimal("0.001"), Decimal("0.001"), timeout_seconds=timeout)
+    return Gateway([row], {("gemini", "gemini-test-1"): adapter}, InMemorySpendLedger(), SpendLimits(clinic_daily_usd=Decimal(1)), role_ceilings=RoleDailyCeilings({"vlm": ceiling}), origin="test", base_delay=0.0)
+
+
+def page_request():
+    return VisionRequest(synthetic_letter.letter_scan()[0], "image/png", 1, CLINIC)
+
+
+@pytest.mark.asyncio
+async def test_a_daily_ceiling_of_zero_does_not_refuse_a_free_vision_call_but_does_refuse_a_paid_one_and_says_so():
+    log: list[str] = []
+    free = vision_gateway(FakeVisionAdapter(log), ceiling=Decimal(0))
+    got = await GatewayVision(free, data_class=DataClass.SYNTHETIC).read(page_request())  # the live run's ceiling was 0 and the row is free tier: a free call costs nothing, so no ceiling applies
+    assert got.text and log == ["MODEL:vision"]
+    paid_log: list[str] = []
+    paid = GatewayVision(vision_gateway(FakeVisionAdapter(paid_log), paid=True, ceiling=Decimal(0)), data_class=DataClass.SYNTHETIC)
+    with pytest.raises(SpendCeilingReached) as caught:
+        await paid.read(page_request())
+    assert paid_log == []  # no call was made
+    assert demo_real_models.failure_reason(caught.value) == "budget refused: a spend ceiling was reached"
+
+
+@pytest.mark.asyncio
+async def test_a_provider_that_never_answers_is_three_timeouts_and_the_probe_says_exactly_that():
+    class Hangs:
+        calls = 0
+
+        async def __call__(self, request):
+            Hangs.calls += 1
+            await asyncio.sleep(5)
+
+    gateway = vision_gateway(Hangs(), timeout=0.05)
+    probe = demo_real_models.VisionProbe(GatewayVision(gateway, data_class=DataClass.SYNTHETIC))
+    started = __import__("time").monotonic()
+    with pytest.raises(AllRoutesFailed):
+        await probe.read(page_request())
+    assert __import__("time").monotonic() - started < 2 and Hangs.calls == 3  # the gateway makes up to THREE attempts per route (spec 16.1) and the breaker only opens after ten failures: a hanging provider costs 3 x the row's timeout (3 x 60 s = 180 s in life)
+    assert probe.calls == 1 and probe.reason == "timed out x3"
+    assert "gemini" not in probe.reason and "https" not in probe.reason and KEY not in probe.reason
+
+
+@pytest.mark.asyncio
+async def test_a_provider_error_status_is_named_in_fixed_words_without_the_key_or_the_url():
+    adapter = GeminiVisionAdapter(KEY, "gemini-3.5-flash-lite", timeout_seconds=60, http=Mock(json_reply({"error": {"message": f"echo {KEY} https://generativelanguage.googleapis.com"}}, 404)).client())
+    probe = demo_real_models.VisionProbe(GatewayVision(vision_gateway_for(adapter), data_class=DataClass.SYNTHETIC))
+    with pytest.raises(AllRoutesFailed):
+        await probe.read(page_request())
+    assert probe.reason == "provider refused the request [the provider refused the request (status 404)]"
+    assert KEY not in probe.reason and "https" not in probe.reason and "generativelanguage" not in probe.reason
+    adapter = GeminiVisionAdapter(KEY, "gemini-3.5-flash-lite", timeout_seconds=60, http=Mock(json_reply({}, 503)).client())
+    probe = demo_real_models.VisionProbe(GatewayVision(vision_gateway_for(adapter), data_class=DataClass.SYNTHETIC))
+    with pytest.raises(AllRoutesFailed):
+        await probe.read(page_request())
+    assert probe.reason == "provider error (retry-worthy) x3 [the provider answered with a retry-worthy status (503)]"
+
+
+def vision_gateway_for(adapter):
+    row = ModelRow("vlm", "gemini", "gemini-3.5-flash-lite", "synthetic_only", 1, Decimal(0), Decimal(0), Decimal("0.001"), Decimal("0.001"), timeout_seconds=60.0)
+    return Gateway([row], {("gemini", "gemini-3.5-flash-lite"): adapter}, InMemorySpendLedger(), SpendLimits(clinic_daily_usd=Decimal(1)), origin="test", base_delay=0.0)
+
+
+def test_every_failure_has_a_fixed_words_reason_and_an_unknown_one_says_so():
+    reason = demo_real_models.failure_reason
+    assert reason(NoApprovedRoute("vlm", DataClass.SYNTHETIC)) == "gate missing: no approved route for this data"
+    assert reason(SpendCeilingReached("x")).startswith("budget refused")
+    assert reason(AllRoutesFailed("vlm", (RouteAttempt("p", "m", "skipped_spend"),))) == "budget refused (a spend ceiling)"
+    assert reason(AllRoutesFailed("vlm", (RouteAttempt("p", "m", "skipped_no_adapter"),))) == "gate missing (no adapter built)"
+    assert reason(AllRoutesFailed("vlm", (RouteAttempt("p", "m", "timeout", 2), RouteAttempt("p2", "m2", "skipped_breaker_open")))) == "timed out x2; route paused after repeated failures"
+    mixed = RouteAttempt("p", "m", "failed_transient", 3, ("timeout", "timeout", "failed_transient"), "the provider answered with a retry-worthy status (429)")  # the live run's likely shape: two timeouts, then a quick refusal
+    assert reason(AllRoutesFailed("vlm", (mixed,))) == "timed out x2, then provider error (retry-worthy) [the provider answered with a retry-worthy status (429)]"
+    assert reason(AllRoutesFailed("vlm", ())) == "no route was tried"
+    assert reason(PermanentError("the provider blocked this page")) == "the provider blocked this page"
+    assert reason(RuntimeError("secret " + KEY)) == "unexpected error"  # an unknown failure never echoes its message
+
+
+@pytest.mark.asyncio
+async def test_a_page_that_was_not_read_is_never_shown_as_read_and_the_rules_are_never_shown_as_clear():
+    script = load_script()
+    log: list[str] = []
+    up = demo_real_models.upgrade_components(base_components(log), providers_for(FakeVisionAdapter(log, raises=PermanentError("the provider refused the request (status 404)")), None), loader=loader, environ=ON, profile="demo")
+    assert up.vision_probe is not None
+    from careflow.front_door import (
+        FrontDoorDeps,
+        build_front_door,
+        initial_state,
+        run_config,
+    )
+
+    conn = Conn(log=log)
+
+    @asynccontextmanager
+    async def session():
+        yield conn
+
+    c = up.components
+    deps = FrontDoorDeps(session=session, engine=c.engine, texts=c.texts, extractor=c.extractor, ingestor=c.ingestor, retriever=c.retriever, proposer=c.proposer, recorder=c.recorder, holds=c.holds, retrieval_scope=dict(c.retrieval_scope), profile="demo")
+    graph = build_front_door(deps, InMemorySaver(), environ={})
+    with worker_context():
+        await graph.ainvoke(initial_state(DOC, CLINIC, "test"), run_config(DOC, CLINIC, "test"))
+    state = (await graph.aget_state(run_config(DOC, CLINIC, "test"))).values
+    assert state["status"] == "extraction_unavailable" and "rules" not in log
+    events = [e for e in log if e in ("rules",)]
+    t_status, t_note = script.text_stage(True, events, up.vision_probe, state["status"])
+    assert t_status == "NOT READ" and "provider refused the request" in t_note and "status 404" in t_note
+    r_status, r_note = script.rules_stage(events, False, state["status"])
+    assert r_status == "NOT RUN" and "NOT a clear" in r_note  # the live run reported the rules as clear: they never ran
+    d_status, _ = script.decision_stage(up.ranker.last if up.ranker else None, state["status"])
+    assert d_status == "not run" or d_status == "not asked"
+    assert script.run_reasons(state) and all(r.islower() for r in script.run_reasons(state))
+
+
+def test_the_stage_words_for_a_good_run_a_flagged_run_an_earlier_run_and_an_unassessable_run():
+    script = load_script()
+    assert script.text_stage(True, ["text", "rules"], None, "triage_proposed") == ("read", "")
+    assert script.text_stage(False, [], None, "triage_proposed")[0] == "not run (earlier run)"
+    assert script.rules_stage(["text", "rules"], False, "triage_proposed")[0] == "clear" and script.rules_stage(["text", "rules"], True, "red_flag_escalated")[0] == "FIRED"
+    assert script.rules_stage(["text", "rules"], False, "held_unassessable")[0] == "unassessable"
+    trace = demo_real_models.DecisionTrace("unavailable", reason="timed out x2")
+    assert script.decision_stage(trace, "triage_proposed") == ("unavailable", "timed out x2")
+    assert script.decision_stage(demo_real_models.DecisionTrace(), "red_flag_escalated")[0] == "not asked"
+
+
+def test_fresh_makes_a_new_document_key_every_time_and_without_it_the_key_is_fixed():
+    script = load_script()
+    fixed = {script.document_key("scan", False, False) for _ in range(5)}
+    assert fixed == {"real-models-demo:scan:clean"}
+    fresh = {script.document_key("scan", False, True) for _ in range(5)}
+    assert len(fresh) == 5 and all(k.startswith("real-models-demo:scan:clean:fresh-") for k in fresh) and not (fresh & fixed)
+    assert script.document_key("pdf", True, False) == "real-models-demo:pdf:flagged"
+    source = (ROOT / "scripts" / "demo_real_models.py").read_text(encoding="utf-8")
+    assert "--fresh" in source and "document_key(kind, flagged, fresh)" in source
+
+
+def test_the_scan_style_page_is_small_like_the_live_checks_page_and_the_gemini_request_bounds_its_answer():
+    page, ctype = synthetic_letter.letter_scan()
+    assert ctype == "image/png" and len(page) <= synthetic_letter.MAX_SCAN_BYTES  # the first version was 113,677 bytes (about 150 times the live check's page); the live run timed out twice on it
+    assert page == synthetic_letter.letter_scan()[0] and page != synthetic_letter.png_bytes(synthetic_letter.letter_lines(), scale=synthetic_letter.LETTER_SCALE)
+    from careflow.adapters.gemini import MAX_OUTPUT_TOKENS
+
+    assert 1024 <= MAX_OUTPUT_TOKENS <= 65536
+    mock = Mock(json_reply({"candidates": [{"content": {"parts": [{"text": "TEXT"}]}, "finishReason": "STOP"}]}))
+    asyncio.run(GeminiVisionAdapter(KEY, "gemini-3.5-flash-lite", timeout_seconds=60, http=mock.client())(page_request()))
+    body = __import__("json").loads(mock.requests[0].content)
+    assert body["generationConfig"] == {"temperature": 0, "maxOutputTokens": MAX_OUTPUT_TOKENS}
