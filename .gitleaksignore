@@ -16,5 +16,7 @@ a5c5067291b175627f16838f15edc2d4cbe21ab6:careflow/app.py:generic-api-key:3994
 # Reviewed 2026-11-08: the identifier idempotency_key in a route call (clinical note write), not a credential
 17615a7d0f6d2ac4b6c3f554da550e421bc8d88e:careflow/app.py:generic-api-key:4944
 
-# generic-api-key false positive (2026-11-14): `token_sets=body.token_sets, idempotency_key=idempotency_key` in the rule-authoring route: argument names, no secret
+# Reviewed 2026-11-14: argument names in the rule-authoring route call, not a credential
 b467d89d29fef5c4002d5fff39ac5a0a29d63ba9:careflow/app.py:generic-api-key:3922
+# Reviewed 2026-11-14: the comment above this entry in an earlier version of this file, not a credential
+08332d49535dc2c6240c9f5c566e958f8aea319b:.gitleaksignore:generic-api-key:19
