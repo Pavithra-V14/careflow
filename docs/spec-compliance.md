@@ -116,7 +116,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 | Req | Requirement | Status | Reason | Where |
 |---|---|---|---|---|
 | 10.1 | Hand-rolled pipeline: BM25 in own code, RRF, hosted reranker | BUILT (BM25, RRF) / FAKE (rest) | Qdrant, embeddings, reranker are ports with fakes | `careflow/retrieval.py` |
-| 10.2 | Two corpora; card retrieval text from structured fields only; notes always filtered by patient | BUILT / DECISION | Card text builder built; `kb.cards` does not exist (every card is clinician content); a notes query wrapper needs the vector store | `careflow/retrieval.py` |
+| 10.2 | Two corpora; card retrieval text from structured fields only; notes always filtered by patient | BUILT (card text, notes wrapper) / DECISION | Card text builder built; the patient-scoped note-vector wrapper makes an unscoped query impossible (clinic and patient required, current-only), over the fake store; `kb.cards` does not exist (every card is clinician content) | `careflow/retrieval.py`, `careflow/note_search.py` |
 | 10.3 | Section-aware chunking, one context line per document, small-to-big | NOT BUILT | Needs Unstructured and an embedding model; the real-PDF spike is open | `docs/design/real-pdf-spike.md` |
 | 10.4 | Tiered extraction: pypdf, Unstructured, Gemini; per-page provenance | BUILT (pypdf, ports) / FAKE | Unstructured and the real vision model are not wired (Gemini is a synthetic demo adapter) | `careflow/extraction.py`, `adapters/pdf.py`, `adapters/vision.py` |
 | 10.5 | Embeddings: a local primary and a hosted hedge in one collection | FAKE | No model approved or installed | `careflow/ports.py` |
@@ -197,7 +197,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 | 16.5b | Data residency: India region; PHI only to local or approved calls | DECISION | Dev and CI are Tokyo and synthetic; production region is the owner's | `docs/design/pre-launch-checklist.md` |
 | 16.5c | Backups, point-in-time restore, quarterly drill | UNMEASURED | Checkers and runbooks built; no drill run | `careflow/drills.py`, `docs/runbooks/` |
 | 16.5d | Breach runbook with the 72-hour window | DECISION | Skeleton; contacts and wording are the owner's and counsel's | `docs/runbooks/breach.md`, `docs/drafts/breach-notification-wording-draft.md` |
-| 16.6 | Vector storage under an agreement in `clinical`; ids-only payloads; a query wrapper; erasure verifies deletion | FAKE / DECISION | Port only; the Qdrant tenancy spike is open | `careflow/ports.py` |
+| 16.6 | Vector storage under an agreement in `clinical`; ids-only payloads; a query wrapper; erasure verifies deletion | BUILT (wrapper, erase and verify) / FAKE / DECISION | The wrapper, ids-only points and a verified delete are built over the port and its fake; the real store, its agreement and the tenancy spike are open | `careflow/note_search.py`, `ports.py` |
 
 ## 17. Data model, identity, infrastructure (spec 17)
 
@@ -341,6 +341,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 ## Built in this review
 
 - `careflow/spend_policy.py`: the 80% soft-threshold plan with the spec's order and the never-limited safety path (15.2), the failure multiplier and the weekly tail selection (15.4), the grounding rate (14.4), the model-deprecation comparison that never reads an unreadable listing as "vanished" (5.3), and request-scoped memoisation of tool reads (6.2). Tests: `tests/test_spend_policy.py`.
+- The patient-scoped note-vector wrapper with a verified erase (10.2, 16.6): `careflow/note_search.py`, `tests/test_note_search.py`.
 - The per-account message rate limit on the two staff routes that write a patient-facing message (11.5), the three-part latency function (14.4) and the gateway's feature plan (15.2).
 - The typed offer-draft response (`OfferDraftOut`: a closed reason word, the missing settings in their own field, typed data) for the frontend request about typed envelopes (8.3).
 
