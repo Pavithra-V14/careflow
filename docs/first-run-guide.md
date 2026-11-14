@@ -247,6 +247,8 @@ cd E:\Claude\careflow-run
 
 It asks you to type the project host once. It then makes one made-up page (invented names and tokens, never real ones), has Gemini read it, runs the red-flag rules on the text first, asks the decision model for a suggestion, writes a triage proposal that waits for a person, and asks Sarvam for a Tamil draft of a made-up sentence. **It prints only: each stage, real or fake, its status, seconds and cost, whether the rules fired, the order the stages ran in, and the proposal id.** Nothing is sent to anyone.
 
+- *Run it again:* a second run on the same document only reports the earlier result (no model is called). Add **`--fresh`** to make a NEW dummy letter document and run the whole path again (the earlier one is not touched).
+- *If a stage did not work:* its line carries a fixed-words reason (`budget refused`, `timed out x3`, `provider error ... (status 503)`, `provider refused the request ... (status 404)`, `gate missing`); `NOT READ` means no text was read, and then the rules show `NOT RUN` (never `clear`).
 - *Variations:* add `--kind pdf` (a PDF with a text layer, read without the vision model) or `--flagged` (the page carries the demo rule's invented token: the rules fire and no other model is asked).
 - *What I should see:* a line per stage; `real` for each provider whose key and live-check date are set, `fake` plus a reason otherwise; `PROPOSAL WAITING FOR REVIEW: <id>`; and the sign-in console showing a new triage task for "Demo Kilo Sample".
 - *Safe to run twice:* the second run reports the same proposal and calls no model.

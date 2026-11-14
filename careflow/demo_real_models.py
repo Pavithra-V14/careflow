@@ -63,6 +63,37 @@ DRAFT_EN: Final = "DEMO DRAFT, NOT SENT: we have received your referral and will
 _DECISION_FAILURES: Final = (NoApprovedRoute, SpendCeilingReached, AllRoutesFailed, BudgetExceeded, TransientError, PermanentError)
 _LETTER: Final = re.compile(r"PATIENT:\s*(?P<name>[A-Z][A-Z' -]{1,60}?)\s*,\s*(?P<dobq>DOB\s*(?P<dob>\d{4}-\d{2}-\d{2}))", re.IGNORECASE)
 MEMO: Final = 64
+_ATTEMPT_WORDS: Final = {
+    "ok": "answered", "timeout": "timed out", "failed_transient": "provider error (retry-worthy)", "failed_permanent": "provider refused the request",
+    "skipped_spend": "budget refused (a spend ceiling)", "skipped_breaker_open": "route paused after repeated failures", "skipped_no_adapter": "gate missing (no adapter built)",
+    "skipped_not_applicable": "route not applicable to this input",
+}
+
+
+def failure_reason(exc: BaseException) -> str:
+    """A FIXED-WORDS reason for a stage that failed or was skipped: budget refused, timed out, provider error with its status, gate missing. Metadata only: never content, a URL or a key (the adapters' own messages are
+    fixed words, proved by tests/test_providers.py)."""
+    if isinstance(exc, NoApprovedRoute):
+        return "gate missing: no approved route for this data"
+    if isinstance(exc, SpendCeilingReached):
+        return "budget refused: a spend ceiling was reached"
+    if isinstance(exc, BudgetExceeded):
+        return "budget refused: the per-run limit was reached"
+    if isinstance(exc, AllRoutesFailed):
+        parts = []
+        for a in exc.attempts:
+            runs: list[list[Any]] = []
+            for outcome in a.history or (a.outcome,) * max(a.calls, 1):  # each call's outcome in order, run-length counted: "timed out x2, then provider error (retry-worthy)"
+                if runs and runs[-1][0] == outcome:
+                    runs[-1][1] += 1
+                else:
+                    runs.append([outcome, 1])
+            words = [_ATTEMPT_WORDS.get(o, "failed") + (f" x{n}" if n > 1 else "") for o, n in runs]
+            parts.append(", then ".join(words) + (f" [{a.detail}]" if a.detail else ""))
+        return "; ".join(parts) or "no route was tried"
+    if isinstance(exc, TransientError | PermanentError):
+        return str(exc)[:120]
+    return "unexpected error"
 
 
 def switched_on(environ: Mapping[str, str]) -> bool:
@@ -121,6 +152,7 @@ class DecisionTrace:
     confidence: float | None = None
     engine: str | None = None
     seconds: float | None = None
+    reason: str | None = None  # a fixed-words reason when the stage did not answer
 
 
 class DecisionRankedRetriever:
@@ -138,25 +170,51 @@ class DecisionRankedRetriever:
             return found
         clinic_id = self._memo.clinic_for(query)
         if clinic_id is None:
-            self.last = DecisionTrace("unknown_clinic")  # the spend cannot be attributed: no call is made
+            self.last = DecisionTrace("unknown_clinic", reason="the clinic of the letter is not known, so no call was made")  # the spend cannot be attributed: no call is made
             return found
         options = tuple(c.card_id for c in found.candidates)
         started = time.monotonic()
         try:
             result = await self._decisions.decide(DecisionRequest(QUESTION, query, options, DataClass.SYNTHETIC), clinic_id=clinic_id, call_class=CallClass.ORDINARY)
-        except _DECISION_FAILURES:
-            self.last = DecisionTrace("unavailable", seconds=time.monotonic() - started)
+        except _DECISION_FAILURES as exc:
+            self.last = DecisionTrace("unavailable", seconds=time.monotonic() - started, reason=failure_reason(exc))
             return found
         seconds = time.monotonic() - started
         choice = result.value.choice
         if choice not in options:
-            self.last = DecisionTrace("unavailable", seconds=seconds)  # an answer that is not one of the options is not an answer
+            self.last = DecisionTrace("unavailable", seconds=seconds, reason="the answer was not one of the options")  # an answer that is not one of the options is not an answer
             return found
         first = next(c for c in found.candidates if c.card_id == choice)
         ordered: tuple[Candidate, ...] = (first, *(c for c in found.candidates if c is not first))
         self.last = DecisionTrace("suggested", choice, result.value.confidence, result.value.engine, seconds)
         return replace(found, candidates=ordered)
 
+
+
+class VisionProbe:
+    """Wraps the vision port and remembers what happened, as METADATA: how long each read took, how many came back and with how many characters, and a fixed-words reason when one failed. It re-raises, so the
+    pipeline behaves exactly as before; it is how the demo script can say WHY a page was not read (timed out, budget refused, provider error status, gate missing) instead of only that extraction was unavailable."""
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+        self.calls = 0
+        self.seconds = 0.0
+        self.answered_chars: int | None = None
+        self.reason: str | None = None
+
+    async def read(self, request: Any) -> Any:
+        self.calls += 1
+        started = time.monotonic()
+        try:
+            result = await self._inner.read(request)
+        except BaseException as exc:
+            self.reason = failure_reason(exc)
+            raise
+        else:
+            self.answered_chars = len(result.text)
+            return result
+        finally:
+            self.seconds += time.monotonic() - started
 
 
 class RealTexts:
@@ -194,6 +252,7 @@ class Upgrade:
     notes: list[str] = field(default_factory=list)
     decision_recorder: DecisionRecorder | None = None
     ranker: DecisionRankedRetriever | None = None
+    vision_probe: VisionProbe | None = None
 
 
 def has_role(gateway: Any, role: str) -> bool:
@@ -212,7 +271,8 @@ def upgrade_components(
     memo = ClinicMemo()
     upgraded = components
     if providers is not None and providers.vision is not None and loader is not None:
-        source = PipelineTextSource(ExtractionPipeline(PypdfExtractor(), vision=providers.vision), loader)
+        out.vision_probe = VisionProbe(providers.vision)
+        source = PipelineTextSource(ExtractionPipeline(PypdfExtractor(), vision=out.vision_probe), loader)
         upgraded = replace(upgraded, texts=RealTexts(source), extractor=LetterExtractor(memo))
         out.text = "real: gemini vision through the gateway"
     else:
@@ -239,19 +299,20 @@ class TranslationSuggestion:
     target: str
     characters: int = 0
     text: str | None = field(default=None, repr=False)
+    reason: str | None = None  # fixed words when it was not suggested
     label: str = DEMO_LABEL  # a SUGGESTION: nothing is stored or sent to a patient
 
 
 async def suggest_translation(translation: Any, *, text: str = DRAFT_EN, target: str = "ta", clinic_id: uuid.UUID | None = None) -> TranslationSuggestion:
     """Translate a draft with Sarvam as a SUGGESTION. `translation` is the built adapter or None. A missing adapter, a spend ceiling or a failure is a named status, never a crash and never invented text."""
     if translation is None:
-        return TranslationSuggestion("unavailable", target)
+        return TranslationSuggestion("unavailable", target, reason="gate missing: the translation provider was not built")
     try:
         answer = await translation.translate(TranslationRequest(text, "en", target, DataClass.SYNTHETIC, clinic_id))
-    except SpendCeilingReached:
-        return TranslationSuggestion("refused", target)
-    except (TransientError, PermanentError):
-        return TranslationSuggestion("failed", target)
+    except SpendCeilingReached as exc:
+        return TranslationSuggestion("refused", target, reason=failure_reason(exc))
+    except (TransientError, PermanentError) as exc:
+        return TranslationSuggestion("failed", target, reason=failure_reason(exc))
     return TranslationSuggestion("suggested", target, len(text), answer.value.text)
 
 

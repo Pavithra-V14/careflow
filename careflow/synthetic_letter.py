@@ -102,23 +102,27 @@ def png_bytes(lines: tuple[str, ...] = DUMMY_LINES, *, scale: int = SCALE) -> by
 
 
 def scan_png_bytes(lines: tuple[str, ...] = DUMMY_LINES, *, scale: int = SCALE) -> bytes:
-    """The same page made to LOOK scanned: grey paper that darkens down the page, speckle noise, a few dust marks, a dark edge. A fixed seed, so the same bytes every time; the text stays readable."""
+    """The same page made to LOOK scanned, but SMALL: grey paper that darkens down the page, a faint shade per scan LINE (one value per pixel row, which compresses to almost nothing), a few dust marks and a dark edge. A fixed
+    seed, so the same bytes every time; the text stays readable. (The first version put noise on every pixel: 113,677 bytes for a 1304 by 140 page, about 150 times the live check's page, and a live run of the
+    hosted vision model timed out twice on it. Per-pixel noise is what made the PNG huge and hard to read; `MAX_SCAN_BYTES` is asserted by a test.)"""
     _check(lines)
     rows = _bitmap(lines, scale)
     state = 12345
     height, width = len(rows), len(rows[0])
     for y, row in enumerate(rows):
+        state = (state * 1103515245 + 12345) & 0x7FFFFFFF
+        line_shade = (state >> 16) % 5 - 2  # -2 .. 2, the same for the whole scan line
+        paper = 238 - (18 * y) // max(height, 1) + line_shade  # a gentle shade down the page
         for x, value in enumerate(row):
-            state = (state * 1103515245 + 12345) & 0x7FFFFFFF
-            noise = (state >> 16) % 17 - 8  # -8 .. 8
-            paper = 238 - (18 * y) // max(height, 1)  # a gentle shade down the page
-            ink = 35 + (state >> 20) % 30  # not quite black
-            pixel = ink if value == 0 else paper + noise
-            if (state >> 8) % 997 == 0:
-                pixel = 150  # a dust speck
+            pixel = 40 if value == 0 else paper
             if x < 3 or x >= width - 3 or y < 3 or y >= height - 3:
                 pixel = 60  # the scanner's dark edge
-            row[x] = max(0, min(255, pixel))
+            row[x] = pixel
+    for k in range(12):  # a few dust specks, in fixed places
+        state = (state * 1103515245 + 12345) & 0x7FFFFFFF
+        y, x = 4 + (state >> 8) % max(height - 8, 1), 4 + (state >> 16) % max(width - 8, 1)
+        if rows[y][x] > 200:
+            rows[y][x] = 170
     return _png(rows)
 
 
@@ -151,6 +155,7 @@ LETTER_NAME: Final = "DEMO KILO SAMPLE"  # an invented token name, in the same "
 LETTER_DOB: Final = "1990-01-01"
 LETTER_CLEAN: Final = ("DUMMY REFERRAL LETTER", f"PATIENT: {LETTER_NAME}, DOB {LETTER_DOB}", "REF ZQ-4821. PLEASE SEE THIS PATIENT. ROUTINE REVIEW.")
 LETTER_SCALE: Final = 4
+MAX_SCAN_BYTES: Final = 30_000  # the scan-style page must stay small: a test asserts it
 
 
 def letter_lines(*, flagged: bool = False) -> tuple[str, ...]:

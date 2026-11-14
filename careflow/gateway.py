@@ -146,6 +146,8 @@ class RouteAttempt:
     model_id: str
     outcome: str  # ok | skipped_no_adapter | skipped_not_applicable | skipped_breaker_open | skipped_spend | failed_transient | timeout | failed_permanent
     calls: int = 0
+    history: tuple[str, ...] = ()  # the outcome of EACH call made on this route, in order (e.g. timeout, timeout, failed_transient): a route that timed out twice and then got a 503 says so
+    detail: str = ""  # the FIXED-WORDS message the adapter raised on its last failed call (e.g. "the provider refused the request (status 404)"), at most 120 characters; the adapters' messages never hold a key, URL or body
 
 
 @dataclass(frozen=True)
@@ -373,7 +375,8 @@ class Gateway:
         raise AllRoutesFailed(role, tuple(attempts))
 
     async def _try_route(self, row, adapter, breaker, payload, clinic_id, call_class, budget, attempts):
-        calls, last = 0, "failed_transient"
+        calls, last, detail = 0, "failed_transient", ""
+        history: list[str] = []
         for n in range(1, MAX_ATTEMPTS_PER_ROUTE + 1):
             if n > 1 and not breaker.allow():
                 break  # the breaker opened during our own retries: stop hammering the engine
@@ -385,15 +388,18 @@ class Gateway:
             except TimeoutError:
                 breaker.failure()
                 last = "timeout"
-            except TransientError:
+                history.append(last)
+            except TransientError as exc:
                 breaker.failure()
-                last = "failed_transient"
+                last, detail = "failed_transient", str(exc)[:120]
+                history.append(last)
             except RouteNotApplicable:
                 last = "skipped_not_applicable"  # the adapter declined without calling its model: not a failure, no breaker hit
                 break
-            except PermanentError:
+            except PermanentError as exc:
                 breaker.failure()
-                last = "failed_permanent"
+                last, detail = "failed_permanent", str(exc)[:120]
+                history.append(last)
                 break
             else:
                 breaker.success()
@@ -409,5 +415,5 @@ class Gateway:
                 return GatewayResult(out.value, row.provider, row.model_id, out.usage, actual, shadow, tuple(attempts))
             if n < MAX_ATTEMPTS_PER_ROUTE:
                 await self.sleep(self.base_delay * (2 ** (n - 1)) * (0.5 + self.jitter()))
-        attempts.append(RouteAttempt(row.provider, row.model_id, last, calls))
+        attempts.append(RouteAttempt(row.provider, row.model_id, last, calls, tuple(history), detail))
         return None

@@ -2,6 +2,7 @@
 
     uv run python scripts/demo_real_models.py --clinic-id <uuid>                  (a scan-style page: Gemini reads it)
     uv run python scripts/demo_real_models.py --clinic-id <uuid> --kind pdf        (a PDF with a text layer: read locally, no vision call)
+    uv run python scripts/demo_real_models.py --clinic-id <uuid> --fresh           (a NEW document id: the whole path again, the earlier document untouched; without it a re-run only reports the earlier result)
     uv run python scripts/demo_real_models.py --clinic-id <uuid> --flagged         (the letter also carries the seeded DEMO rule's invented token: the rules fire and NO other model is asked)
 
 The path (each stage says `real` or why it stayed `fake`; a missing key or gate keeps the fake, never a crash):
@@ -48,6 +49,7 @@ from careflow.extraction import worker_context
 from careflow.front_door import initial_state, run_config
 from careflow.front_door_runner import graph_for, worker_session
 from careflow.gateway import SpendEntry
+from careflow.referral import is_fixed_reason
 from careflow.spend import PostgresSpendLedger
 
 Refused = seed.Refused
@@ -141,6 +143,50 @@ def order_is_safe(events: list[str]) -> bool:
     return events[:1] in (["text"], ["rules"], [])
 
 
+def document_key(kind: str, flagged: bool, fresh: bool) -> str:
+    """The document's idempotency key. Without `fresh` it is fixed (a re-run only reports the earlier result); with it, a NEW random part gives a NEW document id and the earlier document is never touched."""
+    return f"real-models-demo:{kind}:{'flagged' if flagged else 'clean'}" + (f":fresh-{uuid.uuid4().hex[:12]}" if fresh else "")
+
+
+def text_stage(first_run: bool, events: list[str], probe, status: str) -> tuple[str, str]:
+    """(status word, fixed-words note) for stage 1. A page that was NOT read says so and says why (budget refused, timed out, provider error status, gate missing): it is never shown as `read`."""
+    if not first_run:
+        return "not run (earlier run)", "an earlier run's result is reported; no model was called"
+    if "text" in events:
+        return "read", ""
+    if probe is not None and probe.calls and probe.reason:
+        return "NOT READ", probe.reason
+    if probe is not None and probe.calls and probe.answered_chars is not None:
+        return "NOT READ", f"the model answered with {probe.answered_chars} characters, too little to read"
+    if status in ("extraction_unavailable", "letter_unreadable"):
+        return "NOT READ", "no vision call was made: the gate is missing for this page, or the page type is not read"
+    return "not reached", ""
+
+
+def rules_stage(events: list[str], fired: bool, status: str) -> tuple[str, str]:
+    """Stage 2 is `clear` ONLY if the rules really ran: when the page was never read they did not run, and that is said (unknown is not clear)."""
+    if fired:
+        return "FIRED", "the deterministic rules; no model"
+    if "rules" not in events:
+        return "NOT RUN", "the page was not read, so there was no text for the rules to screen (this is NOT a clear)"
+    if status == "held_unassessable":
+        return "unassessable", "no usable red-flag rule: held for a person (unknown is not clear)"
+    return "clear", "the deterministic rules; no model"
+
+
+def decision_stage(trace, status: str) -> tuple[str, str]:
+    if trace is None:
+        return "not run", ""
+    if trace.outcome == "not_asked":
+        return "not asked", f"the run ended before it: {status}"
+    return trace.outcome, trace.reason or ""
+
+
+def run_reasons(state: dict) -> list[str]:
+    """The run's own fixed reason words (the graph already restricts them to closed words)."""
+    return [r for r in (state.get("reasons") or []) if isinstance(r, str) and is_fixed_reason(r)][:10]
+
+
 def provider_environ(env: Mapping[str, str | None]) -> dict[str, str]:
     return {k: v for k, v in env.items() if k and v}
 
@@ -154,7 +200,7 @@ def mode_of(label: str) -> str:
     return "real" if label.startswith("real") else "fake"
 
 
-async def run(env: dict[str, str], clinic: uuid.UUID, *, kind: str, flagged: bool, say=print) -> int:
+async def run(env: dict[str, str], clinic: uuid.UUID, *, kind: str, flagged: bool, fresh: bool = False, say=print) -> int:
     migrator = env["DATABASE_URL_MIGRATOR"]
     try:
         vault = DemographicVault.from_env({k: v for k, v in env.items() if k.startswith("CAREFLOW_") and "_SECRET_V" in k})
@@ -163,7 +209,7 @@ async def run(env: dict[str, str], clinic: uuid.UUID, *, kind: str, flagged: boo
     except Exception:  # noqa: BLE001 - fixed words, never the key material
         raise Refused("refusing: the encryption keys, CAREFLOW_ACTIVE_KEY_VERSION or CAREFLOW_WORKER_ACCOUNT_ID are missing or malformed in the env file") from None
     page, content_type = (synthetic_letter.letter_pdf if kind == "pdf" else synthetic_letter.letter_scan)(flagged=flagged)
-    key = f"real-models-demo:{kind}:{'flagged' if flagged else 'clean'}"
+    key = document_key(kind, flagged, fresh)
     document = seed.det(clinic, key)
     admin = create_async_engine(make_url(migrator.replace("postgresql://", "postgresql+asyncpg://", 1)), connect_args={"statement_cache_size": 0})
     app_engine = make_app_engine(env["DATABASE_URL_APP"], pool_size=2, max_overflow=2, pool_pre_ping=True)
@@ -211,15 +257,21 @@ async def run(env: dict[str, str], clinic: uuid.UUID, *, kind: str, flagged: boo
         status = state.get("status", "unknown")
         fired = status == "red_flag_escalated"
 
-        say(f"clinic {clinic}  document {document}  page: {kind}{' (flagged token)' if flagged else ''}  first run: {'yes' if first_run else 'no, the earlier result is reported and no model was called'}")
+        say(f"clinic {clinic}  document {document}  page: {kind}{' (flagged token)' if flagged else ''}, {len(page)} bytes{'  FRESH document' if fresh else ''}  first run: {'yes' if first_run else 'no, the earlier result is reported and no model was called (use --fresh for a new document)'}")
         say(f"{'stage':<10} {'mode':<5} {'status':<22} {'seconds':>8}  {'cost (actual / at scale)':<30} note")
         a, s = ledger.cost("vlm")
-        say(line("1 text", mode_of(up.text), ("read" if "text" in events else "not run (earlier run)") if first_run else "not run", real_texts.first_read_seconds if real_texts else None, f"${a:.6f} / ${s:.6f}", up.text))
-        say(line("2 rules", "real", "FIRED" if fired else ("clear" if status not in ("held_unassessable",) else "unassessable"), engine.seconds, "$0", "the deterministic rules; no model"))
+        probe = up.vision_probe
+        t_status, t_note = text_stage(first_run, events, probe, status)
+        say(line("1 text", mode_of(up.text), t_status, probe.seconds if probe and probe.calls else (real_texts.first_read_seconds if real_texts else None), f"${a:.6f} / ${s:.6f}", (up.text + ("; " + t_note if t_note else ""))))
+        r_status, r_note = rules_stage(events, fired, status)
+        say(line("2 rules", "real", r_status, engine.seconds, "$0", r_note))
         trace = up.ranker.last if up.ranker is not None else None
         a, s = ledger.cost("decision")
-        say(line("3 decision", mode_of(up.decision), (trace.outcome if trace else "not run"), trace.seconds if trace else None, f"${a:.6f} / ${s:.6f}", up.decision + (f"; suggested card {trace.chosen}, confidence {trace.confidence:.2f} (never calibrated)" if trace and trace.chosen else "")))
-        say(line("run", "-", status, total, "", f"rules fired: {'YES' if fired else 'no'}"))
+        d_status, d_note = decision_stage(trace, status)
+        say(line("3 decision", mode_of(up.decision), d_status, trace.seconds if trace else None, f"${a:.6f} / ${s:.6f}", up.decision + ("; " + d_note if d_note else "") + (f"; suggested card {trace.chosen}, confidence {trace.confidence:.2f} (never calibrated)" if trace and trace.chosen else "")))
+        say(line("run", "-", status, total, "", f"rules fired: {'YES' if fired else ('no' if 'rules' in events else 'NOT RUN')}"))
+        if run_reasons(state):
+            say(f"run reasons: {', '.join(run_reasons(state))}")
         say(f"order the stages ran in: {' -> '.join(events) or '(none)'}  [{'rules before any decision model: OK' if order_is_safe(events) else 'ORDER VIOLATION: STOP AND REPORT'}]")
         if state.get("proposal_id"):
             say(f"PROPOSAL WAITING FOR REVIEW: {state['proposal_id']}  (a person decides in the review console; nothing was approved or sent)")
@@ -228,7 +280,7 @@ async def run(env: dict[str, str], clinic: uuid.UUID, *, kind: str, flagged: boo
         else:
             say(f"no proposal; the run ended as {status} (a hold or an alert for a person; see the review console)")
         suggestion = await demo_real_models.suggest_translation(providers.translation, clinic_id=clinic)
-        say(line("4 draft", "real" if providers.translation is not None else "fake", suggestion.status, None, f"${ledger.cost('translation')[0]:.6f} recorded in the durable ledger (placeholder price)", f"{suggestion.characters} characters in; a suggestion, not stored, not sent"))
+        say(line("4 draft", "real" if providers.translation is not None else "fake", suggestion.status, None, f"${ledger.cost('translation')[0]:.6f} recorded in the durable ledger (placeholder price)", f"{suggestion.characters} characters in; a suggestion, not stored, not sent" + (f"; {suggestion.reason}" if suggestion.reason else "")))
         for provider, why in providers.unavailable.items():
             say(f"{provider}: stayed fake: {why}")
         return 1 if not order_is_safe(events) else 0
@@ -242,6 +294,7 @@ async def main() -> int:
     ap.add_argument("--clinic-id", required=True, type=uuid.UUID)
     ap.add_argument("--env-file", default=".env")
     ap.add_argument("--kind", choices=("scan", "pdf"), default="scan")
+    ap.add_argument("--fresh", action="store_true", help="make a NEW dummy letter document (a new id) and run the whole path again; the earlier document and its result are not touched")
     ap.add_argument("--flagged", action="store_true", help="add the seeded DEMO rule's invented token to the letter: the rules fire and no other model is asked")
     args = ap.parse_args()
     env = {k: v for k, v in dotenv_values(Path(args.env_file)).items() if v is not None}
@@ -257,7 +310,7 @@ async def main() -> int:
         except EOFError:
             raise Refused("refusing: no host was typed") from None
         seed.confirm_target(typed, host)
-        return await run(env, args.clinic_id, kind=args.kind, flagged=args.flagged)
+        return await run(env, args.clinic_id, kind=args.kind, flagged=args.flagged, fresh=args.fresh)
     except Refused as exc:
         print(str(exc))
         return 1
