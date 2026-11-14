@@ -120,3 +120,68 @@ async def test_a_short_or_guessable_key_is_rejected(monkeypatch):
     with pytest.raises(HTTPException) as e:
         await call(request(), key="1")
     assert e.value.status_code == 422
+
+
+# ---- GET /public/grievance-categories: the closed list, no sign-in, never an unlimited door ---------------------------------------------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def _read_fresh(monkeypatch):
+    monkeypatch.delenv(portal_extras_sql.PUBLIC_READ_SETTING, raising=False)
+    app_module._public_limiter_cache.clear()
+    yield
+    app_module._public_limiter_cache.clear()
+
+
+async def read(categories=frozenset({"b_cat", "a_cat"}), host="203.0.113.9"):
+    state = SimpleNamespace(grievance_categories=categories)
+    req = SimpleNamespace(app=SimpleNamespace(state=state), client=SimpleNamespace(host=host))
+    return await app_module.public_grievance_categories(req)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("raw", [None, "", "0", "-1", "abc", "1001", "2.5"])
+async def test_the_category_list_answers_503_without_a_usable_per_address_limit(monkeypatch, _read_fresh, raw):
+    if raw is not None:
+        monkeypatch.setenv(portal_extras_sql.PUBLIC_READ_SETTING, raw)
+    with pytest.raises(HTTPException) as e:
+        await read()
+    assert e.value.status_code == 503
+
+
+async def test_the_category_list_answers_503_until_the_list_is_set(monkeypatch, _read_fresh):
+    monkeypatch.setenv(portal_extras_sql.PUBLIC_READ_SETTING, "5")
+    with pytest.raises(HTTPException) as e:
+        await read(categories=None)
+    assert e.value.status_code == 503
+
+
+async def test_the_category_list_is_the_sorted_closed_list_and_one_address_is_limited_per_minute(monkeypatch, _read_fresh):
+    monkeypatch.setenv(portal_extras_sql.PUBLIC_READ_SETTING, "2")
+    for _ in range(2):
+        assert (await read()).categories == ["a_cat", "b_cat"]
+    with pytest.raises(HTTPException) as limited:
+        await read()
+    assert limited.value.status_code == 429
+    assert (await read(host="198.51.100.4")).categories == ["a_cat", "b_cat"]  # another address is not limited
+
+
+def test_the_read_window_is_sixty_seconds_not_an_hour():
+    now = [0.0]
+    limiter = portal_extras_sql.HourlyLimiter(1, clock=lambda: now[0], window=60.0)
+    assert limiter.allow("a") and not limiter.allow("a")
+    now[0] = 61.0
+    assert limiter.allow("a")
+
+
+def test_the_route_is_public_and_the_demo_pack_supplies_a_labelled_limit():
+    from pathlib import Path
+
+    import yaml
+
+    from careflow import demo_phase4
+
+    routes = {r.path: r for r in app_module.public_config.routes}
+    assert "/public/grievance-categories" in routes and not routes["/public/grievance-categories"].dependant.dependencies  # no sign-in dependency
+    assert demo_phase4.VARIABLES["public_read_ip_per_minute"] == portal_extras_sql.PUBLIC_READ_SETTING
+    pack = yaml.safe_load((Path(__file__).resolve().parent.parent / "config" / "demo-phase4.yaml").read_text(encoding="utf-8"))
+    assert pack["settings"]["public_read_ip_per_minute"]["label"] == "DEMO ONLY - NOT A CLINICAL DECISION"

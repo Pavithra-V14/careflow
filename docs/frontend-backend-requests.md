@@ -337,6 +337,10 @@ The voice consent text must come only from the API. The frontend currently looks
 
 **32 (null in the profile write), answered 2026-11-14:** a field you leave out of `PUT /v1/portal/profile` is left as it is; a field you send as an explicit `null` is cleared, and a person may clear either one. Clearing needs no word from the clinic's list (a cleared sex is no value, not a word), so it works whether or not `CAREFLOW_SEX_WORDS` is set; a non-null sex word is still checked against the list (422 if not on it, 503 if the list is not configured). The route description says so.
 
+**33 (public grievance categories), built 2026-11-14:** `GET /public/grievance-categories` (no sign-in) returns `{categories: [...]}`, the closed sorted list from the required setting `CAREFLOW_GRIEVANCE_CATEGORIES` (the same list the filing route checks). 503 until that list AND the per-address limit `CAREFLOW_PUBLIC_READ_IP_PER_MINUTE` (required, no default) are set; 429 over the per-address limit in any 60 seconds. It reads no database table and nothing about any person. The demo pack carries a labelled DEMO ONLY limit.
+
+**32 again, in plain words:** for each profile field, `sex` and `preferred_language`: leave it out of the request and the stored value stays; send `null` and it is cleared; send a value and it is set (a sex word must be on the clinic's list). The route description says so and `tests/test_profile_null_semantics.py` checks it.
+
 ## Decisions recorded here for later readers
 
 - **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;

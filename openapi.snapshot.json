@@ -9517,6 +9517,28 @@
         ]
       }
     },
+    "/public/grievance-categories": {
+      "get": {
+        "description": "The closed list of category words a grievance may use, with NO sign-in, so the public grievance form can show them (the required setting CAREFLOW_GRIEVANCE_CATEGORIES, sorted; the same list the filing route checks). Nothing about any person is\nread or returned and the database is not touched. 503 until the list AND the per-address limit (CAREFLOW_PUBLIC_READ_IP_PER_MINUTE, a required setting, no default) are set: never an unlimited door. 429 over the per-address limit in any 60 seconds.",
+        "operationId": "public_grievance_categories_public_grievance_categories_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GrievanceCategoriesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Public Grievance Categories",
+        "tags": [
+          "public"
+        ]
+      }
+    },
     "/public/grievances": {
       "post": {
         "description": "File a grievance WITHOUT signing in, to the hospital's published clinic: a category from the clinic's list and the text (stored encrypted, same handling as a signed-in grievance; the clinic's admin sees and works it). Needs an X-Idempotency-Key. 404 while no clinic is\npublished, 422 for a category not on the list, 429 over the per-address or the clinic's hourly limit (both required settings or owner-managed numbers; with either missing the route answers 503, never an unlimited door). The key must be 32 to 300 characters (use a random uuid): a short or guessable key is a 422. The per-address limit counts `request.client.host`: behind a proxy that is the proxy's address unless the deployment forwards the real one, 503 while the category list, the limits or the keys are not configured.",
@@ -11094,7 +11116,7 @@
         ]
       },
       "put": {
-        "description": "Set your sex word and preferred language (it sets values, so a repeat is the same). A field you leave OUT is left as it is; a field you send as an explicit null is CLEARED (a person may clear either; clearing needs no word from the clinic's list, and an unset value is simply no value). 403 unless you are an active patient account, 422 for a sex word that is not on the clinic's list, 503 for a sex word while the clinic has not set its list.",
+        "description": "Set your sex word and preferred language (it sets values, so a repeat is the same). For EACH field (`sex`, `preferred_language`): left OUT means the stored value is left as it is; an explicit null CLEARS it (a person may clear either one; clearing needs no word from the clinic's list, an unset value is simply no value); a value sets it (a sex word must be on the clinic's list). 403 unless you are an active patient account, 422 for a sex word that is not on the clinic's list, 503 for a sex word while the clinic has not set its list.",
         "operationId": "put_profile_v1_portal_profile_put",
         "parameters": [
           {

@@ -53,6 +53,7 @@ VARIABLES: Final = {
     "sex_words": "CAREFLOW_SEX_WORDS",
     "public_grievance_ip_per_hour": "CAREFLOW_PUBLIC_GRIEVANCE_IP_PER_HOUR",
     "message_max_per_minute": "CAREFLOW_MESSAGE_MAX_PER_MINUTE",
+    "public_read_ip_per_minute": "CAREFLOW_PUBLIC_READ_IP_PER_MINUTE",
 }
 
 

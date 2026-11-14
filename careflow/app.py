@@ -5501,7 +5501,7 @@ async def get_profile(request: Request, conn: TxConnAllGrants, claims: dict[str,
 
 @portal.put("/profile", response_model=ProfileOut)
 async def put_profile(body: ProfileIn, request: Request, idempotency_key: IdempotencyKey, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> ProfileOut:
-    """Set your sex word and preferred language (it sets values, so a repeat is the same). A field you leave OUT is left as it is; a field you send as an explicit null is CLEARED (a person may clear either; clearing needs no word from the clinic's list, and an unset value is simply no value). 403 unless you are an active patient account, 422 for a sex word that is not on the clinic's list, 503 for a sex word while the clinic has not set its list."""
+    """Set your sex word and preferred language (it sets values, so a repeat is the same). For EACH field (`sex`, `preferred_language`): left OUT means the stored value is left as it is; an explicit null CLEARS it (a person may clear either one; clearing needs no word from the clinic's list, an unset value is simply no value); a value sets it (a sex word must be on the clinic's list). 403 unless you are an active patient account, 422 for a sex word that is not on the clinic's list, 503 for a sex word while the clinic has not set its list."""
     account_id, _ = await _patient_account(conn, claims)
     if body.sex is not None:
         words = portal_extras_sql.sex_words()
@@ -5917,6 +5917,26 @@ async def file_public_grievance(body: PublicGrievanceIn, request: Request, idemp
 
 class GrievanceCategoriesOut(_Out):
     categories: list[str]
+
+
+def _public_read_limiter() -> "portal_extras_sql.HourlyLimiter | None":
+    if "read_limiter" not in _public_limiter_cache:
+        limit = portal_extras_sql.public_read_limit()
+        _public_limiter_cache["read_limiter"] = portal_extras_sql.HourlyLimiter(limit, window=60.0) if limit is not None else None
+    return _public_limiter_cache["read_limiter"]
+
+
+@public_config.get("/public/grievance-categories", response_model=GrievanceCategoriesOut)
+async def public_grievance_categories(request: Request) -> GrievanceCategoriesOut:
+    """The closed list of category words a grievance may use, with NO sign-in, so the public grievance form can show them (the required setting CAREFLOW_GRIEVANCE_CATEGORIES, sorted; the same list the filing route checks). Nothing about any person is
+    read or returned and the database is not touched. 503 until the list AND the per-address limit (CAREFLOW_PUBLIC_READ_IP_PER_MINUTE, a required setting, no default) are set: never an unlimited door. 429 over the per-address limit in any 60 seconds."""
+    categories = request.app.state.grievance_categories
+    limiter = _public_read_limiter()
+    if categories is None or limiter is None:
+        raise HTTPException(status_code=503, detail="grievance categories are unavailable: the list or the limit is not configured")
+    if not limiter.allow(request.client.host if request.client else "unknown"):
+        raise HTTPException(status_code=429, detail="too many requests; wait and try again")
+    return GrievanceCategoriesOut(categories=sorted(categories))
 
 
 @portal_rights.get("/grievance-categories", response_model=GrievanceCategoriesOut)
