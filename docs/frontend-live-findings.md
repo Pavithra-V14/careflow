@@ -228,4 +228,4 @@ The doctor walk read what the reviewer view shows on four referrals (file `front
 2. The live walk preferred the patient record opened from a merge (possibly merged-away, so no medications panel) and saved the report before the last responses were recorded (fixed: it tries up to six records and waits 2.5 s before saving).
 3. The reviewer-view observation is now part of the walk, so "shown exactly as sent" can be read from a real answer.
 
-No defect was found in the screens themselves: 0 schema mismatches in 337 calls across the six walks, and every refusal was a role the walk visits directly or a database-level second-factor check.
+No defect was found in the screens themselves: 0 schema mismatches in 397 calls across the six walks, and every refusal was a role the walk visits directly or a database-level second-factor check.
