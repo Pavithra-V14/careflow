@@ -131,8 +131,8 @@ calls:
   # Hosted model providers approved by the owner on 2026-10-30 for SYNTHETIC DEMO use only (docs/design/hosted-providers.md). BUILD-SPEC.md 16.5 still forbids a hosted row from ever being
   # phi_approved without a new decision. CI never calls them; the real service is checked only by scripts/provider_live_check.py, which the owner runs by hand.
   - id: gemini-vision
-    service: "Google Gemini API, model gemini-2.5-flash (the vlm role: reads a photographed or scanned page)"
-    host: "generativelanguage.googleapis.com (POST /v1beta/models/gemini-2.5-flash:generateContent)"
+    service: "Google Gemini API, model gemini-3.5-flash-lite (set in config/demo-providers.yaml; the vlm role: reads a photographed or scanned page)"
+    host: "generativelanguage.googleapis.com (POST /v1beta/models/<model id from config>:generateContent)"
     source: careflow/adapters/gemini.py
     data_sent: "The bytes of ONE page image (PNG or JPEG) and a fixed transcription instruction, with the API key in the x-goog-api-key header. Explicit timeout (60 s per page); no redirects; the answer is the page's text, which the red-flag rules screen before any other model call."
     data_class: patient_plaintext

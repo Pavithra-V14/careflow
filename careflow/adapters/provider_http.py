@@ -39,6 +39,28 @@ def refuse_redirecting_client(http: httpx.AsyncClient) -> None:
         raise ValueError("a provider client must not follow redirects (the credential header would travel to another host)")
 
 
+DETAIL_MAX: Final = 200
+
+
+def _with_detail(exc: Exception, chunks: list[bytes]) -> Exception:
+    """Attaches the provider's OWN error fields (`error.status` and `error.message` of a non-200 answer) as the attribute `provider_detail`, truncated, for the owner's live check ONLY. It is NOT in str(exc) or
+    repr(exc), so nothing that logs or stores an exception message ever carries it; the app never reads it. It describes the failed request (a dummy one in the live check), never a stored patient's data."""
+    exc.provider_detail = _error_fields(b"".join(chunks))  # type: ignore[attr-defined]
+    return exc
+
+
+def _error_fields(raw: bytes) -> str:
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        return ""
+    error = parsed.get("error") if isinstance(parsed, dict) else None
+    if not isinstance(error, dict):
+        return ""
+    parts = [f"{name}={error[name]}" for name in ("status", "code", "message") if isinstance(error.get(name), str | int) and not isinstance(error.get(name), bool)]
+    return " ".join(" ".join(parts).split())[:DETAIL_MAX]
+
+
 async def post_json(http: httpx.AsyncClient, url: str, *, headers: dict[str, str], body: dict[str, Any], seconds: float) -> dict[str, Any]:
     """POST `body` as JSON and return the JSON object answered. Fixed-words errors only."""
     try:
@@ -59,11 +81,11 @@ async def post_json(http: httpx.AsyncClient, url: str, *, headers: dict[str, str
     except (httpx.HTTPError, UnicodeError):  # a decoding or stream fault, or a header that cannot be sent: a failed route, never a raw exception out of the gateway
         raise PermanentError("the exchange with the provider failed") from None
     if status in _TRANSIENT_STATUS:
-        raise TransientError(f"the provider answered with a retry-worthy status ({status})")
+        raise _with_detail(TransientError(f"the provider answered with a retry-worthy status ({status})"), chunks)
     if status in (401, 403):
-        raise PermanentError("the provider refused the credential")
+        raise _with_detail(PermanentError("the provider refused the credential"), chunks)
     if status != 200:
-        raise PermanentError(f"the provider refused the request (status {status})")
+        raise _with_detail(PermanentError(f"the provider refused the request (status {status})"), chunks)
     try:
         parsed = json.loads(b"".join(chunks))
     except ValueError:

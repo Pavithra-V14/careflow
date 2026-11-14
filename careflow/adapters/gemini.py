@@ -1,4 +1,4 @@
-"""The `vlm` role over Gemini 2.5 Flash (BUILD-SPEC.md §5.1, §10.4 tier 3). DEMO PROFILE, SYNTHETIC DATA ONLY (owner decision 2026-10-30).
+"""The `vlm` role over a Gemini Flash model (the id is in config/demo-providers.yaml) (BUILD-SPEC.md §5.1, §10.4 tier 3). DEMO PROFILE, SYNTHETIC DATA ONLY (owner decision 2026-10-30).
 
 A callable the gateway registers for a `vlm` row: `await adapter(VisionRequest) -> AdapterResult[VisionResult]`. The registry row must say `data_policy: synthetic_only`, which the gateway honours: a PHI request is
 never offered to it (spec §16.5 still forbids a hosted row from ever being `phi_approved` without a new decision). Endpoint, header and response shape: the Gemini API `generateContent` REST method,
