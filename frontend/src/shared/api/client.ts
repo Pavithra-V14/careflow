@@ -150,6 +150,7 @@ export const OPERATIONS = {
   breakGlassMine: { method: 'get', path: '/v1/staff/break-glass/mine' },
   upcomingVisits: { method: 'get', path: '/v1/staff/visits/upcoming' },
   // ---- the patient portal (patient session only) ----
+  activateMe: { method: 'post', path: '/v1/staff/accounts/activate-me' },
   portalRegister: { method: 'post', path: '/v1/portal/register' },
   portalMe: { method: 'get', path: '/v1/portal/me' },
   portalConsents: { method: 'get', path: '/v1/portal/consents' },
@@ -469,6 +470,8 @@ export function createApi(options: ApiOptions) {
     upcomingVisits: (clinicId: string) => client.GET('/v1/staff/visits/upcoming', { params: { query: { clinic_id: clinicId } } }),
 
     // ---- the patient portal ---------------------------------------------------------------------------------------------------
+    // The invited person's own activation. The route takes no idempotency key.
+    activateMe: () => client.POST('/v1/staff/accounts/activate-me'),
     portalRegister: (o?: WriteOptions) => client.POST('/v1/portal/register', { params: { header: { 'X-Idempotency-Key': key(o) } } }),
     portalMe: () => client.GET('/v1/portal/me'),
     portalConsents: () => client.GET('/v1/portal/consents'),

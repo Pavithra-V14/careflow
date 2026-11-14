@@ -11,6 +11,7 @@ import { DevSpikeSlot } from '../components/DevSpikeSlot';
 import { Shell } from './Shell';
 import { Loading, Message } from './Message';
 import { RolePicker } from './RolePicker';
+import { ActivateMe } from './ActivateMe';
 
 class AccountUnavailable extends Error {}
 
@@ -62,12 +63,15 @@ export function Console() {
 
   if (me.error instanceof AccountUnavailable || (me.data && me.data.grants.length === 0)) {
     return (
-      <Message id="unavailable-title" title={t('app.staffTitle')} alert>
-        <p>{t('staff.account.unavailable')}</p>
-        <button type="button" onClick={() => void signOut()}>
-          {t('staff.account.signOut')}
-        </button>
-      </Message>
+      <>
+        <Message id="unavailable-title" title={t('app.staffTitle')} alert>
+          <p>{t('staff.account.unavailable')}</p>
+          <button type="button" onClick={() => void signOut()}>
+            {t('staff.account.signOut')}
+          </button>
+        </Message>
+        <ActivateMe />
+      </>
     );
   }
 

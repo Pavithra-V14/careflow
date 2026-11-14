@@ -127,6 +127,29 @@ test('an account the API refuses (403) gets one neutral message and a way out', 
   await expect(page.locator('input[type=email]')).toBeVisible();
 });
 
+for (const lng of ['en', 'ta'] as const) {
+  test(`activate my own account [${lng}]: offered under the neutral message, accessible at 320, 768 and 1280, confirmation first, keyboard only`, async ({ page }) => {
+    await start(page, { enrolled: true, meStatus: 403 }, lng);
+    await submitSignIn(page);
+    await submitCode(page);
+    const button = page.locator('#activate-title ~ button');
+    await expect(button).toBeVisible();
+    for (const [name, width] of [['phone', 320], ['tablet', 768], ['desktop', 1280]] as const) {
+      await page.setViewportSize({ width, height: 800 });
+      await check(page, 'activate', lng, name);
+    }
+    await button.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('dialog')).toBeVisible();
+    for (const [name, width] of [['phone', 320], ['tablet', 768], ['desktop', 1280]] as const) {
+      await page.setViewportSize({ width, height: 800 });
+      await check(page, 'activate-dialog', lng, name);
+    }
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  });
+}
+
 test('sign-out returns to sign-in and the session does not come back on reload', async ({ page }) => {
   await start(page, { enrolled: true });
   await submitSignIn(page);

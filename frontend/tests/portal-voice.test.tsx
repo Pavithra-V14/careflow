@@ -25,6 +25,8 @@ interface State {
   enabled?: boolean;
   open?: 'ok' | number;
   pref?: number;
+  /** The API supplies a voice session notice (default yes). */
+  voiceNotice?: boolean;
 }
 function backend(state: State) {
   let enabled = state.enabled ?? false;
@@ -32,7 +34,13 @@ function backend(state: State) {
     const key = `${req.method} ${req.path}`;
     if (key === 'get /public/clinic') return json({ clinic_id: CLINIC_A, name: 'Placeholder Hospital' });
     if (key === 'get /v1/portal/me') return json({ bound_to_a_patient_record: true, consents: {}, stage: state.stage ?? 'active', status: 'x' });
-    if (key === 'get /v1/portal/consents') return json({ notices: [{ body: 'x', decision: true, notice_id: NOTICE, purpose: 'care_delivery', version: 3 }] });
+    if (key === 'get /v1/portal/consents')
+      return json({
+        notices: [
+          { body: 'x', decision: true, notice_id: NOTICE, purpose: 'care_delivery', version: 3 },
+          ...(state.voiceNotice === false ? [] : [{ body: 'Voice notice text exactly as sent.', decision: null, label: 'Voice notice label', notice_id: '55555555-5555-4555-8555-555555555555', purpose: 'voice_session', version: 2 }]),
+        ],
+      });
     if (key === 'get /v1/portal/grievances') return json({ grievances: [] });
     if (key === 'get /v1/portal/grievance-categories') return json({ categories: ['access'] });
     if (key === 'get /v1/portal/voice/preference') return state.pref ? json({ detail: LEAK }, state.pref) : json({ voice_enabled: enabled });
@@ -128,7 +136,7 @@ describe('the voice setting', () => {
 });
 
 describe('opening a voice session', () => {
-  it('starts with nothing chosen, shows the notice as a marked placeholder, and needs a workflow and the person\'s own agreement', async () => {
+  it('starts with nothing chosen, shows the API notice exactly as sent (and none of its own), and needs a workflow and an agreement', async () => {
     const user = userEvent.setup();
     stubApi(backend({ enabled: true }));
     await mount();
@@ -138,7 +146,8 @@ describe('opening a voice session', () => {
     expect(radios.some((r) => (r as HTMLInputElement).checked)).toBe(false);
     const agree = screen.getByRole('checkbox', { name: /I have read the notice above/ });
     expect((agree as HTMLInputElement).checked).toBe(false);
-    expect(document.querySelector('[data-placeholder]')?.textContent).toContain('PLACEHOLDER: voice session consent');
+    expect(screen.getByText('Voice notice text exactly as sent.')).toBeInTheDocument();
+    expect(document.querySelector('[data-placeholder]')).toBeNull(); // the frontend writes no notice text of its own
     expect(open).toBeDisabled();
     await user.click(radios[0]!);
     expect(open).toBeDisabled();
@@ -147,6 +156,23 @@ describe('opening a voice session', () => {
     await user.click(radios[0]!); // still selected
     await user.click(agree);
     expect(open).toBeDisabled();
+  });
+
+  it('is not set up, and cannot be opened, until the API supplies a notice', async () => {
+    watchHardware();
+    const calls = stubApi(backend({ enabled: true, voiceNotice: false }));
+    await mount();
+    expect(await screen.findByText('Voice sessions are not set up yet. Nothing can be opened.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open voice session' })).toBeDisabled();
+    expect(screen.queryByRole('radio')).toBeNull();
+    expect(writes(calls)).toHaveLength(0);
+  });
+
+  it('keeps the voice notice out of the account consent list, so it cannot be granted or withdrawn there', async () => {
+    stubApi(backend({ enabled: true }));
+    await mount();
+    await screen.findByText('Voice notice text exactly as sent.');
+    expect(screen.getAllByText('Voice notice text exactly as sent.')).toHaveLength(1);
   });
 
   it('sends the chosen workflow with consent and a key, says what happened, and never touches the microphone or a socket', async () => {

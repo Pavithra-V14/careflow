@@ -1,8 +1,8 @@
 # Tamil review pack (AI-prepared, NOT reviewed by a native speaker)
 
-Prepared 2026-11-13. Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 1558 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
+Prepared 2026-11-14. Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 1614 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
 
-**Regenerated 2026-11-13:** this version includes the 120 strings added since the first pack (red-flag rule list, approval and drafting screens, the front desk supervisor, the new alert label, the revoke alert lines and medications). They are written and second-passed in the same way and are just as unreviewed.
+**Regenerated 2026-11-14** by `npm run i18n:pack` from the strings as they are now, so it covers every current string, including the newest screens (patient voice setting, consent withdrawal and history, activating a staff account, withdrawing and retiring a red-flag rule). Each is written and second-passed in the same way and is just as unreviewed.
 
 ## What the second pass looked at
 
@@ -12,11 +12,11 @@ Meaning errors, register for patients, medical or safety terms, unsafe ambiguity
 - **B** wrong or odd meaning, wrong register, or an inconsistent term. Needs a native speaker.
 - **C** minor wording, or an administrator-only technical label.
 
-How it was done, honestly: all 1558 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and every string of four words or more and every short string that differs from its English was read once by the AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
+How it was done, honestly: all 1614 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and the strings that carry meaning (sentences of four words or more, and short strings that differ from their English) were read by an AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
 
-Automatic checks: 1558 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
+Automatic checks: 1614 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
 
-Notes: 51 grade A, 78 grade B, 31 grade C (160 rows with a note; some notes cover a group of similar strings, named in the note).
+Notes: 64 grade A, 94 grade B, 47 grade C (205 rows with a note; some notes cover a group of similar strings, named in the note).
 
 ## Part 1. Strings that most need a native speaker (safety first)
 
@@ -38,7 +38,7 @@ Notes: 51 grade A, 78 grade B, 31 grade C (160 rows with a note; some notes cove
 | `dashboard.metric.red_flag_recall` | Red-flag recall | சிவப்புக் கொடி மீட்பு | "Red-flag recall" (how many red flags the system catches, i.e. sensitivity) is rendered சிவப்புக் கொடி மீட்பு; மீட்பு means rescue or retrieval. A safety metric an administrator reads must not be ambiguous. Same in urgent_case_recall. |
 | `dashboard.metric.urgent_case_recall` | Urgent case recall | அவசர நிகழ்வு மீட்பு | "recall" (sensitivity) rendered மீட்பு (rescue); see dashboard.metric.red_flag_recall. |
 
-### 2. Clinical results, decisions and samples
+### 2. Clinical results, decisions, medications and red-flag rules
 
 | Key | English | Tamil (AI-prepared) | Why a native speaker is needed |
 |---|---|---|---|
@@ -68,8 +68,16 @@ Notes: 51 grade A, 78 grade B, 31 grade C (160 rows with a note; some notes cove
 | `medications.stop` | Stop this medicine | இந்த மருந்தை நிறுத்து | "Stop this medicine" rendered இந்த மருந்தை நிறுத்து: the patient stopped taking it. Check it cannot be read as "stop giving it now" as an instruction to the patient. Wording is item 35 on docs/design/clinician-sheet.md. |
 | `medications.stopTitle` | Record that this medicine was stopped? | இந்த மருந்து நிறுத்தப்பட்டது எனப் பதிவு செய்யலாமா? | "Record that this medicine was stopped?" rendered இந்த மருந்து நிறுத்தப்பட்டது எனப் பதிவு செய்யலாமா?: it records a fact, it does not order a stop. Check that is clear. |
 | `medications.validToHint` | An empty end is saved as "no end recorded". It is not read as "still taking". | காலியான முடிவு "முடிவு பதிவு செய்யப்படவில்லை" என்று சேமிக்கப்படும். அது "இன்னும் எடுத்துக்கொள்ளப்படுகிறது" என்று கருதப்படாது. | The "still taking" statement was reworded without a gendered verb (இன்னும் எடுத்துக்கொள்ளப்படுகிறது, passive). A native clinician should confirm it reads naturally and clearly says an empty end is NOT read as ongoing. Item 36 on docs/design/clinician-sheet.md. |
+| `admin.rules.withdrawBody` | A withdrawn draft is closed for good. It can never be approved and it is never in force. A withdrawn version is not the same as a retired one. Only a draft can be withdrawn. To change a rule, write a new version. | திரும்பப் பெறப்பட்ட வரைவு முற்றிலும் மூடப்படும். அதை ஒருபோதும் ஒப்புக்கொள்ள முடியாது; அது ஒருபோதும் நடைமுறையில் இருக்காது. திரும்பப் பெறுதல் என்பது நிறுத்துதலிலிருந்து வேறுபட்டது. வரைவை மட்டுமே திரும்பப் பெற முடியும். ஒரு விதியை மாற்ற, புதிய பதிப்பை எழுதுங்கள். | Says a withdrawn draft is closed for good and is NOT the same as retired. "திரும்பப் பெறுதல்" and "நிறுத்துதல்" are close in everyday Tamil, so the contrast may not come across. Clinician sheet item 37. |
+| `admin.rules.retireBody` | Your retire decision is recorded now, and nothing is retired until a second, different doctor also records one. A retired version never comes back: a new version is the way back. If this is the newest version of its rule code, the whole rule code stops being in force. | உங்கள் நிறுத்த முடிவு இப்போது பதிவாகும்; வேறொரு மருத்துவரும் பதிவு செய்யும் வரை எதுவும் நிறுத்தப்படாது. நிறுத்தப்பட்ட பதிப்பு மீண்டும் வராது; புதிய பதிப்பே திரும்ப வழி. இது இந்த விதிக் குறியீட்டின் புதிய பதிப்பாக இருந்தால், முழு விதிக் குறியீடும் நடைமுறையில் இருக்காது. | Says nothing is retired until a second, different doctor records it, and that a retired newest version switches off the whole rule code. A wrong reading could leave a rule in force or switch one off. A native speaker who is a clinician should check. Clinician sheet item 37. |
+| `admin.rules.retireTitle` | Retire this approved red-flag rule version? | ஒப்புக்கொள்ளப்பட்ட இந்தச் சிவப்புக் கொடி விதிப் பதிப்பை நிறுத்தவா? | Asks whether to retire an approved red-flag rule version; "நிறுத்தவா" can read as "stop it now" although one doctor alone cannot retire it. |
+| `admin.rules.retireCount` | Retire decisions recorded so far: {{count}}. Two different doctors are needed. | இதுவரை பதிவான நிறுத்த முடிவுகள்: {{count}}. இரண்டு வெவ்வேறு மருத்துவர்கள் தேவை. | Says how many retire decisions exist and that two different doctors are needed. A count read wrongly could make a person think a rule is already retired. |
+| `admin.rules.statuses.withdrawn` | Withdrawn | திரும்பப் பெறப்பட்டது | A status word. "திரும்பப் பெறப்பட்டது" (withdrawn) must not be read as "retired" (நிறுத்தப்பட்டது), since the two mean different things for whether a rule is in force. |
+| `admin.rules.result.retired` | Your retire decision was recorded and this version is now retired. | உங்கள் நிறுத்த முடிவு பதிவானது; இந்தப் பதிப்பு இப்போது நிறுத்தப்பட்டது. | Tells a doctor a rule version is now retired. Must be unambiguous that it is out of use. |
+| `admin.rules.result.withdrawn` | This draft is withdrawn. It is closed for good and is not in force. | இந்த வரைவு திரும்பப் பெறப்பட்டது. அது முற்றிலும் மூடப்பட்டது; நடைமுறையில் இல்லை. | Tells a doctor a draft is closed and not in force; also shown when a repeat request reaches an already withdrawn version. |
+| `admin.rules.result.not_approved` | This version is not approved, so it cannot be retired. Nothing was recorded. | இந்தப் பதிப்பு ஒப்புக்கொள்ளப்படவில்லை, எனவே நிறுத்த முடியாது. எதுவும் பதிவு செய்யப்படவில்லை. | Says nothing was recorded because the version is not approved; a reader must not take it as retired. |
 
-### 3. Erasure, privacy, consent and patient rights
+### 3. Consent, privacy, erasure and patient rights
 
 | Key | English | Tamil (AI-prepared) | Why a native speaker is needed |
 |---|---|---|---|
@@ -77,6 +85,11 @@ Notes: 51 grade A, 78 grade B, 31 grade C (160 rows with a note; some notes cove
 | `portal.activate.consent_required` | The care-delivery notice has not been granted yet, so the account was not activated. | பராமரிப்பு வழங்கல் அறிவிப்பு இன்னும் வழங்கப்படவில்லை; எனவே கணக்கு செயல்படுத்தப்படவில்லை. | Consent: "the care-delivery notice has not been granted" is rendered பராமரிப்பு வழங்கல் அறிவிப்பு ... வழங்கப்படவில்லை. A notice is not "granted"; consent wording needs the hospital's counsel and a native reviewer. |
 | `placeholder.privacyNotice` | [PLACEHOLDER: privacy notice. To be supplied by the hospital and approved by its legal counsel.] | [PLACEHOLDER: privacy notice. To be supplied by the hospital and approved by its legal counsel.] | By design this string (and every placeholder.* string) is still ENGLISH in the Tamil interface: privacy notice, privacy promise, grievance contact, FAQ answers, erasure wording, identity checks. A Tamil-speaking patient sees English until the hospital and its counsel supply real Tamil text. This is a launch blocker for the Tamil patient pages, not a translation to fix here. |
 | `portal.grievance.body` | Use this for access, correction, erasure, a nominee, or any other request. A person at the hospital reads it. | அணுகல், திருத்தம், அழித்தல், பரிந்துரைக்கப்பட்டவர், அல்லது வேறு எந்தக் கோரிக்கைக்கும் இதைப் பயன்படுத்துங்கள். மருத்துவமனையில் ஒருவர் இதைப் படிப்பார். | "nominee" (a person a patient names to act for them) is rendered பரிந்துரைக்கப்பட்டவர் ("a person who was recommended"). The usual legal word for a nominee differs; this is a patient-rights term, send to the hospital's counsel and a native reviewer. |
+| `portal.voice.agree` | I have read the notice above and I agree to this voice session. | மேலே உள்ள அறிவிப்பைப் படித்தேன்; இந்தக் குரல் அமர்வுக்கு ஒப்புக்கொள்கிறேன். | A patient agrees to a voice session with this sentence. "ஒப்புக்கொள்கிறேன்" (I agree) shares its verb with "approve" and "admit"; a reviewer should confirm it reads as consent, in a polite patient register. |
+| `portal.consent.withdrawnDone` | Your consent was withdrawn. You can grant it again at any time. | உங்கள் ஒப்புதல் திரும்பப் பெறப்பட்டது. எப்போது வேண்டுமானாலும் மீண்டும் வழங்கலாம். | Tells the patient their consent was withdrawn, at once, with no confirmation step. It must read as done and reversible ("மீண்டும் வழங்கலாம்"). "திரும்பப் பெறப்பட்டது" shares its verb with revoke and cannot-be-undone elsewhere (Part 4). |
+| `portal.myData.purpose.care_delivery` | Care delivery | சிகிச்சை வழங்கல் | The name of a consent purpose a patient sees in their own history; "சிகிச்சை வழங்கல்" should match how the notice names it. |
+| `portal.myData.purpose.ai_processing` | AI-assisted processing | செயற்கை நுண்ணறிவு உதவியுடன் செயலாக்கம் | "செயற்கை நுண்ணறிவு உதவியுடன் செயலாக்கம்" is long and technical for a patient; a reviewer should check it is understood, and that it matches the notice wording. |
+| `portal.myData.purpose.service_improvement` | Service improvement | சேவை மேம்பாடு | A consent purpose name; "சேவை மேம்பாடு" (service improvement) should match the notice, which also says the data is de-identified. |
 
 ### 4. Identity: merge, link, revoke and undo
 
@@ -183,6 +196,22 @@ Notes: 51 grade A, 78 grade B, 31 grade C (160 rows with a note; some notes cove
 | `medications.correctTitle` | Correct this medication entry? | இந்த மருந்துப் பதிவைத் திருத்தலாமா? | Confirmation question for a correction; check it against medications.correct. |
 | `medications.stopBody` | This adds a new row with an end time for the medicine below. The old row stays on record, marked as replaced. Nothing else is changed. | இது கீழே உள்ள மருந்துக்கு முடிவு நேரத்துடன் ஒரு புதிய வரிசையைச் சேர்க்கிறது. பழைய வரிசை, மாற்றப்பட்டது எனக் குறிக்கப்பட்டு பதிவில் இருக்கும். வேறு எதுவும் மாறாது. | Adds a row with an end time; the old row stays; nothing else changes. Check clarity. |
 | `medications.stopSave` | Record stop | நிறுத்தத்தைப் பதிவு செய் | "Record stop" rendered நிறுத்தத்தைப் பதிவு செய்: check it reads as recording, not ordering. |
+| `portal.voice.noAudio` | This screen does not record or play sound yet. The audio connection is not set up. | இந்தத் திரை இன்னும் ஒலியைப் பதிவு செய்யாது, ஒலிக்கவும் செய்யாது. ஒலி இணைப்பு அமைக்கப்படவில்லை. | "ஒலி இணைப்பு அமைக்கப்படவில்லை" (the sound connection is not set up) must not read as a fault of the patient's device. Check the wording. |
+| `portal.voice.notYours` | No session was opened. You are not recorded as a patient of this hospital. | எந்த அமர்வும் திறக்கப்படவில்லை. நீங்கள் இந்த மருத்துவமனையின் நோயாளியாகப் பதிவாகவில்லை. | "நோயாளியாகப் பதிவாகவில்லை" (not recorded as a patient) could read as a rejection of the person; check that it is neutral. |
+| `portal.voice.unavailable` | Voice is not available at this hospital right now. No session was opened. | இந்த மருத்துவமனையில் குரல் இப்போது கிடைக்கவில்லை. எந்த அமர்வும் திறக்கப்படவில்லை. | Check that "கிடைக்கவில்லை" (not available) reads as a temporary state, and that "எந்த அமர்வும் திறக்கப்படவில்லை" is clear to a patient. |
+| `portal.voice.repeat` | This repeated an earlier request. No new session was made. | இது முன்னர் செய்த அதே கோரிக்கையின் மறுமுறை. புதிய அமர்வு உருவாக்கப்படவில்லை. | "மறுமுறை" (repeat) for a repeated request may be unclear to a patient. |
+| `portal.voice.intro` | Voice lets you say a reply out loud instead of typing it. It is optional and it stays off until you turn it on. | தட்டச்சு செய்வதற்குப் பதிலாக உங்கள் பதிலை வாய்மொழியாகச் சொல்ல குரல் உதவும். இது விருப்பத்துக்குரியது; நீங்கள் இயக்கும் வரை அணைந்தே இருக்கும். | "வாய்மொழியாக" (by speaking) and "குரல்" (voice) as the feature name; check the word patients use for voice mode. |
+| `portal.voice.workflow.slot_offer` | Replying to an appointment offer | சந்திப்பு வாய்ப்புக்குப் பதில் சொல்ல | "சந்திப்பு வாய்ப்பு" for an appointment offer; the console uses another word for appointment in places. |
+| `portal.voice.workflow.intake_question` | Answering a question before a visit | வருகைக்கு முன் கேட்கப்படும் கேள்விக்குப் பதில் சொல்ல | Check that "கேள்விக்குப் பதில் சொல்ல" reads as answering a clinic question, not asking one. |
+| `portal.voice.workflow.readiness_item` | Answering an item on a visit checklist | வருகைக்கான தயார்நிலைப் பட்டியலில் ஒரு உருப்படிக்குப் பதில் சொல்ல | "தயார்நிலைப் பட்டியல்" (readiness list) is a coined term; check what clinics call a pre-visit checklist. |
+| `admin.rules.withdrawTitle` | Withdraw this draft red-flag rule version? | இந்தச் சிவப்புக் கொடி விதி வரைவுப் பதிப்பைத் திரும்பப் பெறவா? | Check "திரும்பப் பெறவா" for a draft (a withdrawal, not a deletion). |
+| `admin.rules.retire` | Retire this version | இந்தப் பதிப்பை நிறுத்து | Button label "நிறுத்து" (stop) for retire; check the word clinicians use for taking a rule out of use. |
+| `admin.rules.withdraw` | Withdraw this draft | இந்த வரைவைத் திரும்பப் பெறு | Button label "திரும்பப் பெறு" for withdraw a draft; same verb as revoke. |
+| `admin.rules.youRetired` | You have recorded your retire decision on this version. | இந்தப் பதிப்பில் உங்கள் நிறுத்த முடிவைப் பதிவு செய்துவிட்டீர்கள். | Check it says the doctor has recorded their own decision only. |
+| `admin.rules.youWrote` | You wrote this version. A different doctor has to approve or reject it. | இந்தப் பதிப்பை நீங்கள் எழுதினீர்கள். வேறொரு மருத்துவர்தான் இதை ஒப்புக்கொள்ளவோ நிராகரிக்கவோ வேண்டும். | Says the author cannot approve or reject; check "வேறொரு மருத்துவர்தான்" (only a different doctor) is not read as a request. |
+| `admin.rules.decisionWords.retire` | Retired it | நிறுத்தினார் | "நிறுத்தினார்" (he/she stopped it) as the decision word in a table of who decided; the honorific form is neutral, check it matches "ஒப்புக்கொண்டார்" and "நிராகரித்தார்". |
+| `staff.activate.confirmBody` | This activates your own account. Nobody else, an administrator included, can do it for you. | இது உங்கள் சொந்தக் கணக்கைச் செயல்படுத்தும். வேறு யாரும், நிர்வாகி உட்பட, உங்களுக்காக இதைச் செய்ய முடியாது. | "நிர்வாகி உட்பட" (an administrator included) states that nobody else can activate the account; check it reads as a fact, not a threat. |
+| `staff.activate.body` | If you were invited to the staff console and have not activated your account yet, you can do it here. It needs the authenticator code you signed in with. | பணியாளர் கன்சோலுக்கு உங்களுக்கு அழைப்பு வந்து, இன்னும் கணக்கைச் செயல்படுத்தவில்லை என்றால், இங்கே செய்யலாம். நீங்கள் உள்நுழைந்த அங்கீகார குறியீடு இதற்குத் தேவை. | Long sentence; check the invited-staff wording and that "அங்கீகார குறியீடு" is the word staff use for the authenticator code. |
 
 ## Part 3. Minor wording and technical labels (grade C)
 
@@ -219,31 +248,49 @@ Notes: 51 grade A, 78 grade B, 31 grade C (160 rows with a note; some notes cove
 | `roles.front_desk_supervisor` | Front desk supervisor | வரவேற்பு மேசை மேற்பார்வையாளர் | வரவேற்பு மேசை மேற்பார்வையாளர்: consistent with வரவேற்பு மேசை but the project also uses முன்பணியாளர் for front desk. |
 | `medications.stoppedAt` | Stopped at | நிறுத்தப்பட்ட நேரம் | நிறுத்தப்பட்ட நேரம் (stopped at). |
 | `medications.stopDone` | The stop was recorded. | நிறுத்தம் பதிவு செய்யப்பட்டது. | நிறுத்தம் பதிவு செய்யப்பட்டது. |
+| `portal.voice.invalid` | The session could not be opened as asked. No session was opened. | கேட்டபடி அமர்வைத் திறக்க முடியவில்லை. எந்த அமர்வும் திறக்கப்படவில்லை. | Plain error line; check register. |
+| `portal.voice.notSetUp` | Voice sessions are not set up yet. Nothing can be opened. | குரல் அமர்வுகள் இன்னும் அமைக்கப்படவில்லை. எதையும் திறக்க முடியாது. | Plain state line. |
+| `portal.voice.confirmBody` | This changes one setting on your account. You can change it back at any time. | இது உங்கள் கணக்கின் ஓர் அமைப்பை மாற்றும். எப்போது வேண்டுமானாலும் மீண்டும் மாற்றலாம். | Check the register. |
+| `portal.consent.regrant` | Grant again | மீண்டும் வழங்கு | "மீண்டும் வழங்கு" (give again) is a button label. |
+| `portal.myData.history` | Your consent history | உங்கள் ஒப்புதல் வரலாறு | Table heading. |
+| `portal.myData.historyNone` | There are no consent entries in the file. | கோப்பில் ஒப்புதல் பதிவுகள் எதுவும் இல்லை. | Empty-state line. |
+| `portal.myData.col.purpose` | Purpose | நோக்கம் | Column heading. |
+| `portal.myData.col.decision` | Decision | முடிவு | Column heading; முடிவு is the one word for decision, result and end (Part 4). |
+| `portal.myData.col.version` | Notice version | அறிவிப்புப் பதிப்பு | Column heading. |
+| `portal.myData.col.when` | When | எப்போது | Column heading. |
+| `staff.activate.notDone` | Your account was not activated. Contact your administrator. | உங்கள் கணக்கு செயல்படுத்தப்படவில்லை. உங்கள் நிர்வாகியைத் தொடர்பு கொள்ளுங்கள். | Plain state line. |
+| `staff.activate.refused` | This account cannot be activated here. Contact your administrator. | இந்தக் கணக்கை இங்கே செயல்படுத்த முடியாது. உங்கள் நிர்வாகியைத் தொடர்பு கொள்ளுங்கள். | Plain state line. |
+| `staff.activate.button` | Activate my account | என் கணக்கைச் செயல்படுத்து | Button label. |
+| `staff.activate.title` | Activate your account | உங்கள் கணக்கைச் செயல்படுத்துங்கள் | Heading. |
+| `staff.activate.confirmTitle` | Activate your account? | உங்கள் கணக்கைச் செயல்படுத்தவா? | Dialog title. |
+| `staff.activate.done` | Your account is activated. | உங்கள் கணக்கு செயல்படுத்தப்பட்டது. | Plain state line. |
 
 ## Part 4. Terms used inconsistently
 
 | English term | Tamil used (number of strings, approximate: substring match) | Problem |
 |---|---|---|
-| approve | ஒப்புக்கொள் (verb), ஒப்புதல் (noun) (54) | The verb also means "admit/agree"; some places use ஒப்புதல் அளி. |
+| approve | ஒப்புக்கொள் (verb), ஒப்புதல் (noun) (62) | The verb also means "admit/agree"; some places use ஒப்புதல் அளி. |
 | acknowledge | ஏற்றுக்கொள் ("accept") (15) | Same verb as approve; the action only records that you have seen something. |
-| record / log / transcript / register | பதிவு everywhere (127) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
-| result / decision / end | முடிவு everywhere (62) | One word for a clinical result, a person's decision and an end time. |
+| record / log / transcript / register | பதிவு everywhere (132) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
+| result / decision / end | முடிவு everywhere (66) | One word for a clinical result, a person's decision and an end time. |
 | role | பங்கு (14) | Also means "share"; பணி is used for "task". |
-| merge / link / connect / attach | இணை / இணைப்பு (50) | Merging two patient records, linking a portal account, attaching a note: one word. |
-| red flag | சிவப்புக் கொடி (literal) (19) | Check the wording clinicians use. |
-| hold (a slot or a referral) | நிறுத்து / நிறுத்தம் (stop) and ஒதுக்கீடு (allocation) (43) | Two or three words for one idea. |
-| task / job | பணி (66) | A review task and a queued job share the word. |
+| merge / link / connect / attach | இணை / இணைப்பு (51) | Merging two patient records, linking a portal account, attaching a note: one word. |
+| red flag | சிவப்புக் கொடி (literal) (21) | Check the wording clinicians use. |
+| hold (a slot or a referral) | நிறுத்து / நிறுத்தம் (stop) and ஒதுக்கீடு (allocation) (52) | Two or three words for one idea. |
+| retire (a rule version) and withdraw (a draft) | நிறுத்து (retire) and திரும்பப் பெறு (withdraw) (63) | The rule screens need two different words; "withdraw" shares its Tamil with "revoke" and "cannot be undone". |
+| task / job | பணி (67) | A review task and a queued job share the word. |
 | approved (a status) and approve (a button) | அங்கீகரிக்கப்பட்டது (status) and ஒப்புக்கொள் (button) (14) | Two word families for one idea in the red-flag rule screens. |
-| patient | நோயாளி and நோயாளர் (73) | Two spellings. |
-| clinic / hospital | மருத்துவமனை (most strings), கிளினிக் (1) (53) | Check which is meant where. |
+| patient | நோயாளி and நோயாளர் (74) | Two spellings. |
+| clinic / hospital | மருத்துவமனை (most strings), கிளினிக் (1) (55) | Check which is meant where. |
 | front desk | வரவேற்பு மேசை and முன்பணியாளர் (8) | Two renderings. |
 | confidence | நம்பிக்கை (2) | Means belief or hope; the strings mean how sure the system is. |
 | sample (a sampled decision) | மாதிரி (5) | Reads as a laboratory specimen. |
-| revoke / take back, and "cannot be undone" | திரும்பப் பெறு for both (16) | The same verb for "revoke" and "cannot be reversed". |
-| fresh (code) | புதிய ("new") (24) | Means a recently entered code, not a new one. |
+| revoke / take back, and "cannot be undone" | திரும்பப் பெறு for both (21) | The same verb for "revoke" and "cannot be reversed". |
+| grant / withdraw (a consent) | வழங்கு (grant) and திரும்பப் பெறு (withdraw) (23) | Consent withdrawal is one click in the portal, so the word must be unmistakable. |
+| fresh (code) | புதிய ("new") (27) | Means a recently entered code, not a new one. |
 | screen (the rules read text) | பரிசோதனை (6) | The word for a medical examination or test. |
 | escalate | உயர்நிலைக்கு அனுப்பு ("send to a higher level") (5) | Loses the sense of raising urgency. |
-| authenticator | அங்கீகார செயலி (app) / அங்கீகார குறியீடு (code) (15) | Consistent; check it is the word staff use. |
+| authenticator | அங்கீகார செயலி (app) / அங்கீகார குறியீடு (code) (16) | Consistent; check it is the word staff use. |
 
 ## Part 5. Register
 
@@ -285,7 +332,7 @@ These are the same in English and Tamil by design, and a Tamil-speaking patient 
 - `tasks.kind.screening_unassessable`
 - `tasks.kind.triage_proposal`
 
-## Part 7. All 1558 strings
+## Part 7. All 1614 strings
 
 Fill in the last column. Write **OK**, or write the full corrected Tamil (keep every {{placeholder}} exactly as it is). Leave a row empty if you have not looked at it.
 
@@ -563,6 +610,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `admin.rules.col.decision` | Decision | முடிவு | no issue found | |
 | `admin.rules.decisionWords.approve` | Approved | ஒப்புக்கொண்டார் | no issue found | |
 | `admin.rules.decisionWords.reject` | Rejected | நிராகரித்தார் | no issue found | |
+| `admin.rules.decisionWords.retire` | Retired it | நிறுத்தினார் | B: "நிறுத்தினார்" (he/she stopped it) as the decision word in a table of who decided; the honorific form is neutral, check it matches "ஒப்புக்கொண்டார்" and "நிராகரித்தார்". | |
 | `admin.rules.decisions` | Decisions so far | இதுவரை எடுத்த முடிவுகள் | no issue found | |
 | `admin.rules.draftNote` | This is a draft. It is never active. It becomes approved only when two different doctors approve it, and its author cannot be one of them. | இது ஒரு வரைவு. இது ஒருபோதும் செயலில் இருக்காது. இரண்டு வெவ்வேறு மருத்துவர்கள் ஒப்புக்கொண்டால் மட்டுமே இது அங்கீகரிக்கப்படும்; அதை எழுதியவர் அவர்களில் ஒருவராக இருக்க முடியாது. | A: Says a draft is never active. A wrong word here could make a draft look live. Check "never" (ஒருபோதும்) and "active" (செயலில்). | |
 | `admin.rules.empty` | There are no red-flag rule versions to show. | காட்ட சிவப்புக் கொடி விதிப் பதிப்புகள் இல்லை. | no issue found | |
@@ -585,23 +633,36 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `admin.rules.result.approved` | Your approval was recorded and this version is now approved. | உங்கள் ஒப்புதல் பதிவு செய்யப்பட்டது; இந்தப் பதிப்பு இப்போது அங்கீகரிக்கப்பட்டுள்ளது. | A: "This version is now approved": check the word is the same as the status word and cannot be read as "recorded only". | |
 | `admin.rules.result.author_cannot_decide` | You wrote this version, so you cannot decide it. A different doctor must. | இந்தப் பதிப்பை நீங்கள் எழுதினீர்கள், எனவே இதில் முடிவெடுக்க முடியாது. வேறொரு மருத்துவர் முடிவெடுக்க வேண்டும். | A: Tells the author they cannot decide their own rule. Check it is firm and not polite advice. | |
 | `admin.rules.result.empty_rule` | This version has no phrases, patterns or vital-sign criteria, so it cannot be approved. | இந்தப் பதிப்பில் சொற்றொடர்கள், வடிவங்கள் அல்லது உடல்நிலை அளவீட்டு நிபந்தனைகள் எதுவும் இல்லை, எனவே இதை ஒப்புக்கொள்ள முடியாது. | B: No content, cannot be approved: check wording. | |
+| `admin.rules.result.not_approved` | This version is not approved, so it cannot be retired. Nothing was recorded. | இந்தப் பதிப்பு ஒப்புக்கொள்ளப்படவில்லை, எனவே நிறுத்த முடியாது. எதுவும் பதிவு செய்யப்படவில்லை. | A: Says nothing was recorded because the version is not approved; a reader must not take it as retired. | |
 | `admin.rules.result.not_draft` | This version is not a draft any more, so nothing was recorded. | இந்தப் பதிப்பு இப்போது வரைவு அல்ல, எனவே எதுவும் பதிவு செய்யப்படவில்லை. | B: "Not a draft any more": check the tense and that nothing was saved is clear. | |
 | `admin.rules.result.origin_mismatch` | This version belongs to a different environment than this clinic, so nothing was recorded. | இந்தப் பதிப்பு இந்த மருத்துவமனையின் சூழலைச் சேர்ந்தது அல்ல, எனவே எதுவும் பதிவு செய்யப்படவில்லை. | B: "Environment" rendered சூழல்; check it is understood as live, test and so on, not surroundings. | |
 | `admin.rules.result.platform_rule` | This rule applies to every clinic. Who may approve it has not been decided, so nothing was approved here. | இந்த விதி எல்லா மருத்துவமனைகளுக்கும் பொருந்தும். இதை யார் ஒப்புக்கொள்ளலாம் என்பது இன்னும் முடிவு செய்யப்படவில்லை, எனவே இங்கே எதுவும் அங்கீகரிக்கப்படவில்லை. | B: "This rule applies to every clinic. Who may approve it has not been decided." Check the meaning of "applies to every clinic". | |
 | `admin.rules.result.recorded` | Your approval was recorded. The version is not approved yet: a second, different doctor must approve it. | உங்கள் ஒப்புதல் பதிவு செய்யப்பட்டது. இந்தப் பதிப்பு இன்னும் அங்கீகரிக்கப்படவில்லை: இரண்டாவது, வேறொரு மருத்துவர் ஒப்புக்கொள்ள வேண்டும். | A: "Your approval was recorded. It is not approved yet: a second, different doctor must approve it." Check that the two halves cannot be read as "approved". | |
 | `admin.rules.result.rejected` | Your rejection was recorded. This version is closed. | உங்கள் நிராகரிப்பு பதிவு செய்யப்பட்டது. இந்தப் பதிப்பு மூடப்பட்டது. | B: Check the closed state is clear. | |
 | `admin.rules.result.rejected_earlier` | A doctor already rejected this version, so it cannot be approved. | ஒரு மருத்துவர் ஏற்கெனவே இந்தப் பதிப்பை நிராகரித்துவிட்டார், எனவே இதை ஒப்புக்கொள்ள முடியாது. | B: Check it says a doctor already rejected it, so it cannot be approved. | |
+| `admin.rules.result.retired` | Your retire decision was recorded and this version is now retired. | உங்கள் நிறுத்த முடிவு பதிவானது; இந்தப் பதிப்பு இப்போது நிறுத்தப்பட்டது. | A: Tells a doctor a rule version is now retired. Must be unambiguous that it is out of use. | |
 | `admin.rules.result.unknown` | The system answered with a result this screen does not know. Nothing is shown as approved. Reload the page to see the current state. | இந்தத் திரைக்குத் தெரியாத ஒரு முடிவை அமைப்பு தெரிவித்தது. எதுவும் அங்கீகரிக்கப்பட்டதாகக் காட்டப்படவில்லை. தற்போதைய நிலையைப் பார்க்க பக்கத்தை மீண்டும் ஏற்றவும். | B: Fallback: "nothing is shown as approved. Reload". Check clarity. | |
+| `admin.rules.result.withdrawn` | This draft is withdrawn. It is closed for good and is not in force. | இந்த வரைவு திரும்பப் பெறப்பட்டது. அது முற்றிலும் மூடப்பட்டது; நடைமுறையில் இல்லை. | A: Tells a doctor a draft is closed and not in force; also shown when a repeat request reaches an already withdrawn version. | |
+| `admin.rules.retire` | Retire this version | இந்தப் பதிப்பை நிறுத்து | B: Button label "நிறுத்து" (stop) for retire; check the word clinicians use for taking a rule out of use. | |
+| `admin.rules.retireBody` | Your retire decision is recorded now, and nothing is retired until a second, different doctor also records one. A retired version never comes back: a new version is the way back. If this is the newest version of its rule code, the whole rule code stops being in force. | உங்கள் நிறுத்த முடிவு இப்போது பதிவாகும்; வேறொரு மருத்துவரும் பதிவு செய்யும் வரை எதுவும் நிறுத்தப்படாது. நிறுத்தப்பட்ட பதிப்பு மீண்டும் வராது; புதிய பதிப்பே திரும்ப வழி. இது இந்த விதிக் குறியீட்டின் புதிய பதிப்பாக இருந்தால், முழு விதிக் குறியீடும் நடைமுறையில் இருக்காது. | A: Says nothing is retired until a second, different doctor records it, and that a retired newest version switches off the whole rule code. A wrong reading could leave a rule in force or switch one off. A native speaker who is a clinician should check. Clinician sheet item 37. | |
+| `admin.rules.retireCount` | Retire decisions recorded so far: {{count}}. Two different doctors are needed. | இதுவரை பதிவான நிறுத்த முடிவுகள்: {{count}}. இரண்டு வெவ்வேறு மருத்துவர்கள் தேவை. | A: Says how many retire decisions exist and that two different doctors are needed. A count read wrongly could make a person think a rule is already retired. | |
+| `admin.rules.retireTitle` | Retire this approved red-flag rule version? | ஒப்புக்கொள்ளப்பட்ட இந்தச் சிவப்புக் கொடி விதிப் பதிப்பை நிறுத்தவா? | A: Asks whether to retire an approved red-flag rule version; "நிறுத்தவா" can read as "stop it now" although one doctor alone cannot retire it. | |
 | `admin.rules.status` | Status | நிலை | no issue found | |
 | `admin.rules.statuses.approved` | Approved | அங்கீகரிக்கப்பட்டது | B: அங்கீகரிக்கப்பட்டது versus the button verb ஒப்புக்கொள்: pick one family of words for approve. | |
 | `admin.rules.statuses.draft_unreviewed` | Draft, not approved | வரைவு, அங்கீகரிக்கப்படவில்லை | A: "Draft, not approved": check it cannot be read as "approved draft". The word அங்கீகரிக்கப்பட்டது is used for the status "Approved" but the button verb is ஒப்புக்கொள்: two words for one idea. | |
 | `admin.rules.statuses.retired` | Retired | நிறுத்தப்பட்டது | B: "Retired" is rendered நிறுத்தப்பட்டது ("stopped"), the same root as the "stop" and "hold" strings. Check it means taken out of use, not paused. | |
+| `admin.rules.statuses.withdrawn` | Withdrawn | திரும்பப் பெறப்பட்டது | A: A status word. "திரும்பப் பெறப்பட்டது" (withdrawn) must not be read as "retired" (நிறுத்தப்பட்டது), since the two mean different things for whether a rule is in force. | |
 | `admin.rules.tokenSets` | Token sets | சொல் தொகுப்புகள் | B: "Token sets" rendered சொல் தொகுப்புகள் ("word sets"): a technical term; check it is understood as words that must all appear together. | |
 | `admin.rules.twoDoctors` | A draft version becomes approved only when two different doctors approve it, each with a fresh authenticator code. One rejection closes the version. Nothing is approved by default. | வரைவுப் பதிப்பு, இரண்டு வெவ்வேறு மருத்துவர்கள் ஒவ்வொருவரும் புதிய அங்கீகார குறியீட்டுடன் ஒப்புக்கொண்டால் மட்டுமே அங்கீகரிக்கப்படும். ஒரு நிராகரிப்பு அந்தப் பதிப்பை மூடிவிடும். இயல்பாக எதுவும் அங்கீகரிக்கப்படுவதில்லை. | A: States the two-doctor rule and "nothing is approved by default" (இயல்பாக எதுவும் அங்கீகரிக்கப்படுவதில்லை). Check that இயல்பாக reads as "by default" and not "normally". | |
 | `admin.rules.vitals` | Vital-sign criteria | உடல்நிலை அளவீட்டு நிபந்தனைகள் | B: "Vital-sign criteria" rendered உடல்நிலை அளவீட்டு நிபந்தனைகள்: check the clinical term clinicians use for vital signs. | |
 | `admin.rules.vitalsNo` | This version has no vital-sign criteria. | இந்தப் பதிப்பில் உடல்நிலை அளவீட்டு நிபந்தனைகள் இல்லை. | no issue found | |
 | `admin.rules.vitalsYes` | This version has vital-sign criteria. | இந்தப் பதிப்பில் உடல்நிலை அளவீட்டு நிபந்தனைகள் உள்ளன. | no issue found | |
+| `admin.rules.withdraw` | Withdraw this draft | இந்த வரைவைத் திரும்பப் பெறு | B: Button label "திரும்பப் பெறு" for withdraw a draft; same verb as revoke. | |
+| `admin.rules.withdrawBody` | A withdrawn draft is closed for good. It can never be approved and it is never in force. A withdrawn version is not the same as a retired one. Only a draft can be withdrawn. To change a rule, write a new version. | திரும்பப் பெறப்பட்ட வரைவு முற்றிலும் மூடப்படும். அதை ஒருபோதும் ஒப்புக்கொள்ள முடியாது; அது ஒருபோதும் நடைமுறையில் இருக்காது. திரும்பப் பெறுதல் என்பது நிறுத்துதலிலிருந்து வேறுபட்டது. வரைவை மட்டுமே திரும்பப் பெற முடியும். ஒரு விதியை மாற்ற, புதிய பதிப்பை எழுதுங்கள். | A: Says a withdrawn draft is closed for good and is NOT the same as retired. "திரும்பப் பெறுதல்" and "நிறுத்துதல்" are close in everyday Tamil, so the contrast may not come across. Clinician sheet item 37. | |
+| `admin.rules.withdrawTitle` | Withdraw this draft red-flag rule version? | இந்தச் சிவப்புக் கொடி விதி வரைவுப் பதிப்பைத் திரும்பப் பெறவா? | B: Check "திரும்பப் பெறவா" for a draft (a withdrawal, not a deletion). | |
 | `admin.rules.youDecided` | You have already decided on this version. | இந்தப் பதிப்பில் நீங்கள் ஏற்கெனவே முடிவெடுத்துவிட்டீர்கள். | no issue found | |
+| `admin.rules.youRetired` | You have recorded your retire decision on this version. | இந்தப் பதிப்பில் உங்கள் நிறுத்த முடிவைப் பதிவு செய்துவிட்டீர்கள். | B: Check it says the doctor has recorded their own decision only. | |
+| `admin.rules.youWrote` | You wrote this version. A different doctor has to approve or reject it. | இந்தப் பதிப்பை நீங்கள் எழுதினீர்கள். வேறொரு மருத்துவர்தான் இதை ஒப்புக்கொள்ளவோ நிராகரிக்கவோ வேண்டும். | B: Says the author cannot approve or reject; check "வேறொரு மருத்துவர்தான்" (only a different doctor) is not read as a request. | |
 | `admin.stepUp` | This needs a fresh authenticator code. You will be asked for it. | இதற்குப் புதிய அங்கீகார குறியீடு தேவை. அது உங்களிடம் கேட்கப்படும். | B: "fresh" code is rendered புதிய ("new"). It means a RECENTLY entered code, not a never-used one; a reviewer should pick wording that says "recent". | |
 | `admin.tab.accounts` | Staff accounts | பணியாளர் கணக்குகள் | no issue found | |
 | `admin.tab.autonomy` | Autonomy | தன்னாட்சி | no issue found | |
@@ -1380,11 +1441,12 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `portal.consent.noDecision` | No decision yet | இன்னும் முடிவு இல்லை | no issue found | |
 | `portal.consent.none` | No notice has been published yet. | இன்னும் அறிவிப்பு எதுவும் வெளியிடப்படவில்லை. | no issue found | |
 | `portal.consent.recorded` | Your decision was recorded. | உங்கள் முடிவு பதிவானது. | no issue found | |
+| `portal.consent.regrant` | Grant again | மீண்டும் வழங்கு | C: "மீண்டும் வழங்கு" (give again) is a button label. | |
 | `portal.consent.title` | Notices and your decisions | அறிவிப்புகளும் உங்கள் முடிவுகளும் | no issue found | |
 | `portal.consent.version` | version {{version}} | பதிப்பு {{version}} | no issue found | |
 | `portal.consent.withdraw` | Withdraw | திரும்பப் பெறு | no issue found | |
-| `portal.consent.withdrawTitle` | Withdraw this? | இதைத் திரும்பப் பெறவா? | no issue found | |
 | `portal.consent.withdrawn` | Withdrawn | திரும்பப் பெறப்பட்டது | no issue found | |
+| `portal.consent.withdrawnDone` | Your consent was withdrawn. You can grant it again at any time. | உங்கள் ஒப்புதல் திரும்பப் பெறப்பட்டது. எப்போது வேண்டுமானாலும் மீண்டும் வழங்கலாம். | A: Tells the patient their consent was withdrawn, at once, with no confirmation step. It must read as done and reversible ("மீண்டும் வழங்கலாம்"). "திரும்பப் பெறப்பட்டது" shares its verb with revoke and cannot-be-undone elsewhere (Part 4). | |
 | `portal.erased` | Erased | அழிக்கப்பட்டது | no issue found | |
 | `portal.grievance.body` | Use this for access, correction, erasure, a nominee, or any other request. A person at the hospital reads it. | அணுகல், திருத்தம், அழித்தல், பரிந்துரைக்கப்பட்டவர், அல்லது வேறு எந்தக் கோரிக்கைக்கும் இதைப் பயன்படுத்துங்கள். மருத்துவமனையில் ஒருவர் இதைப் படிப்பார். | A: "nominee" (a person a patient names to act for them) is rendered பரிந்துரைக்கப்பட்டவர் ("a person who was recommended"). The usual legal word for a nominee differs; this is a patient-rights term, send to the hospital's counsel and a native reviewer. | |
 | `portal.grievance.category` | Category | வகை | no issue found | |
@@ -1407,12 +1469,21 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `portal.linked.label` | Linked to a record | ஒரு பதிவுடன் இணைக்கப்பட்டுள்ளது | no issue found | |
 | `portal.myData.body` | Downloads one file with everything the system holds about you that you may see. Each download is recorded. | நீங்கள் பார்க்க அனுமதிக்கப்பட்ட, அமைப்பு உங்களைப் பற்றி வைத்திருக்கும் அனைத்தையும் ஒரே கோப்பாகப் பதிவிறக்குகிறது. ஒவ்வொரு பதிவிறக்கமும் பதிவு செய்யப்படும். | no issue found | |
 | `portal.myData.button` | Download my data | என் தரவைப் பதிவிறக்கு | no issue found | |
+| `portal.myData.col.decision` | Decision | முடிவு | C: Column heading; முடிவு is the one word for decision, result and end (Part 4). | |
+| `portal.myData.col.purpose` | Purpose | நோக்கம் | C: Column heading. | |
+| `portal.myData.col.version` | Notice version | அறிவிப்புப் பதிப்பு | C: Column heading. | |
+| `portal.myData.col.when` | When | எப்போது | C: Column heading. | |
 | `portal.myData.count.bookings` | bookings: {{count}} | முன்பதிவுகள்: {{count}} | no issue found | |
 | `portal.myData.count.consents` | consent decisions: {{count}} | சம்மத முடிவுகள்: {{count}} | no issue found | |
 | `portal.myData.count.grievances` | messages you sent to the hospital: {{count}} | நீங்கள் மருத்துவமனைக்கு அனுப்பிய செய்திகள்: {{count}} | no issue found | |
 | `portal.myData.count.messages` | messages: {{count}} | செய்திகள்: {{count}} | no issue found | |
 | `portal.myData.count.records` | records: {{count}} | பதிவுகள்: {{count}} | no issue found | |
 | `portal.myData.done` | Your file was downloaded. It holds: | உங்கள் கோப்பு பதிவிறக்கப்பட்டது. அதில் உள்ளவை: | no issue found | |
+| `portal.myData.history` | Your consent history | உங்கள் ஒப்புதல் வரலாறு | C: Table heading. | |
+| `portal.myData.historyNone` | There are no consent entries in the file. | கோப்பில் ஒப்புதல் பதிவுகள் எதுவும் இல்லை. | C: Empty-state line. | |
+| `portal.myData.purpose.ai_processing` | AI-assisted processing | செயற்கை நுண்ணறிவு உதவியுடன் செயலாக்கம் | A: "செயற்கை நுண்ணறிவு உதவியுடன் செயலாக்கம்" is long and technical for a patient; a reviewer should check it is understood, and that it matches the notice wording. | |
+| `portal.myData.purpose.care_delivery` | Care delivery | சிகிச்சை வழங்கல் | A: The name of a consent purpose a patient sees in their own history; "சிகிச்சை வழங்கல்" should match how the notice names it. | |
+| `portal.myData.purpose.service_improvement` | Service improvement | சேவை மேம்பாடு | A: A consent purpose name; "சேவை மேம்பாடு" (service improvement) should match the notice, which also says the data is de-identified. | |
 | `portal.myData.title` | Download my data | என் தரவைப் பதிவிறக்கு | no issue found | |
 | `portal.myData.truncated` | The file does not hold everything: some lists were cut short. | கோப்பில் அனைத்தும் இல்லை: சில பட்டியல்கள் சுருக்கப்பட்டன. | no issue found | |
 | `portal.notAvailable` | This is not available to you yet. | இது இன்னும் உங்களுக்குக் கிடைக்கவில்லை. | no issue found | |
@@ -1439,6 +1510,30 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `portal.stage.registered` | Created | உருவாக்கப்பட்டது | no issue found | |
 | `portal.title` | Your account | உங்கள் கணக்கு | no issue found | |
 | `portal.unreadable` | Not readable | படிக்க இயலவில்லை | no issue found | |
+| `portal.voice.agree` | I have read the notice above and I agree to this voice session. | மேலே உள்ள அறிவிப்பைப் படித்தேன்; இந்தக் குரல் அமர்வுக்கு ஒப்புக்கொள்கிறேன். | A: A patient agrees to a voice session with this sentence. "ஒப்புக்கொள்கிறேன்" (I agree) shares its verb with "approve" and "admit"; a reviewer should confirm it reads as consent, in a polite patient register. | |
+| `portal.voice.confirmBody` | This changes one setting on your account. You can change it back at any time. | இது உங்கள் கணக்கின் ஓர் அமைப்பை மாற்றும். எப்போது வேண்டுமானாலும் மீண்டும் மாற்றலாம். | C: Check the register. | |
+| `portal.voice.confirmOffTitle` | Turn voice off? | குரலை அணைக்கவா? | no issue found | |
+| `portal.voice.confirmOnTitle` | Turn voice on? | குரலை இயக்கவா? | no issue found | |
+| `portal.voice.intro` | Voice lets you say a reply out loud instead of typing it. It is optional and it stays off until you turn it on. | தட்டச்சு செய்வதற்குப் பதிலாக உங்கள் பதிலை வாய்மொழியாகச் சொல்ல குரல் உதவும். இது விருப்பத்துக்குரியது; நீங்கள் இயக்கும் வரை அணைந்தே இருக்கும். | B: "வாய்மொழியாக" (by speaking) and "குரல்" (voice) as the feature name; check the word patients use for voice mode. | |
+| `portal.voice.invalid` | The session could not be opened as asked. No session was opened. | கேட்டபடி அமர்வைத் திறக்க முடியவில்லை. எந்த அமர்வும் திறக்கப்படவில்லை. | C: Plain error line; check register. | |
+| `portal.voice.noAudio` | This screen does not record or play sound yet. The audio connection is not set up. | இந்தத் திரை இன்னும் ஒலியைப் பதிவு செய்யாது, ஒலிக்கவும் செய்யாது. ஒலி இணைப்பு அமைக்கப்படவில்லை. | B: "ஒலி இணைப்பு அமைக்கப்படவில்லை" (the sound connection is not set up) must not read as a fault of the patient's device. Check the wording. | |
+| `portal.voice.notSetUp` | Voice sessions are not set up yet. Nothing can be opened. | குரல் அமர்வுகள் இன்னும் அமைக்கப்படவில்லை. எதையும் திறக்க முடியாது. | C: Plain state line. | |
+| `portal.voice.notYours` | No session was opened. You are not recorded as a patient of this hospital. | எந்த அமர்வும் திறக்கப்படவில்லை. நீங்கள் இந்த மருத்துவமனையின் நோயாளியாகப் பதிவாகவில்லை. | B: "நோயாளியாகப் பதிவாகவில்லை" (not recorded as a patient) could read as a rejection of the person; check that it is neutral. | |
+| `portal.voice.off` | Voice is off for your account. | உங்கள் கணக்கில் குரல் அணைந்துள்ளது. | no issue found | |
+| `portal.voice.on` | Voice is on for your account. | உங்கள் கணக்கில் குரல் இயக்கத்தில் உள்ளது. | no issue found | |
+| `portal.voice.open` | Open voice session | குரல் அமர்வைத் திற | no issue found | |
+| `portal.voice.opened` | A voice session was opened. | ஒரு குரல் அமர்வு திறக்கப்பட்டது. | no issue found | |
+| `portal.voice.repeat` | This repeated an earlier request. No new session was made. | இது முன்னர் செய்த அதே கோரிக்கையின் மறுமுறை. புதிய அமர்வு உருவாக்கப்படவில்லை. | B: "மறுமுறை" (repeat) for a repeated request may be unclear to a patient. | |
+| `portal.voice.saved` | Your voice setting was saved. | உங்கள் குரல் அமைப்பு சேமிக்கப்பட்டது. | no issue found | |
+| `portal.voice.sessionTitle` | Open a voice session | குரல் அமர்வைத் திற | no issue found | |
+| `portal.voice.title` | Voice | குரல் | no issue found | |
+| `portal.voice.turnOff` | Turn voice off | குரலை அணை | no issue found | |
+| `portal.voice.turnOn` | Turn voice on | குரலை இயக்கு | no issue found | |
+| `portal.voice.unavailable` | Voice is not available at this hospital right now. No session was opened. | இந்த மருத்துவமனையில் குரல் இப்போது கிடைக்கவில்லை. எந்த அமர்வும் திறக்கப்படவில்லை. | B: Check that "கிடைக்கவில்லை" (not available) reads as a temporary state, and that "எந்த அமர்வும் திறக்கப்படவில்லை" is clear to a patient. | |
+| `portal.voice.workflow.intake_question` | Answering a question before a visit | வருகைக்கு முன் கேட்கப்படும் கேள்விக்குப் பதில் சொல்ல | B: Check that "கேள்விக்குப் பதில் சொல்ல" reads as answering a clinic question, not asking one. | |
+| `portal.voice.workflow.readiness_item` | Answering an item on a visit checklist | வருகைக்கான தயார்நிலைப் பட்டியலில் ஒரு உருப்படிக்குப் பதில் சொல்ல | B: "தயார்நிலைப் பட்டியல்" (readiness list) is a coined term; check what clinics call a pre-visit checklist. | |
+| `portal.voice.workflow.slot_offer` | Replying to an appointment offer | சந்திப்பு வாய்ப்புக்குப் பதில் சொல்ல | B: "சந்திப்பு வாய்ப்பு" for an appointment offer; the console uses another word for appointment in places. | |
+| `portal.voice.workflowLegend` | What is this session for? | இந்த அமர்வு எதற்காக? | no issue found | |
 | `problem.conflict` | That conflicts with the current state. Refresh and try again. | இது தற்போதைய நிலையுடன் முரண்படுகிறது. புதுப்பித்து மீண்டும் முயற்சிக்கவும். | no issue found | |
 | `problem.forbidden` | This is not available to your role. | இது உங்கள் பங்கிற்குக் கிடைக்காது. | no issue found | |
 | `problem.invalid` | Check what you entered and try again. | நீங்கள் உள்ளிட்டதைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும். | no issue found | |
@@ -1742,6 +1837,14 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `shell.profileUnknown` | Operating profile unknown | இயக்க நிலை தெரியவில்லை | no issue found | |
 | `staff.account.signOut` | Sign out | வெளியேறுக | no issue found | |
 | `staff.account.unavailable` | This account cannot use the staff console. Contact your administrator. | இந்தக் கணக்கால் பணியாளர் தளத்தைப் பயன்படுத்த முடியாது. உங்கள் நிர்வாகியைத் தொடர்பு கொள்ளவும். | no issue found | |
+| `staff.activate.body` | If you were invited to the staff console and have not activated your account yet, you can do it here. It needs the authenticator code you signed in with. | பணியாளர் கன்சோலுக்கு உங்களுக்கு அழைப்பு வந்து, இன்னும் கணக்கைச் செயல்படுத்தவில்லை என்றால், இங்கே செய்யலாம். நீங்கள் உள்நுழைந்த அங்கீகார குறியீடு இதற்குத் தேவை. | B: Long sentence; check the invited-staff wording and that "அங்கீகார குறியீடு" is the word staff use for the authenticator code. | |
+| `staff.activate.button` | Activate my account | என் கணக்கைச் செயல்படுத்து | C: Button label. | |
+| `staff.activate.confirmBody` | This activates your own account. Nobody else, an administrator included, can do it for you. | இது உங்கள் சொந்தக் கணக்கைச் செயல்படுத்தும். வேறு யாரும், நிர்வாகி உட்பட, உங்களுக்காக இதைச் செய்ய முடியாது. | B: "நிர்வாகி உட்பட" (an administrator included) states that nobody else can activate the account; check it reads as a fact, not a threat. | |
+| `staff.activate.confirmTitle` | Activate your account? | உங்கள் கணக்கைச் செயல்படுத்தவா? | C: Dialog title. | |
+| `staff.activate.done` | Your account is activated. | உங்கள் கணக்கு செயல்படுத்தப்பட்டது. | C: Plain state line. | |
+| `staff.activate.notDone` | Your account was not activated. Contact your administrator. | உங்கள் கணக்கு செயல்படுத்தப்படவில்லை. உங்கள் நிர்வாகியைத் தொடர்பு கொள்ளுங்கள். | C: Plain state line. | |
+| `staff.activate.refused` | This account cannot be activated here. Contact your administrator. | இந்தக் கணக்கை இங்கே செயல்படுத்த முடியாது. உங்கள் நிர்வாகியைத் தொடர்பு கொள்ளுங்கள். | C: Plain state line. | |
+| `staff.activate.title` | Activate your account | உங்கள் கணக்கைச் செயல்படுத்துங்கள் | C: Heading. | |
 | `staff.console.error` | Your account details could not be loaded. | உங்கள் கணக்கு விவரங்களை ஏற்ற முடியவில்லை. | no issue found | |
 | `staff.console.loading` | Loading your account… | உங்கள் கணக்கை ஏற்றுகிறது… | no issue found | |
 | `staff.console.retry` | Try again | மீண்டும் முயற்சிக்கவும் | no issue found | |

@@ -48,7 +48,7 @@ Status words:
 | Ref | Requirement | Status | Notes |
 |---|---|---|---|
 | 20.1 | Separate, independently withdrawable consent purposes | built | |
-| 20.1 | Withdrawal is one click | partly built | Withdraw is a click plus a confirmation step, because the rule for every write is a confirmation. **blocked: decision** (D2 in the report) |
+| 20.1 | Withdrawal is one click | built (2026-11-14) | Withdraw is recorded at once, the result is shown with a "Grant again" button; granting keeps its confirmation (owner decision) |
 | 20.1 | Access, correction, erasure and nominee requests through the grievance channel with tracking | partly built | Filing a grievance with a category from the clinic's list, and the list of my grievances, are built. Correction, erasure and nominee are only as good as the category words the clinic configures; nothing in the console makes them separate request types. Request 24 |
 | 20.1 | Grievance reachable without signing in (PATIENT-WORKFLOWS H2) | blocked: route | The only grievance route needs an active patient account; the public footer shows the grievance contact as a marked placeholder. Request 26 |
 | 20.1 | Under-18 accounts: guardian consent and a recorded proxy-booking trail | blocked: route, and decision | No route. Counsel has to confirm the specifics first. Request 21 |
@@ -100,7 +100,7 @@ Status words:
 | Item | Status | Notes |
 |---|---|---|
 | Mic button only if the clinic flag is on AND the patient turned `voice_enabled` on | built (the gate; no mic yet) | The session form shows only when the person turned voice on. The clinic flag is not readable by the browser; the 503 answer from opening a session is the signal, shown as "voice is not available" |
-| Spoken and on-screen consent and recording disclosure before any audio | blocked: decision | The disclosure wording is consent and privacy text: a marked placeholder until counsel supplies it. The consent box is unticked and the session cannot be opened without it |
+| Spoken and on-screen consent and recording disclosure before any audio | built, text from the API only (2026-11-14) | The frontend holds no notice text. The Open button stays blocked, and the screen says voice is not set up, until the API supplies the notice (request 31). The agreement box is unticked. Nothing is spoken: no audio |
 | Audio over a Gemini Live browser connection | blocked: external | Patient speech would leave the browser for Google's API. `BUILD-SPEC.md` names it, but the session route's reply carries no connection details and a service approval and data-processing agreement are needed for anything beyond synthetic data. Nothing here opens a microphone or a socket |
 | Scope: slot offer, intake question, readiness item only | built (2026-11-14) | The workflow list is the three words in the schema; nothing free-form |
 | Staff voice transcripts (read, purge) | built | |

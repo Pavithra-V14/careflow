@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-1605 of 1605 strings are unreviewed.
+1614 of 1614 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -1130,7 +1130,6 @@ Terms standardised: proposal, resolve / resolved.
 | `placeholder.reviewReasons` | PLACEHOLDER - clinician to define | PLACEHOLDER - clinician to define | kept in English by design |
 | `placeholder.revokeReasons` | [PLACEHOLDER: the wording of these reasons is not final. To be confirmed by the clinic.] | [PLACEHOLDER: the wording of these reasons is not final. To be confirmed by the clinic.] | kept in English by design |
 | `placeholder.taskClose` | PLACEHOLDER - clinician to define how this kind of task is closed. It cannot be closed here. | PLACEHOLDER - clinician to define how this kind of task is closed. It cannot be closed here. | kept in English by design |
-| `placeholder.voiceDisclosure` | [PLACEHOLDER: voice session consent and recording disclosure. To be supplied by the hospital and approved by its legal counsel.] | [PLACEHOLDER: voice session consent and recording disclosure. To be supplied by the hospital and approved by its legal counsel.] | kept in English by design |
 | `portal.activate.activated` | Your account is active. | உங்கள் கணக்கு செயலில் உள்ளது. | ok |
 | `portal.activate.already_active` | Your account was already active. | உங்கள் கணக்கு ஏற்கனவே செயலில் இருந்தது. | ok |
 | `portal.activate.body` | You can activate your account once you have granted the care-delivery notice. | பராமரிப்பு வழங்கல் அறிவிப்பை வழங்கிய பிறகு உங்கள் கணக்கைச் செயல்படுத்தலாம். | ok |
@@ -1164,11 +1163,12 @@ Terms standardised: proposal, resolve / resolved.
 | `portal.consent.noDecision` | No decision yet | இன்னும் முடிவு இல்லை | ok |
 | `portal.consent.none` | No notice has been published yet. | இன்னும் அறிவிப்பு எதுவும் வெளியிடப்படவில்லை. | ok |
 | `portal.consent.recorded` | Your decision was recorded. | உங்கள் முடிவு பதிவானது. | ok |
+| `portal.consent.regrant` | Grant again | மீண்டும் வழங்கு | ok |
 | `portal.consent.title` | Notices and your decisions | அறிவிப்புகளும் உங்கள் முடிவுகளும் | ok |
 | `portal.consent.version` | version {{version}} | பதிப்பு {{version}} | ok |
 | `portal.consent.withdraw` | Withdraw | திரும்பப் பெறு | ok |
-| `portal.consent.withdrawTitle` | Withdraw this? | இதைத் திரும்பப் பெறவா? | ok |
 | `portal.consent.withdrawn` | Withdrawn | திரும்பப் பெறப்பட்டது | ok |
+| `portal.consent.withdrawnDone` | Your consent was withdrawn. You can grant it again at any time. | உங்கள் ஒப்புதல் திரும்பப் பெறப்பட்டது. எப்போது வேண்டுமானாலும் மீண்டும் வழங்கலாம். | ok |
 | `portal.erased` | Erased | அழிக்கப்பட்டது | ok |
 | `portal.grievance.body` | Use this for access, correction, erasure, a nominee, or any other request. A person at the hospital reads it. | அணுகல், திருத்தம், அழித்தல், பரிந்துரைக்கப்பட்டவர், அல்லது வேறு எந்தக் கோரிக்கைக்கும் இதைப் பயன்படுத்துங்கள். மருத்துவமனையில் ஒருவர் இதைப் படிப்பார். | ok |
 | `portal.grievance.category` | Category | வகை | ok |
@@ -1239,6 +1239,7 @@ Terms standardised: proposal, resolve / resolved.
 | `portal.voice.intro` | Voice lets you say a reply out loud instead of typing it. It is optional and it stays off until you turn it on. | தட்டச்சு செய்வதற்குப் பதிலாக உங்கள் பதிலை வாய்மொழியாகச் சொல்ல குரல் உதவும். இது விருப்பத்துக்குரியது; நீங்கள் இயக்கும் வரை அணைந்தே இருக்கும். | ok |
 | `portal.voice.invalid` | The session could not be opened as asked. No session was opened. | கேட்டபடி அமர்வைத் திறக்க முடியவில்லை. எந்த அமர்வும் திறக்கப்படவில்லை. | ok |
 | `portal.voice.noAudio` | This screen does not record or play sound yet. The audio connection is not set up. | இந்தத் திரை இன்னும் ஒலியைப் பதிவு செய்யாது, ஒலிக்கவும் செய்யாது. ஒலி இணைப்பு அமைக்கப்படவில்லை. | ok |
+| `portal.voice.notSetUp` | Voice sessions are not set up yet. Nothing can be opened. | குரல் அமர்வுகள் இன்னும் அமைக்கப்படவில்லை. எதையும் திறக்க முடியாது. | ok |
 | `portal.voice.notYours` | No session was opened. You are not recorded as a patient of this hospital. | எந்த அமர்வும் திறக்கப்படவில்லை. நீங்கள் இந்த மருத்துவமனையின் நோயாளியாகப் பதிவாகவில்லை. | ok |
 | `portal.voice.off` | Voice is off for your account. | உங்கள் கணக்கில் குரல் அணைந்துள்ளது. | ok |
 | `portal.voice.on` | Voice is on for your account. | உங்கள் கணக்கில் குரல் இயக்கத்தில் உள்ளது. | ok |
@@ -1558,6 +1559,14 @@ Terms standardised: proposal, resolve / resolved.
 | `shell.profileUnknown` | Operating profile unknown | இயக்க நிலை தெரியவில்லை | minor drift |
 | `staff.account.signOut` | Sign out | வெளியேறுக | ok |
 | `staff.account.unavailable` | This account cannot use the staff console. Contact your administrator. | இந்தக் கணக்கால் பணியாளர் தளத்தைப் பயன்படுத்த முடியாது. உங்கள் நிர்வாகியைத் தொடர்பு கொள்ளவும். | ok |
+| `staff.activate.body` | If you were invited to the staff console and have not activated your account yet, you can do it here. It needs the authenticator code you signed in with. | பணியாளர் கன்சோலுக்கு உங்களுக்கு அழைப்பு வந்து, இன்னும் கணக்கைச் செயல்படுத்தவில்லை என்றால், இங்கே செய்யலாம். நீங்கள் உள்நுழைந்த அங்கீகார குறியீடு இதற்குத் தேவை. | ok |
+| `staff.activate.button` | Activate my account | என் கணக்கைச் செயல்படுத்து | ok |
+| `staff.activate.confirmBody` | This activates your own account. Nobody else, an administrator included, can do it for you. | இது உங்கள் சொந்தக் கணக்கைச் செயல்படுத்தும். வேறு யாரும், நிர்வாகி உட்பட, உங்களுக்காக இதைச் செய்ய முடியாது. | ok |
+| `staff.activate.confirmTitle` | Activate your account? | உங்கள் கணக்கைச் செயல்படுத்தவா? | ok |
+| `staff.activate.done` | Your account is activated. | உங்கள் கணக்கு செயல்படுத்தப்பட்டது. | ok |
+| `staff.activate.notDone` | Your account was not activated. Contact your administrator. | உங்கள் கணக்கு செயல்படுத்தப்படவில்லை. உங்கள் நிர்வாகியைத் தொடர்பு கொள்ளுங்கள். | ok |
+| `staff.activate.refused` | This account cannot be activated here. Contact your administrator. | இந்தக் கணக்கை இங்கே செயல்படுத்த முடியாது. உங்கள் நிர்வாகியைத் தொடர்பு கொள்ளுங்கள். | ok |
+| `staff.activate.title` | Activate your account | உங்கள் கணக்கைச் செயல்படுத்துங்கள் | ok |
 | `staff.console.error` | Your account details could not be loaded. | உங்கள் கணக்கு விவரங்களை ஏற்ற முடியவில்லை. | ok |
 | `staff.console.loading` | Loading your account… | உங்கள் கணக்கை ஏற்றுகிறது… | ok |
 | `staff.console.retry` | Try again | மீண்டும் முயற்சிக்கவும் | ok |

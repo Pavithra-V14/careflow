@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { usePortalQuery } from './portalQuery';
+import { VOICE_NOTICE_PURPOSE, usePortalQuery } from './portalQuery';
 import { useTranslation } from 'react-i18next';
 import type { Api } from '../../shared/api/client';
 import type { components } from '../../shared/api/schema';
@@ -28,7 +28,8 @@ const Loading = () => {
 /**
  * The current notice for each purpose, EXACTLY as the API sends it (text and version are shown as given, in a plain text block: no
  * markup is interpreted, nothing is shortened or reworded), with the person's decision on it. A decision is recorded against the
- * version shown. Buttons say Grant and Withdraw; nothing is pre-chosen and nothing is recorded before a confirmation.
+ * version shown. Nothing is pre-chosen. GRANTING asks for a confirmation first. WITHDRAWING is one click (BUILD-SPEC 20.1: withdrawal is one
+ * click): it is recorded at once, the result is shown, and a "Grant again" button is right there.
  */
 export function ConsentSection({ api, stage }: { api: Api; stage: Stage }) {
   const { t } = useTranslation();
@@ -36,6 +37,7 @@ export function ConsentSection({ api, stage }: { api: Api; stage: Stage }) {
   const word = useWord();
   const [acting, setActing] = useState<{ notice: Notice; action: 'granted' | 'withdrawn' } | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [withdrawn, setWithdrawn] = useState<Notice | null>(null); // the notice just withdrawn, so it can be granted again
   const notices = usePortalQuery(['portal-consents'], () => unwrap(api.portalConsents()));
 
   const record = useIdempotentWrite(
@@ -48,10 +50,34 @@ export function ConsentSection({ api, stage }: { api: Api; stage: Stage }) {
     },
   );
 
+  const withdraw = useIdempotentWrite(
+    (n: Notice, key) => unwrap(api.recordConsent({ notice_id: n.notice_id, purpose: n.purpose as 'care_delivery', action: 'withdrawn' }, { idempotencyKey: key })),
+    () => {
+      setNote(t('portal.consent.withdrawnDone'));
+      void queryClient.invalidateQueries();
+    },
+  );
+  // The voice session notice is per-session consent shown on the voice screen, not one of the account purposes listed here.
+  const shown = (notices.data?.notices ?? []).filter((n) => n.purpose !== VOICE_NOTICE_PURPOSE);
+  const withdrawConflict = withdraw.error?.kind === 'conflict';
+  useEffect(() => {
+    if (withdrawConflict) void queryClient.invalidateQueries(); // the notice changed: read the current one
+  }, [withdrawConflict, queryClient]);
+
   return (
     <section aria-labelledby="portal-consent">
       <h2 id="portal-consent">{t('portal.consent.title')}</h2>
-      {note && <p role="status">{note}</p>}
+      {note && (
+        <p role="status">
+          {note}{' '}
+          {withdrawn && (
+            <button type="button" className="button button-secondary" onClick={() => { setNote(null); setActing({ notice: withdrawn, action: 'granted' }); }}>
+              {t('portal.consent.regrant')}
+            </button>
+          )}
+        </p>
+      )}
+      <WriteProblem problem={withdraw.error} calm={{ conflict: t('portal.consent.changed') }} />
       {notices.isPending && <Loading />}
       {notices.isError &&
         (notices.error.kind === 'forbidden' ? (
@@ -61,9 +87,9 @@ export function ConsentSection({ api, stage }: { api: Api; stage: Stage }) {
             <ProblemText kind={notices.error.kind} />
           </p>
         ))}
-      {notices.isSuccess && notices.data.notices.length === 0 && <p>{t('portal.consent.none')}</p>}
+      {notices.isSuccess && shown.length === 0 && <p>{t('portal.consent.none')}</p>}
       {notices.isSuccess &&
-        notices.data.notices.map((n) => (
+        shown.map((n) => (
           <article key={n.notice_id} className="notice" aria-label={n.label ?? n.purpose}>
             <h3>
               {n.label ?? <code>{n.purpose}</code>} · {t('portal.consent.version', { version: n.version })}
@@ -77,15 +103,25 @@ export function ConsentSection({ api, stage }: { api: Api; stage: Stage }) {
             <button type="button" className="button button-primary" disabled={n.decision === true} onClick={() => { setNote(null); setActing({ notice: n, action: 'granted' }); }}>
               {t('portal.consent.grant')}
             </button>{' '}
-            <button type="button" className="button button-secondary" disabled={n.decision === false} onClick={() => { setNote(null); setActing({ notice: n, action: 'withdrawn' }); }}>
+            <button
+              type="button"
+              className="button button-secondary"
+              disabled={n.decision === false || withdraw.isPending}
+              onClick={() => {
+                setNote(null);
+                withdraw.reset(); // a different notice is a different request: never reuse the old key
+                setWithdrawn(n);
+                withdraw.mutate(n);
+              }}
+            >
               {t('portal.consent.withdraw')}
             </button>
           </article>
         ))}
       {acting && (
         <ConfirmDialog
-          title={t(acting.action === 'granted' ? 'portal.consent.grantTitle' : 'portal.consent.withdrawTitle')}
-          confirmLabel={t(acting.action === 'granted' ? 'portal.consent.grant' : 'portal.consent.withdraw')}
+          title={t('portal.consent.grantTitle')}
+          confirmLabel={t('portal.consent.grant')}
           busy={record.isPending}
           onConfirm={() => record.mutate(acting)}
           onCancel={() => {

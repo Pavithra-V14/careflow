@@ -147,6 +147,7 @@ const INVOCATIONS: Record<keyof typeof OPERATIONS, (api: Api, o?: WriteOptions) 
   breakGlassReasons: (api) => api.breakGlassReasons(ID),
   breakGlassMine: (api) => api.breakGlassMine(ID),
   upcomingVisits: (api) => api.upcomingVisits(ID),
+  activateMe: (api) => api.activateMe(),
   portalRegister: (api, o) => api.portalRegister(o),
   portalMe: (api) => api.portalMe(),
   portalConsents: (api) => api.portalConsents(),
@@ -274,8 +275,8 @@ describe('API client contract', () => {
     for (const [name, op] of Object.entries(OPERATIONS)) {
       if (op.method === 'get') continue;
       const needs = isWrite(name as keyof typeof OPERATIONS);
-      // The one POST that is a read (patient search) deliberately carries no key.
-      expect(needs, `${name} (${op.path})`).toBe(name !== 'searchPatients');
+      // Two POSTs deliberately carry no key: patient search (a read) and the invited person's own activation (the route takes none).
+      expect(needs, `${name} (${op.path})`).toBe(name !== 'searchPatients' && name !== 'activateMe');
     }
   });
 

@@ -47,7 +47,6 @@
       "grant": "Grant",
       "withdraw": "Withdraw",
       "grantTitle": "Grant this?",
-      "withdrawTitle": "Withdraw this?",
       "confirmBody": "Your decision is recorded against the version shown above, with the time.",
       "recorded": "Your decision was recorded.",
       "changed": "The notice changed while you were reading. The page will refresh; please read the new version."
