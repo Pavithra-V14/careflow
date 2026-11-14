@@ -1,0 +1,49 @@
+{
+  "placeholder": {
+    "voiceDisclosure": "[PLACEHOLDER: voice session consent and recording disclosure. To be supplied by the hospital and approved by its legal counsel.]"
+  },
+  "portal": {
+    "voice": {
+      "title": "Voice",
+      "intro": "Voice lets you say a reply out loud instead of typing it. It is optional and it stays off until you turn it on.",
+      "on": "Voice is on for your account.",
+      "off": "Voice is off for your account.",
+      "turnOn": "Turn voice on",
+      "turnOff": "Turn voice off",
+      "confirmOnTitle": "Turn voice on?",
+      "confirmOffTitle": "Turn voice off?",
+      "confirmBody": "This changes one setting on your account. You can change it back at any time.",
+      "saved": "Your voice setting was saved.",
+      "sessionTitle": "Open a voice session",
+      "workflowLegend": "What is this session for?",
+      "workflow": {
+        "slot_offer": "Replying to an appointment offer",
+        "intake_question": "Answering a question before a visit",
+        "readiness_item": "Answering an item on a visit checklist"
+      },
+      "agree": "I have read the notice above and I agree to this voice session.",
+      "open": "Open voice session",
+      "opened": "A voice session was opened.",
+      "repeat": "This repeated an earlier request. No new session was made.",
+      "noAudio": "This screen does not record or play sound yet. The audio connection is not set up.",
+      "unavailable": "Voice is not available at this hospital right now. No session was opened.",
+      "notYours": "No session was opened. You are not recorded as a patient of this hospital.",
+      "invalid": "The session could not be opened as asked. No session was opened."
+    },
+    "myData": {
+      "history": "Your consent history",
+      "historyNone": "There are no consent entries in the file.",
+      "col": {
+        "purpose": "Purpose",
+        "decision": "Decision",
+        "version": "Notice version",
+        "when": "When"
+      },
+      "purpose": {
+        "care_delivery": "Care delivery",
+        "ai_processing": "AI-assisted processing",
+        "service_improvement": "Service improvement"
+      }
+    }
+  }
+}

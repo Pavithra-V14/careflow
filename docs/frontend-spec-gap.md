@@ -7,7 +7,7 @@ Status words:
 
 - **built** is in the code and tested against fakes. It is not "live-verified"; see `docs/frontend-live-checklist.md` for that.
 - **partly built** says what is missing.
-- **not built, can be built** needs only routes already in the snapshot. Phase B builds these.
+- **not built, can be built** needs only routes already in the snapshot. Built on 2026-11-14 (section 6).
 - **blocked: route** the snapshot has no route for it; the request is in `docs/frontend-backend-requests.md` (item 20 onward).
 - **blocked: decision** or **blocked: external** needs an answer from the owner, a clinician, counsel, or an approved outside service.
 
@@ -31,7 +31,7 @@ Status words:
 | 19.3 | Patient menu: language | built | Switcher on every page; the choice is kept in the browser. A server-side "preferred language" has no route (request 20) |
 | 19.3 | Patient menu: notifications | blocked: route | No notification-preference route. Request 22 |
 | 19.3 | Patient menu: security (devices, passkeys) | blocked: route, and decision | No list-and-revoke-sessions route; passkeys are not configured. Request 23. Passkeys would also be a new auth feature, ask first |
-| 19.3 | Patient menu: privacy and consent (withdraw, download my data, request erasure) | partly built | Grant and withdraw per purpose with a confirmation, and download are built. Phase B adds the consent history from the downloaded file. Erasure for a patient has no route: it goes through the grievance channel (built) and the grievance category list is a clinic setting. Request 24 asks for an explicit patient erasure request |
+| 19.3 | Patient menu: privacy and consent (withdraw, download my data, request erasure) | partly built | Grant and withdraw per purpose with a confirmation, and download are built. The consent history (purpose, decision, notice version, date) is now shown from the file the person downloads, with no extra call (2026-11-14). Erasure for a patient has no route: it goes through the grievance channel (built) and the grievance category list is a clinic setting. Request 24 asks for an explicit patient erasure request |
 | 19.3 | Patient menu: sign out | built | |
 | 19.3 | Staff: role badge, role switcher, current clinic | built | Active role is chosen per session; the header that sends it to the server is OFF until the backend reads it (request 3) |
 | 19.3 | Admin: persistent LIVE / TEST badge | built | Same words as the dashboard |
@@ -39,7 +39,7 @@ Status words:
 | 19.4 | Patient sign-up: full name, date of birth, sex, preferred language | partly built | Name and date of birth are asked at the claim step (they are what the claim route takes). `POST /v1/portal/register` takes no body, so sex and preferred language have nowhere to go. Request 20 |
 | 19.4 | Consent to care delivery (required); AI processing and service improvement (optional, separate) | built | Notices shown exactly as sent, each purpose separate, nothing pre-ticked |
 | 19.4 | Optional email as a fallback channel | blocked: route | Request 22 |
-| 19.4 | `voice_enabled` in the profile after registration, off by default | not built, can be built | `GET` and `PUT /v1/portal/voice/preference` exist. Phase B |
+| 19.4 | `voice_enabled` in the profile after registration, off by default | built (2026-11-14) | The Voice section of the portal: the person's own setting, with a confirmation. Off until chosen |
 | 19.4 | Not collected at sign-up: Aadhaar, address, ID proofs, insurance, blood group | built | No such field anywhere in the portal |
 | 19.4 | Staff by invitation only; name, work email, mobile, role, council registration number; second factor at first login | partly built | Invitation (email and role) and second-factor enrolment are built; there is no staff sign-up screen (a test enforces it). The invite route takes only `email` and `role`, so name, mobile and the registration number cannot be recorded. Request 25 |
 
@@ -88,7 +88,7 @@ Status words:
 | E3 procedure-readiness checklist | blocked: route | Request 30. The nurse side (status, relay a reply) is built |
 | E4 report a barrier | blocked: route | Request 30 |
 | F1 to F3 care plan, follow-ups, result corrections | partly built | Staff side built (care plans, results, correction tasks). The patient sees these only as offers and messages (28 and 29) |
-| G1 voice mic button for patients who turned it on | not built, can be built (the part the routes allow) | Phase B: the preference switch, the per-session consent step, the workflow choice, opening a session and the 403, 404 and 503 states. The microphone and audio connection itself are **blocked: external** (see 23.1 below) |
+| G1 voice mic button for patients who turned it on | partly built (2026-11-14) | Built: the preference switch, the per-session consent step, the workflow choice, opening a session and the 403, 404 and 503 states. The microphone and audio connection itself are **blocked: external** (see 23.1 below) |
 | G2 Tamil in every workflow | partly built | Built everywhere that exists; unreviewed. Red-flag detection on Tamil text is the backend |
 | H1 withdraw consents, download my data, request erasure | partly built | See 19.3 |
 | H2 grievance without sign-in | blocked: route | Request 26 |
@@ -99,9 +99,14 @@ Status words:
 
 | Item | Status | Notes |
 |---|---|---|
-| Mic button only if the clinic flag is on AND the patient turned `voice_enabled` on | not built, can be built | Phase B. The clinic flag is not readable by the browser; the 503 answer from opening a session is the signal, shown as "voice is not available" |
+| Mic button only if the clinic flag is on AND the patient turned `voice_enabled` on | built (the gate; no mic yet) | The session form shows only when the person turned voice on. The clinic flag is not readable by the browser; the 503 answer from opening a session is the signal, shown as "voice is not available" |
 | Spoken and on-screen consent and recording disclosure before any audio | blocked: decision | The disclosure wording is consent and privacy text: a marked placeholder until counsel supplies it. The consent box is unticked and the session cannot be opened without it |
 | Audio over a Gemini Live browser connection | blocked: external | Patient speech would leave the browser for Google's API. `BUILD-SPEC.md` names it, but the session route's reply carries no connection details and a service approval and data-processing agreement are needed for anything beyond synthetic data. Nothing here opens a microphone or a socket |
-| Scope: slot offer, intake question, readiness item only | built (Phase B) | The workflow list is the three words in the schema; nothing free-form |
+| Scope: slot offer, intake question, readiness item only | built (2026-11-14) | The workflow list is the three words in the schema; nothing free-form |
 | Staff voice transcripts (read, purge) | built | |
 | Patient-facing visit readiness | blocked: route | See E2 to E4 |
+
+## 6. Phase B result (2026-11-14)
+
+Everything marked "not built, can be built" is built: the patient voice setting and session gate, and the consent history. No other item
+could be built on routes already in the snapshot: the rest are blocked on a route (requests 20 to 30), a decision, or an outside service.
