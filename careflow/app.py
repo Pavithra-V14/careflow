@@ -5501,7 +5501,7 @@ async def get_profile(request: Request, conn: TxConnAllGrants, claims: dict[str,
 
 @portal.put("/profile", response_model=ProfileOut)
 async def put_profile(body: ProfileIn, request: Request, idempotency_key: IdempotencyKey, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> ProfileOut:
-    """Set your sex word and preferred language (it sets values, so a repeat is the same). 403 unless you are an active patient account, 422 for a sex word that is not on the clinic's list, 503 for a sex word while the clinic has not set its list."""
+    """Set your sex word and preferred language (it sets values, so a repeat is the same). A field you leave OUT is left as it is; a field you send as an explicit null is CLEARED (a person may clear either; clearing needs no word from the clinic's list, and an unset value is simply no value). 403 unless you are an active patient account, 422 for a sex word that is not on the clinic's list, 503 for a sex word while the clinic has not set its list."""
     account_id, _ = await _patient_account(conn, claims)
     if body.sex is not None:
         words = portal_extras_sql.sex_words()
