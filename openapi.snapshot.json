@@ -2043,7 +2043,8 @@
             "enum": [
               "care_delivery",
               "ai_processing",
-              "service_improvement"
+              "service_improvement",
+              "voice_session"
             ],
             "title": "Purpose",
             "type": "string"
@@ -4570,6 +4571,12 @@
             "type": "string"
           },
           "purpose": {
+            "enum": [
+              "care_delivery",
+              "ai_processing",
+              "service_improvement",
+              "voice_session"
+            ],
             "title": "Purpose",
             "type": "string"
           },
@@ -8733,37 +8740,6 @@
         "title": "VoiceChunkOut",
         "type": "object"
       },
-      "VoiceConsentNoticeOut": {
-        "additionalProperties": false,
-        "properties": {
-          "configured": {
-            "title": "Configured",
-            "type": "boolean"
-          },
-          "is_placeholder": {
-            "title": "Is Placeholder",
-            "type": "boolean"
-          },
-          "text": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Text"
-          }
-        },
-        "required": [
-          "configured",
-          "text",
-          "is_placeholder"
-        ],
-        "title": "VoiceConsentNoticeOut",
-        "type": "object"
-      },
       "VoicePreferenceIn": {
         "additionalProperties": false,
         "properties": {
@@ -10453,53 +10429,6 @@
         "summary": "File Patient Request",
         "tags": [
           "patient portal"
-        ]
-      }
-    },
-    "/v1/portal/voice/consent-notice": {
-      "get": {
-        "description": "The notice shown before any audio is processed in a voice session (spec 23.4), exactly as configured: the wording is counsel's and is NOT written here; the demo pack carries a labelled placeholder. `configured` is false while it is unset. 403 unless you are an active patient account.",
-        "operationId": "voice_consent_notice_v1_portal_voice_consent_notice_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/VoiceConsentNoticeOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            },
-            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            },
-            "description": "Authenticated, but this role may not do this. Fixed body."
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Voice Consent Notice",
-        "tags": [
-          "portal voice"
         ]
       }
     },

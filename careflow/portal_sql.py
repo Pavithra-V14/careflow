@@ -22,7 +22,7 @@ from careflow.mpi import (
     parse_date_of_birth,
 )
 
-PURPOSES: Final = ("care_delivery", "ai_processing", "service_improvement")
+PURPOSES: Final = ("care_delivery", "ai_processing", "service_improvement", "voice_session")
 
 
 class PortalRefused(Exception):

@@ -237,3 +237,13 @@ async def test_the_public_grievance_needs_a_published_clinic_and_an_owner_set_ca
     assert await as_app(db, nobody, "update iam.public_grievance_limits set max_per_hour = 1000") == "42501"
     assert await as_app(db, nobody, PUBLIC, g=uuid.uuid4(), k="short") == "42501"  # an anonymous key must be unguessable (32 characters or more)
     # the erasure link is set once: a different one is not silently ignored (see the erasure-link test above); a twenty-request bound per account stops a flood
+
+
+async def test_voice_session_is_a_consent_notice_purpose_and_an_unknown_purpose_is_still_refused(db):
+    w = await world(db)
+    ins = "insert into iam.consent_notices (purpose, version, body) values (:p, 1, 'TEST NOTICE')"
+    assert await owner(db, ins, p="voice_session") == 1
+    assert await owner(db, ins, p="voice") == "23514"  # a closed list
+    assert await as_app(db, w["pa1"], "select purpose, version from iam.consent_notices where purpose = 'voice_session'") == [("voice_session", 1)]  # a patient reads it
+    assert await as_app(db, w["pa1"], "insert into iam.consent_notices (purpose, version, body) values ('voice_session', 2, 'x')") == "42501"  # and cannot publish one
+
