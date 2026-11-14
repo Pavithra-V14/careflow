@@ -70,7 +70,8 @@ for (const lang of LANGS) {
   test(`no patient account yet: create it [${lang}]`, async ({ page }) => {
     await open(page, lang, { start: 'none' });
     await signIn(page);
-    await expect(page.locator('main button.button-primary')).toBeVisible();
+    // The register button follows the page's heading directly. (The complaint form's Send button, in a form, is also .button-primary while signing in.)
+    await expect(page.locator('main h2 ~ button.button-primary')).toBeVisible();
     await sweep(page, 'portal-register', lang);
   });
 
