@@ -56,6 +56,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from careflow.decision_info import clean_extra
 from careflow.extraction import ExtractionNeedsManual
 from careflow.referral import (
     ReferralDocumentNotFound,
@@ -316,7 +317,7 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
             "status": "matched",
             "abstained": found.abstained,
             "abstain_reason": found.reason if found.reason in ABSTAIN_REASONS else "",
-            "candidates": [{"card_id": c.card_id, "version": c.version} for c in found.candidates],
+            "candidates": [{"card_id": c.card_id, "version": c.version, **clean_extra(c.extra)} for c in found.candidates],  # ids, plus ONLY the closed decision fields a real decision left
         }
 
     async def hold_for_human(state: FrontDoorState) -> FrontDoorState:

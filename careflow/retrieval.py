@@ -157,6 +157,7 @@ class Candidate:
     fused_score: float
     dense_similarity: float | None = None
     bm25_ratio: float | None = None
+    extra: Mapping[str, object] = field(default_factory=dict, compare=False, repr=False)  # the decision fields a real decision left (careflow.decision_info: probability, engine, model_id, confidence, rule); filtered before anything is stored
 
 
 @dataclass(frozen=True)

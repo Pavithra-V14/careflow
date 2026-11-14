@@ -180,8 +180,11 @@ async def test_gemini_refuses_a_bad_image_a_bad_model_id_and_a_redirecting_clien
 # ---- Jev via OpenRouter ----------------------------------------------------------------------------------------------------------------------
 
 
-def openrouter_ok(choice="urgent", confidence=0.8, usage=True):
-    body = {"choices": [{"message": {"role": "assistant", "content": json.dumps({"choice": choice, "confidence": confidence})}}], "model": "downstream/model"}
+def openrouter_ok(choice="urgent", confidence=0.8, usage=True, probabilities=None):
+    """A reply in the shape the client asks for: a choice and one probability per offered option (here routine and urgent). `confidence` is the choice's own probability; the other option takes the rest."""
+    other = "routine" if choice == "urgent" else "urgent"
+    probs = probabilities if probabilities is not None else {choice: confidence, other: 1 - confidence}
+    body = {"choices": [{"message": {"role": "assistant", "content": json.dumps({"choice": choice, "probabilities": probs})}}], "model": "downstream/model"}
     if usage:
         body["usage"] = {"prompt_tokens": 90, "completion_tokens": 12, "total_tokens": 102}
     return body
@@ -205,6 +208,8 @@ async def test_jev_goes_through_chat_completions_with_the_router_model_and_a_str
     assert body["model"] == JEV_MODEL == "typesafe/jev-router" and body["plugins"][0]["id"] == "jev-router"
     schema = body["response_format"]["json_schema"]
     assert schema["strict"] is True and schema["schema"]["properties"]["choice"]["enum"] == ["routine", "urgent"] and schema["schema"]["additionalProperties"] is False
+    assert set(schema["schema"]["properties"]["probabilities"]["properties"]) == {"routine", "urgent"} and schema["schema"]["properties"]["probabilities"]["required"] == ["routine", "urgent"]  # one probability per offered option
+    assert "HIGHEST probability" in body["messages"][0]["content"] and "strictly higher" in body["messages"][0]["content"]  # the rule is stated to the model
 
 
 @pytest.mark.asyncio
@@ -583,3 +588,135 @@ def test_the_live_check_failure_line_carries_the_providers_message_truncated_and
     assert KEY not in line and "***" in line and "status 404" in line and "provider said: status=NOT_FOUND" in line
     assert len(line) <= len("the provider refused the request (status 404) | provider said: ") + 200
     assert module.failure_text(PermanentError("fixed words"), KEY) == "fixed words"  # no provider text: nothing added
+
+
+
+# ---- the live run of 2026-11-14 (b): the model answered, our validation rejected it, and the wording blamed the provider -----------------------------------------------
+
+
+
+from careflow.demo_real_models import failure_reason
+from careflow.ports import AnswerRejected
+
+
+def jev_replies(*bodies):
+    """A transport that answers each request with the next body (and remembers the requests)."""
+    queue = list(bodies)
+    seen: list = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(200, json=queue.pop(0) if len(queue) > 1 else queue[0])
+
+    return Mock(handler), seen
+
+
+@pytest.mark.asyncio
+async def test_a_rejected_answer_is_reported_as_an_answer_rejection_never_as_a_provider_refusal():
+    tie = openrouter_ok(probabilities={"routine": 0.5, "urgent": 0.5})  # the live run: the model answered with no clear top option
+    adapter = JevAdapter(JevRouterClient(KEY, timeout_seconds=20, http=Mock(json_reply(tie)).client()))
+    with pytest.raises(AnswerRejected) as caught:
+        await adapter(decision_request())
+    message = str(caught.value)
+    assert message.startswith("answer rejected: the choice does not have the highest probability") and "after one repair request" in message
+    assert "provider refused" not in message and "routine=0.50" in message and "urgent=0.50" in message and "choice=urgent" in message  # the shape of the answer: option ids and numbers
+    assert KEY not in message and "synthetic note" not in message  # never the key or the input text
+    assert isinstance(caught.value, PermanentError)  # (the gateway still goes straight to the next route)
+    # a REAL provider error keeps its own words
+    refused = JevAdapter(JevRouterClient(KEY, timeout_seconds=20, http=Mock(json_reply({}, 400)).client()))
+    with pytest.raises(PermanentError) as real:
+        await refused(decision_request())
+    assert not isinstance(real.value, AnswerRejected) and "refused" in str(real.value)
+
+
+@pytest.mark.asyncio
+async def test_through_the_gateway_the_reason_says_answer_rejected_and_provider_refused_is_kept_for_real_http_errors():
+    from decimal import Decimal as D
+
+    from careflow.gateway import Gateway, InMemorySpendLedger, ModelRow, SpendLimits
+
+    def gateway_over(mock):
+        row = ModelRow("decision", "jev", JEV_MODEL, "synthetic_only", 1, D("0.0005"), D("0.0015"), D("0.0005"), D("0.0015"), timeout_seconds=20)
+        adapter = JevAdapter(JevRouterClient(KEY, timeout_seconds=20, http=mock.client()))
+        return Gateway([row], {("jev", JEV_MODEL): adapter}, InMemorySpendLedger(), SpendLimits(clinic_daily_usd=D(1)), origin="test", base_delay=0.0)
+
+    clinic = uuid.uuid4()
+    tie = Mock(json_reply(openrouter_ok(probabilities={"routine": 0.5, "urgent": 0.5})))
+    from careflow.gateway import AllRoutesFailed
+
+    with pytest.raises(AllRoutesFailed) as caught:
+        await gateway_over(tie).call("decision", decision_request(), data_class=DataClass.SYNTHETIC, clinic_id=clinic)
+    reason = failure_reason(caught.value)
+    assert reason.startswith("answer rejected: the choice does not have the highest probability") and "provider refused" not in reason and "provider error" not in reason
+    assert len(tie.requests) == 2  # the first request and ONE repair; the rejection is not retried again by the gateway
+    refused = Mock(json_reply({}, 400))
+    with pytest.raises(AllRoutesFailed) as caught:
+        await gateway_over(refused).call("decision", decision_request(), data_class=DataClass.SYNTHETIC, clinic_id=clinic)
+    assert failure_reason(caught.value).startswith("provider refused the request") and "status 400" in failure_reason(caught.value)
+
+
+@pytest.mark.asyncio
+async def test_a_consistent_answer_is_accepted_with_each_options_probability_as_the_model_gave_it():
+    adapter = JevAdapter(JevRouterClient(KEY, timeout_seconds=20, http=Mock(json_reply(openrouter_ok(probabilities={"routine": 0.2, "urgent": 0.8}))).client()))
+    out = await adapter(decision_request())
+    assert out.value.choice == "urgent" and out.value.probabilities == {"routine": pytest.approx(0.2), "urgent": pytest.approx(0.8)} and out.value.confidence == pytest.approx(0.8)
+    assert out.value.route == "jev" and out.value.calibrated is False
+    three = DecisionRequest("triage_band", "synthetic note", ("a", "b", "c"), data_class=DataClass.SYNTHETIC)
+    ok3 = {"choices": [{"message": {"content": json.dumps({"choice": "b", "probabilities": {"a": 0.25, "b": 0.5, "c": 0.25}})}}], "model": "m"}
+    got = await JevAdapter(JevRouterClient(KEY, timeout_seconds=20, http=Mock(json_reply(ok3)).client()))(three)
+    assert got.value.probabilities == {"a": 0.25, "b": 0.5, "c": 0.25}  # the alternatives are the model's own numbers, not an even spread
+    rounded = openrouter_ok(probabilities={"routine": 0.33, "urgent": 0.66})  # a model's rounding: 0.99, within the tolerance
+    got = await JevAdapter(JevRouterClient(KEY, timeout_seconds=20, http=Mock(json_reply(rounded)).client()))(decision_request())
+    assert abs(sum(got.value.probabilities.values()) - 1) < 1e-9 and got.value.choice == "urgent"
+
+
+@pytest.mark.asyncio
+async def test_the_validation_rule_is_not_loosened_a_tie_a_wrong_top_a_bad_sum_and_an_unlisted_option_are_all_still_rejected():
+    for label, probs, choice in (
+        ("a tie", {"routine": 0.5, "urgent": 0.5}, "urgent"), ("the choice is not on top", {"routine": 0.7, "urgent": 0.3}, "urgent"), ("probabilities adding to 0.8", {"routine": 0.1, "urgent": 0.7}, "urgent"),
+        ("a probability above 1", {"routine": -0.5, "urgent": 1.5}, "urgent"), ("a missing option", {"urgent": 1.0}, "urgent"), ("an extra option", {"routine": 0.1, "urgent": 0.8, "x": 0.1}, "urgent"),
+    ):
+        body = openrouter_ok(choice, probabilities=probs)
+        adapter = JevAdapter(JevRouterClient(KEY, timeout_seconds=20, http=Mock(json_reply(body)).client()))
+        with pytest.raises(AnswerRejected):
+            await adapter(decision_request())
+        assert label
+    unlisted = openrouter_ok("emergency", probabilities={"routine": 0.2, "urgent": 0.8})
+    with pytest.raises(AnswerRejected, match="not one of the offered options"):
+        await JevAdapter(JevRouterClient(KEY, timeout_seconds=20, http=Mock(json_reply(unlisted)).client()))(decision_request())
+
+
+@pytest.mark.asyncio
+async def test_one_repair_request_restates_the_rule_is_counted_and_its_tokens_are_added_and_a_second_rejection_still_ends_in_review():
+    bad = openrouter_ok(probabilities={"routine": 0.5, "urgent": 0.5})
+    good = openrouter_ok(probabilities={"routine": 0.3, "urgent": 0.7})
+    mock, seen = jev_replies(bad, good)
+    adapter = JevAdapter(JevRouterClient(KEY, timeout_seconds=20, http=mock.client()))
+    out = await adapter(decision_request())
+    assert out.value.choice == "urgent" and out.value.route == "jev+repair"  # accepted only after the repair, and the route says so
+    assert len(seen) == 2
+    second = json.loads(seen[1].content)["messages"]
+    assert [m["role"] for m in second] == ["system", "user", "assistant", "user"]
+    assert "rejected" in second[3]["content"] and "highest probability" in second[3]["content"] and "no ties" in second[3]["content"] and "add up to 1" in second[3]["content"]  # the rule, restated
+    assert (out.usage.input_tokens, out.usage.output_tokens) == (180, 24)  # BOTH requests' tokens are counted (90 + 90, 12 + 12)
+    mock2, seen2 = jev_replies(bad, bad)
+    with pytest.raises(AnswerRejected, match="after one repair request"):
+        await JevAdapter(JevRouterClient(KEY, timeout_seconds=20, http=mock2.client()))(decision_request())
+    assert len(seen2) == 2  # exactly one repair, never a loop
+    mock3, seen3 = jev_replies(openrouter_ok())
+    await JevAdapter(JevRouterClient(KEY, timeout_seconds=20, http=mock3.client()))(decision_request())
+    assert len(seen3) == 1  # a consistent first answer needs no repair
+
+
+@pytest.mark.asyncio
+async def test_a_provider_error_on_the_repair_request_is_not_hidden_as_an_answer_rejection():
+    state = {"n": 0}
+
+    def handler(request):
+        state["n"] += 1
+        return httpx.Response(200, json=openrouter_ok(probabilities={"routine": 0.5, "urgent": 0.5})) if state["n"] == 1 else httpx.Response(503, json={})
+
+    adapter = JevAdapter(JevRouterClient(KEY, timeout_seconds=20, http=Mock(handler).client()))
+    with pytest.raises(TransientError):  # the second request failed at the provider: that is a provider error, retried by the gateway like any other
+        await adapter(decision_request())
+    assert state["n"] == 2

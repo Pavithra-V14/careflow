@@ -7681,6 +7681,17 @@
             ],
             "title": "Confidence"
           },
+          "decision_rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Rule"
+          },
           "engine": {
             "anyOf": [
               {
@@ -7703,6 +7714,17 @@
           "kind": {
             "title": "Kind",
             "type": "string"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
           },
           "on_approve": {
             "title": "On Approve",
@@ -7756,6 +7778,8 @@
           "on_edit",
           "engine",
           "confidence",
+          "model_id",
+          "decision_rule",
           "triggering_rule",
           "reason_codes"
         ],
@@ -8788,6 +8812,18 @@
       "StaffPatientRequestOut": {
         "additionalProperties": false,
         "properties": {
+          "allowed_next": {
+            "items": {
+              "enum": [
+                "acknowledged",
+                "resolved",
+                "declined"
+              ],
+              "type": "string"
+            },
+            "title": "Allowed Next",
+            "type": "array"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -8857,6 +8893,7 @@
           "kind",
           "field",
           "status",
+          "allowed_next",
           "erasure_request_id",
           "created_at"
         ],
@@ -17686,7 +17723,7 @@
     },
     "/v1/staff/patient-requests": {
       "get": {
-        "description": "The clinic's patient requests, oldest first (ids, a closed kind, the field NAME for a correction, status; no text). 404 if the clinic is not visible to you, 403 unless you are front desk there.",
+        "description": "The clinic's patient requests, oldest first (ids, a closed kind, the field NAME for a correction, status, and `allowed_next`: the statuses the backend would accept next for that row, which only a front-desk person of the clinic may set; no text). 404 if the clinic is not visible to you, 403 unless you are front desk there.",
         "operationId": "list_patient_requests_v1_staff_patient_requests_get",
         "parameters": [
           {

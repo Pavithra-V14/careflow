@@ -131,6 +131,14 @@ async def list_own_requests(conn: AsyncConnection, account_id: uuid.UUID, limit:
     return list((await conn.execute(text("select id, clinic_id, kind, field, status, created_at, updated_at from iam.patient_requests where account_id = :a order by created_at desc, id limit :n"), {"a": account_id, "n": limit})).all())
 
 
+NEXT_STATUSES: Final = {"open": ("acknowledged", "resolved", "declined"), "acknowledged": ("resolved", "declined"), "resolved": (), "declined": ()}  # the same transitions iam.update_patient_request accepts (migration 0080)
+
+
+def allowed_next(status: str) -> list[str]:
+    """The statuses the backend would accept next from `status`; an unknown status allows none (unknown is not a value)."""
+    return list(NEXT_STATUSES.get(status, ()))
+
+
 async def list_clinic_requests(conn: AsyncConnection, clinic_id: uuid.UUID, limit: int) -> list[Any]:
     return list(
         (

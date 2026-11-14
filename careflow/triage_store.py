@@ -19,6 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from careflow.decision_info import candidate_entry
 from careflow.front_door import STATUSES as KNOWN_STATUSES
 from careflow.front_door import TriageProposal
 from careflow.referral import is_fixed_reason
@@ -63,7 +64,7 @@ class SqlTriageProposer:
             raise TriageStoreError("a triage proposal needs a resolved patient")
         if not isinstance(idempotency_key, str) or not idempotency_key.strip():
             raise TriageStoreError("an idempotency key is required on every write")
-        ids = [{"card_id": str(c["card_id"]), "version": int(c["version"])} for c in candidates]  # ids only, whatever else was in the dict
+        ids = [candidate_entry(c) for c in candidates]  # ids, plus ONLY the closed decision fields (careflow.decision_info): probability, engine, model_id, confidence, rule; never text, whatever else was in the dict
         proposal_id = proposal_id_for(clinic_id, idempotency_key)
         task_key = f"triage-task:{document_id}"
         try:

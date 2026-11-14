@@ -141,7 +141,10 @@ async def test_a_clear_dummy_letter_reads_screens_decides_and_waits_for_a_person
     assert c.recorder.performed == {}  # nothing approved
     vision_at, rules_at, decision_at = log.index("MODEL:vision"), log.index("rules"), log.index("MODEL:decision")
     assert vision_at < rules_at < decision_at, log  # the transcription (the one carve-out), then the rules, and the decision model only after the rules
-    assert state.values["candidates"][0] == {"card_id": "demo-synthetic-card-B", "version": 1}  # the model only REORDERED the fictional cards
+    top, second = state.values["candidates"]
+    assert (top["card_id"], top["version"]) == ("demo-synthetic-card-B", 1) and second["card_id"] == "demo-synthetic-card-A"  # the model only REORDERED the fictional cards
+    assert top == {"card_id": "demo-synthetic-card-B", "version": 1, "probability": 0.8, "engine": "fake-jev", "model_id": "typesafe/jev-router", "confidence": 0.8, "rule": "chosen_option_ranks_first"}  # what the review screen shows: engine, model, confidence, rule, probability
+    assert second == {"card_id": "demo-synthetic-card-A", "version": 1, "probability": 0.2}  # each alternative carries its own probability, and nothing else
     assert {x["card_id"] for x in state.values["candidates"]} == {"demo-synthetic-card-A", "demo-synthetic-card-B"}
     (call,) = c.ingestor.calls
     assert call["name"] == "Demo Kilo Sample" and call["dob"] == "1990-01-01"  # read by the regular expression, each claim quoted from the letter
@@ -550,3 +553,53 @@ def test_the_scan_style_page_is_small_like_the_live_checks_page_and_the_gemini_r
     asyncio.run(GeminiVisionAdapter(KEY, "gemini-3.5-flash-lite", timeout_seconds=60, http=mock.client())(page_request()))
     body = __import__("json").loads(mock.requests[0].content)
     assert body["generationConfig"] == {"temperature": 0, "maxOutputTokens": MAX_OUTPUT_TOKENS}
+
+
+
+# ---- what a real decision leaves on the proposal, and the staff request list ------------------------------------------------------------------------------------------
+
+
+from careflow import decision_info
+from careflow.review_console import build_reviewer_view
+
+
+def test_only_closed_decision_fields_can_be_stored_and_free_text_never_can():
+    clean = decision_info.clean_extra({"probability": 0.8, "engine": "jev", "model_id": "typesafe/jev-router", "confidence": 0.8, "rule": "chosen_option_ranks_first", "text": "the whole letter", "note": "x"})
+    assert clean == {"probability": 0.8, "engine": "jev", "model_id": "typesafe/jev-router", "confidence": 0.8, "rule": "chosen_option_ranks_first"}  # unknown keys are dropped
+    for bad in ({"probability": 1.5}, {"probability": -0.1}, {"probability": float("nan")}, {"probability": True}, {"probability": "0.5"}, {"engine": "Has Spaces And Text!"}, {"engine": "x" * 41}, {"rule": "a free sentence about a patient"}, {"model_id": "bad model"}, {"model_id": "m" * 101}):
+        assert decision_info.clean_extra(bad) == {}, bad  # a malformed field is dropped, never stored
+    assert decision_info.candidate_entry({"card_id": "demo-card-a", "version": "2", "probability": 0.4, "letter": "text"}) == {"card_id": "demo-card-a", "version": 2, "probability": 0.4}
+    assert decision_info.proposal_info([]) == {"engine": None, "model_id": None, "confidence": None, "rule": None}  # not recorded
+    assert decision_info.proposal_info([{"card_id": "a", "version": 1}])["engine"] is None
+    assert decision_info.proposal_info([{"card_id": "a", "version": 1, "engine": "jev", "model_id": "m-1", "confidence": 0.7, "rule": "chosen_option_ranks_first"}]) == {"engine": "jev", "model_id": "m-1", "confidence": 0.7, "rule": "chosen_option_ranks_first"}
+
+
+def test_the_reviewer_view_shows_each_alternatives_probability_and_the_engine_and_confidence_or_none_when_not_recorded():
+    stored = [{"card_id": "demo-card-b", "version": 1, "probability": 0.8, "engine": "jev", "model_id": "m-1", "confidence": 0.8, "rule": "chosen_option_ranks_first"}, {"card_id": "demo-card-a", "version": 1, "probability": 0.2}]
+    info = decision_info.proposal_info(stored)
+    view = build_reviewer_view(task_id="t", kind="triage_proposal", origin="test", candidates=stored, abstained=False, mode="shadow", engine=info["engine"], confidence=info["confidence"]).for_reviewer()
+    assert view["engine"] == "jev" and view["confidence"] == 0.8 and [(a["label"], a["probability"]) for a in view["alternatives"]] == [("demo-card-b@1", 0.8), ("demo-card-a@1", 0.2)]
+    old = [{"card_id": "demo-card-a", "version": 1}]  # a proposal stored before this: not recorded, never shown as 0 or as high
+    view = build_reviewer_view(task_id="t", kind="triage_proposal", origin="test", candidates=old, abstained=False, mode="shadow", **{k: v for k, v in decision_info.proposal_info(old).items() if k in ("engine", "confidence")}).for_reviewer()
+    assert view["engine"] is None and view["confidence"] is None and view["alternatives"][0]["probability"] is None
+
+
+def test_the_proposal_writer_and_the_graph_keep_only_the_closed_fields():
+    store = (ROOT / "careflow" / "triage_store.py").read_text(encoding="utf-8")
+    assert "ids = [candidate_entry(c) for c in candidates]" in store
+    front = (ROOT / "careflow" / "front_door.py").read_text(encoding="utf-8")
+    assert "**clean_extra(c.extra)" in front
+    app_source = (ROOT / "careflow" / "app.py").read_text(encoding="utf-8")
+    assert "proposal_info(p.candidates)" in app_source and "engine=info[\"engine\"], confidence=info[\"confidence\"]" in app_source
+
+
+def test_the_staff_request_list_says_which_statuses_may_come_next_exactly_as_the_database_accepts_them():
+    from careflow import portal_extras_sql
+
+    assert portal_extras_sql.allowed_next("open") == ["acknowledged", "resolved", "declined"]
+    assert portal_extras_sql.allowed_next("acknowledged") == ["resolved", "declined"]
+    assert portal_extras_sql.allowed_next("resolved") == [] and portal_extras_sql.allowed_next("declined") == [] and portal_extras_sql.allowed_next("surprise") == []
+    sql = (ROOT / "db" / "migrations" / "0080_patient_portal_profile_notifications_requests_public_grievance.sql").read_text(encoding="utf-8")
+    assert "(v_r.status = 'open' and p_status in ('acknowledged', 'resolved', 'declined')) or (v_r.status = 'acknowledged' and p_status in ('resolved', 'declined'))" in sql  # the table above is that rule
+    app_source = (ROOT / "careflow" / "app.py").read_text(encoding="utf-8")
+    assert "allowed_next=portal_extras_sql.allowed_next(r.status)" in app_source and "allowed_next: list[Literal[\"acknowledged\", \"resolved\", \"declined\"]]" in app_source

@@ -44,6 +44,7 @@ from careflow.budget import CallClass, RunBudget
 from careflow.ports import (
     ROLES,
     AdapterResult,
+    AnswerRejected,
     DataClass,
     PermanentError,
     RouteNotApplicable,
@@ -144,7 +145,7 @@ class ModelRow:
 class RouteAttempt:
     provider: str
     model_id: str
-    outcome: str  # ok | skipped_no_adapter | skipped_not_applicable | skipped_breaker_open | skipped_spend | failed_transient | timeout | failed_permanent
+    outcome: str  # ok | skipped_no_adapter | skipped_not_applicable | skipped_breaker_open | skipped_spend | failed_transient | timeout | failed_permanent | answer_rejected
     calls: int = 0
     history: tuple[str, ...] = ()  # the outcome of EACH call made on this route, in order (e.g. timeout, timeout, failed_transient): a route that timed out twice and then got a 503 says so
     detail: str = ""  # the FIXED-WORDS message the adapter raised on its last failed call (e.g. "the provider refused the request (status 404)"), at most 120 characters; the adapters' messages never hold a key, URL or body
@@ -395,6 +396,11 @@ class Gateway:
                 history.append(last)
             except RouteNotApplicable:
                 last = "skipped_not_applicable"  # the adapter declined without calling its model: not a failure, no breaker hit
+                break
+            except AnswerRejected as exc:
+                breaker.failure()
+                last, detail = "answer_rejected", str(exc)[:200]
+                history.append(last)
                 break
             except PermanentError as exc:
                 breaker.failure()
