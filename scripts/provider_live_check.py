@@ -61,18 +61,28 @@ def record(name: str, ok: bool, detail: str) -> None:
     print(("PASS  " if ok else "FAIL  ") + f"{name}: {detail}")
 
 
+def failure_text(exc: Exception, key: str) -> str:
+    """The adapter's fixed-words message plus, when the provider sent one, ITS OWN error status and message (at most 200 characters, set by the transport). That is about the dummy request, never patient content. The key is
+    masked out of every part, whatever the provider echoed."""
+    said = (getattr(exc, "provider_detail", "") or "")[:200]
+    text = f"{exc}" + (f" | provider said: {said}" if said else "")
+    return text.replace(key, "***") if key else text
+
+
 def names(obj: object) -> str:
     return ", ".join(sorted(obj)) if isinstance(obj, dict) else type(obj).__name__
 
 
 async def check_gemini(key: str, image: bytes, content_type: str) -> None:
     """Calls the APPLICATION'S adapter (so a change to the adapter is re-verified), with a DUMMY image you made yourself."""
-    adapter = gemini.GeminiVisionAdapter(key, "gemini-2.5-flash", timeout_seconds=60)
+    row = next(r for r in provider_setup.load_provider_config().rows if r.provider == "gemini")  # the model id comes from config/demo-providers.yaml, the same one the app uses
+    adapter = gemini.GeminiVisionAdapter(key, row.model_id, timeout_seconds=60)
+    print(f"model: {row.model_id}")
     started = time.monotonic()
     try:
         out = await adapter(VisionRequest(image=image, content_type=content_type, page=1, clinic_id=uuid.uuid4()))
     except (TransientError, PermanentError) as exc:
-        record("1 the adapter read the page (text came back, finishReason STOP)", False, f"{exc}")
+        record("1 the adapter read the page (text came back, finishReason STOP)", False, failure_text(exc, key))
         return
     record("1 the adapter read the page (text came back, finishReason STOP)", bool(out.value.text.strip()), f"{len(out.value.text)} characters in {time.monotonic() - started:.1f}s; compare them with your dummy page by eye")
     record("2 usage reported", out.usage.input_tokens > 0, f"input {out.usage.input_tokens}, output {out.usage.output_tokens} tokens (an ESTIMATE if the service omitted a count); " + cost_line("gemini", out.usage.input_tokens, out.usage.output_tokens))
@@ -87,7 +97,7 @@ async def check_jev(key: str) -> None:
     try:
         reply = await client.decide({"task": "choice", "question": "triage_band", "input": "A made-up sentence: the synthetic patient asks for a routine check.", "options": ["routine", "urgent"]})
     except (TransientError, PermanentError) as exc:
-        record("1 the router answered with a strict-JSON choice", False, f"{exc}")
+        record("1 the router answered with a strict-JSON choice", False, failure_text(exc, key))
         return
     probs = reply.get("probabilities") if isinstance(reply, dict) else None
     record("1 the router answered with a strict-JSON choice", isinstance(probs, dict) and set(probs) == {"routine", "urgent"}, f"in {time.monotonic() - started:.1f}s; probabilities keys: {names(probs)}")
@@ -105,7 +115,7 @@ async def check_sarvam(key: str) -> None:
     try:
         out = await adapter.translate(TranslationRequest(text, "en", "ta", DataClass.SYNTHETIC))
     except (TransientError, PermanentError) as exc:
-        record("1 a text of exactly 1,000 characters is accepted", False, f"{exc}")
+        record("1 a text of exactly 1,000 characters is accepted", False, failure_text(exc, key))
         return
     record("1 a text of exactly 1,000 characters is accepted", bool(out.value.text.strip()), f"{len(text)} characters in, {len(out.value.text)} out, {time.monotonic() - started:.1f}s; " + cost_line("sarvam", chars=len(text)))
     print("info: this script does NOT verify the price per character or the rate limits (Appendix B): read them on Sarvam's pricing page and update config/demo-providers.yaml if they differ.")

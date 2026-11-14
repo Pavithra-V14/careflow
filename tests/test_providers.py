@@ -417,7 +417,7 @@ def test_the_keys_are_not_in_the_ci_workflow_the_app_never_logs_them_and_no_test
         build_providers(good_env(CAREFLOW_ENV=None, GEMINI_API_KEY=KEY, CAREFLOW_GEMINI_VERIFIED=""), profile="demo")
     assert KEY not in caplog.text
     for path in (ROOT / "tests").glob("*.py"):
-        if path.name != "test_providers.py":
+        if path.name not in ("test_providers.py", "test_set_provider_keys_script.py"):  # the second names the variables to prove the key-setup script writes only them; it only ever uses a made-up canary value
             text = path.read_text(encoding="utf-8")
             assert not any(name in text for name in KEY_VARIABLES.values()), f"{path.name} reads a provider key"
 
@@ -557,3 +557,29 @@ def test_a_durable_ledger_passed_in_is_the_one_the_gateway_uses():
     mine = InMemorySpendLedger()
     built = build_providers(good_env(), profile="demo", ledger=mine)
     assert built.gateway is not None and built.gateway.ledger is mine
+
+
+@pytest.mark.asyncio
+async def test_the_providers_own_error_fields_ride_on_a_side_attribute_never_in_the_message():
+    body = {"error": {"code": 404, "status": "NOT_FOUND", "message": "models/x is not found " + "y" * 400 + KEY}}
+    adapter = GeminiVisionAdapter(KEY, "gemini-3.5-flash-lite", timeout_seconds=60, http=Mock(json_reply(body, 404)).client())
+    with pytest.raises(PermanentError) as caught:
+        await adapter(vision_request())
+    assert_clean(caught.value)  # the message and repr stay fixed words
+    assert "NOT_FOUND" not in f"{caught.value!s} {caught.value!r}"
+    detail = caught.value.provider_detail
+    assert "status=NOT_FOUND" in detail and "code=404" in detail and len(detail) <= 200
+
+
+def test_the_live_check_failure_line_carries_the_providers_message_truncated_and_with_the_key_masked():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("provider_live_check_under_test", ROOT / "scripts" / "provider_live_check.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    exc = PermanentError("the provider refused the request (status 404)")
+    exc.provider_detail = f"status=NOT_FOUND message=echo {KEY} " + "z" * 300
+    line = module.failure_text(exc, KEY)
+    assert KEY not in line and "***" in line and "status 404" in line and "provider said: status=NOT_FOUND" in line
+    assert len(line) <= len("the provider refused the request (status 404) | provider said: ") + 200
+    assert module.failure_text(PermanentError("fixed words"), KEY) == "fixed words"  # no provider text: nothing added

@@ -1,6 +1,6 @@
 # DEMO ONLY - SYNTHETIC DATA, PRICES TO BE CONFIRMED (Appendix B).
 #
-# The registry rows for the three hosted providers approved by the owner on 2026-10-30 for SYNTHETIC DEMO use only: Gemini 2.5 Flash (vlm), Jev via OpenRouter (decision), Sarvam (translation).
+# The registry rows for the three hosted providers approved by the owner on 2026-10-30 for SYNTHETIC DEMO use only: Gemini 3.5 Flash-Lite (vlm; the model id is set below), Jev via OpenRouter (decision), Sarvam (translation).
 # EVERY row is `data_policy: synthetic_only`. A hosted row is never `phi_approved`: BUILD-SPEC.md 16.5 forbids it without a new decision, and careflow/provider_setup.py refuses to load a file that says
 # otherwise. A free-tier row is synthetic_only by definition.
 #
@@ -15,7 +15,7 @@ label: "DEMO ONLY - SYNTHETIC DATA, PRICES TO BE CONFIRMED (Appendix B)"
 rows:
   - role: vlm
     provider: gemini
-    model_id: gemini-2.5-flash
+    model_id: gemini-3.5-flash-lite  # was gemini-2.5-flash, deprecated by Google (404 for new keys); 3.5 Flash-Lite is stable, takes image input and has a free tier (ai.google.dev model + pricing pages, 2026-11-14)
     data_policy: synthetic_only
     priority: 1
     timeout_seconds: 60
