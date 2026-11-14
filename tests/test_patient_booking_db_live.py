@@ -222,3 +222,16 @@ async def test_an_inactive_visit_type_is_not_bookable_and_the_cap_counts_only_fu
     assert isinstance(await as_app(db, w["pa1"], BOOK, s=s1, k="i1"), list)  # a past booking does not count against the cap
     await owner(db, "update sched.visit_types set active = false where id = :v", v=w["vt"])
     assert await as_app(db, w["pa2"], BOOK, s=await slot(db, w), k="i2") == "42501"
+
+
+async def test_the_booking_functions_use_server_made_audit_keys_and_no_advisory_lock_and_a_planted_audit_key_cannot_block_a_cancel(db):
+    w = await world(db)
+    src = (await owner(db, "select prosrc from pg_proc where oid = 'sched.patient_book_slot(uuid, text)'::regprocedure"))[0][0] + (await owner(db, "select prosrc from pg_proc where oid = 'sched.patient_cancel_booking(uuid, text)'::regprocedure"))[0][0]
+    assert "advisory" not in src and "patient-booking-audit" not in src and "patient-cancel-audit" not in src and "sys:patient-booking:" in src and "sys:patient-cancel:" in src
+    booked = await as_app(db, w["pa1"], BOOK, s=await slot(db, w), k="a1")
+    assert isinstance(booked, list), booked
+    # clinic staff may insert audit rows with their own keys, but never the reserved `sys:` prefix: the old predictable key, if planted, no longer matters
+    plant = "insert into audit.log (origin, clinic_id, actor_id, action, resource_type, resource_id, details, idempotency_key) values ('test', :c, :a, 'x', 'sched.bookings', :b, '{}'::jsonb, :k)"
+    await as_app(db, w["fd"], plant, c=w["clinic"], a=w["fd"], b=str(booked[0][0]), k=f"patient-cancel-audit:{booked[0][0]}")
+    assert await as_app(db, w["fd"], plant, c=w["clinic"], a=w["fd"], b="x", k="sys:patient-cancel:1") == "42501"
+    assert await as_app(db, w["pa1"], "select o_changed from sched.patient_cancel_booking(:b, 'a2')", b=booked[0][0]) == [(True,)]
