@@ -288,3 +288,14 @@ async def test_the_approval_check_function_is_not_executable_by_the_application_
     for role in ("careflow_app", "anon", "authenticated", "service_role"):
         if await db.fetchval("select exists (select 1 from pg_roles where rolname = $1)", role):
             assert not await db.fetchval("select has_function_privilege($1, 'ai.model_registry_check_approval()', 'EXECUTE')", role), role
+
+
+async def test_the_translation_role_is_accepted_for_the_worker_and_other_unknown_roles_are_still_refused(db):
+    """Migration 0086: Sarvam's spend can land in the durable ledger; nothing else about the ledger changed."""
+    w = await world(db)
+    assert await as_app(db, w.people["worker_a"], ledger_sql(w.a, role="translation")) == "INSERT 0 1"
+    for who in ("admin_a", "nurse_a", "front_desk_a", "patient", None):
+        assert await as_app(db, w.people[who] if who else None, ledger_sql(w.a, role="translation")) == "42501", who  # still the queue worker of the clinic only
+    assert await outcome(db, ledger_sql(w.a, role="translation_x")) == "23514"
+    assert await outcome(db, ledger_sql(w.a, role="llm_huge")) == "23514"
+    assert await outcome(db, "update ops.spend_ledger set usd_actual = 0") == "23001"  # still append-only

@@ -91,3 +91,22 @@ def test_the_password_rules_and_it_is_never_an_argument_printed_or_stored():
     printed = re.findall(r"print\((.*)\)", source)
     assert printed and not any("password" in p.lower() or "secret" in p.lower() for p in printed), printed
     assert "open(" not in source and "write_text" not in source  # nothing is written to a file
+
+
+def test_the_supervisor_role_is_offered_and_needs_front_desk_held_in_this_clinic_and_never_a_new_account():
+    assert "front_desk_supervisor" in seed.ROLES
+    assert seed.roles_after({"front_desk"}, "front_desk_supervisor") == {"front_desk", "front_desk_supervisor"}
+    assert seed.roles_after({"front_desk", "nurse"}, "front_desk_supervisor", {"front_desk"}) == {"front_desk", "nurse", "front_desk_supervisor"}
+    for existing, here in ((set(), set()), ({"nurse"}, {"nurse"}), ({"front_desk"}, {"nurse"}), ({"front_desk"}, set()), ({"queue_worker"}, set())):  # a new account, no front desk, front desk only in ANOTHER clinic
+        with pytest.raises(seed.Refused):
+            seed.roles_after(existing, "front_desk_supervisor", here)
+    with pytest.raises(seed.Refused):
+        seed.roles_after({"queue_worker"}, "front_desk_supervisor", {"front_desk"})  # a worker holds no other role
+    assert seed.roles_after({"front_desk", "front_desk_supervisor"}, "front_desk_supervisor", {"front_desk", "front_desk_supervisor"}) == {"front_desk", "front_desk_supervisor"}  # a repeat is harmless
+
+
+def test_the_script_checks_the_front_desk_role_in_the_named_clinic_before_it_writes_and_asks_no_password_for_an_existing_account():
+    source = (ROOT / "scripts" / "seed_dev_staff.py").read_text(encoding="utf-8")
+    assert "account_id = $1 and clinic_id = $2 and revoked_at is null" in source and "roles_after(existing, args.role, here)" in source
+    assert source.index("roles_after(existing, args.role, here)") < source.index("if args.dry_run:") < source.index("getpass.getpass")  # the rule, then the dry run, then (new accounts only) the password
+    assert "if account is None:\n                password" in source

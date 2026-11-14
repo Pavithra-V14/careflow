@@ -190,6 +190,7 @@ def build_providers(
     ceilings = {role: c for role in CEILING_VARIABLES if (c := read_ceiling(environ, role)) is not None}
     role_ceilings = RoleDailyCeilings(ceilings)
     run_cap = read_run_cap(environ)
+    spend_ledger = ledger or InMemorySpendLedger()  # ONE ledger for the gateway and the translation route
     rows: list[ModelRow] = []
     adapters: dict[tuple[str, str], Any] = {}
 
@@ -226,7 +227,7 @@ def build_providers(
     if rows:
         total = sum((ceilings[r] for r in {row.role for row in rows}), Decimal(0))
         assert run_cap is not None  # (every row was built through `usable`, which requires it)
-        out.gateway = Gateway(rows, adapters, ledger or InMemorySpendLedger(), SpendLimits(clinic_daily_usd=total, per_request_usd=run_cap), role_ceilings=role_ceilings, origin="test")
+        out.gateway = Gateway(rows, adapters, spend_ledger, SpendLimits(clinic_daily_usd=total, per_request_usd=run_cap), role_ceilings=role_ceilings, origin="test")
         if any(r.role == "vlm" for r in rows):
             out.vision = GatewayVision(out.gateway, data_class=DataClass.SYNTHETIC)
     why = usable("sarvam", "translation")
@@ -234,7 +235,7 @@ def build_providers(
         out.unavailable["sarvam"] = why
     else:
         spec = cfg.translation
-        out.translation = SarvamTranslation(environ[KEY_VARIABLES["sarvam"]].strip(), timeout_seconds=spec.timeout_seconds, price_per_1k_chars_usd=spec.price_per_1k_chars_usd, ceilings=role_ceilings, http=http)
+        out.translation = SarvamTranslation(environ[KEY_VARIABLES["sarvam"]].strip(), timeout_seconds=spec.timeout_seconds, price_per_1k_chars_usd=spec.price_per_1k_chars_usd, ceilings=role_ceilings, http=http, ledger=spend_ledger, origin="test")
     for provider, reason in out.unavailable.items():
         log.warning("hosted provider %s is unavailable: %s", provider, reason)
     return out
