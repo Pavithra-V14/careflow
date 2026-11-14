@@ -172,3 +172,28 @@ None.
 ## Write steps still to do (record mode, user clicks)
 
 Front desk: add two patients to the waitlist, Hold, Book, cancel, Prepare offer, Send, mark delivered, typing a patient's reply. Then nurse, doctor, admin.
+
+# Second live pass (14 Nov 2026)
+
+Backend: `127.0.0.1:8000` (started by the user from the updated main, all migrations applied). Dev server `127.0.0.1:5173/staff/`, started with `VITE_DEV_SKIP_STAFF_MFA=1` and `CAREFLOW_API_BASE_URL` set in the shell for this run only (no file). The user typed the password; no credential, token or storage was read or recorded.
+
+| Step | Result | Cause |
+|---|---|---|
+| Dev server against 8000, dev-only switch ON | pass | `GET /readyz` answered 200 (JSON) through the dev proxy. |
+| Front desk sign-in (pavithravenkatesh341@gmail.com, password only) | signed in, then every staff call refused | `GET /v1/iam/me` 200, then `GET /referrals`, `/review-tasks` (four times), `/scheduling/providers`, `/scheduling/locations` all 401. The console treats any other 401 as "sign in again", so the walk ended in the sign-in screen. Cause, read from the backend code (`careflow/app.py`, `_require_mfa`): `CAREFLOW_REQUIRE_AAL2` defaults to ON, and with it on EVERY staff route except `/v1/iam/me` answers 401 with `WWW-Authenticate: mfa` to a password-only session. This backend run has it on; the 8010 backend of the first pass had it off (allowed only in profile demo with synthetic data). The dev-only switch only skips the console's enrolment screen; it cannot satisfy the backend. |
+| Nurse, admin and doctor sign-ins | not run | Same cause: each would only 401. Not asked to sign in three more times for nothing. |
+| Scheduling offer draft, rule list and authoring, medications, patient requests, supervisor, staff views of a patient record, voice sessions (admin), alerts, referral review | not tested live: needs second factor | Every one of them is a staff route behind the check above. The supervisor also has no account in the list given (front desk, nurse and admin, doctor). |
+| Referral review: a model-made proposal | checked in code and unit tests, not live | See below. |
+| Patient request status buttons from `allowed_next` | nothing new | The snapshot (main at 9d3496c) has no `allowed_next` and no transitions on the patient request rows; the guessed set stays, `invalid_transition` is the fallback. |
+
+## Frontend defects found and fixed in this pass
+
+1. **The live walk reported a pass when the backend refused everything.** The run ended "1 passed" with 8 calls, six of them 401. It now prints a line saying how many calls answered 401 and why, and fails the walk (`e2e-live/live.spec.ts`).
+2. **Referral review: no clear "suggestion" label.** The reviewer view and the referral's proposal section showed the engine, confidence, probabilities and mode with no statement that this is a suggestion. Both now say, above the figures: "This is a suggestion made by the system, shown as the system recorded it. It is not a decision: a person decides." (English and Tamil, Tamil unreviewed.)
+3. **Referral review: values were reworded or rounded.** The mode word was passed through a translation lookup and probabilities and the confidence were rounded to whole percents. The mode (for example `shadow`) is now shown exactly as the API sends it, and figures keep one decimal place (87.6% is not shown as 88%). A missing engine, confidence, probability, rule or mode is still "Not recorded", never zero.
+
+The API's reviewer view has these fields: `engine` (the label), `confidence`, alternatives with `probability` (null when the engine gave none), `triggering_rule`, and `proposal.mode`. It has no "role" field; if the owner expects one, it is not in the schema. Tests: `tests/console-f7.test.tsx` (suggestion label, mode, engine, one-decimal figures, "Not recorded").
+
+## What is needed to run the pass
+
+Either restart the backend with `CAREFLOW_REQUIRE_AAL2=false` (the 8010 setup; demo profile and synthetic data only), or sign in with real authenticator codes (the dev accounts have no authenticator today). Then the four walks (front desk, nurse, admin, doctor) are redone with the walk now covering: patient requests, red-flag rules and the rule authoring form (opened, never saved), up to six referral details, and the patient record with its medications panel.

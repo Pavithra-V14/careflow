@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-1775 of 1775 strings are unreviewed.
+1776 of 1776 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -1542,6 +1542,7 @@ Terms standardised: proposal, resolve / resolved.
 | `review.reasonOptional` | Reason (optional for approve) | காரணம் (ஒப்புக்கொள்ள விருப்பம்) | ok |
 | `review.reasonRequired` | Choose a reason. A reject needs one. | ஒரு காரணத்தைத் தேர்ந்தெடுங்கள். நிராகரிக்க ஒன்று தேவை. | ok |
 | `review.rule` | Rule that triggered review | மதிப்பாய்வைத் தூண்டிய விதி | ok |
+| `review.suggestion` | This is a suggestion made by the system, shown as the system recorded it. It is not a decision: a person decides. | இது அமைப்பு செய்த ஒரு பரிந்துரை; அமைப்பு பதிவு செய்தபடியே காட்டப்படுகிறது. இது முடிவு அல்ல: முடிவை ஒரு நபர் எடுப்பார். | ok |
 | `review.viewMissing` | There is no proposal to show for this referral. | இந்தப் பரிந்துரைக்குக் காட்ட முன்மொழிவு இல்லை. | ok |
 | `review.viewTitle` | Reviewer view | மதிப்பாய்வாளர் பார்வை | ok |
 | `roles.admin` | Admin | நிர்வாகி | ok |

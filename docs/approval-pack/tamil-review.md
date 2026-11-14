@@ -1,6 +1,6 @@
 # Tamil review pack (AI-prepared, NOT reviewed by a native speaker)
 
-Prepared 2026-11-14. Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 1775 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
+Prepared 2026-11-14. Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 1776 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
 
 **Regenerated 2026-11-14** by `npm run i18n:pack` from the strings as they are now, so it covers every current string, including the newest screens (patient voice setting, consent withdrawal and history, activating a staff account, withdrawing and retiring a red-flag rule). Each is written and second-passed in the same way and is just as unreviewed.
 
@@ -12,9 +12,9 @@ Meaning errors, register for patients, medical or safety terms, unsafe ambiguity
 - **B** wrong or odd meaning, wrong register, or an inconsistent term. Needs a native speaker.
 - **C** minor wording, or an administrator-only technical label.
 
-How it was done, honestly: all 1775 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and the strings that carry meaning (sentences of four words or more, and short strings that differ from their English) were read by an AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
+How it was done, honestly: all 1776 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and the strings that carry meaning (sentences of four words or more, and short strings that differ from their English) were read by an AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
 
-Automatic checks: 1775 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
+Automatic checks: 1776 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
 
 Notes: 71 grade A, 125 grade B, 58 grade C (254 rows with a note; some notes cover a group of similar strings, named in the note).
 
@@ -320,8 +320,8 @@ Notes: 71 grade A, 125 grade B, 58 grade C (254 rows with a note; some notes cov
 |---|---|---|
 | approve | ஒப்புக்கொள் (verb), ஒப்புதல் (noun) (62) | The verb also means "admit/agree"; some places use ஒப்புதல் அளி. |
 | acknowledge | ஏற்றுக்கொள் ("accept") (15) | Same verb as approve; the action only records that you have seen something. |
-| record / log / transcript / register | பதிவு everywhere (151) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
-| result / decision / end | முடிவு everywhere (67) | One word for a clinical result, a person's decision and an end time. |
+| record / log / transcript / register | பதிவு everywhere (152) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
+| result / decision / end | முடிவு everywhere (68) | One word for a clinical result, a person's decision and an end time. |
 | role | பங்கு (14) | Also means "share"; பணி is used for "task". |
 | merge / link / connect / attach | இணை / இணைப்பு (56) | Merging two patient records, linking a portal account, attaching a note: one word. |
 | red flag | சிவப்புக் கொடி (literal) (21) | Check the wording clinicians use. |
@@ -381,7 +381,7 @@ These are the same in English and Tamil by design, and a Tamil-speaking patient 
 - `tasks.kind.screening_unassessable`
 - `tasks.kind.triage_proposal`
 
-## Part 7. All 1775 strings
+## Part 7. All 1776 strings
 
 Fill in the last column. Write **OK**, or write the full corrected Tamil (keep every {{placeholder}} exactly as it is). Leave a row empty if you have not looked at it.
 
@@ -1869,6 +1869,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `review.reasonOptional` | Reason (optional for approve) | காரணம் (ஒப்புக்கொள்ள விருப்பம்) | no issue found | |
 | `review.reasonRequired` | Choose a reason. A reject needs one. | ஒரு காரணத்தைத் தேர்ந்தெடுங்கள். நிராகரிக்க ஒன்று தேவை. | no issue found | |
 | `review.rule` | Rule that triggered review | மதிப்பாய்வைத் தூண்டிய விதி | no issue found | |
+| `review.suggestion` | This is a suggestion made by the system, shown as the system recorded it. It is not a decision: a person decides. | இது அமைப்பு செய்த ஒரு பரிந்துரை; அமைப்பு பதிவு செய்தபடியே காட்டப்படுகிறது. இது முடிவு அல்ல: முடிவை ஒரு நபர் எடுப்பார். | no issue found | |
 | `review.viewMissing` | There is no proposal to show for this referral. | இந்தப் பரிந்துரைக்குக் காட்ட முன்மொழிவு இல்லை. | no issue found | |
 | `review.viewTitle` | Reviewer view | மதிப்பாய்வாளர் பார்வை | no issue found | |
 | `roles.admin` | Admin | நிர்வாகி | no issue found | |
