@@ -259,6 +259,39 @@ The audit log stays auditor only. Run stays offered to front desk, nurse and doc
 - A person holding front desk and the supervisor role chooses the role per sign-in like any other pair. The supervisor sees only the task inbox in the console; confirm that is the intent (the alerts route does not list the supervisor).
 - **Requested from the backend:** an `authored_by_you` flag (boolean) on each rule version in `GET /v1/staff/console/red-flag-rules`. When it is in the snapshot the console will hide Approve and Reject from the author (keeping the confirmation and the `author_cannot_decide` refusal as the fallback). Also requested, when built: the withdraw route and the two-person retire route, so their buttons can be added.
 
+### 20. Patient profile: name, sex, preferred language (requested 2026-11-14, frontend spec gap)
+ returns no display name, and  takes no body, so the portal cannot show the initials avatar and name (BUILD-SPEC 19.3) or collect sex and preferred language (19.4). Please add a way to read and set them (name, sex, preferred language), with the closed word lists in the schema.
+
+### 21. Family members and guardians (requested 2026-11-14)
+No dependant or guardian routes exist (BUILD-SPEC 19.3, 20.1, PATIENT-WORKFLOWS A3). Needed: list and add a dependant, act on a dependant's behalf, and the recorded proxy trail. Counsel has to confirm the under-18 specifics first; the frontend writes no consent wording for it.
+
+### 22. Notification channels and optional email (requested 2026-11-14)
+No route to read or set the notification preference or an optional email address (19.3, 19.4).
+
+### 23. Devices and sessions (requested 2026-11-14)
+No route to list a patient's signed-in devices and revoke one (19.3 Security, PATIENT-WORKFLOWS H3). Passkeys would be a new auth feature and need the owner's approval first.
+
+### 24. Patient erasure, correction and nominee requests (requested 2026-11-14)
+The patient path is the grievance channel with whatever category words the clinic configures. Please say whether these are separate request types, and if so add the routes or the category words (20.1). The console invents no category.
+
+### 25. Staff invite fields (requested 2026-11-14)
+ has only ,  and . BUILD-SPEC 19.4 also lists name, mobile and the medical-council registration number (doctors and nurses). Please add them, or say they are held elsewhere.
+
+### 26. Grievance without signing in (requested 2026-11-14)
+PATIENT-WORKFLOWS H2 says any patient can reach the grievance channel without signing in. The only grievance routes need an active patient account. Please add a public route, or confirm the public footer contact is the whole channel.
+
+### 27. Protocol card and message-template editor routes (requested 2026-11-14)
+BUILD-SPEC 20.2 describes an admin card editor that validates against the card schema and runs the card's own test cases before publishing. No card or template routes are in the snapshot. Until they are, there is no screen. The console will invent no card or template content.
+
+### 28. Patient scheduling routes (requested 2026-11-14)
+Slots, holds, bookings and cancel exist only under . Patient booking and cancelling (PATIENT-WORKFLOWS B1, B3, B5) need patient-scoped routes, with the server enforcing that only a future appointment can be cancelled.
+
+### 29. Patient messaging routes (requested 2026-11-14)
+Threads and messages exist only under . The patient needs to list their own threads by topic, read an offer, send a reply, and see the account-stage limits (B2, B4, D1 to D3). A rejected attempt should look identical to a missing thread, as the workflows say.
+
+### 30. Patient visit-readiness routes (requested 2026-11-14)
+No patient route for intake questions, the procedure checklist or reporting a barrier (E2 to E4).
+
 ## Decisions recorded here for later readers
 
 - **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;
