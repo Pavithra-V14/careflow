@@ -250,3 +250,7 @@ Account pavithravenkatesh341@gmail.com, which now holds `front_desk` AND `front_
 **What this means for the earlier decision** (the supervisor sees the task inbox only): that is a console convenience, and it holds: the console offers the supervisor only Tasks. The live result shows the backend's own enforcement for a supervisor-only person has NOT been exercised, because every available account that holds the role also holds `front_desk`.
 
 To test the supervisor role on its own, either create an account that holds only `front_desk_supervisor`, or switch on the active-role header (`SEND_ACTIVE_ROLE_HEADER`, which needs the backend's migration 0028 live check). Neither was done: no write, no flag change.
+
+## Supervisor item: closed (decided 14 Nov 2026)
+
+**No supervisor-only person can exist; supervisor = front desk plus a console view.** By design a front desk supervisor always holds `front_desk` too, so the walk of 14 Nov (account holding both grants, merged at 8631640) IS the real supervisor case. The supervisor-only walk is cancelled; no supervisor-only test account and no active-role header switch-on are needed for it.

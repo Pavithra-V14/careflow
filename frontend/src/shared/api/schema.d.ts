@@ -1476,6 +1476,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/knowledge/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Knowledge Search Route
+         * @description Search the knowledge cards. 404 if the clinic is not visible to you, 403 unless you are a nurse or doctor there, 503 until knowledge search is switched on (demo + synthetic_only only). Returns card ids, versions and
+         *     scores, and `abstained` with a fixed `reason` when nothing clears the required thresholds (an answer, not an error). The query is masked before any model and is not stored.
+         */
+        post: operations["knowledge_search_route_v1_staff_knowledge_search_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/medications": {
         parameters: {
             query?: never;
@@ -1680,7 +1701,7 @@ export interface paths {
         };
         /**
          * List Patient Requests
-         * @description The clinic's patient requests, oldest first (ids, a closed kind, the field NAME for a correction, status; no text). 404 if the clinic is not visible to you, 403 unless you are front desk there.
+         * @description The clinic's patient requests, oldest first (ids, a closed kind, the field NAME for a correction, status, and `allowed_next`: the statuses the backend would accept next for that row, which only a front-desk person of the clinic may set; no text). 404 if the clinic is not visible to you, 403 unless you are front desk there.
          */
         get: operations["list_patient_requests_v1_staff_patient_requests_get"];
         put?: never;
@@ -4330,6 +4351,43 @@ export interface components {
              */
             role: "front_desk" | "front_desk_supervisor" | "nurse" | "doctor" | "admin" | "auditor" | "business_owner";
         };
+        /** KnowledgeCandidateOut */
+        KnowledgeCandidateOut: {
+            /** Bm25 Ratio */
+            bm25_ratio: number | null;
+            /** Card Id */
+            card_id: string;
+            /** Similarity */
+            similarity: number | null;
+            /** Version */
+            version: number;
+        };
+        /** KnowledgeSearchIn */
+        KnowledgeSearchIn: {
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /** Query */
+            query: string;
+        };
+        /** KnowledgeSearchOut */
+        KnowledgeSearchOut: {
+            /** Abstained */
+            abstained: boolean;
+            /** Candidates */
+            candidates: components["schemas"]["KnowledgeCandidateOut"][];
+            /**
+             * Embedding
+             * @enum {string}
+             */
+            embedding: "fake" | "hosted";
+            /** Reason */
+            reason: ("no_calibrated_policy" | "no_candidates" | "dense_unavailable" | "below_threshold" | "all_stale") | null;
+            /** Reranked */
+            reranked: boolean;
+        };
         /** LabelsIn */
         LabelsIn: {
             /**
@@ -6011,6 +6069,8 @@ export interface components {
             }[];
             /** Confidence */
             confidence: number | null;
+            /** Decision Rule */
+            decision_rule: string | null;
             /** Engine */
             engine: string | null;
             /** Evidence */
@@ -6019,6 +6079,8 @@ export interface components {
             }[];
             /** Kind */
             kind: string;
+            /** Model Id */
+            model_id: string | null;
             /** On Approve */
             on_approve: string;
             /** On Edit */
@@ -6523,6 +6585,8 @@ export interface components {
         };
         /** StaffPatientRequestOut */
         StaffPatientRequestOut: {
+            /** Allowed Next */
+            allowed_next: ("acknowledged" | "resolved" | "declined")[];
             /**
              * Created At
              * Format: date-time
@@ -11550,6 +11614,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+        };
+    };
+    knowledge_search_route_v1_staff_knowledge_search_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KnowledgeSearchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeSearchOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+            /** @description Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };

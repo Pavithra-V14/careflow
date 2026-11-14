@@ -276,7 +276,7 @@ describe('reviewer view and reason codes', () => {
   const detail = { clinic_id: CLINIC_A, content_type: 'application/pdf', created_at: '2026-10-30T05:00:00Z', decided: false, document_id: ID.doc, holds: [], open_holds: 0, proposal, proposal_id: ID.doc2, proposal_visible: true, registered_by: ID.user, run_state: 'awaiting_decision', size_bytes: 2048 };
   const view = (over: Record<string, unknown> = {}) => ({
     alternatives: [{ label: 'card-x@3', probability: null }, { label: 'card-y@1', probability: 0.25 }],
-    confidence: null, engine: null, evidence: [{ field: 'reason', source: 'letter', crop_ref: null }],
+    confidence: null, engine: null, model_id: null, decision_rule: null, evidence: [{ field: 'reason', source: 'letter', crop_ref: null }],
     kind: 'triage_proposal', on_approve: 'Approve text from the API', on_edit: 'Edit text from the API', on_reject: 'Reject text from the API',
     proposal: { abstained: false, mode: 'shadow', candidate_count: 2 }, reason_codes: [], task_id: ID.task, triggering_rule: null, ...over,
   });
@@ -309,6 +309,22 @@ describe('reviewer view and reason codes', () => {
     expect(within(section).getByText('43.2%')).toBeInTheDocument();
     const detailSection = screen.getByRole('heading', { level: 2, name: 'Triage proposal' }).parentElement as HTMLElement;
     expect(within(detailSection).getAllByText(/This is a suggestion made by the system/).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('shows the model id and the decision rule next to the engine exactly as sent, and "Not recorded" when they are null', async () => {
+    const a = await openConsole({ role: 'nurse', hash: `/referrals/${ID.doc}`, routes: base({ engine: 'engine-x', model_id: 'model-id-x', decision_rule: 'rule-text-x', confidence: 0.5 }) });
+    await screen.findByText('Approve text from the API');
+    const filled = within(screen.getByRole('heading', { name: 'Reviewer view' }).closest('section') as HTMLElement);
+    expect(filled.getByText('Model').nextElementSibling).toHaveTextContent('model-id-x');
+    expect(filled.getByText('Decision rule').nextElementSibling).toHaveTextContent('rule-text-x');
+    expect(filled.getByText('Engine').nextElementSibling).toHaveTextContent('engine-x');
+    a.unmount();
+    await openConsole({ role: 'nurse', hash: `/referrals/${ID.doc}`, routes: base({ engine: 'engine-x' }) });
+    await screen.findByText('Approve text from the API');
+    const empty = within(screen.getByRole('heading', { name: 'Reviewer view' }).closest('section') as HTMLElement);
+    expect(empty.getByText('Model').nextElementSibling).toHaveTextContent('Not recorded');
+    expect(empty.getByText('Decision rule').nextElementSibling).toHaveTextContent('Not recorded');
+    expect(empty.getByText('Engine').nextElementSibling).toHaveTextContent('engine-x');
   });
 
   it('shows an unknown mode as "Not recorded" in the reviewer view', async () => {
