@@ -138,7 +138,7 @@ async def test_a_patient_cannot_open_a_thread_at_another_clinic_or_without_a_rec
     assert await open_thread(db, w, "pa1", clinic=w["other"]) == "42501"
     assert await open_thread(db, w, "nurse") == "42501"
     assert await open_thread(db, w, "fd") == "42501"
-    await owner(db, "update mpi.patients set erased_at = clock_timestamp(), name_ct = null, dob_ct = null, phone_ct = null where id = :p", p=w["rec3"])
+    await owner(db, "update mpi.patients set erased_at = clock_timestamp(), name_ct = null, dob_ct = null, phone_ct = null, name_key_version = null, dob_key_version = null, phone_key_version = null where id = :p", p=w["rec3"])
     assert await open_thread(db, w, "pa3") == "42501"  # an erased record
 
 

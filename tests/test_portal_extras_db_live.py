@@ -241,9 +241,9 @@ async def test_the_public_grievance_needs_a_published_clinic_and_an_owner_set_ca
 
 async def test_voice_session_is_a_consent_notice_purpose_and_an_unknown_purpose_is_still_refused(db):
     w = await world(db)
-    ins = "insert into iam.consent_notices (purpose, version, body) values (:p, 1, 'TEST NOTICE')"
+    ins = "insert into iam.consent_notices (purpose, version, body) values (:p, 900, 'TEST NOTICE')"
     assert await owner(db, ins, p="voice_session") == 1
     assert await owner(db, ins, p="voice") == "23514"  # a closed list
-    assert await as_app(db, w["pa1"], "select purpose, version from iam.consent_notices where purpose = 'voice_session'") == [("voice_session", 1)]  # a patient reads it
-    assert await as_app(db, w["pa1"], "insert into iam.consent_notices (purpose, version, body) values ('voice_session', 2, 'x')") == "42501"  # and cannot publish one
+    assert await as_app(db, w["pa1"], "select purpose, version from iam.consent_notices where purpose = 'voice_session' and version = 900") == [("voice_session", 900)]  # a patient reads it (a high version, so a notice counsel already published cannot collide)
+    assert await as_app(db, w["pa1"], "insert into iam.consent_notices (purpose, version, body) values ('voice_session', 901, 'x')") == "42501"  # and cannot publish one
 
