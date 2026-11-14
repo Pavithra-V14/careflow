@@ -111,6 +111,14 @@ class EmbeddingPort(Protocol):
 
 
 @dataclass(frozen=True)
+class EmbeddingRequest:
+    """What the gateway hands an `embed` adapter: the texts (card text or a MASKED query, never raw patient text: never in a repr) and the clinic the spend belongs to."""
+
+    texts: tuple[str, ...] = field(repr=False)
+    clinic_id: uuid.UUID
+
+
+@dataclass(frozen=True)
 class VectorPoint:
     """One protocol card in the vector index (BUILD-SPEC.md 10.2: one card = one retrieval unit; cards hold no patient data). The index is
     disposable: Postgres is truth, and `version` is what the index was built from, checked again at the join (10.8)."""

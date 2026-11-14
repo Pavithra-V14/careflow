@@ -140,6 +140,14 @@ foreach ($p in $Providers) {
     Write-Host ''
 }
 
+# ---- the embeddings ceiling (Gemini's embedding model, used by the knowledge search; free tier, so 0 is the usual answer) ------------------------------------------------------------
+$embedNow = Get-EnvVariable $envPath 'CAREFLOW_SPEND_CEILING_EMBED_USD'
+$embedShown = if ($embedNow) { $embedNow } else { '0' }
+$embedAnswer = Read-Host ('Most Gemini EMBEDDINGS (the knowledge search) may spend in one DAY, in US dollars [' + $embedShown + ']')
+if (-not $embedAnswer) { $embedAnswer = $embedShown }
+if (Test-AmountShape $embedAnswer $true) { Set-EnvVariable $envPath 'CAREFLOW_SPEND_CEILING_EMBED_USD' $embedAnswer } else { Write-Host '  that is not an amount; the embeddings ceiling was left as it was.' }
+Write-Host ''
+
 # ---- the per-run cap ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 $capNow = Get-EnvVariable $envPath $CapVar
 $capShown = if ($capNow) { $capNow } else { '0.10' }

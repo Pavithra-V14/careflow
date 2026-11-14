@@ -259,6 +259,7 @@ jobs:
               tests/test_portal_extras_db_live.py
               tests/test_patient_messaging_db_live.py
               tests/test_patient_booking_db_live.py
+              tests/test_knowledge_db_live.py
               tests/test_rule_authoring_db_live.py
               tests/test_e2e_demo_flow_live.py
           - shard: 8  # PART 3 of 3 of the header dimension, plus the Phase 11 database files (migrations 0047 to 0050)

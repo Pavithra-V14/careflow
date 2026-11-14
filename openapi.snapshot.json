@@ -3623,6 +3623,126 @@
         "title": "InviteOut",
         "type": "object"
       },
+      "KnowledgeCandidateOut": {
+        "additionalProperties": false,
+        "properties": {
+          "bm25_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bm25 Ratio"
+          },
+          "card_id": {
+            "title": "Card Id",
+            "type": "string"
+          },
+          "similarity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Similarity"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "card_id",
+          "version",
+          "similarity",
+          "bm25_ratio"
+        ],
+        "title": "KnowledgeCandidateOut",
+        "type": "object"
+      },
+      "KnowledgeSearchIn": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "query": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "query"
+        ],
+        "title": "KnowledgeSearchIn",
+        "type": "object"
+      },
+      "KnowledgeSearchOut": {
+        "additionalProperties": false,
+        "properties": {
+          "abstained": {
+            "title": "Abstained",
+            "type": "boolean"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeCandidateOut"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "embedding": {
+            "enum": [
+              "fake",
+              "hosted"
+            ],
+            "title": "Embedding",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "no_calibrated_policy",
+                  "no_candidates",
+                  "dense_unavailable",
+                  "below_threshold",
+                  "all_stale"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "reranked": {
+            "title": "Reranked",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "abstained",
+          "reason",
+          "candidates",
+          "embedding",
+          "reranked"
+        ],
+        "title": "KnowledgeSearchOut",
+        "type": "object"
+      },
       "LabelsIn": {
         "additionalProperties": false,
         "properties": {
@@ -16385,6 +16505,93 @@
         "summary": "List Possible Duplicates",
         "tags": [
           "staff identity"
+        ]
+      }
+    },
+    "/v1/staff/knowledge/search": {
+      "post": {
+        "description": "Search the knowledge cards. 404 if the clinic is not visible to you, 403 unless you are a nurse or doctor there, 503 until knowledge search is switched on (demo + synthetic_only only). Returns card ids, versions and\nscores, and `abstained` with a fixed `reason` when nothing clears the required thresholds (an answer, not an error). The query is masked before any model and is not stored.",
+        "operationId": "knowledge_search_route_v1_staff_knowledge_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeSearchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeSearchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Knowledge Search Route",
+        "tags": [
+          "staff knowledge"
         ]
       }
     },

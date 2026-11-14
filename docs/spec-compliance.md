@@ -41,7 +41,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 | 3.6 | Two MCP servers in process: `scheduling` (read+write), `clinical` (read-only) | BUILT, FAKE data | The clinical server has no chart data to read yet | `careflow/mcp_kit.py`, `clinical_server.py`, `scheduling_agent.py`, `scheduling_write_tools.py` |
 | 3.7 | Postgres-backed queue behind a `QueuePort`; Redis/SQS adapter stubbed | BUILT / NOT BUILT | Queue built; the stub adapter is deferred until volume needs it | `careflow/queue.py`, `ports.py` |
 | 3.8 | React + Vite + TypeScript frontend, Vitest, contract test | OUT OF SCOPE HERE | A separate workstream | `frontend/` |
-| 3.9 | Auth: Supabase Auth; Vectors: Qdrant | BUILT / FAKE | Auth built; Qdrant is a port with a fake | `careflow/auth.py`, `ports.py` |
+| 3.9 | Auth: Supabase Auth; Vectors: Qdrant | BUILT / DEVIATION | Auth built; vectors are in Postgres with pgvector (owner decision 2026-11-14, `docs/design/retrieval-pgvector.md`): a documented deviation from Qdrant, no new service; the spec text is not edited | `careflow/auth.py`, `ports.py` |
 
 ## 4. Use-case and agent inventory (spec 4)
 
@@ -115,7 +115,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 
 | Req | Requirement | Status | Reason | Where |
 |---|---|---|---|---|
-| 10.1 | Hand-rolled pipeline: BM25 in own code, RRF, hosted reranker | BUILT (BM25, RRF) / FAKE (rest) | Qdrant, embeddings, reranker are ports with fakes | `careflow/retrieval.py` |
+| 10.1 | Hand-rolled pipeline: BM25 in own code, RRF, hosted reranker | BUILT (BM25, RRF, pgvector store, embeddings adapter, context wiring) / FAKE (reranker) | Dense search is pgvector (migration 0085) instead of Qdrant, a documented deviation; embeddings are the local fake by default and Gemini (synthetic only, through the gateway) when the demo gates hold; the reranker is a port with a fake; only invented placeholder cards exist | `careflow/retrieval.py` |
 | 10.2 | Two corpora; card retrieval text from structured fields only; notes always filtered by patient | BUILT (card text, notes wrapper) / DECISION | Card text builder built; the patient-scoped note-vector wrapper makes an unscoped query impossible (clinic and patient required, current-only), over the fake store; `kb.cards` does not exist (every card is clinician content) | `careflow/retrieval.py`, `careflow/note_search.py` |
 | 10.3 | Section-aware chunking, one context line per document, small-to-big | NOT BUILT | Needs Unstructured and an embedding model; the real-PDF spike is open | `docs/design/real-pdf-spike.md` |
 | 10.4 | Tiered extraction: pypdf, Unstructured, Gemini; per-page provenance | BUILT (pypdf, ports) / FAKE | Unstructured and the real vision model are not wired (Gemini is a synthetic demo adapter) | `careflow/extraction.py`, `adapters/pdf.py`, `adapters/vision.py` |
@@ -123,7 +123,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 | 10.6 | Reranker with a fallback chain; decorative | FAKE | Fusion order is the live fallback | `careflow/retrieval.py` |
 | 10.7 | Metadata split: deterministic fields gate; model-derived only rank | BUILT (principle) | Nothing model-derived gates access | `careflow/retrieval.py` |
 | 10.8 | Abstention below a calibrated threshold; version-mismatch discarded at the join | BUILT (mechanism) | The threshold is calibrated data nobody has | `careflow/retrieval.py` (`AbstentionPolicy`) |
-| 10.9 | Retrieval quality gate in CI | DECISION | Needs a gold set and thresholds | `careflow/gates.py` |
+| 10.9 | Retrieval quality gate in CI | HARNESS BUILT / DECISION | `careflow/retrieval_eval.py` measures recall@k and MRR with every threshold a required setting (unset: NOT MEASURED); a real gate needs a clinician-reviewed gold set and thresholds | `careflow/gates.py` |
 
 ## 11. Guardrails and safety (spec 11)
 
@@ -313,7 +313,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 | B.11 | Passkeys | DECISION | Excluded by the owner |
 | B.12 | JWT signing method and JWKS | BUILT | Resolved on dev and CI by real calls |
 | B.13 | Advisory-lock connection mode | BUILT | Resolved by real calls and a CI run |
-| B.14 | Qdrant per-clinic access control | UNMEASURED | A spike is open |
+| B.14 | Qdrant per-clinic access control | NOT NEEDED ON THIS PATH | Vectors are in Postgres: tenancy is RLS and the definer functions of 0085 (live-tested); the Qdrant spike applies only if Qdrant is ever adopted |
 | B.15 | Voice interrupt gap; Gemini Live limits; mid-session instruction updates | UNMEASURED | No engine |
 | B.16 | Storage signed-upload overwrite and validity | UNMEASURED | The spike is open; documents are demo-only until it is closed |
 

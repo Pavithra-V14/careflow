@@ -21,6 +21,7 @@ REQUIRED: Final = (
     ("0080", "iam.file_public_grievance(text,bytea,smallint,uuid,text)", "proc"),
     ("0082", "msg.patient_post_message(uuid,uuid,bytea,smallint,text)", "proc"),
     ("0083", "sched.patient_book_slot(uuid,text)", "proc"),
+    ("0085", "kb.search_card_embeddings(uuid,text,text,text,integer)", "proc"),
 )
 
 

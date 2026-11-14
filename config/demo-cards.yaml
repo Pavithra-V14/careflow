@@ -1,0 +1,76 @@
+# DEMO ONLY - NOT A CLINICAL DECISION.
+#
+# SYNTHETIC PLACEHOLDER CARDS for the retrieval mechanism's tests and demo (owner decision 2026-11-14). Every word is INVENTED and MEANS NOTHING: no medicine, condition, symptom, dose, threshold or
+# instruction. They are shaped like cards (a title, a description, synonyms, patient phrases) only so the index, the search, the version join and the quality harness have something to work on. Protocol cards
+# are clinician-owned: kb/cards stays EMPTY and nothing here is, or may be copied into, a real card. careflow/demo_cards.py loads this file and refuses a card that is not labelled.
+#
+# `queries` are made-up questions for the retrieval-quality harness: each names the card it should find (by id). Same rule: invented words only.
+
+label: "DEMO ONLY - NOT A CLINICAL DECISION"
+
+cards:
+  - card_id: demo-card-zorblat
+    version: 1
+    audience: [nurse, doctor, queue_worker]
+    title: "Zorblat widget returns"
+    description: "How a zorblat widget is handed back at the quibble desk and who stamps the blue slip."
+    synonyms: ["zorblat", "quibble desk", "blue slip"]
+    patient_phrases: ["where do I hand back my zorblat widget", "who stamps the blue slip"]
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+
+  - card_id: demo-card-flimmer
+    version: 1
+    audience: [nurse, doctor, queue_worker]
+    title: "Flimmer lamp polishing"
+    description: "The weekly polishing of the flimmer lamps in the plonk corridor and the grizzle cloth they need."
+    synonyms: ["flimmer", "plonk corridor", "grizzle cloth"]
+    patient_phrases: ["when are the flimmer lamps polished", "which cloth polishes a flimmer lamp"]
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+
+  - card_id: demo-card-wumble
+    version: 1
+    audience: [nurse, doctor, queue_worker]
+    title: "Wumble garden opening times"
+    description: "The hours the wumble garden gate is unlatched and the snarfle bell that rings at closing."
+    synonyms: ["wumble", "garden gate", "snarfle bell"]
+    patient_phrases: ["what time does the wumble garden open", "when does the snarfle bell ring"]
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+
+  - card_id: demo-card-quibbit
+    version: 1
+    audience: [nurse, doctor, queue_worker]
+    title: "Quibbit stamp collection"
+    description: "Collecting quibbit stamps on the orange card and trading ten of them for one frabble badge."
+    synonyms: ["quibbit", "orange card", "frabble badge"]
+    patient_phrases: ["how do I trade quibbit stamps", "what does the frabble badge need"]
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+
+  - card_id: demo-card-tromble
+    version: 1
+    audience: [nurse, doctor, queue_worker]
+    title: "Tromble bench booking"
+    description: "Booking a tromble bench under the wibble awning for a thursday gathering of the sprocket club."
+    synonyms: ["tromble", "wibble awning", "sprocket club"]
+    patient_phrases: ["can I book a tromble bench", "where is the wibble awning"]
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+
+  - card_id: demo-card-nork
+    version: 1
+    audience: [doctor, queue_worker]
+    title: "Nork ledger corrections"
+    description: "Correcting a line in the nork ledger with the green pen and initialling it beside the margin glim."
+    synonyms: ["nork", "green pen", "margin glim"]
+    patient_phrases: ["how is a nork ledger line corrected", "which pen corrects the nork ledger"]
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+
+queries:
+  - {text: "where do I hand back a zorblat widget", expect: demo-card-zorblat}
+  - {text: "who stamps my blue slip at the quibble desk", expect: demo-card-zorblat}
+  - {text: "when are the flimmer lamps polished", expect: demo-card-flimmer}
+  - {text: "which grizzle cloth is used in the plonk corridor", expect: demo-card-flimmer}
+  - {text: "what time does the wumble garden gate open", expect: demo-card-wumble}
+  - {text: "when does the snarfle bell ring at closing", expect: demo-card-wumble}
+  - {text: "trade ten quibbit stamps for a frabble badge", expect: demo-card-quibbit}
+  - {text: "my orange card is full of quibbit stamps", expect: demo-card-quibbit}
+  - {text: "book a tromble bench under the wibble awning", expect: demo-card-tromble}
+  - {text: "the sprocket club needs a thursday bench", expect: demo-card-tromble}

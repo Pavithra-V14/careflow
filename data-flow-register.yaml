@@ -144,6 +144,20 @@ calls:
     appendix_b: "generateContent request/response shape, inline_data limits, usageMetadata names, free-tier rate limits (NOT YET CONFIRMED against the real service: scripts/provider_live_check.py; the application builds the adapter only when CAREFLOW_GEMINI_VERIFIED records the date)"
     notes: "Demo profile with data_policy synthetic_only only; never under CI. A free-tier row is synthetic_only by definition (Google may use unpaid-tier content to improve its products; keep billing off and use synthetic pages only). No real patient page goes here until a separate decision (a data-processing arrangement and region) and the privacy owner's written confirmation. A per-role daily spend ceiling (CAREFLOW_SPEND_CEILING_VLM_USD) is required and has no default; a stop becomes a manual task showing the image."
 
+  - id: gemini-embeddings
+    service: "Google Gemini API, model gemini-embedding-2 (set in config/demo-providers.yaml; the embed role: turns card text and a masked question into 768 numbers for the knowledge search)"
+    host: "generativelanguage.googleapis.com (POST /v1beta/models/<model id from config>:batchEmbedContents)"
+    source: careflow/adapters/gemini_embed.py
+    data_sent: "Up to 100 short texts per call (an invented placeholder card's title, description, synonyms and phrases when indexing; the signed-in user's question, MASKED by careflow.text_guard.mask_pii, when searching), each with the model name and outputDimensionality 768, and the API key in the x-goog-api-key header. SYNTHETIC data only: the texts are invented placeholders. Explicit timeout (20 s); no redirects; the answer is vectors, which are stored in kb.card_embeddings (ids, a hash and numbers; never the text)."
+    data_class: patient_plaintext
+    data_policy: synthetic_only
+    permitted_in_clinical: false
+    approved_by: "the project owner (instruction of 2026-11-14)"
+    approved_on: "2026-11-14"
+    status: approved
+    appendix_b: "batchEmbedContents request shape, the RESPONSE shape (embeddings[].values), whether usage is reported, the free-tier limits (NOT YET CONFIRMED against the real service: scripts/provider_live_check.py --provider gemini, the E1 to E3 lines; the application builds the adapter only when CAREFLOW_GEMINI_VERIFIED holds a date)."
+    notes: "Demo profile with data_policy synthetic_only only; never under CI; refused in the clinical profile. Behind the gateway (role embed: durable spend ledger, CAREFLOW_SPEND_CEILING_EMBED_USD, the per-run cap). A free-tier row is synthetic_only by definition (Google may use unpaid-tier content to improve its products). Used only when CAREFLOW_DEMO_REAL_MODELS is on; the default embedder is the local deterministic fake, which calls nothing."
+
   - id: openrouter-jev
     service: "OpenRouter, router model typesafe/jev-router (the decision role's hosted engine, \"Jev\")"
     host: "openrouter.ai (POST /api/v1/chat/completions)"

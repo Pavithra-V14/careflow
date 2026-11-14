@@ -27,10 +27,12 @@ import yaml
 from careflow import demo_phase3
 from careflow.adapters.decision import JevAdapter
 from careflow.adapters.gemini import GeminiVisionAdapter
+from careflow.adapters.gemini_embed import GeminiEmbeddingAdapter
 from careflow.adapters.openrouter import JEV_MODEL, JevRouterClient
 from careflow.adapters.sarvam import MODEL as SARVAM_MODEL
 from careflow.adapters.sarvam import SarvamTranslation
 from careflow.adapters.vision import GatewayVision, vlm_row
+from careflow.embeddings import GatewayEmbedding
 from careflow.gateway import (
     Gateway,
     InMemorySpendLedger,
@@ -48,7 +50,7 @@ LABEL: Final = "DEMO ONLY - SYNTHETIC DATA, PRICES TO BE CONFIRMED (Appendix B)"
 KEY_VARIABLES: Final = {"gemini": "GEMINI_API_KEY", "jev": "OPENROUTER_API_KEY", "sarvam": "SARVAM_API_KEY"}
 VERIFIED_VARIABLES: Final = {"gemini": "CAREFLOW_GEMINI_VERIFIED", "jev": "CAREFLOW_OPENROUTER_VERIFIED", "sarvam": "CAREFLOW_SARVAM_VERIFIED"}
 RUN_CAP_VARIABLE: Final = "CAREFLOW_SPEND_CAP_PER_RUN_USD"
-CEILING_VARIABLES: Final = {"vlm": "CAREFLOW_SPEND_CEILING_VLM_USD", "decision": "CAREFLOW_SPEND_CEILING_DECISION_USD", "translation": "CAREFLOW_SPEND_CEILING_TRANSLATION_USD"}
+CEILING_VARIABLES: Final = {"vlm": "CAREFLOW_SPEND_CEILING_VLM_USD", "decision": "CAREFLOW_SPEND_CEILING_DECISION_USD", "translation": "CAREFLOW_SPEND_CEILING_TRANSLATION_USD", "embed": "CAREFLOW_SPEND_CEILING_EMBED_USD"}
 _ROW_KEYS: Final = {
     "role", "provider", "model_id", "data_policy", "priority", "timeout_seconds", "free_tier", "price_in_per_1k", "price_out_per_1k", "shadow_in_per_1k", "shadow_out_per_1k", "label",
 }
@@ -111,6 +113,8 @@ def load_provider_config(path: Path = CONFIG_FILE) -> ProviderConfig:
                                 price_in_per_1k=p_in, price_out_per_1k=p_out, shadow_in_per_1k=s_in, shadow_out_per_1k=s_out))
         elif raw["role"] == "decision":
             rows.append(ModelRow("decision", raw["provider"], raw["model_id"], raw["data_policy"], raw["priority"], p_in, p_out, s_in, s_out, timeout_seconds=float(raw["timeout_seconds"])))
+        elif raw["role"] == "embed":
+            rows.append(ModelRow("embed", raw["provider"], raw["model_id"], raw["data_policy"], raw["priority"], p_in, p_out, s_in, s_out, timeout_seconds=float(raw["timeout_seconds"])))
         else:
             raise ProviderConfigRefused("the provider file has a role this setup does not build")
     t = doc["translation"]
@@ -156,10 +160,18 @@ def _verified(environ: Mapping[str, str], provider: str) -> bool:
 
 @dataclass
 class ProviderSet:
+    """What passed its gates. `embedding_for(clinic)` is an `EmbeddingPort` over the gateway's `embed` role for that clinic (the spend is the clinic's), or None when the role was not built."""
+
     gateway: Gateway | None = None
     vision: GatewayVision | None = None
     translation: SarvamTranslation | None = None
-    unavailable: dict[str, str] = field(default_factory=dict)  # provider -> a fixed reason (never a value)
+    embedding_model_id: str | None = None  # the hosted embedding row's model id, when the `embed` role was built (the index is filtered by it)
+    unavailable: dict[str, str] = field(default_factory=dict)  # provider -> a fixed reason (never a value); the embedding row is `gemini-embed`
+
+    def embedding_for(self, clinic_id: Any) -> GatewayEmbedding | None:
+        if self.gateway is None or self.embedding_model_id is None:
+            return None
+        return GatewayEmbedding(self.gateway, clinic_id, self.embedding_model_id)
 
 
 def build_providers(
@@ -194,17 +206,21 @@ def build_providers(
 
     for row in cfg.rows:
         provider = row.provider
+        label = f"{provider}-embed" if row.role == "embed" else provider  # one provider, two roles: each says why it is missing
         why = usable(provider, row.role)
         if why:
-            out.unavailable[provider] = why
+            out.unavailable[label] = why
             continue
         key = environ[KEY_VARIABLES[provider]].strip()
-        if provider == "gemini":
+        if provider == "gemini" and row.role == "embed":
+            adapters[row.key] = GeminiEmbeddingAdapter(key, row.model_id, timeout_seconds=row.timeout_seconds, http=http)
+            out.embedding_model_id = row.model_id
+        elif provider == "gemini":
             adapters[row.key] = GeminiVisionAdapter(key, row.model_id, timeout_seconds=row.timeout_seconds, http=http)
         elif provider == "jev" and row.model_id == JEV_MODEL:
             adapters[row.key] = JevAdapter(JevRouterClient(key, timeout_seconds=row.timeout_seconds, http=http))
         else:
-            out.unavailable[provider] = "no adapter for this registry row"
+            out.unavailable[label] = "no adapter for this registry row"
             continue
         rows.append(row)
     if rows:

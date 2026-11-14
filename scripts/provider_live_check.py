@@ -28,10 +28,12 @@ from dotenv import dotenv_values
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from careflow import provider_setup, synthetic_letter
-from careflow.adapters import gemini, openrouter, sarvam
+from careflow.adapters import gemini, gemini_embed, openrouter, sarvam
+from careflow.embeddings import DIMENSIONS
 from careflow.gateway import RoleDailyCeilings
 from careflow.ports import (
     DataClass,
+    EmbeddingRequest,
     PermanentError,
     TransientError,
     TranslationRequest,
@@ -91,6 +93,35 @@ async def check_gemini(key: str, image: bytes, content_type: str) -> None:
         record("3 the dummy letter was read (expected words found)", found >= 3, f"{found} of {len(synthetic_letter.EXPECTED_WORDS)} expected words")
 
 
+EMBED_TEXTS = ("The invented zorblat widget goes back to the quibble desk.", "A made-up sentence about a flimmer lamp in the plonk corridor.", "The invented zorblat widget is returned at the quibble desk.")
+
+
+async def check_gemini_embed(key: str) -> None:
+    """The embeddings role (the retrieval mechanism): one batch of three INVENTED sentences through the application's own adapter. Prints only status, dimensions, latency and cost: never a vector or a sentence. Confirms the
+    Appendix B facts the adapter assumes (the response shape, 768 dimensions, finite numbers) and a sanity check that two sentences about the same invented thing are closer than two about different things."""
+    row = next((r for r in provider_setup.load_provider_config().rows if r.provider == "gemini" and r.role == "embed"), None)
+    if row is None:
+        record("E1 an embeddings row exists in config/demo-providers.yaml", False, "no embed row")
+        return
+    adapter = gemini_embed.GeminiEmbeddingAdapter(key, row.model_id, timeout_seconds=row.timeout_seconds)
+    print(f"model: {row.model_id}")
+    started = time.monotonic()
+    try:
+        out = await adapter(EmbeddingRequest(EMBED_TEXTS, uuid.uuid4()))
+    except (TransientError, PermanentError) as exc:
+        record("E1 the adapter embedded a batch of three invented sentences", False, failure_text(exc, key))
+        return
+    vectors = out.value.vectors
+    ok = len(vectors) == 3 and all(len(v) == DIMENSIONS for v in vectors)
+    record("E1 the adapter embedded a batch of three invented sentences", ok, f"{len(vectors)} vectors of {out.value.dimensions} numbers in {time.monotonic() - started:.1f}s (all finite, unit length)")
+    cost = row.price_in_per_1k * out.usage.input_tokens / 1000
+    shadow = row.shadow_in_per_1k * out.usage.input_tokens / 1000
+    record("E2 usage estimate and cost", out.usage.input_tokens > 0, f"about {out.usage.input_tokens} input tokens (an ESTIMATE: the service's REST answer is not documented to report them); cost: actual ${cost:.6f}, at-scale estimate ${shadow:.6f} (placeholder prices)")
+    if ok:
+        dot = lambda a, b: sum(x * y for x, y in zip(a, b, strict=True))
+        record("E3 two sentences about the same invented thing are closer than two about different things", dot(vectors[0], vectors[2]) > dot(vectors[0], vectors[1]), "compared by cosine; no number is shown")
+
+
 async def check_jev(key: str) -> None:
     client = openrouter.JevRouterClient(key, timeout_seconds=20)
     started = time.monotonic()
@@ -147,6 +178,7 @@ def main() -> int:
                 asyncio.run(check_gemini(key, args.image.read_bytes(), "image/jpeg" if args.image.suffix.lower() in (".jpg", ".jpeg") else "image/png"))
             else:
                 asyncio.run(check_gemini(key, synthetic_letter.png_bytes(), "image/png"))
+            asyncio.run(check_gemini_embed(key))
         elif provider == "jev":
             asyncio.run(check_jev(key))
         else:
