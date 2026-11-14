@@ -74,14 +74,14 @@ Status words:
 | A2 claim a record created by a referral (phone and date of birth both match; otherwise flagged for front desk) | built | Claim by verified phone plus name plus date of birth plus clinic; `claimed`, `pending_review`, `locked`, `already_bound`, `consent_required` each have a fixed message. The appointment offer showing before sign-up depends on B2 |
 | A3 guardian and dependants, proxy-booking trail | blocked: route | Request 21 |
 | A4 returning sign-in; new device appears in Security | partly built | Sign-in built. The devices list is request 23 |
-| B1 browse visit types, providers, slots; hold; book | blocked: route | The scheduling routes are staff-only. No patient routes. Request 28 |
-| B2 reply to an appointment offer in free text; unclear replies re-asked | blocked: route | The patient has no message routes. Request 29. The front-desk "enter the patient's reply" flow is built for the console |
-| B3 cancel a future appointment | blocked: route | Request 28 |
+| B1 browse visit types, providers, slots; hold; book | partly built (2026-11-14) | The "Appointments" section lists open times and books one after a confirmation. Browsing by provider and a hold step have no patient route. Request 28 |
+| B2 reply to an appointment offer in free text; unclear replies re-asked | partly built (2026-11-14) | The patient can send a message on `appointments`. Re-asking an unclear reply is the backend's job. The front-desk "enter the patient's reply" flow is built for the console |
+| B3 cancel a future appointment | built (2026-11-14) | Cancel shows only where the API says the booking is cancellable, after a confirmation |
 | B4 be offered a freed slot (message, or read aloud) | blocked: route | Needs 29. Staff side (offers, delivery) is built |
 | B5 reschedule from a readiness barrier | blocked: route | Needs 28 and 29; the nurse side of barriers is built |
 | C1 and C3 red flag in any text, automatic safety message | not a frontend item | Rules run on the backend. The static "call 108" banner is built on every patient page. Staff see alerts and tasks (built) |
 | C2 red flag in a voice session | not a frontend item | The backend watches the transcript. The frontend must not widen the voice scope (see G1) |
-| D1 and D2 messaging, topics by account stage | blocked: route | Patient message routes. Request 29. The staff inbox and threads are built |
+| D1 and D2 messaging, topics by account stage | built (2026-11-14) | "Messages to the hospital": send on care or appointments, read your own conversations. The stage gating is the backend's. The staff inbox and threads are built |
 | D3 reminders for overdue items | blocked: route | Needs 29 |
 | E1 pre-visit brief | not patient-facing | By design the patient never sees it |
 | E2 answer intake questions | blocked: route | No patient route. Request 30 |

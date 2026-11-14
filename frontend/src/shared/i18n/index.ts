@@ -37,6 +37,8 @@ import f23En from './f23.en.json';
 import f23Ta from './f23.ta.json';
 import f24En from './f24.en.json';
 import f24Ta from './f24.ta.json';
+import f25En from './f25.en.json';
+import f25Ta from './f25.ta.json';
 import f18Ta from './f18.ta.json';
 import f17Ta from './f17.ta.json';
 import f16Ta from './f16.ta.json';
@@ -58,8 +60,8 @@ function mergeTrees(base: Tree, extra: Tree): Tree {
 }
 
 export const RESOURCES = {
-  en: mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(en as Tree, consoleEn as Tree), f4En as Tree), f6En as Tree), f7En as Tree), f8En as Tree), f9En as Tree), f10En as Tree), f12En as Tree), f11En as Tree), f13En as Tree), f14En as Tree), f15En as Tree), f16En as Tree), f17En as Tree), f18En as Tree), f19En as Tree), f20En as Tree), f21En as Tree), f22En as Tree), f23En as Tree), f24En as Tree),
-  ta: mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(ta as Tree, consoleTa as Tree), f4Ta as Tree), f6Ta as Tree), f7Ta as Tree), f8Ta as Tree), f9Ta as Tree), f10Ta as Tree), f12Ta as Tree), f11Ta as Tree), f13Ta as Tree), f14Ta as Tree), f15Ta as Tree), f16Ta as Tree), f17Ta as Tree), f18Ta as Tree), f19Ta as Tree), f20Ta as Tree), f21Ta as Tree), f22Ta as Tree), f23Ta as Tree), f24Ta as Tree),
+  en: mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(en as Tree, consoleEn as Tree), f4En as Tree), f6En as Tree), f7En as Tree), f8En as Tree), f9En as Tree), f10En as Tree), f12En as Tree), f11En as Tree), f13En as Tree), f14En as Tree), f15En as Tree), f16En as Tree), f17En as Tree), f18En as Tree), f19En as Tree), f20En as Tree), f21En as Tree), f22En as Tree), f23En as Tree), f24En as Tree), f25En as Tree),
+  ta: mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(mergeTrees(ta as Tree, consoleTa as Tree), f4Ta as Tree), f6Ta as Tree), f7Ta as Tree), f8Ta as Tree), f9Ta as Tree), f10Ta as Tree), f12Ta as Tree), f11Ta as Tree), f13Ta as Tree), f14Ta as Tree), f15Ta as Tree), f16Ta as Tree), f17Ta as Tree), f18Ta as Tree), f19Ta as Tree), f20Ta as Tree), f21Ta as Tree), f22Ta as Tree), f23Ta as Tree), f24Ta as Tree), f25Ta as Tree),
 };
 
 export const LANGUAGES = ['en', 'ta'] as const;

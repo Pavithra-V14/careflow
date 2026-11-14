@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-1683 of 1683 strings are unreviewed.
+1729 of 1729 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -1138,6 +1138,28 @@ Terms standardised: proposal, resolve / resolved.
 | `portal.activate.consent_required` | The care-delivery notice has not been granted yet, so the account was not activated. | பராமரிப்பு வழங்கல் அறிவிப்பு இன்னும் வழங்கப்படவில்லை; எனவே கணக்கு செயல்படுத்தப்படவில்லை. | ok |
 | `portal.activate.title` | Activate your account | உங்கள் கணக்கைச் செயல்படுத்துங்கள் | ok |
 | `portal.afterActivation` | Claiming a record, filing a grievance and downloading your data become available once your account is active. | உங்கள் கணக்கு செயலில் வந்த பிறகு பதிவை இணைத்தல், குறை தெரிவித்தல், உங்கள் தரவைப் பதிவிறக்குதல் கிடைக்கும். | ok |
+| `portal.booking.alreadyBooked` | This appointment was already booked for you. | இந்தச் சந்திப்பு ஏற்கெனவே உங்களுக்குப் பதிவு செய்யப்பட்டுள்ளது. | ok |
+| `portal.booking.book` | Book | பதிவு செய் | ok |
+| `portal.booking.bookConflict` | This time is no longer open, or you have reached the hospital's limit of future appointments. Nothing was booked. | இந்த நேரம் இனி காலியாக இல்லை, அல்லது எதிர்காலச் சந்திப்புகளுக்கான மருத்துவமனையின் வரம்பை அடைந்துவிட்டீர்கள். எதுவும் பதிவு செய்யப்படவில்லை. | ok |
+| `portal.booking.bookRefused` | This time cannot be booked by this account. Nothing was booked. | இந்தக் கணக்கால் இந்த நேரத்தைப் பதிவு செய்ய முடியாது. எதுவும் பதிவு செய்யப்படவில்லை. | ok |
+| `portal.booking.bookTitle` | Book this appointment? | இந்தச் சந்திப்பைப் பதிவு செய்யவா? | ok |
+| `portal.booking.booked` | Your appointment was booked. | உங்கள் சந்திப்பு பதிவு செய்யப்பட்டது. | ok |
+| `portal.booking.cancel` | Cancel appointment | சந்திப்பை ரத்து செய் | ok |
+| `portal.booking.cancelBody` | The time becomes free again. Nobody is contacted. | அந்த நேரம் மீண்டும் காலியாகும். யாரையும் தொடர்பு கொள்ள மாட்டோம். | ok |
+| `portal.booking.cancelConflict` | This appointment cannot be cancelled any more: it was already cancelled or it has started. | இந்தச் சந்திப்பை இனி ரத்து செய்ய முடியாது: இது ஏற்கெனவே ரத்து செய்யப்பட்டது அல்லது தொடங்கிவிட்டது. | ok |
+| `portal.booking.cancelGone` | This appointment was not found. | இந்தச் சந்திப்பு கிடைக்கவில்லை. | ok |
+| `portal.booking.cancelTitle` | Cancel this appointment? | இந்தச் சந்திப்பை ரத்து செய்யவா? | ok |
+| `portal.booking.cancelled` | Your appointment was cancelled. | உங்கள் சந்திப்பு ரத்து செய்யப்பட்டது. | ok |
+| `portal.booking.mine` | Your appointments | உங்கள் சந்திப்புகள் | ok |
+| `portal.booking.needClinic` | Enter the hospital code above to see open times. | காலி நேரங்களைக் காண மேலே மருத்துவமனைக் குறியீட்டை உள்ளிடவும். | ok |
+| `portal.booking.noSlots` | There are no open times right now. | இப்போது காலி நேரங்கள் எதுவும் இல்லை. | ok |
+| `portal.booking.none` | You have no appointments. | உங்களுக்குச் சந்திப்புகள் எதுவும் இல்லை. | ok |
+| `portal.booking.off` | Booking online is not turned on at this hospital yet. | இந்த மருத்துவமனையில் இணையம் வழியாகப் பதிவு செய்தல் இன்னும் இயக்கப்படவில்லை. | ok |
+| `portal.booking.open` | Book an appointment | ஒரு சந்திப்பைப் பதிவு செய்யுங்கள் | ok |
+| `portal.booking.openBody` | These are the open times the hospital lets patients book. | நோயாளிகள் பதிவு செய்ய மருத்துவமனை அனுமதிக்கும் காலி நேரங்கள் இவை. | ok |
+| `portal.booking.status.cancelled` | Cancelled | ரத்து செய்யப்பட்டது | ok |
+| `portal.booking.status.confirmed` | Confirmed | உறுதி செய்யப்பட்டது | ok |
+| `portal.booking.title` | Appointments | சந்திப்புகள் | ok |
 | `portal.claim.alreadyLinked` | Your account is linked to a record. | உங்கள் கணக்கு ஒரு பதிவுடன் இணைக்கப்பட்டுள்ளது. | ok |
 | `portal.claim.body` | To see your own record, give the name and date of birth the hospital has for you. This also needs a verified mobile number. | உங்கள் சொந்த பதிவைப் பார்க்க, மருத்துவமனையிடம் உங்களுக்காக உள்ள பெயரையும் பிறந்த தேதியையும் கொடுங்கள். இதற்குச் சரிபார்க்கப்பட்ட கைபேசி எண்ணும் தேவை. | ok |
 | `portal.claim.button` | Link my record | என் பதிவை இணை | ok |
@@ -1189,6 +1211,30 @@ Terms standardised: proposal, resolve / resolved.
 | `portal.grievance.unavailable` | This is not available right now (the category list or the encryption is not set up). Nothing was sent. | இது இப்போது கிடைக்கவில்லை (வகைப் பட்டியல் அல்லது குறியாக்கம் அமைக்கப்படவில்லை). எதுவும் அனுப்பப்படவில்லை. | ok |
 | `portal.hospital` | Hospital: {{name}} | மருத்துவமனை: {{name}} | ok |
 | `portal.linked.label` | Linked to a record | ஒரு பதிவுடன் இணைக்கப்பட்டுள்ளது | ok |
+| `portal.messages.chooseTopic` | Choose | தேர்ந்தெடுக்கவும் | ok |
+| `portal.messages.confirmBody` | This sends your message to the hospital. It is stored encrypted. | இது உங்கள் செய்தியை மருத்துவமனைக்கு அனுப்பும். இது மறைகுறியாக்கப்பட்டுச் சேமிக்கப்படும். | ok |
+| `portal.messages.confirmTitle` | Send this message? | இந்தச் செய்தியை அனுப்பவா? | ok |
+| `portal.messages.count` | {{n}} messages | {{n}} செய்திகள் | ok |
+| `portal.messages.empty` | There are no messages here. | இங்கே செய்திகள் எதுவும் இல்லை. | ok |
+| `portal.messages.gone` | This conversation was not found. | இந்த உரையாடல் கிடைக்கவில்லை. | ok |
+| `portal.messages.hide` | Hide | மறை | ok |
+| `portal.messages.invalid` | The message was not accepted. It may be empty or too long. Nothing was sent. | செய்தி ஏற்கப்படவில்லை. அது காலியாகவோ மிக நீளமாகவோ இருக்கலாம். எதுவும் அனுப்பப்படவில்லை. | ok |
+| `portal.messages.mine` | Your conversations | உங்கள் உரையாடல்கள் | ok |
+| `portal.messages.none` | You have no conversations. | உங்களுக்கு உரையாடல்கள் எதுவும் இல்லை. | ok |
+| `portal.messages.off` | Messages are not turned on at this hospital yet. | இந்த மருத்துவமனையில் செய்திகள் இன்னும் இயக்கப்படவில்லை. | ok |
+| `portal.messages.read` | Read | படி | ok |
+| `portal.messages.refused` | This cannot be done for this account: it must be active and linked to a record at that hospital. Nothing was sent. | இந்தக் கணக்கிற்கு இதைச் செய்ய முடியாது: அது செயலில் இருக்க வேண்டும், அந்த மருத்துவமனையின் பதிவுடன் இணைக்கப்பட்டிருக்க வேண்டும். எதுவும் அனுப்பப்படவில்லை. | ok |
+| `portal.messages.send` | Send message | செய்தியை அனுப்பு | ok |
+| `portal.messages.sender.patient` | You | நீங்கள் | ok |
+| `portal.messages.sender.staff` | The hospital | மருத்துவமனை | ok |
+| `portal.messages.sender.system` | System | அமைப்பு | ok |
+| `portal.messages.sent` | Your message was sent. | உங்கள் செய்தி அனுப்பப்பட்டது. | ok |
+| `portal.messages.text` | Your message | உங்கள் செய்தி | ok |
+| `portal.messages.title` | Messages to the hospital | மருத்துவமனைக்குச் செய்திகள் | ok |
+| `portal.messages.topic` | What is it about? | இது எதைப் பற்றியது? | ok |
+| `portal.messages.topics.appointments` | Appointments | சந்திப்புகள் | ok |
+| `portal.messages.topics.care` | My care | என் சிகிச்சை | ok |
+| `portal.messages.topics.safety` | Safety | பாதுகாப்பு | ok |
 | `portal.myData.body` | Downloads one file with everything the system holds about you that you may see. Each download is recorded. | நீங்கள் பார்க்க அனுமதிக்கப்பட்ட, அமைப்பு உங்களைப் பற்றி வைத்திருக்கும் அனைத்தையும் ஒரே கோப்பாகப் பதிவிறக்குகிறது. ஒவ்வொரு பதிவிறக்கமும் பதிவு செய்யப்படும். | ok |
 | `portal.myData.button` | Download my data | என் தரவைப் பதிவிறக்கு | ok |
 | `portal.myData.col.decision` | Decision | முடிவு | ok |

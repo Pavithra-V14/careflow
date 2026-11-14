@@ -218,3 +218,32 @@ test('voice: opened with the keyboard only, and nothing asks for the microphone'
   expect(await page.evaluate(() => (window as unknown as { __mic: number }).__mic)).toBe(0);
   expect(mock.calls.filter((c) => c.path === '/v1/portal/voice/sessions')).toHaveLength(1);
 });
+
+test('keyboard only: cancel an appointment, book an open time and send a message, each after its confirmation', async ({ page }) => {
+  const mock = await open(page, 'en', { start: 'active', granted: true });
+  await signIn(page);
+  await expect(page.locator('#portal-booking')).toBeVisible();
+  const writes = (p: RegExp) => mock.calls.filter((c) => c.method === 'POST' && p.test(c.path)).length;
+  await page.getByRole('button', { name: /Cancel appointment: / }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('dialog')).toBeVisible();
+  expect(writes(/\/cancel$/)).toBe(0);
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel appointment' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByText('Your appointment was cancelled.')).toBeVisible();
+  await page.getByRole('button', { name: /Book: Other Visit/ }).focus();
+  await page.keyboard.press('Enter');
+  await page.getByRole('dialog').getByRole('button', { name: 'Book' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByText('Your appointment was booked.')).toBeVisible();
+  await page.locator('#ms-topic').selectOption('care');
+  await page.locator('#ms-text').fill('Some words');
+  await page.locator('#ms-text ~ button[type=submit]').focus();
+  await page.keyboard.press('Enter');
+  expect(writes(/\/v1\/portal\/messages$/)).toBe(0);
+  await page.getByRole('dialog').getByRole('button', { name: 'Send message' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByText('Your message was sent.')).toBeVisible();
+  expect(writes(/\/book$/)).toBe(1);
+  expect(writes(/\/v1\/portal\/messages$/)).toBe(1);
+});

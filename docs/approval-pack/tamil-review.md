@@ -1,6 +1,6 @@
 # Tamil review pack (AI-prepared, NOT reviewed by a native speaker)
 
-Prepared 2026-11-14. Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 1683 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
+Prepared 2026-11-14. Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 1729 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
 
 **Regenerated 2026-11-14** by `npm run i18n:pack` from the strings as they are now, so it covers every current string, including the newest screens (patient voice setting, consent withdrawal and history, activating a staff account, withdrawing and retiring a red-flag rule). Each is written and second-passed in the same way and is just as unreviewed.
 
@@ -12,11 +12,11 @@ Meaning errors, register for patients, medical or safety terms, unsafe ambiguity
 - **B** wrong or odd meaning, wrong register, or an inconsistent term. Needs a native speaker.
 - **C** minor wording, or an administrator-only technical label.
 
-How it was done, honestly: all 1683 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and the strings that carry meaning (sentences of four words or more, and short strings that differ from their English) were read by an AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
+How it was done, honestly: all 1729 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and the strings that carry meaning (sentences of four words or more, and short strings that differ from their English) were read by an AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
 
-Automatic checks: 1683 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
+Automatic checks: 1729 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
 
-Notes: 69 grade A, 115 grade B, 53 grade C (237 rows with a note; some notes cover a group of similar strings, named in the note).
+Notes: 71 grade A, 125 grade B, 58 grade C (254 rows with a note; some notes cover a group of similar strings, named in the note).
 
 ## Part 1. Strings that most need a native speaker (safety first)
 
@@ -118,6 +118,8 @@ Notes: 69 grade A, 115 grade B, 53 grade C (237 rows with a note; some notes cov
 | `portal.requests.kinds.erasure` | Erase my record | என் பதிவை அழிக்க | "என் பதிவை அழிக்க" (to erase my record) must read as asking, not as doing. Check the verb. |
 | `portal.requests.body` | You can ask for your record to be erased, for a detail to be corrected, or for a nominee to be recorded. The request has no free text. The hospital's front desk takes it from there. | உங்கள் பதிவை அழிக்கவும், ஒரு விவரத்தைத் திருத்தவும் அல்லது ஒரு நியமனதாரரைப் பதிவு செய்யவும் நீங்கள் கேட்கலாம். இந்தக் கோரிக்கையில் தனி உரை எதுவும் இல்லை. மருத்துவமனையின் வரவேற்புப் பணியாளர்கள் அடுத்ததைப் பார்ப்பார்கள். | Explains what the three requests are and that the front desk takes it from there; check "வரவேற்புப் பணியாளர்கள்" for front desk and that nothing reads as a promise of outcome. |
 | `portal.profile.sex` | Sex | பாலினம் | The label for sex. The words themselves come from the hospital's list, in the hospital's own wording, so the label must match how that list is worded. Needs the privacy owner's sign-off on the field. |
+| `portal.booking.cancelBody` | The time becomes free again. Nobody is contacted. | அந்த நேரம் மீண்டும் காலியாகும். யாரையும் தொடர்பு கொள்ள மாட்டோம். | Says the time becomes free and nobody is contacted. "யாரையும் தொடர்பு கொள்ள மாட்டோம்" must read as a plain fact, not as a promise made on behalf of the hospital. |
+| `portal.messages.sent` | Your message was sent. | உங்கள் செய்தி அனுப்பப்பட்டது. | The one line shown after any send, whatever the safety screening found. It must not suggest a reply time or that anything was understood or acted on. |
 
 ## Part 2. Meaning, register and term problems (grade B)
 
@@ -238,6 +240,16 @@ Notes: 69 grade A, 115 grade B, 53 grade C (237 rows with a note; some notes cov
 | `portal.notifications.kind.offer_sent` | An appointment offer | ஒரு சந்திப்பு வாய்ப்பு | "ஒரு சந்திப்பு வாய்ப்பு" (an appointment offer); the notice has no text of its own. |
 | `portal.notifications.kind.grievance_update` | An update on one of your messages to the hospital | மருத்துவமனைக்கு நீங்கள் அனுப்பிய செய்திகளில் ஒன்றைப் பற்றிய புதிய தகவல் | Long; check "செய்திகளில் ஒன்றைப் பற்றிய புதிய தகவல்" is clear. |
 | `portal.notifications.kind.request_update` | An update on one of your requests | உங்கள் கோரிக்கைகளில் ஒன்றைப் பற்றிய புதிய தகவல் | Check "கோரிக்கைகளில் ஒன்றைப் பற்றிய புதிய தகவல்". |
+| `portal.booking.cancelConflict` | This appointment cannot be cancelled any more: it was already cancelled or it has started. | இந்தச் சந்திப்பை இனி ரத்து செய்ய முடியாது: இது ஏற்கெனவே ரத்து செய்யப்பட்டது அல்லது தொடங்கிவிட்டது. | Long condition sentence: already cancelled or already started; check it is understood. |
+| `portal.booking.bookConflict` | This time is no longer open, or you have reached the hospital's limit of future appointments. Nothing was booked. | இந்த நேரம் இனி காலியாக இல்லை, அல்லது எதிர்காலச் சந்திப்புகளுக்கான மருத்துவமனையின் வரம்பை அடைந்துவிட்டீர்கள். எதுவும் பதிவு செய்யப்படவில்லை. | Combines two reasons (time taken, or limit reached) in one sentence; check it reads clearly and is not accusing. |
+| `portal.booking.bookRefused` | This time cannot be booked by this account. Nothing was booked. | இந்தக் கணக்கால் இந்த நேரத்தைப் பதிவு செய்ய முடியாது. எதுவும் பதிவு செய்யப்படவில்லை. | Says this account cannot book this time; check it is neutral. |
+| `portal.booking.off` | Booking online is not turned on at this hospital yet. | இந்த மருத்துவமனையில் இணையம் வழியாகப் பதிவு செய்தல் இன்னும் இயக்கப்படவில்லை. | Says online booking is not turned on yet; must read as a state, not a fault. |
+| `portal.booking.alreadyBooked` | This appointment was already booked for you. | இந்தச் சந்திப்பு ஏற்கெனவே உங்களுக்குப் பதிவு செய்யப்பட்டுள்ளது. | Says the appointment was already booked for the patient (a repeat request); check it is not read as an error. |
+| `portal.messages.confirmBody` | This sends your message to the hospital. It is stored encrypted. | இது உங்கள் செய்தியை மருத்துவமனைக்கு அனுப்பும். இது மறைகுறியாக்கப்பட்டுச் சேமிக்கப்படும். | "மறைகுறியாக்கப்பட்டு" (encrypted) is technical for a patient. The sentence must not suggest a reply time. |
+| `portal.messages.refused` | This cannot be done for this account: it must be active and linked to a record at that hospital. Nothing was sent. | இந்தக் கணக்கிற்கு இதைச் செய்ய முடியாது: அது செயலில் இருக்க வேண்டும், அந்த மருத்துவமனையின் பதிவுடன் இணைக்கப்பட்டிருக்க வேண்டும். எதுவும் அனுப்பப்படவில்லை. | Long condition sentence; check it is understood. |
+| `portal.messages.off` | Messages are not turned on at this hospital yet. | இந்த மருத்துவமனையில் செய்திகள் இன்னும் இயக்கப்படவில்லை. | Says messages are not turned on yet; must read as a state, not a fault. |
+| `portal.messages.topics.safety` | Safety | பாதுகாப்பு | A thread label set by the system, "பாதுகாப்பு" (safety); check it does not alarm a patient. |
+| `portal.messages.topics.care` | My care | என் சிகிச்சை | "என் சிகிச்சை" (my care) as a topic choice. |
 
 ## Part 3. Minor wording and technical labels (grade C)
 
@@ -296,6 +308,11 @@ Notes: 69 grade A, 115 grade B, 53 grade C (237 rows with a note; some notes cov
 | `scheduling.draft.text` | Draft text | வரைவு உரை | Heading. |
 | `portal.notifications.unread` | Unread: {{n}} | படிக்காதவை: {{n}} | A count after a label. |
 | `portal.notifications.markRead` | Mark as read | படித்ததாகக் குறி | Button label. |
+| `portal.booking.status.confirmed` | Confirmed | உறுதி செய்யப்பட்டது | Status word. |
+| `portal.booking.status.cancelled` | Cancelled | ரத்து செய்யப்பட்டது | Status word. |
+| `portal.booking.openBody` | These are the open times the hospital lets patients book. | நோயாளிகள் பதிவு செய்ய மருத்துவமனை அனுமதிக்கும் காலி நேரங்கள் இவை. | Short explanation. |
+| `portal.messages.sender.system` | System | அமைப்பு | Label for a message sent by the system. |
+| `portal.messages.sender.staff` | The hospital | மருத்துவமனை | Label for a message from the hospital. |
 
 ## Part 4. Terms used inconsistently
 
@@ -303,17 +320,17 @@ Notes: 69 grade A, 115 grade B, 53 grade C (237 rows with a note; some notes cov
 |---|---|---|
 | approve | ஒப்புக்கொள் (verb), ஒப்புதல் (noun) (62) | The verb also means "admit/agree"; some places use ஒப்புதல் அளி. |
 | acknowledge | ஏற்றுக்கொள் ("accept") (15) | Same verb as approve; the action only records that you have seen something. |
-| record / log / transcript / register | பதிவு everywhere (135) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
+| record / log / transcript / register | பதிவு everywhere (145) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
 | result / decision / end | முடிவு everywhere (67) | One word for a clinical result, a person's decision and an end time. |
 | role | பங்கு (14) | Also means "share"; பணி is used for "task". |
-| merge / link / connect / attach | இணை / இணைப்பு (52) | Merging two patient records, linking a portal account, attaching a note: one word. |
+| merge / link / connect / attach | இணை / இணைப்பு (54) | Merging two patient records, linking a portal account, attaching a note: one word. |
 | red flag | சிவப்புக் கொடி (literal) (21) | Check the wording clinicians use. |
 | hold (a slot or a referral) | நிறுத்து / நிறுத்தம் (stop) and ஒதுக்கீடு (allocation) (53) | Two or three words for one idea. |
 | retire (a rule version) and withdraw (a draft) | நிறுத்து (retire) and திரும்பப் பெறு (withdraw) (63) | The rule screens need two different words; "withdraw" shares its Tamil with "revoke" and "cannot be undone". |
 | task / job | பணி (68) | A review task and a queued job share the word. |
 | approved (a status) and approve (a button) | அங்கீகரிக்கப்பட்டது (status) and ஒப்புக்கொள் (button) (14) | Two word families for one idea in the red-flag rule screens. |
-| patient | நோயாளி and நோயாளர் (75) | Two spellings. |
-| clinic / hospital | மருத்துவமனை (most strings), கிளினிக் (1) (66) | Check which is meant where. |
+| patient | நோயாளி and நோயாளர் (76) | Two spellings. |
+| clinic / hospital | மருத்துவமனை (most strings), கிளினிக் (1) (75) | Check which is meant where. |
 | front desk | வரவேற்பு மேசை and முன்பணியாளர் (8) | Two renderings. |
 | confidence | நம்பிக்கை (2) | Means belief or hope; the strings mean how sure the system is. |
 | sample (a sampled decision) | மாதிரி (5) | Reads as a laboratory specimen. |
@@ -364,7 +381,7 @@ These are the same in English and Tamil by design, and a Tamil-speaking patient 
 - `tasks.kind.screening_unassessable`
 - `tasks.kind.triage_proposal`
 
-## Part 7. All 1683 strings
+## Part 7. All 1729 strings
 
 Fill in the last column. Write **OK**, or write the full corrected Tamil (keep every {{placeholder}} exactly as it is). Leave a row empty if you have not looked at it.
 
@@ -1448,6 +1465,28 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `portal.activate.consent_required` | The care-delivery notice has not been granted yet, so the account was not activated. | பராமரிப்பு வழங்கல் அறிவிப்பு இன்னும் வழங்கப்படவில்லை; எனவே கணக்கு செயல்படுத்தப்படவில்லை. | A: Consent: "the care-delivery notice has not been granted" is rendered பராமரிப்பு வழங்கல் அறிவிப்பு ... வழங்கப்படவில்லை. A notice is not "granted"; consent wording needs the hospital's counsel and a native reviewer. | |
 | `portal.activate.title` | Activate your account | உங்கள் கணக்கைச் செயல்படுத்துங்கள் | no issue found | |
 | `portal.afterActivation` | Claiming a record, filing a grievance and downloading your data become available once your account is active. | உங்கள் கணக்கு செயலில் வந்த பிறகு பதிவை இணைத்தல், குறை தெரிவித்தல், உங்கள் தரவைப் பதிவிறக்குதல் கிடைக்கும். | no issue found | |
+| `portal.booking.alreadyBooked` | This appointment was already booked for you. | இந்தச் சந்திப்பு ஏற்கெனவே உங்களுக்குப் பதிவு செய்யப்பட்டுள்ளது. | B: Says the appointment was already booked for the patient (a repeat request); check it is not read as an error. | |
+| `portal.booking.book` | Book | பதிவு செய் | no issue found | |
+| `portal.booking.bookConflict` | This time is no longer open, or you have reached the hospital's limit of future appointments. Nothing was booked. | இந்த நேரம் இனி காலியாக இல்லை, அல்லது எதிர்காலச் சந்திப்புகளுக்கான மருத்துவமனையின் வரம்பை அடைந்துவிட்டீர்கள். எதுவும் பதிவு செய்யப்படவில்லை. | B: Combines two reasons (time taken, or limit reached) in one sentence; check it reads clearly and is not accusing. | |
+| `portal.booking.bookRefused` | This time cannot be booked by this account. Nothing was booked. | இந்தக் கணக்கால் இந்த நேரத்தைப் பதிவு செய்ய முடியாது. எதுவும் பதிவு செய்யப்படவில்லை. | B: Says this account cannot book this time; check it is neutral. | |
+| `portal.booking.bookTitle` | Book this appointment? | இந்தச் சந்திப்பைப் பதிவு செய்யவா? | no issue found | |
+| `portal.booking.booked` | Your appointment was booked. | உங்கள் சந்திப்பு பதிவு செய்யப்பட்டது. | no issue found | |
+| `portal.booking.cancel` | Cancel appointment | சந்திப்பை ரத்து செய் | no issue found | |
+| `portal.booking.cancelBody` | The time becomes free again. Nobody is contacted. | அந்த நேரம் மீண்டும் காலியாகும். யாரையும் தொடர்பு கொள்ள மாட்டோம். | A: Says the time becomes free and nobody is contacted. "யாரையும் தொடர்பு கொள்ள மாட்டோம்" must read as a plain fact, not as a promise made on behalf of the hospital. | |
+| `portal.booking.cancelConflict` | This appointment cannot be cancelled any more: it was already cancelled or it has started. | இந்தச் சந்திப்பை இனி ரத்து செய்ய முடியாது: இது ஏற்கெனவே ரத்து செய்யப்பட்டது அல்லது தொடங்கிவிட்டது. | B: Long condition sentence: already cancelled or already started; check it is understood. | |
+| `portal.booking.cancelGone` | This appointment was not found. | இந்தச் சந்திப்பு கிடைக்கவில்லை. | no issue found | |
+| `portal.booking.cancelTitle` | Cancel this appointment? | இந்தச் சந்திப்பை ரத்து செய்யவா? | no issue found | |
+| `portal.booking.cancelled` | Your appointment was cancelled. | உங்கள் சந்திப்பு ரத்து செய்யப்பட்டது. | no issue found | |
+| `portal.booking.mine` | Your appointments | உங்கள் சந்திப்புகள் | no issue found | |
+| `portal.booking.needClinic` | Enter the hospital code above to see open times. | காலி நேரங்களைக் காண மேலே மருத்துவமனைக் குறியீட்டை உள்ளிடவும். | no issue found | |
+| `portal.booking.noSlots` | There are no open times right now. | இப்போது காலி நேரங்கள் எதுவும் இல்லை. | no issue found | |
+| `portal.booking.none` | You have no appointments. | உங்களுக்குச் சந்திப்புகள் எதுவும் இல்லை. | no issue found | |
+| `portal.booking.off` | Booking online is not turned on at this hospital yet. | இந்த மருத்துவமனையில் இணையம் வழியாகப் பதிவு செய்தல் இன்னும் இயக்கப்படவில்லை. | B: Says online booking is not turned on yet; must read as a state, not a fault. | |
+| `portal.booking.open` | Book an appointment | ஒரு சந்திப்பைப் பதிவு செய்யுங்கள் | no issue found | |
+| `portal.booking.openBody` | These are the open times the hospital lets patients book. | நோயாளிகள் பதிவு செய்ய மருத்துவமனை அனுமதிக்கும் காலி நேரங்கள் இவை. | C: Short explanation. | |
+| `portal.booking.status.cancelled` | Cancelled | ரத்து செய்யப்பட்டது | C: Status word. | |
+| `portal.booking.status.confirmed` | Confirmed | உறுதி செய்யப்பட்டது | C: Status word. | |
+| `portal.booking.title` | Appointments | சந்திப்புகள் | no issue found | |
 | `portal.claim.alreadyLinked` | Your account is linked to a record. | உங்கள் கணக்கு ஒரு பதிவுடன் இணைக்கப்பட்டுள்ளது. | no issue found | |
 | `portal.claim.body` | To see your own record, give the name and date of birth the hospital has for you. This also needs a verified mobile number. | உங்கள் சொந்த பதிவைப் பார்க்க, மருத்துவமனையிடம் உங்களுக்காக உள்ள பெயரையும் பிறந்த தேதியையும் கொடுங்கள். இதற்குச் சரிபார்க்கப்பட்ட கைபேசி எண்ணும் தேவை. | no issue found | |
 | `portal.claim.button` | Link my record | என் பதிவை இணை | no issue found | |
@@ -1499,6 +1538,30 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `portal.grievance.unavailable` | This is not available right now (the category list or the encryption is not set up). Nothing was sent. | இது இப்போது கிடைக்கவில்லை (வகைப் பட்டியல் அல்லது குறியாக்கம் அமைக்கப்படவில்லை). எதுவும் அனுப்பப்படவில்லை. | no issue found | |
 | `portal.hospital` | Hospital: {{name}} | மருத்துவமனை: {{name}} | no issue found | |
 | `portal.linked.label` | Linked to a record | ஒரு பதிவுடன் இணைக்கப்பட்டுள்ளது | no issue found | |
+| `portal.messages.chooseTopic` | Choose | தேர்ந்தெடுக்கவும் | no issue found | |
+| `portal.messages.confirmBody` | This sends your message to the hospital. It is stored encrypted. | இது உங்கள் செய்தியை மருத்துவமனைக்கு அனுப்பும். இது மறைகுறியாக்கப்பட்டுச் சேமிக்கப்படும். | B: "மறைகுறியாக்கப்பட்டு" (encrypted) is technical for a patient. The sentence must not suggest a reply time. | |
+| `portal.messages.confirmTitle` | Send this message? | இந்தச் செய்தியை அனுப்பவா? | no issue found | |
+| `portal.messages.count` | {{n}} messages | {{n}} செய்திகள் | no issue found | |
+| `portal.messages.empty` | There are no messages here. | இங்கே செய்திகள் எதுவும் இல்லை. | no issue found | |
+| `portal.messages.gone` | This conversation was not found. | இந்த உரையாடல் கிடைக்கவில்லை. | no issue found | |
+| `portal.messages.hide` | Hide | மறை | no issue found | |
+| `portal.messages.invalid` | The message was not accepted. It may be empty or too long. Nothing was sent. | செய்தி ஏற்கப்படவில்லை. அது காலியாகவோ மிக நீளமாகவோ இருக்கலாம். எதுவும் அனுப்பப்படவில்லை. | no issue found | |
+| `portal.messages.mine` | Your conversations | உங்கள் உரையாடல்கள் | no issue found | |
+| `portal.messages.none` | You have no conversations. | உங்களுக்கு உரையாடல்கள் எதுவும் இல்லை. | no issue found | |
+| `portal.messages.off` | Messages are not turned on at this hospital yet. | இந்த மருத்துவமனையில் செய்திகள் இன்னும் இயக்கப்படவில்லை. | B: Says messages are not turned on yet; must read as a state, not a fault. | |
+| `portal.messages.read` | Read | படி | no issue found | |
+| `portal.messages.refused` | This cannot be done for this account: it must be active and linked to a record at that hospital. Nothing was sent. | இந்தக் கணக்கிற்கு இதைச் செய்ய முடியாது: அது செயலில் இருக்க வேண்டும், அந்த மருத்துவமனையின் பதிவுடன் இணைக்கப்பட்டிருக்க வேண்டும். எதுவும் அனுப்பப்படவில்லை. | B: Long condition sentence; check it is understood. | |
+| `portal.messages.send` | Send message | செய்தியை அனுப்பு | no issue found | |
+| `portal.messages.sender.patient` | You | நீங்கள் | no issue found | |
+| `portal.messages.sender.staff` | The hospital | மருத்துவமனை | C: Label for a message from the hospital. | |
+| `portal.messages.sender.system` | System | அமைப்பு | C: Label for a message sent by the system. | |
+| `portal.messages.sent` | Your message was sent. | உங்கள் செய்தி அனுப்பப்பட்டது. | A: The one line shown after any send, whatever the safety screening found. It must not suggest a reply time or that anything was understood or acted on. | |
+| `portal.messages.text` | Your message | உங்கள் செய்தி | no issue found | |
+| `portal.messages.title` | Messages to the hospital | மருத்துவமனைக்குச் செய்திகள் | no issue found | |
+| `portal.messages.topic` | What is it about? | இது எதைப் பற்றியது? | no issue found | |
+| `portal.messages.topics.appointments` | Appointments | சந்திப்புகள் | no issue found | |
+| `portal.messages.topics.care` | My care | என் சிகிச்சை | B: "என் சிகிச்சை" (my care) as a topic choice. | |
+| `portal.messages.topics.safety` | Safety | பாதுகாப்பு | B: A thread label set by the system, "பாதுகாப்பு" (safety); check it does not alarm a patient. | |
 | `portal.myData.body` | Downloads one file with everything the system holds about you that you may see. Each download is recorded. | நீங்கள் பார்க்க அனுமதிக்கப்பட்ட, அமைப்பு உங்களைப் பற்றி வைத்திருக்கும் அனைத்தையும் ஒரே கோப்பாகப் பதிவிறக்குகிறது. ஒவ்வொரு பதிவிறக்கமும் பதிவு செய்யப்படும். | no issue found | |
 | `portal.myData.button` | Download my data | என் தரவைப் பதிவிறக்கு | no issue found | |
 | `portal.myData.col.decision` | Decision | முடிவு | C: Column heading; முடிவு is the one word for decision, result and end (Part 4). | |

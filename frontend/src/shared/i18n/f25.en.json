@@ -1,0 +1,60 @@
+{
+  "portal": {
+    "booking": {
+      "title": "Appointments",
+      "mine": "Your appointments",
+      "none": "You have no appointments.",
+      "off": "Booking online is not turned on at this hospital yet.",
+      "status": {
+        "confirmed": "Confirmed",
+        "cancelled": "Cancelled"
+      },
+      "cancel": "Cancel appointment",
+      "cancelTitle": "Cancel this appointment?",
+      "cancelBody": "The time becomes free again. Nobody is contacted.",
+      "cancelled": "Your appointment was cancelled.",
+      "cancelGone": "This appointment was not found.",
+      "cancelConflict": "This appointment cannot be cancelled any more: it was already cancelled or it has started.",
+      "open": "Book an appointment",
+      "openBody": "These are the open times the hospital lets patients book.",
+      "needClinic": "Enter the hospital code above to see open times.",
+      "noSlots": "There are no open times right now.",
+      "book": "Book",
+      "bookTitle": "Book this appointment?",
+      "booked": "Your appointment was booked.",
+      "alreadyBooked": "This appointment was already booked for you.",
+      "bookRefused": "This time cannot be booked by this account. Nothing was booked.",
+      "bookConflict": "This time is no longer open, or you have reached the hospital's limit of future appointments. Nothing was booked."
+    },
+    "messages": {
+      "title": "Messages to the hospital",
+      "off": "Messages are not turned on at this hospital yet.",
+      "topic": "What is it about?",
+      "chooseTopic": "Choose",
+      "topics": {
+        "care": "My care",
+        "appointments": "Appointments",
+        "safety": "Safety"
+      },
+      "text": "Your message",
+      "send": "Send message",
+      "confirmTitle": "Send this message?",
+      "confirmBody": "This sends your message to the hospital. It is stored encrypted.",
+      "sent": "Your message was sent.",
+      "refused": "This cannot be done for this account: it must be active and linked to a record at that hospital. Nothing was sent.",
+      "invalid": "The message was not accepted. It may be empty or too long. Nothing was sent.",
+      "mine": "Your conversations",
+      "none": "You have no conversations.",
+      "count": "{{n}} messages",
+      "read": "Read",
+      "hide": "Hide",
+      "gone": "This conversation was not found.",
+      "empty": "There are no messages here.",
+      "sender": {
+        "patient": "You",
+        "staff": "The hospital",
+        "system": "System"
+      }
+    }
+  }
+}
