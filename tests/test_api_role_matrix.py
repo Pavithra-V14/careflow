@@ -275,6 +275,7 @@ async def _cleanup(ids, conn=None):
         await conn.execute("delete from iam.break_glass_reasons where clinic_id = any($1)", clinics)
         await conn.execute("delete from iam.break_glass_settings where clinic_id = any($1)", clinics)
         await conn.execute("delete from msg.voice_preferences where account_id = any($1)", accounts)
+        await conn.execute("delete from iam.patient_profiles where account_id = any($1)", accounts)
         await conn.execute("delete from iam.staff_roles where clinic_id = any($1)", [ids.clinic_a, ids.clinic_b])
         for statement, args in (("delete from iam.accounts where id = any($1)", accounts), ("delete from iam.clinics where id = any($1)", [ids.clinic_a, ids.clinic_b])):
             try:
@@ -3356,6 +3357,111 @@ def rule_withdraw_cases(ids) -> list[tuple]:
     ]
     return cases + _unauthenticated(ids, path(), None)
 
+# ---- patient profile, notifications, requests and the staff request list (migration 0080). The matrix patient is an ACTIVE account bound to no record, so filing a request is refused (the flows are in
+# tests/test_portal_extras_db_live.py); the public grievance route is outside /v1 and has its own offline tests (tests/test_public_grievance_route.py).
+
+PORTAL_PROFILE = PORTAL + "/profile"
+PORTAL_NOTIFICATIONS = PORTAL + "/notifications"
+PORTAL_REQUESTS = PORTAL + "/requests"
+STAFF_PATIENT_REQUESTS = "/v1/staff/patient-requests"
+PROFILE_KEYS = {"display_name", "sex", "preferred_language", "sex_words", "languages"}
+
+
+def portal_profile_get_cases(ids) -> list[tuple]:
+    cases = [_case(ids, "an active patient account reads its own profile", "patient", 200, PORTAL_PROFILE, key=None, body=lambda b: set(b) == PROFILE_KEYS and b["languages"] == ["en", "ta"])]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, PORTAL_PROFILE, key=None, body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, PORTAL_PROFILE, key=None, body=NOT_A_PATIENT))
+    return cases + _unauthenticated(ids, PORTAL_PROFILE, None)[:4]
+
+
+def portal_profile_put_cases(ids) -> list[tuple]:
+    cases = [
+        _case(ids, "an active patient account sets its preferred language", "patient", 200, PORTAL_PROFILE, json={"preferred_language": "ta"}, body=lambda b: set(b) == PROFILE_KEYS and b["preferred_language"] == "ta"),
+        _case(ids, "a sex word while the clinic list is not configured is told so (503), nothing is written", "patient", 503, PORTAL_PROFILE, json={"sex": "some_word"}, body=lambda b: "not configured" in b["detail"]),
+        _case(ids, "a sex word with a bad shape is rejected", "patient", 422, PORTAL_PROFILE, json={"sex": "Bad Word"}, body=_fixed(422)),
+        _case(ids, "a language outside en and ta is rejected", "patient", 422, PORTAL_PROFILE, json={"preferred_language": "fr"}, body=_fixed(422)),
+        _case(ids, "an extra field is rejected", "patient", 422, PORTAL_PROFILE, json={"name": "x"}, body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "patient", 422, PORTAL_PROFILE, json={"preferred_language": "en"}, key=None, body=_fixed(422)),
+    ]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, PORTAL_PROFILE, json={"preferred_language": "en"}, body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, PORTAL_PROFILE, json={"preferred_language": "en"}, body=NOT_A_PATIENT))
+    return cases + _unauthenticated(ids, PORTAL_PROFILE, {"preferred_language": "en"})
+
+
+def portal_notifications_list_cases(ids) -> list[tuple]:
+    cases = [_case(ids, "an active patient account lists its own notices (none)", "patient", 200, PORTAL_NOTIFICATIONS, key=None, body=lambda b: b == {"notifications": []})]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, PORTAL_NOTIFICATIONS, key=None, body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, PORTAL_NOTIFICATIONS, key=None, body=NOT_A_PATIENT))
+    return cases + _unauthenticated(ids, PORTAL_NOTIFICATIONS, None)[:4]
+
+
+def portal_notification_read_cases(ids) -> list[tuple]:
+    path = lambda: f"{PORTAL_NOTIFICATIONS}/{uuid.uuid4()}/read"
+    cases = [_case(ids, "a notice that is not yours or does not exist is one not-found", "patient", 404, path(), body=_fixed(404))]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path(), body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases += [
+        _case(ids, "missing X-Idempotency-Key is rejected", "patient", 422, path(), key=None, body=_fixed(422)),
+        _case(ids, "a notice id that is not a uuid is rejected", "patient", 422, f"{PORTAL_NOTIFICATIONS}/nope/read", body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)
+
+
+def portal_request_file_cases(ids) -> list[tuple]:
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "kind": "erasure", **o}
+    cases = [_case(ids, "an active patient account bound to no record is refused", "patient", 403, PORTAL_REQUESTS, json=body(), body=NOT_A_PATIENT)]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, PORTAL_REQUESTS, json=body(), body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, PORTAL_REQUESTS, json=body(), body=NOT_A_PATIENT))
+    cases += [
+        _case(ids, "a correction without a field is rejected", "patient", 422, PORTAL_REQUESTS, json=body(kind="correction"), body=_rejected),
+        _case(ids, "another kind with a field is rejected", "patient", 422, PORTAL_REQUESTS, json=body(field="phone"), body=_rejected),
+        _case(ids, "an unknown kind is rejected", "patient", 422, PORTAL_REQUESTS, json=body(kind="rename"), body=_fixed(422)),
+        _case(ids, "free text has no place in a request (an extra field)", "patient", 422, PORTAL_REQUESTS, json=body(text="x"), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "patient", 422, PORTAL_REQUESTS, json=body(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, PORTAL_REQUESTS, body())
+
+
+def portal_request_list_cases(ids) -> list[tuple]:
+    cases = [_case(ids, "an active patient account lists its own requests (none)", "patient", 200, PORTAL_REQUESTS, key=None, body=lambda b: b == {"requests": []})]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, PORTAL_REQUESTS, key=None, body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, PORTAL_REQUESTS, key=None, body=NOT_A_PATIENT))
+    return cases + _unauthenticated(ids, PORTAL_REQUESTS, None)[:4]
+
+
+def staff_patient_request_list_cases(ids) -> list[tuple]:
+    path = lambda **o: STAFF_PATIENT_REQUESTS + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
+    visible = ("nurse_a", "doctor_a", "admin_a", "business_owner_a", "auditor_a", "multi")
+    cases = _console_clinic_cases(ids, path, allowed=("front_desk_a",), ok_status=200, ok_body=lambda b: b == {"requests": []}, visible_refused=visible)
+    cases += [
+        _case(ids, "an unknown clinic is not found", "front_desk_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "limit=0 is rejected", "front_desk_a", 422, path(limit=0), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
+def staff_patient_request_status_cases(ids) -> list[tuple]:
+    path = lambda: f"{STAFF_PATIENT_REQUESTS}/{uuid.uuid4()}/status"
+    body = {"status": "acknowledged"}
+    cases = [_case(ids, f"{p} cannot update a request that does not exist", p, 404, path(), json=body, body=_fixed(404)) for p in ids.people]
+    cases += [
+        _case(ids, "a status that is not one of the three is rejected", "front_desk_a", 422, path(), json={"status": "open"}, body=_fixed(422)),
+        _case(ids, "an extra field is rejected", "front_desk_a", 422, path(), json={**body, "text": "x"}, body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "front_desk_a", 422, path(), json=body, key=None, body=_fixed(422)),
+        _case(ids, "a request id that is not a uuid is rejected", "front_desk_a", 422, f"{STAFF_PATIENT_REQUESTS}/nope/status", json=body, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), body)
+
+
+VOICE_CONSENT_NOTICE = "/v1/portal/voice/consent-notice"
+
+
+def voice_consent_notice_cases(ids) -> list[tuple]:
+    cases = [_case(ids, "an active patient account reads the notice setting (unset here: nothing configured, no text)", "patient", 200, VOICE_CONSENT_NOTICE, key=None, body=lambda b: b == {"configured": False, "text": None, "is_placeholder": False})]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, VOICE_CONSENT_NOTICE, key=None, body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, VOICE_CONSENT_NOTICE, key=None, body=NOT_A_PATIENT))
+    return cases + _unauthenticated(ids, VOICE_CONSENT_NOTICE, None)[:4]
+
+
 # ---- break-glass access (migration 0058; BUILD-SPEC.md 18.4) ------------------------------------------------------------------------------------------------------------------------------------------------
 # Front desk, nurse and doctor open a time-limited grant for one patient (a reason code from the clinic's owner-kept list); the holder reads that patient's messages (this world has no encryption keys, so the
 # read answers 503 after the grant is found; the decrypting path and the database behaviour are in tests/test_break_glass_db_live.py); an admin of the clinic who did not open it reviews. Opening writes
@@ -3786,6 +3892,15 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", RULES): rule_author_cases,
     ("POST", RULE_DECISION): rule_decision_cases,
     ("POST", RULE_WITHDRAW): rule_withdraw_cases,
+    ("GET", PORTAL_PROFILE): portal_profile_get_cases,
+    ("GET", VOICE_CONSENT_NOTICE): voice_consent_notice_cases,
+    ("PUT", PORTAL_PROFILE): portal_profile_put_cases,
+    ("GET", PORTAL_NOTIFICATIONS): portal_notifications_list_cases,
+    ("POST", PORTAL_NOTIFICATIONS + "/{notification_id}/read"): portal_notification_read_cases,
+    ("POST", PORTAL_REQUESTS): portal_request_file_cases,
+    ("GET", PORTAL_REQUESTS): portal_request_list_cases,
+    ("GET", STAFF_PATIENT_REQUESTS): staff_patient_request_list_cases,
+    ("POST", STAFF_PATIENT_REQUESTS + "/{request_id}/status"): staff_patient_request_status_cases,
     ("POST", MEDICATIONS): medication_record_cases,
     ("GET", MEDICATIONS): medication_list_cases,
     ("GET", AUTONOMY): autonomy_get_cases,

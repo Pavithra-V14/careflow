@@ -84,6 +84,7 @@ from careflow import (
     offers,
     openapi_errors,
     patient_view,
+    portal_extras_sql,
     portal_sql,
     producers_sql,
     provider_setup,
@@ -4232,6 +4233,20 @@ async def _patient_account(conn: AsyncConnection, claims: dict[str, Any], status
     return account_id, row.origin
 
 
+class VoiceConsentNoticeOut(_Out):
+    configured: bool  # false until counsel's notice is set: the frontend then shows nothing of its own
+    text: str | None
+    is_placeholder: bool  # true for the labelled demo placeholder (its text starts with DEMO ONLY)
+
+
+@portal_voice.get("/consent-notice", response_model=VoiceConsentNoticeOut)
+async def voice_consent_notice(request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> VoiceConsentNoticeOut:
+    """The notice shown before any audio is processed in a voice session (spec 23.4), exactly as configured: the wording is counsel's and is NOT written here; the demo pack carries a labelled placeholder. `configured` is false while it is unset. 403 unless you are an active patient account."""
+    await _patient_account(conn, claims)
+    text_ = request.app.state.voice_consent_notice
+    return VoiceConsentNoticeOut(configured=text_ is not None, text=text_, is_placeholder=text_ is not None and text_.startswith("DEMO ONLY"))
+
+
 @portal_voice.get("/preference", response_model=VoicePreferenceOut)
 async def get_voice_preference(conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> VoicePreferenceOut:
     """Your own voice preference (false until you choose). 403 unless you are an active patient account."""
@@ -5049,6 +5064,7 @@ class GrievanceOut(_Out):
     status: Literal["open", "acknowledged", "resolved"]
     created_at: datetime
     erased: bool
+    source: Literal["patient", "public"]  # `public`: filed without signing in
     text: str | None  # null when the text was erased or cannot be read
 
 
@@ -5117,7 +5133,7 @@ def _grievance_out(r: Any, vault: DemographicVault | None) -> GrievanceOut:
             body = messages_mod.decrypt_grievance_text(vault, bytes(r.body_ct), clinic_id=r.clinic_id, grievance_id=r.id, key_version=r.body_key_version)
         except CryptoError:
             body = None
-    return GrievanceOut(grievance_id=r.id, clinic_id=r.clinic_id, category=r.category, status=r.status, created_at=r.created_at, erased=r.erased_at is not None, text=body)
+    return GrievanceOut(grievance_id=r.id, clinic_id=r.clinic_id, category=r.category, status=r.status, created_at=r.created_at, erased=r.erased_at is not None, source=r.source, text=body)
 
 
 async def _stage(conn: AsyncConnection) -> Literal["registered", "new_patient", "pending_activation", "active"]:
@@ -5449,6 +5465,246 @@ async def public_clinic(request: Request) -> PublicClinicOut:
     return PublicClinicOut(clinic_id=row.clinic_id, name=row.name)
 
 
+
+# ---- patient profile, in-app notifications, patient requests, the public grievance (migration 0080; frontend requests 20, 22, 24, 26) -----------------------------------------------------------------
+# MECHANISM ONLY: the sex words are the required setting CAREFLOW_SEX_WORDS (no default), the public route needs CAREFLOW_PUBLIC_GRIEVANCE_IP_PER_HOUR (no default) and the owner-managed hourly cap; nothing here decides wording.
+
+patient_requests_staff = APIRouter(prefix="/v1/staff/patient-requests", tags=["staff patient requests"])
+PATIENT_REQUEST_HANDLERS = ("front_desk",)
+_public_limiter_cache: dict[str, Any] = {}
+
+
+class ProfileOut(_Out):
+    display_name: str | None  # the name on YOUR OWN record (never stored a second time); null when no record is bound or it cannot be read
+    sex: str | None
+    preferred_language: Literal["en", "ta"] | None
+    sex_words: list[str]  # the closed list you may choose from (empty while the clinic has not set it)
+    languages: list[Literal["en", "ta"]]
+
+
+class ProfileIn(_Body):
+    sex: str | None = Field(default=None, pattern=r"^[a-z][a-z_]{0,19}$")
+    preferred_language: Literal["en", "ta"] | None = None
+
+
+@portal.get("/profile", response_model=ProfileOut)
+async def get_profile(request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> ProfileOut:
+    """Your own profile: the name on your record, your sex word and preferred language, and the closed lists you can choose from. 403 unless you are an active patient account."""
+    account_id, _ = await _patient_account(conn, claims)
+    vault: DemographicVault | None = request.app.state.vault
+    name: str | None = None
+    for r in await rights_sql.own_records(conn, account_id):
+        if r.erased_at is None and vault is not None and r.name_ct is not None:
+            try:
+                name = vault.decrypt(bytes(r.name_ct), field="name", key_version=r.name_key_version)
+                break
+            except CryptoError:
+                name = None
+    row = await portal_extras_sql.get_profile(conn, account_id)
+    words = portal_extras_sql.sex_words()
+    return ProfileOut(
+        display_name=name, sex=row.sex if row else None, preferred_language=row.preferred_language if row else None,
+        sex_words=sorted(words) if words else [], languages=["en", "ta"],
+    )
+
+
+@portal.put("/profile", response_model=ProfileOut)
+async def put_profile(body: ProfileIn, request: Request, idempotency_key: IdempotencyKey, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> ProfileOut:
+    """Set your sex word and preferred language (it sets values, so a repeat is the same). 403 unless you are an active patient account, 422 for a sex word that is not on the clinic's list, 503 for a sex word while the clinic has not set its list."""
+    account_id, _ = await _patient_account(conn, claims)
+    if body.sex is not None:
+        words = portal_extras_sql.sex_words()
+        if words is None:
+            raise HTTPException(status_code=503, detail="the profile is unavailable: the list of words is not configured")
+        if body.sex not in words:
+            raise HTTPException(status_code=422, detail="request rejected")
+    current = await portal_extras_sql.get_profile(conn, account_id)
+    sex = body.sex if "sex" in body.model_fields_set else (current.sex if current else None)  # a field you did not send is left as it is
+    language = body.preferred_language if "preferred_language" in body.model_fields_set else (current.preferred_language if current else None)
+    try:
+        await portal_extras_sql.set_profile(conn, sex=sex, language=language)
+    except portal_extras_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return await get_profile(request, conn, claims)
+
+
+class NotificationOut(_Out):
+    notification_id: uuid.UUID
+    kind: Literal["request_update", "grievance_update", "offer_sent"]
+    ref: str | None  # an opaque id, never text
+    created_at: datetime
+    read: bool
+
+
+class NotificationList(_Out):
+    notifications: list[NotificationOut]
+
+
+class NotificationReadOut(_Out):
+    notification_id: uuid.UUID
+    changed: bool  # false: it was already read
+
+
+@portal.get("/notifications", response_model=NotificationList)
+async def list_notifications(conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 100) -> NotificationList:
+    """Your in-app notices, newest first (a closed kind and an opaque reference; no text). 403 unless you are an active patient account. In-app only: no e-mail or SMS exists."""
+    account_id, _ = await _patient_account(conn, claims)
+    rows = await portal_extras_sql.list_notifications(conn, account_id, limit)
+    return NotificationList(notifications=[NotificationOut(notification_id=r.id, kind=r.kind, ref=r.ref, created_at=r.created_at, read=r.read_at is not None) for r in rows])
+
+
+@portal.post("/notifications/{notification_id}/read", response_model=NotificationReadOut)
+async def read_notification(notification_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> NotificationReadOut:
+    """Mark one of your notices read (once; a repeat answers `changed` false). 404 for one that is not yours or does not exist (one answer), 403 unless you are an active patient account."""
+    await _patient_account(conn, claims)
+    try:
+        changed = await portal_extras_sql.mark_read(conn, notification_id)
+    except portal_extras_sql.Refused:
+        raise HTTPException(status_code=404, detail="not found") from None
+    return NotificationReadOut(notification_id=notification_id, changed=changed)
+
+
+class PatientRequestIn(_Body):
+    clinic_id: uuid.UUID
+    kind: Literal["erasure", "correction", "nominee"]
+    field: Literal["name", "date_of_birth", "phone"] | None = None  # for a correction only: WHICH detail (never the value; front desk takes it from you)
+
+
+class PatientRequestFiledOut(_Out):
+    request_id: uuid.UUID
+    created: bool
+
+
+class PatientRequestOut(_Out):
+    request_id: uuid.UUID
+    clinic_id: uuid.UUID
+    kind: Literal["erasure", "correction", "nominee"]
+    field: Literal["name", "date_of_birth", "phone"] | None
+    status: Literal["open", "acknowledged", "resolved", "declined"]
+    created_at: datetime
+    updated_at: datetime
+
+
+class PatientRequestList(_Out):
+    requests: list[PatientRequestOut]
+
+
+@portal.post("/requests", response_model=PatientRequestFiledOut, status_code=201)
+async def file_patient_request(body: PatientRequestIn, idempotency_key: IdempotencyKey, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> PatientRequestFiledOut:
+    """Ask for your record to be erased, a detail corrected, or a nominee recorded. It carries NO free text: a correction names which detail (name, date of birth or phone), never the value. Front desk of your clinic takes it from there (erasure goes
+    through the existing two-person flow); nothing is changed by the request itself. Idempotent on the key. 403 unless you are an active patient account with a live record at that clinic, 422 for a correction without a field or another kind with one."""
+    account_id, _ = await _patient_account(conn, claims)
+    if (body.kind == "correction") != (body.field is not None):
+        raise HTTPException(status_code=422, detail="request rejected")
+    request_id = uuid.uuid5(uuid.NAMESPACE_URL, f"careflow-patient-request:{account_id}:{idempotency_key}")
+    try:
+        filed, created = await portal_extras_sql.file_request(conn, clinic_id=body.clinic_id, kind=body.kind, field=body.field, request_id=request_id, idempotency_key=f"request:{idempotency_key}")
+    except portal_extras_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return PatientRequestFiledOut(request_id=filed, created=created)
+
+
+@portal.get("/requests", response_model=PatientRequestList)
+async def list_my_requests(conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 100) -> PatientRequestList:
+    """Your own requests with their status, newest first. 403 unless you are an active patient account."""
+    account_id, _ = await _patient_account(conn, claims)
+    rows = await portal_extras_sql.list_own_requests(conn, account_id, limit)
+    return PatientRequestList(requests=[PatientRequestOut(request_id=r.id, clinic_id=r.clinic_id, kind=r.kind, field=r.field, status=r.status, created_at=r.created_at, updated_at=r.updated_at) for r in rows])
+
+
+class StaffPatientRequestOut(_Out):
+    request_id: uuid.UUID
+    patient_id: uuid.UUID
+    kind: Literal["erasure", "correction", "nominee"]
+    field: Literal["name", "date_of_birth", "phone"] | None
+    status: Literal["open", "acknowledged", "resolved", "declined"]
+    erasure_request_id: uuid.UUID | None
+    created_at: datetime
+
+
+class StaffPatientRequestList(_Out):
+    requests: list[StaffPatientRequestOut]
+
+
+class PatientRequestStatusIn(_Body):
+    status: Literal["acknowledged", "resolved", "declined"]
+    erasure_request_id: uuid.UUID | None = None  # link the existing two-person erasure request you started for this patient
+
+
+class PatientRequestStatusOut(_Out):
+    result: Literal["recorded", "replay", "invalid_transition"]
+
+
+@patient_requests_staff.get("", response_model=StaffPatientRequestList)
+async def list_patient_requests(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 100) -> StaffPatientRequestList:
+    """The clinic's patient requests, oldest first (ids, a closed kind, the field NAME for a correction, status; no text). 404 if the clinic is not visible to you, 403 unless you are front desk there."""
+    await _console_clinic(conn, clinic_id, PATIENT_REQUEST_HANDLERS)
+    rows = await portal_extras_sql.list_clinic_requests(conn, clinic_id, limit)
+    return StaffPatientRequestList(
+        requests=[StaffPatientRequestOut(request_id=r.id, patient_id=r.patient_id, kind=r.kind, field=r.field, status=r.status, erasure_request_id=r.erasure_request_id, created_at=r.created_at) for r in rows]
+    )
+
+
+@patient_requests_staff.post("/{request_id}/status", response_model=PatientRequestStatusOut)
+async def update_patient_request(request_id: uuid.UUID, body: PatientRequestStatusIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> PatientRequestStatusOut:
+    """Acknowledge, resolve or decline a patient request as front desk of its clinic (a second factor is required and checked again by the database); the patient gets an in-app notice. An erasure request may LINK the two-person erasure request you started
+    (same clinic, same patient). Audited by the database. 404 if you cannot see it, 403 unless you are front desk of its clinic."""
+    found = await portal_extras_sql.request_clinic(conn, request_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _clinic_role_held(conn, found[0], PATIENT_REQUEST_HANDLERS):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    try:
+        result = await portal_extras_sql.update_request(conn, request_id=request_id, status=body.status, erasure_request_id=body.erasure_request_id)
+    except portal_extras_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return PatientRequestStatusOut(result=result)  # type: ignore[arg-type]
+
+
+class PublicGrievanceIn(_Body):
+    category: str = Field(pattern=r"^[a-z][a-z0-9_]{0,39}$")
+    text: str = Field(min_length=1, max_length=GRIEVANCE_TEXT_MAX)
+
+
+def _public_limiter() -> "portal_extras_sql.HourlyLimiter | None":
+    if "limiter" not in _public_limiter_cache:
+        limit = portal_extras_sql.public_ip_limit()
+        _public_limiter_cache["limiter"] = portal_extras_sql.HourlyLimiter(limit) if limit is not None else None
+    return _public_limiter_cache["limiter"]
+
+
+@public_config.post("/public/grievances", response_model=GrievanceFiledOut, status_code=201)
+async def file_public_grievance(body: PublicGrievanceIn, request: Request, idempotency_key: IdempotencyKey) -> GrievanceFiledOut:
+    """File a grievance WITHOUT signing in, to the hospital's published clinic: a category from the clinic's list and the text (stored encrypted, same handling as a signed-in grievance; the clinic's admin sees and works it). Needs an X-Idempotency-Key. 404 while no clinic is
+    published, 422 for a category not on the list, 429 over the per-address or the clinic's hourly limit (both required settings or owner-managed numbers; with either missing the route answers 503, never an unlimited door). The key must be 32 to 300 characters (use a random uuid): a short or guessable key is a 422. The per-address limit counts `request.client.host`: behind a proxy that is the proxy's address unless the deployment forwards the real one, 503 while the category list, the limits or the keys are not configured."""
+    categories = request.app.state.grievance_categories
+    vault: DemographicVault | None = request.app.state.vault
+    key_version = _active_key_version(request)
+    limiter = _public_limiter()
+    if categories is None or vault is None or key_version is None or limiter is None:
+        raise HTTPException(status_code=503, detail="grievances are unavailable: the category list, the limits or the encryption keys are not configured")
+    if body.category not in categories or not 32 <= len(idempotency_key) <= 300:  # an anonymous caller's key must be unguessable (a random uuid): see migration 0080
+        raise HTTPException(status_code=422, detail="request rejected")
+    if not limiter.allow(request.client.host if request.client else "unknown"):
+        raise HTTPException(status_code=429, detail="too many requests; wait and try again")
+    async with request.app.state.engine.connect() as probe:
+        clinic = (await probe.execute(text("select clinic_id from iam.public_clinic()"))).first()
+    if clinic is None:
+        raise HTTPException(status_code=404, detail="not found")
+    grievance_id = uuid.uuid5(uuid.NAMESPACE_URL, f"careflow-public-grievance:{clinic.clinic_id}:{idempotency_key}")
+    ct = messages_mod.encrypt_grievance_text(vault, body.text, clinic_id=clinic.clinic_id, grievance_id=grievance_id, key_version=key_version)
+    try:
+        async with request.app.state.engine.begin() as conn:
+            filed, created = await portal_extras_sql.file_public_grievance(conn, category=body.category, body_ct=ct, key_version=key_version, grievance_id=grievance_id, idempotency_key=f"public:{idempotency_key}")
+    except portal_extras_sql.NothingPublished:
+        raise HTTPException(status_code=404, detail="not found") from None
+    except portal_extras_sql.LimitReached:
+        raise HTTPException(status_code=429, detail="too many requests; wait and try again") from None
+    except portal_extras_sql.Refused:
+        raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request") from None
+    return GrievanceFiledOut(grievance_id=filed, created=created)
+
+
 class GrievanceCategoriesOut(_Out):
     categories: list[str]
 
@@ -5567,6 +5823,7 @@ def create_app(
         app.state.voice_feature_on = voice_feature_on(os.environ)
         app.state.voice_engine = None  # no real voice engine exists (owner decision 2026-11-06): the session route answers 503
         app.state.voice_retention_days = _positive_int(p4env.get('CAREFLOW_VOICE_TRANSCRIPT_RETENTION_DAYS'))
+        app.state.voice_consent_notice = (p4env.get("CAREFLOW_VOICE_CONSENT_NOTICE") or "").strip() or None  # counsel's wording (a required setting); only a labelled demo placeholder exists
         app.state.retention_checkpoint_days = _positive_int(p4env.get("CAREFLOW_RETENTION_CHECKPOINT_DAYS"))  # required settings, no defaults: an unset period is not assessed
         app.state.retention_clinical_record_days = _positive_int(p4env.get("CAREFLOW_RETENTION_CLINICAL_RECORD_DAYS"))
         app.state.grievance_categories = _word_list(p4env.get("CAREFLOW_GRIEVANCE_CATEGORIES"))
@@ -5741,11 +5998,12 @@ def create_app(
     app.include_router(staff_break_glass)
     app.include_router(portal_rights)
     app.include_router(staff_grievances)
+    app.include_router(patient_requests_staff)
     app.include_router(staff_recovery)
     app.include_router(staff_notes)
     app.include_router(health)
     app.include_router(public_config)
-    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, portal, staff_voice, staff_care_plans, staff_results, staff_medications, staff_portal_claims, staff_visits, staff_break_glass, portal_rights, staff_grievances, staff_recovery, staff_notes])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
+    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, portal, staff_voice, staff_care_plans, staff_results, staff_medications, staff_portal_claims, staff_visits, staff_break_glass, portal_rights, staff_grievances, staff_recovery, staff_notes, patient_requests_staff, public_config])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
     return app
 
 
