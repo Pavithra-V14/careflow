@@ -62,6 +62,10 @@ export function ReviewerView({ documentId }: { documentId: string }) {
           <dd>{word('tasks.kind', v.kind)}</dd>
           <dt>{t('review.engine')}</dt>
           <dd>{text(v.engine) ?? notRecorded}</dd>
+          <dt>{t('review.modelId')}</dt>
+          <dd>{text(v.model_id) ?? notRecorded}</dd>
+          <dt>{t('review.decisionRule')}</dt>
+          <dd>{text(v.decision_rule) ?? notRecorded}</dd>
           <dt>{t('review.confidence')}</dt>
           <dd>{confidence === null ? notRecorded : percent(confidence)}</dd>
           <dt>{t('review.rule')}</dt>

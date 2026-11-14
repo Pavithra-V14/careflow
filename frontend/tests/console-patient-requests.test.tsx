@@ -8,8 +8,8 @@ import { ID, LEAK, fail, list, openConsole, writes, type Routes } from './helper
 const REQ = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const REQ2 = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const ERA = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
-const row = (over: Record<string, unknown> = {}) => ({ created_at: '2026-11-09T05:00:00Z', erasure_request_id: null, field: null, kind: 'erasure', patient_id: ID.patient, request_id: REQ, status: 'open', ...over });
-const requests = (rows: unknown[] = [row(), row({ request_id: REQ2, kind: 'correction', field: 'phone', status: 'acknowledged' }), row({ request_id: ID.doc, status: 'resolved', kind: 'nominee' })]): Routes[number] => [
+const row = (over: Record<string, unknown> = {}) => ({ allowed_next: ['acknowledged', 'resolved', 'declined'], created_at: '2026-11-09T05:00:00Z', erasure_request_id: null, field: null, kind: 'erasure', patient_id: ID.patient, request_id: REQ, status: 'open', ...over });
+const requests = (rows: unknown[] = [row(), row({ request_id: REQ2, kind: 'correction', field: 'phone', status: 'acknowledged', allowed_next: ['resolved', 'declined'] }), row({ request_id: ID.doc, status: 'resolved', kind: 'nominee', allowed_next: [] })]): Routes[number] => [
   'get',
   '/v1/staff/patient-requests',
   () => json({ requests: rows }),
@@ -18,16 +18,24 @@ const erasures: Routes[number] = ['get', '/v1/staff/erasure-requests', () => lis
 const status = (path: string, result: string, code = 200): Routes[number] => ['post', path, () => json({ result }, code)];
 
 describe('patient requests (front desk)', () => {
-  it('lists the requests with closed words, offers only the next statuses, and asks the clinic of the active role', async () => {
+  it('lists the requests with closed words, builds each row\'s buttons from its allowed_next only, and asks the clinic of the active role', async () => {
     const { calls } = await openConsole({ hash: '/requests', routes: [requests()] });
     expect(await screen.findByRole('heading', { name: 'Patient requests' })).toBeInTheDocument();
     const rows = within(await screen.findByRole('table')).getAllByRole('row');
     expect(rows).toHaveLength(4);
     expect(within(rows[1]!).getAllByRole('button').map((b) => b.textContent)).toEqual(['Mark as seen', 'Resolve', 'Decline']);
     expect(within(rows[2]!).getAllByRole('button').map((b) => b.textContent)).toEqual(['Resolve', 'Decline']);
-    expect(within(rows[3]!).queryAllByRole('button')).toHaveLength(0); // a final status offers nothing
+    expect(within(rows[3]!).queryAllByRole('button')).toHaveLength(0); // an empty allowed_next offers nothing
     expect(within(rows[2]!).getByText('Phone number')).toBeInTheDocument(); // the field NAME, never a value
     expect(calls.find((c) => c.path === '/v1/staff/patient-requests')?.query.get('clinic_id')).toBe(CLINIC_A);
+  });
+
+  it('offers exactly what allowed_next says, whatever the status word is: nothing is hard-coded', async () => {
+    await openConsole({ hash: '/requests', routes: [requests([row({ status: 'open', allowed_next: ['declined'] }), row({ request_id: REQ2, status: 'resolved', allowed_next: ['acknowledged'] }), row({ request_id: ID.doc, status: 'acknowledged', allowed_next: [] })])] });
+    const rows = within(await screen.findByRole('table')).getAllByRole('row');
+    expect(within(rows[1]!).getAllByRole('button').map((b) => b.textContent)).toEqual(['Decline']); // an open request that may only be declined
+    expect(within(rows[2]!).getAllByRole('button').map((b) => b.textContent)).toEqual(['Mark as seen']); // even from "resolved", if the API says so
+    expect(within(rows[3]!).queryAllByRole('button')).toHaveLength(0); // "seen" with nothing allowed
   });
 
   it('changes a status only after a confirmation, with a key and no free text, and says the patient was told', async () => {

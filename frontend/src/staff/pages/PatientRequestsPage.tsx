@@ -15,17 +15,9 @@ type Row = components['schemas']['StaffPatientRequestOut'];
 type NewStatus = components['schemas']['PatientRequestStatusIn']['status'];
 type Result = components['schemas']['PatientRequestStatusOut']['result'];
 
-/** Which new statuses a row offers. A convenience only: the backend decides and answers `invalid_transition` when it disagrees. */
-const NEXT: Record<Row['status'], readonly NewStatus[]> = {
-  open: ['acknowledged', 'resolved', 'declined'],
-  acknowledged: ['resolved', 'declined'],
-  resolved: [],
-  declined: [],
-};
-
 /**
  * Patients' requests about their own record (front desk): erasure, correction (the field NAME only, never a value) and nominee. The list
- * carries ids, a closed kind, the field name and a status, and no text. Changing a status asks for a confirmation, needs a recent second
+ * carries ids, a closed kind, the field name and a status, and no text. The buttons of a row are exactly the statuses the API lists in its `allowed_next` (nothing is hard-coded here); a row with none shows none. Changing a status asks for a confirmation, needs a recent second
  * factor (the step-up prompt) and tells the patient with an in-app notice. For an erasure the front desk may link the two-person erasure
  * request they started for the same patient; nothing here starts, approves or changes an erasure.
  */
@@ -83,9 +75,9 @@ export function PatientRequestsPage() {
                   </td>
                   <td>{r.erasure_request_id ? <ShortId id={r.erasure_request_id} /> : '–'}</td>
                   <td>
-                    {NEXT[r.status].length === 0
+                    {r.allowed_next.length === 0
                       ? '–'
-                      : NEXT[r.status].map((s) => (
+                      : r.allowed_next.map((s) => (
                           <button
                             key={s}
                             type="button"

@@ -8,6 +8,9 @@ for (const lang of LANGS) {
     await openConsole(page, 'front_desk', lang);
     await go(page, '#/requests', /\S/);
     await expect(page.locator('main table')).toBeVisible();
+    // The third row has an empty allowed_next: no buttons, only a dash.
+    await expect(page.locator('main tbody tr')).toHaveCount(3);
+    await expect(page.locator('main tbody tr').nth(2).getByRole('button')).toHaveCount(0);
     await sweep(page, 'patient-requests', lang);
     await page.locator('main tbody tr').first().getByRole('button').first().click();
     await expect(page.getByRole('dialog')).toBeVisible();

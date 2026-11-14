@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-1776 of 1776 strings are unreviewed.
+1778 of 1778 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -1524,6 +1524,7 @@ Terms standardised: proposal, resolve / resolved.
 | `review.alternatives` | Alternatives considered | பரிசீலிக்கப்பட்ட மாற்றுகள் | ok |
 | `review.candidateCount` | Candidates | வேட்பாளர்கள் | ok |
 | `review.confidence` | Confidence | நம்பிக்கை | ok |
+| `review.decisionRule` | Decision rule | முடிவு விதி | ok |
 | `review.engine` | Engine | இயந்திரம் | ok |
 | `review.evidence` | Evidence | சான்று | ok |
 | `review.evidenceCrop` | Source image reference | மூலப் படக் குறிப்பு | ok |
@@ -1531,6 +1532,7 @@ Terms standardised: proposal, resolve / resolved.
 | `review.evidenceSource` | Source | மூலம் | ok |
 | `review.kind` | Task kind | பணி வகை | ok |
 | `review.mode` | Mode | முறை | ok |
+| `review.modelId` | Model | மாதிரி | ok |
 | `review.noAlternatives` | No alternatives were recorded. | மாற்றுகள் எதுவும் பதிவாகவில்லை. | ok |
 | `review.noEvidence` | No evidence was recorded. | சான்று எதுவும் பதிவாகவில்லை. | ok |
 | `review.notRecorded` | Not recorded | பதிவு செய்யப்படவில்லை | ok |
