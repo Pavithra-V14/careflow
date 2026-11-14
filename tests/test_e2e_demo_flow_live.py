@@ -14,7 +14,6 @@ import uuid
 
 import pytest
 
-from tests.db_helpers import without_scope
 from tests.test_api_offers_live import (  # noqa: F401  (the fixtures are imported so this module seeds its own world)
     DRAFT,
     SEND,
@@ -90,5 +89,5 @@ async def test_the_scheduling_flow_from_a_cancelled_booking_to_a_booked_offer_wi
     for expected in ("offer.send", "offer.mark_delivered", "offer.reply_record"):
         assert expected in actions, expected
     for r in await rows(w, "select details from audit.log where clinic_id = :c and actor_id = :a", c=w.a, a=w.ids["fd_a"]):
-        assert "TEST REPLY" not in str(without_scope(r[0]))
+        assert "TEST REPLY" not in str(r[0])
     assert DRAFT  # (the draft route is part of the sequence above)
