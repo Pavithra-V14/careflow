@@ -27,6 +27,9 @@ export type ConsentIn = components['schemas']['ConsentIn'];
 export type ClaimIn = components['schemas']['ClaimIn'];
 export type GrievanceIn = components['schemas']['GrievanceIn'];
 export type VoiceSessionIn = components['schemas']['VoiceSessionIn'];
+export type ProfileIn = components['schemas']['ProfileIn'];
+export type PatientRequestIn = components['schemas']['PatientRequestIn'];
+export type PublicGrievanceIn = components['schemas']['PublicGrievanceIn'];
 export type NoteIn = components['schemas']['NoteIn'];
 export type BreakGlassOpenIn = components['schemas']['BreakGlassOpenIn'];
 export type BreakGlassOutcome = components['schemas']['BreakGlassReviewIn']['outcome'];
@@ -163,6 +166,13 @@ export const OPERATIONS = {
   getVoicePreference: { method: 'get', path: '/v1/portal/voice/preference' },
   putVoicePreference: { method: 'put', path: '/v1/portal/voice/preference' },
   openVoiceSession: { method: 'post', path: '/v1/portal/voice/sessions' },
+  getProfile: { method: 'get', path: '/v1/portal/profile' },
+  putProfile: { method: 'put', path: '/v1/portal/profile' },
+  listNotifications: { method: 'get', path: '/v1/portal/notifications' },
+  readNotification: { method: 'post', path: '/v1/portal/notifications/{notification_id}/read' },
+  listMyRequests: { method: 'get', path: '/v1/portal/requests' },
+  filePatientRequest: { method: 'post', path: '/v1/portal/requests' },
+  filePublicGrievance: { method: 'post', path: '/public/grievances' },
   // ---- visit readiness, portal claims, break-glass, recovery, notes, grievances ----
   readinessView: { method: 'get', path: '/v1/staff/visits/{visit_id}/readiness' },
   startReadiness: { method: 'post', path: '/v1/staff/visits/{visit_id}/readiness/start' },
@@ -485,6 +495,14 @@ export function createApi(options: ApiOptions) {
     // Voice (patient, active account): the person's own on/off setting, and opening one scoped session after the per-session consent.
     getVoicePreference: () => client.GET('/v1/portal/voice/preference'),
     putVoicePreference: (voiceEnabled: boolean, o?: WriteOptions) => client.PUT('/v1/portal/voice/preference', { params: { header: { 'X-Idempotency-Key': key(o) } }, body: { voice_enabled: voiceEnabled } }),
+    getProfile: () => client.GET('/v1/portal/profile'),
+    putProfile: (body: ProfileIn, o?: WriteOptions) => client.PUT('/v1/portal/profile', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    listNotifications: () => client.GET('/v1/portal/notifications'),
+    readNotification: (notificationId: string, o?: WriteOptions) =>
+      client.POST('/v1/portal/notifications/{notification_id}/read', { params: { path: { notification_id: notificationId }, header: { 'X-Idempotency-Key': key(o) } } }),
+    listMyRequests: () => client.GET('/v1/portal/requests'),
+    filePatientRequest: (body: PatientRequestIn, o?: WriteOptions) => client.POST('/v1/portal/requests', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    filePublicGrievance: (body: PublicGrievanceIn, o?: WriteOptions) => client.POST('/public/grievances', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
     openVoiceSession: (body: VoiceSessionIn, o?: WriteOptions) => client.POST('/v1/portal/voice/sessions', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
 
     // ---- visit readiness, portal claims, break-glass, recovery, notes, grievances ---------------------------------------------

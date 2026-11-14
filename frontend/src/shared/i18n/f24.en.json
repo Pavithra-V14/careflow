@@ -1,0 +1,73 @@
+{
+  "portal": {
+    "profile": {
+      "title": "Your details",
+      "name": "Name on your record",
+      "noName": "Not available",
+      "sex": "Sex",
+      "noSexList": "The hospital has not set up a list of choices yet.",
+      "language": "Preferred language",
+      "choose": "Choose",
+      "save": "Save",
+      "saved": "Your details were saved.",
+      "invalid": "That choice is not on the hospital's list. Nothing was saved.",
+      "unavailable": "This is not set up yet. Nothing was saved."
+    },
+    "notifications": {
+      "title": "Your notices",
+      "none": "You have no notices.",
+      "unread": "Unread: {{n}}",
+      "new": "New",
+      "read": "Read",
+      "markRead": "Mark as read",
+      "gone": "This notice is no longer there.",
+      "kind": {
+        "request_update": "An update on one of your requests",
+        "grievance_update": "An update on one of your messages to the hospital",
+        "offer_sent": "An appointment offer"
+      }
+    },
+    "requests": {
+      "title": "Ask the hospital about your record",
+      "body": "You can ask for your record to be erased, for a detail to be corrected, or for a nominee to be recorded. The request has no free text. The hospital's front desk takes it from there.",
+      "kind": "What do you want to ask?",
+      "chooseKind": "Choose",
+      "kinds": {
+        "erasure": "Erase my record",
+        "correction": "Correct a detail",
+        "nominee": "Record a nominee"
+      },
+      "field": "Which detail?",
+      "chooseField": "Choose",
+      "fields": {
+        "name": "Name",
+        "date_of_birth": "Date of birth",
+        "phone": "Phone number"
+      },
+      "send": "Send request",
+      "confirmTitle": "Send this request?",
+      "confirmBody": "This sends a request to the hospital. A correction names the detail only, never the new value. Nothing is changed by sending it.",
+      "sent": "Your request was sent.",
+      "already": "This request was already on record.",
+      "mine": "Your requests",
+      "none": "You have not sent any.",
+      "status": {
+        "open": "Open",
+        "acknowledged": "Seen",
+        "resolved": "Resolved",
+        "declined": "Declined"
+      },
+      "refused": "This cannot be done for this account: it must be active and linked to a record at that hospital.",
+      "invalid": "That request was not accepted. Check your choices. Nothing was sent."
+    },
+    "publicGrievance": {
+      "title": "Send a complaint without signing in",
+      "body": "This goes to the hospital without signing in. A person at the hospital reads it.",
+      "confirmBody": "This sends your message to the hospital. It is stored encrypted.",
+      "filed": "Your message was sent.",
+      "noClinic": "No hospital is set up to receive this right now. Nothing was sent.",
+      "unavailable": "This is not available right now. Nothing was sent.",
+      "refused": "This cannot be done right now. Nothing was sent."
+    }
+  }
+}

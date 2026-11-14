@@ -66,6 +66,8 @@ export async function installPortalMock(page: Page, scenario: PortalScenario = {
     const method = req.method();
     const body = req.postData() ? (JSON.parse(req.postData() as string) as unknown) : undefined;
     calls.push({ method, path, key: req.headers()['x-idempotency-key'] ?? null, body });
+    // The public routes need no sign-in (a grievance without signing in, MOCK ONLY).
+    if (method === 'POST' && path === '/public/grievances') return reply(route, 201, { created: true, grievance_id: '33333333-3333-4333-8333-333333333333' });
     if (!req.headers()['authorization']?.startsWith('Bearer ')) return reply(route, 401, { detail: 'not authenticated' });
 
     if (method === 'GET' && path === '/public/clinic') return reply(route, 200, { clinic_id: '3f2b8c1e-6a4d-4e1b-9d0a-1c2d3e4f5a6b', name: 'Placeholder Hospital' });
@@ -101,6 +103,12 @@ export async function installPortalMock(page: Page, scenario: PortalScenario = {
     if (method === 'GET' && path === '/v1/portal/my-data') {
       return reply(route, 200, { account_status: 'active', bookings: [], consents: [{ action: 'granted', notice_version: 3, occurred_at: '2026-11-09T05:00:00Z', purpose: 'care_delivery' }], grievances: [], messages: [], records: [], stage: 'active', truncated: false });
     }
+    if (method === 'GET' && path === '/v1/portal/profile') return reply(route, 200, { display_name: 'Placeholder Person', languages: ['en', 'ta'], preferred_language: null, sex: null, sex_words: ['female', 'male'] });
+    if (method === 'PUT' && path === '/v1/portal/profile') return reply(route, 200, { display_name: 'Placeholder Person', languages: ['en', 'ta'], ...(body as object), sex_words: ['female', 'male'] });
+    if (method === 'GET' && path === '/v1/portal/notifications') return reply(route, 200, { notifications: [{ created_at: '2026-11-09T05:00:00Z', kind: 'request_update', notification_id: '66666666-6666-4666-8666-666666666666', read: false, ref: null }, { created_at: '2026-11-08T05:00:00Z', kind: 'offer_sent', notification_id: '77777777-7777-4777-8777-777777777777', read: true, ref: null }] });
+    if (method === 'POST' && /^\/v1\/portal\/notifications\/[^/]+\/read$/.test(path)) return reply(route, 200, { changed: true, notification_id: path.split('/')[4] });
+    if (method === 'GET' && path === '/v1/portal/requests') return reply(route, 200, { requests: [{ clinic_id: '3f2b8c1e-6a4d-4e1b-9d0a-1c2d3e4f5a6b', created_at: '2026-11-09T05:00:00Z', field: 'phone', kind: 'correction', request_id: '88888888-8888-4888-8888-888888888888', status: 'open', updated_at: '2026-11-09T05:00:00Z' }] });
+    if (method === 'POST' && path === '/v1/portal/requests') return reply(route, 201, { created: true, request_id: '88888888-8888-4888-8888-888888888888' });
     if (method === 'GET' && path === '/v1/portal/voice/preference') return reply(route, 200, { voice_enabled: voiceOn });
     if (method === 'PUT' && path === '/v1/portal/voice/preference') {
       voiceOn = (body as { voice_enabled: boolean }).voice_enabled;

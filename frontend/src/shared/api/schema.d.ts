@@ -343,26 +343,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/portal/voice/consent-notice": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Voice Consent Notice
-         * @description The notice shown before any audio is processed in a voice session (spec 23.4), exactly as configured: the wording is counsel's and is NOT written here; the demo pack carries a labelled placeholder. `configured` is false while it is unset. 403 unless you are an active patient account.
-         */
-        get: operations["voice_consent_notice_v1_portal_voice_consent_notice_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/portal/voice/preference": {
         parameters: {
             query?: never;
@@ -3582,7 +3562,7 @@ export interface components {
              * Purpose
              * @enum {string}
              */
-            purpose: "care_delivery" | "ai_processing" | "service_improvement";
+            purpose: "care_delivery" | "ai_processing" | "service_improvement" | "voice_session";
         };
         /** ConsentOut */
         ConsentOut: {
@@ -4595,8 +4575,11 @@ export interface components {
              * Format: uuid
              */
             notice_id: string;
-            /** Purpose */
-            purpose: string;
+            /**
+             * Purpose
+             * @enum {string}
+             */
+            purpose: "care_delivery" | "ai_processing" | "service_improvement" | "voice_session";
             /** Version */
             version: number;
         };
@@ -6383,15 +6366,6 @@ export interface components {
             /** Text */
             text: string;
         };
-        /** VoiceConsentNoticeOut */
-        VoiceConsentNoticeOut: {
-            /** Configured */
-            configured: boolean;
-            /** Is Placeholder */
-            is_placeholder: boolean;
-            /** Text */
-            text: string | null;
-        };
         /** VoicePreferenceIn */
         VoicePreferenceIn: {
             /** Voice Enabled */
@@ -7531,44 +7505,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ValidationErrorBody"];
-                };
-            };
-        };
-    };
-    voice_consent_notice_v1_portal_voice_consent_notice_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VoiceConsentNoticeOut"];
-                };
-            };
-            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            /** @description Authenticated, but this role may not do this. Fixed body. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };

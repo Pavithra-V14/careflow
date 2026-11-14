@@ -259,7 +259,7 @@ The audit log stays auditor only. Run stays offered to front desk, nurse and doc
 - A person holding front desk and the supervisor role chooses the role per sign-in like any other pair. The supervisor sees only the task inbox in the console; confirm that is the intent (the alerts route does not list the supervisor).
 - **DONE (2026-11-14, snapshot 67ccb4a):** `authored_by_you`, the withdraw route and two-person retire (decision `retire`) are in the snapshot and built. Original request: an `authored_by_you` flag (boolean) on each rule version in `GET /v1/staff/console/red-flag-rules`. When it is in the snapshot the console will hide Approve and Reject from the author (keeping the confirmation and the `author_cannot_decide` refusal as the fallback). Also requested, when built: the withdraw route and the two-person retire route, so their buttons can be added.
 
-### 20. Patient profile: name, sex, preferred language (requested 2026-11-14, frontend spec gap)
+### 20. Patient profile: name, sex, preferred language (requested 2026-11-14, frontend spec gap) - ROUTES LANDED, screen built (F14); the avatar is not built
 `GET /v1/portal/me` returns no display name, and `POST /v1/portal/register` takes no body, so the portal cannot show the initials avatar and name (BUILD-SPEC 19.3) or collect sex and preferred language (19.4). Please add a way to read and set them (name, sex, preferred language), with the closed word lists in the schema.
 
 ### 21. Family members and guardians (requested 2026-11-14)
@@ -271,13 +271,13 @@ No route to read or set the notification preference or an optional email address
 ### 23. Devices and sessions (requested 2026-11-14)
 No route to list a patient's signed-in devices and revoke one (19.3 Security, PATIENT-WORKFLOWS H3). Passkeys would be a new auth feature and need the owner's approval first.
 
-### 24. Patient erasure, correction and nominee requests (requested 2026-11-14)
+### 24. Patient erasure, correction and nominee requests (requested 2026-11-14) - ROUTES LANDED, screen built (F14)
 The patient path is the grievance channel with whatever category words the clinic configures. Please say whether these are separate request types, and if so add the routes or the category words (20.1). The console invents no category.
 
 ### 25. Staff invite fields (requested 2026-11-14)
 `InviteIn` has only `email`, `clinic_id` and `role`. BUILD-SPEC 19.4 also lists name, mobile and the medical-council registration number (doctors and nurses). Please add them, or say they are held elsewhere.
 
-### 26. Grievance without signing in (requested 2026-11-14)
+### 26. Grievance without signing in (requested 2026-11-14) - ROUTE LANDED, form built on the sign-in page (F14); no public category list exists, so the category is typed
 PATIENT-WORKFLOWS H2 says any patient can reach the grievance channel without signing in. The only grievance routes need an active patient account. Please add a public route, or confirm the public footer contact is the whole channel.
 
 ### 27. Protocol card and message-template editor routes (requested 2026-11-14)
@@ -319,7 +319,7 @@ Older items, NOT built, and why (each needs a decision or a service first):
 - **27 (card and template editor):** protocol cards and templates are clinician content with no table yet (`kb.cards` does not exist); needs a card-schema design and a clinician first.
 - **28 to 30 (patient scheduling, messaging and readiness routes):** they depend on the account-stage gating, consent and guardian decisions (items 21 and 22) and on the patient-facing channel decision for readiness (owner decision so far: none; a nurse or doctor relays replies).
 
-### 31. Where the voice session notice comes from (requested 2026-11-14, owner decision)
+### 31. Where the voice session notice comes from: DONE (2026-11-14, `voice_session` is a closed `purpose` value)
 The voice consent text must come only from the API. The frontend currently looks in `GET /v1/portal/consents` for a notice whose `purpose` is `voice_session` (an ASSUMED word: the snapshot types `purpose` as a free string). It shows that notice exactly as sent and blocks the Open button until one exists; with none it says voice is not set up. Please confirm the word, or give the notice its own route. The notice is not one of the three consent purposes, so the console does not offer Grant or Withdraw on it. The demo pack should supply a labelled placeholder.
 
 **31 (voice notice), answered 2026-11-14:** `voice_session` is now a closed value of the consent notice `purpose` (the schema enum on `NoticeOut` and `ConsentIn`), served by the existing `GET /v1/portal/consents` like the other purposes; the demo pack carries a labelled DEMO ONLY placeholder notice and label for it; outside the demo the text is the owner's `CAREFLOW_CONSENT_NOTICES` entry (counsel's wording); with no notice published the list has no `voice_session` item. It can be granted or withdrawn like the others (an ordinary consent event on the current notice), so the console may offer or hide those buttons as it chooses. The separate route and setting added earlier in this pass (`/voice/consent-notice`) were removed.

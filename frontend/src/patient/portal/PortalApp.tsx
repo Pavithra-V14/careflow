@@ -8,6 +8,7 @@ import { ProblemText } from '../../staff/ui/states';
 import { PATHS } from '../paths';
 import { normalisePhone, type PortalAuth } from './auth';
 import { VoiceSection } from './VoiceSection';
+import { NotificationsSection, ProfileSection, PublicGrievanceSection, RequestsSection } from './PortalMore';
 import { ClaimSection, ConsentSection, GrievanceSection, MyDataSection } from './PortalSections';
 
 // The patient portal (BUILD-SPEC sections 15 and 19). Mobile first, one column. Patient session checks only: nothing about the patient is
@@ -35,6 +36,8 @@ export function PortalApp({ auth, apiBaseUrl }: { auth: PortalAuth | null; apiBa
     };
   }, [auth, queryClient]);
 
+  const publicApi = useMemo(() => createApi({ baseUrl: apiBaseUrl, getAccessToken: () => null }), [apiBaseUrl]); // no token: these routes need none
+
   const signOut = useCallback(async () => {
     await auth?.signOut();
     queryClient.clear();
@@ -60,7 +63,14 @@ export function PortalApp({ auth, apiBaseUrl }: { auth: PortalAuth | null; apiBa
           {t('common.loading')}
         </p>
       )}
-      {phase === 'signed-out' && <SignIn auth={auth} onDone={() => setPhase('signed-in')} />}
+      {phase === 'signed-out' && (
+        <>
+          <SignIn auth={auth} onDone={() => setPhase('signed-in')} />
+          <QueryClientProvider client={queryClient}>
+            <PublicGrievanceSection api={publicApi} />
+          </QueryClientProvider>
+        </>
+      )}
       {phase === 'signed-in' && (
         <QueryClientProvider client={queryClient}>
           <Account auth={auth} apiBaseUrl={apiBaseUrl} onSignedOut={() => void signOut()} />
@@ -235,6 +245,9 @@ function Account({ auth, apiBaseUrl, onSignedOut }: { auth: PortalAuth; apiBaseU
       {active ? (
         <>
           <ClaimSection api={api} bound={account.bound_to_a_patient_record} />
+          <ProfileSection api={api} />
+          <NotificationsSection api={api} />
+          <RequestsSection api={api} />
           <GrievanceSection api={api} />
           <VoiceSection api={api} />
           <MyDataSection api={api} />

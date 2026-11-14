@@ -1,6 +1,6 @@
 # Tamil review pack (AI-prepared, NOT reviewed by a native speaker)
 
-Prepared 2026-11-14. Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 1630 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
+Prepared 2026-11-14. Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 1683 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
 
 **Regenerated 2026-11-14** by `npm run i18n:pack` from the strings as they are now, so it covers every current string, including the newest screens (patient voice setting, consent withdrawal and history, activating a staff account, withdrawing and retiring a red-flag rule). Each is written and second-passed in the same way and is just as unreviewed.
 
@@ -12,11 +12,11 @@ Meaning errors, register for patients, medical or safety terms, unsafe ambiguity
 - **B** wrong or odd meaning, wrong register, or an inconsistent term. Needs a native speaker.
 - **C** minor wording, or an administrator-only technical label.
 
-How it was done, honestly: all 1630 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and the strings that carry meaning (sentences of four words or more, and short strings that differ from their English) were read by an AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
+How it was done, honestly: all 1683 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and the strings that carry meaning (sentences of four words or more, and short strings that differ from their English) were read by an AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
 
-Automatic checks: 1630 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
+Automatic checks: 1683 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
 
-Notes: 65 grade A, 100 grade B, 51 grade C (216 rows with a note; some notes cover a group of similar strings, named in the note).
+Notes: 69 grade A, 115 grade B, 53 grade C (237 rows with a note; some notes cover a group of similar strings, named in the note).
 
 ## Part 1. Strings that most need a native speaker (safety first)
 
@@ -114,6 +114,10 @@ Notes: 65 grade A, 100 grade B, 51 grade C (216 rows with a note; some notes cov
 |---|---|---|---|
 | `alerts.already` | This alert was already acknowledged. The list will refresh. | இந்த எச்சரிக்கை ஏற்கனவே ஏற்கப்பட்டது. பட்டியல் புதுப்பிக்கப்படும். | Same verb issue as alerts.acknowledged. |
 | `scheduling.draft.notice` | This is a draft only. A person decides what happens next. Nothing is sent to anyone from this screen. | இது வரைவு மட்டுமே. அடுத்து என்ன நடக்கும் என்பதை ஒரு நபர் முடிவு செய்வார். இந்தத் திரையிலிருந்து யாருக்கும் எதுவும் அனுப்பப்படாது. | Says the draft sends nothing and a person decides. "ஒரு நபர் முடிவு செய்வார்" must read as a person decides, not that the system will decide later. A wrong reading could make staff think an offer went out. |
+| `portal.requests.confirmBody` | This sends a request to the hospital. A correction names the detail only, never the new value. Nothing is changed by sending it. | இது மருத்துவமனைக்கு ஒரு கோரிக்கையை அனுப்பும். திருத்தத்தில் விவரத்தின் பெயர் மட்டுமே இருக்கும், புதிய மதிப்பு இருக்காது. அனுப்புவதால் எதுவும் மாறாது. | Tells the patient that sending a request changes nothing by itself and that a correction names the detail, not the new value. It sits next to an erasure request, so it must not read as "your record will be erased". Counsel should approve the English first. |
+| `portal.requests.kinds.erasure` | Erase my record | என் பதிவை அழிக்க | "என் பதிவை அழிக்க" (to erase my record) must read as asking, not as doing. Check the verb. |
+| `portal.requests.body` | You can ask for your record to be erased, for a detail to be corrected, or for a nominee to be recorded. The request has no free text. The hospital's front desk takes it from there. | உங்கள் பதிவை அழிக்கவும், ஒரு விவரத்தைத் திருத்தவும் அல்லது ஒரு நியமனதாரரைப் பதிவு செய்யவும் நீங்கள் கேட்கலாம். இந்தக் கோரிக்கையில் தனி உரை எதுவும் இல்லை. மருத்துவமனையின் வரவேற்புப் பணியாளர்கள் அடுத்ததைப் பார்ப்பார்கள். | Explains what the three requests are and that the front desk takes it from there; check "வரவேற்புப் பணியாளர்கள்" for front desk and that nothing reads as a promise of outcome. |
+| `portal.profile.sex` | Sex | பாலினம் | The label for sex. The words themselves come from the hospital's list, in the hospital's own wording, so the label must match how that list is worded. Needs the privacy owner's sign-off on the field. |
 
 ## Part 2. Meaning, register and term problems (grade B)
 
@@ -219,6 +223,21 @@ Notes: 65 grade A, 100 grade B, 51 grade C (216 rows with a note; some notes cov
 | `scheduling.draft.ruleRank` | By rank, then by the time they joined the waitlist | தரவரிசைப்படி, பிறகு பட்டியலில் சேர்ந்த நேரப்படி | States the only ordering rule: by rank, then by join time. Check the order of the two parts is clear. |
 | `scheduling.draft.holdLifetime` | Hold lasts | ஒதுக்கீடு நீடிக்கும் நேரம் | Label for how long a held slot is kept; "ஒதுக்கீடு" for hold may differ from the word used elsewhere. |
 | `scheduling.draft.offerExpiry` | Offer expires after | வாய்ப்பு காலாவதியாகும் நேரம் | Label for how long until an offer lapses. |
+| `portal.requests.kinds.nominee` | Record a nominee | ஒரு நியமனதாரரைப் பதிவு செய்ய | "நியமனதாரர்" (nominee) is a legal term; check the word clinics and patients use. |
+| `portal.requests.kinds.correction` | Correct a detail | ஒரு விவரத்தைத் திருத்த | Check "திருத்த" reads as correcting a detail on the record. |
+| `portal.requests.status.declined` | Declined | ஏற்கப்படவில்லை | "ஏற்கப்படவில்லை" (not accepted) must read as the hospital declining, and be neutral in tone. |
+| `portal.requests.status.acknowledged` | Seen | பார்க்கப்பட்டது | "பார்க்கப்பட்டது" (seen) must not be read as "approved". |
+| `portal.requests.already` | This request was already on record. | இந்தக் கோரிக்கை ஏற்கெனவே பதிவில் உள்ளது. | Says the request was already on record; check it is not read as a refusal. |
+| `portal.requests.refused` | This cannot be done for this account: it must be active and linked to a record at that hospital. | இந்தக் கணக்கிற்கு இதைச் செய்ய முடியாது: அது செயலில் இருக்க வேண்டும், அந்த மருத்துவமனையின் பதிவுடன் இணைக்கப்பட்டிருக்க வேண்டும். | Long condition sentence; check it is understood. |
+| `portal.publicGrievance.body` | This goes to the hospital without signing in. A person at the hospital reads it. | இது உள்நுழையாமலே மருத்துவமனைக்குச் செல்லும். மருத்துவமனையில் ஒருவர் இதைப் படிப்பார். | Says the complaint goes to the hospital without signing in; check it does not suggest it is anonymous. |
+| `portal.publicGrievance.confirmBody` | This sends your message to the hospital. It is stored encrypted. | இது உங்கள் செய்தியை மருத்துவமனைக்கு அனுப்பும். இது மறைகுறியாக்கப்பட்டுச் சேமிக்கப்படும். | "மறைகுறியாக்கப்பட்டு" (encrypted) is technical for a patient. |
+| `portal.publicGrievance.noClinic` | No hospital is set up to receive this right now. Nothing was sent. | இதைப் பெற இப்போது எந்த மருத்துவமனையும் அமைக்கப்படவில்லை. எதுவும் அனுப்பப்படவில்லை. | Check "எந்த மருத்துவமனையும் அமைக்கப்படவில்லை" reads as a setup state, not a fault of the patient. |
+| `portal.profile.noSexList` | The hospital has not set up a list of choices yet. | தேர்வுகளின் பட்டியலை மருத்துவமனை இன்னும் அமைக்கவில்லை. | Says the hospital has not set up a list of choices yet; check it is neutral. |
+| `portal.profile.invalid` | That choice is not on the hospital's list. Nothing was saved. | அந்தத் தேர்வு மருத்துவமனையின் பட்டியலில் இல்லை. எதுவும் சேமிக்கப்படவில்லை. | Says a choice is not on the hospital's list and nothing was saved. |
+| `portal.profile.name` | Name on your record | உங்கள் பதிவில் உள்ள பெயர் | "உங்கள் பதிவில் உள்ள பெயர்" (the name on your record); the person cannot change it here. |
+| `portal.notifications.kind.offer_sent` | An appointment offer | ஒரு சந்திப்பு வாய்ப்பு | "ஒரு சந்திப்பு வாய்ப்பு" (an appointment offer); the notice has no text of its own. |
+| `portal.notifications.kind.grievance_update` | An update on one of your messages to the hospital | மருத்துவமனைக்கு நீங்கள் அனுப்பிய செய்திகளில் ஒன்றைப் பற்றிய புதிய தகவல் | Long; check "செய்திகளில் ஒன்றைப் பற்றிய புதிய தகவல்" is clear. |
+| `portal.notifications.kind.request_update` | An update on one of your requests | உங்கள் கோரிக்கைகளில் ஒன்றைப் பற்றிய புதிய தகவல் | Check "கோரிக்கைகளில் ஒன்றைப் பற்றிய புதிய தகவல்". |
 
 ## Part 3. Minor wording and technical labels (grade C)
 
@@ -275,6 +294,8 @@ Notes: 65 grade A, 100 grade B, 51 grade C (216 rows with a note; some notes cov
 | `scheduling.draft.seconds` | {{n}} seconds | {{n}} வினாடிகள் | Number plus the unit word. |
 | `scheduling.draft.title` | Draft offer | வரைவு வாய்ப்பு | Heading. |
 | `scheduling.draft.text` | Draft text | வரைவு உரை | Heading. |
+| `portal.notifications.unread` | Unread: {{n}} | படிக்காதவை: {{n}} | A count after a label. |
+| `portal.notifications.markRead` | Mark as read | படித்ததாகக் குறி | Button label. |
 
 ## Part 4. Terms used inconsistently
 
@@ -282,23 +303,23 @@ Notes: 65 grade A, 100 grade B, 51 grade C (216 rows with a note; some notes cov
 |---|---|---|
 | approve | ஒப்புக்கொள் (verb), ஒப்புதல் (noun) (62) | The verb also means "admit/agree"; some places use ஒப்புதல் அளி. |
 | acknowledge | ஏற்றுக்கொள் ("accept") (15) | Same verb as approve; the action only records that you have seen something. |
-| record / log / transcript / register | பதிவு everywhere (132) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
+| record / log / transcript / register | பதிவு everywhere (135) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
 | result / decision / end | முடிவு everywhere (67) | One word for a clinical result, a person's decision and an end time. |
 | role | பங்கு (14) | Also means "share"; பணி is used for "task". |
-| merge / link / connect / attach | இணை / இணைப்பு (51) | Merging two patient records, linking a portal account, attaching a note: one word. |
+| merge / link / connect / attach | இணை / இணைப்பு (52) | Merging two patient records, linking a portal account, attaching a note: one word. |
 | red flag | சிவப்புக் கொடி (literal) (21) | Check the wording clinicians use. |
 | hold (a slot or a referral) | நிறுத்து / நிறுத்தம் (stop) and ஒதுக்கீடு (allocation) (53) | Two or three words for one idea. |
 | retire (a rule version) and withdraw (a draft) | நிறுத்து (retire) and திரும்பப் பெறு (withdraw) (63) | The rule screens need two different words; "withdraw" shares its Tamil with "revoke" and "cannot be undone". |
-| task / job | பணி (67) | A review task and a queued job share the word. |
+| task / job | பணி (68) | A review task and a queued job share the word. |
 | approved (a status) and approve (a button) | அங்கீகரிக்கப்பட்டது (status) and ஒப்புக்கொள் (button) (14) | Two word families for one idea in the red-flag rule screens. |
 | patient | நோயாளி and நோயாளர் (75) | Two spellings. |
-| clinic / hospital | மருத்துவமனை (most strings), கிளினிக் (1) (56) | Check which is meant where. |
+| clinic / hospital | மருத்துவமனை (most strings), கிளினிக் (1) (66) | Check which is meant where. |
 | front desk | வரவேற்பு மேசை and முன்பணியாளர் (8) | Two renderings. |
 | confidence | நம்பிக்கை (2) | Means belief or hope; the strings mean how sure the system is. |
 | sample (a sampled decision) | மாதிரி (5) | Reads as a laboratory specimen. |
 | revoke / take back, and "cannot be undone" | திரும்பப் பெறு for both (21) | The same verb for "revoke" and "cannot be reversed". |
 | grant / withdraw (a consent) | வழங்கு (grant) and திரும்பப் பெறு (withdraw) (23) | Consent withdrawal is one click in the portal, so the word must be unmistakable. |
-| fresh (code) | புதிய ("new") (27) | Means a recently entered code, not a new one. |
+| fresh (code) | புதிய ("new") (31) | Means a recently entered code, not a new one. |
 | screen (the rules read text) | பரிசோதனை (6) | The word for a medical examination or test. |
 | escalate | உயர்நிலைக்கு அனுப்பு ("send to a higher level") (5) | Loses the sense of raising urgency. |
 | authenticator | அங்கீகார செயலி (app) / அங்கீகார குறியீடு (code) (16) | Consistent; check it is the word staff use. |
@@ -343,7 +364,7 @@ These are the same in English and Tamil by design, and a Tamil-speaking patient 
 - `tasks.kind.screening_unassessable`
 - `tasks.kind.triage_proposal`
 
-## Part 7. All 1630 strings
+## Part 7. All 1683 strings
 
 Fill in the last column. Write **OK**, or write the full corrected Tamil (keep every {{placeholder}} exactly as it is). Leave a row empty if you have not looked at it.
 
@@ -1498,10 +1519,63 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `portal.myData.title` | Download my data | என் தரவைப் பதிவிறக்கு | no issue found | |
 | `portal.myData.truncated` | The file does not hold everything: some lists were cut short. | கோப்பில் அனைத்தும் இல்லை: சில பட்டியல்கள் சுருக்கப்பட்டன. | no issue found | |
 | `portal.notAvailable` | This is not available to you yet. | இது இன்னும் உங்களுக்குக் கிடைக்கவில்லை. | no issue found | |
+| `portal.notifications.gone` | This notice is no longer there. | இந்த அறிவிப்பு இப்போது இல்லை. | no issue found | |
+| `portal.notifications.kind.grievance_update` | An update on one of your messages to the hospital | மருத்துவமனைக்கு நீங்கள் அனுப்பிய செய்திகளில் ஒன்றைப் பற்றிய புதிய தகவல் | B: Long; check "செய்திகளில் ஒன்றைப் பற்றிய புதிய தகவல்" is clear. | |
+| `portal.notifications.kind.offer_sent` | An appointment offer | ஒரு சந்திப்பு வாய்ப்பு | B: "ஒரு சந்திப்பு வாய்ப்பு" (an appointment offer); the notice has no text of its own. | |
+| `portal.notifications.kind.request_update` | An update on one of your requests | உங்கள் கோரிக்கைகளில் ஒன்றைப் பற்றிய புதிய தகவல் | B: Check "கோரிக்கைகளில் ஒன்றைப் பற்றிய புதிய தகவல்". | |
+| `portal.notifications.markRead` | Mark as read | படித்ததாகக் குறி | C: Button label. | |
+| `portal.notifications.new` | New | புதியது | no issue found | |
+| `portal.notifications.none` | You have no notices. | உங்களுக்கு அறிவிப்புகள் எதுவும் இல்லை. | no issue found | |
+| `portal.notifications.read` | Read | படித்தது | no issue found | |
+| `portal.notifications.title` | Your notices | உங்கள் அறிவிப்புகள் | no issue found | |
+| `portal.notifications.unread` | Unread: {{n}} | படிக்காதவை: {{n}} | C: A count after a label. | |
+| `portal.profile.choose` | Choose | தேர்ந்தெடுக்கவும் | no issue found | |
+| `portal.profile.invalid` | That choice is not on the hospital's list. Nothing was saved. | அந்தத் தேர்வு மருத்துவமனையின் பட்டியலில் இல்லை. எதுவும் சேமிக்கப்படவில்லை. | B: Says a choice is not on the hospital's list and nothing was saved. | |
+| `portal.profile.language` | Preferred language | விருப்பமான மொழி | no issue found | |
+| `portal.profile.name` | Name on your record | உங்கள் பதிவில் உள்ள பெயர் | B: "உங்கள் பதிவில் உள்ள பெயர்" (the name on your record); the person cannot change it here. | |
+| `portal.profile.noName` | Not available | கிடைக்கவில்லை | no issue found | |
+| `portal.profile.noSexList` | The hospital has not set up a list of choices yet. | தேர்வுகளின் பட்டியலை மருத்துவமனை இன்னும் அமைக்கவில்லை. | B: Says the hospital has not set up a list of choices yet; check it is neutral. | |
+| `portal.profile.save` | Save | சேமி | no issue found | |
+| `portal.profile.saved` | Your details were saved. | உங்கள் விவரங்கள் சேமிக்கப்பட்டன. | no issue found | |
+| `portal.profile.sex` | Sex | பாலினம் | A: The label for sex. The words themselves come from the hospital's list, in the hospital's own wording, so the label must match how that list is worded. Needs the privacy owner's sign-off on the field. | |
+| `portal.profile.title` | Your details | உங்கள் விவரங்கள் | no issue found | |
+| `portal.profile.unavailable` | This is not set up yet. Nothing was saved. | இது இன்னும் அமைக்கப்படவில்லை. எதுவும் சேமிக்கப்படவில்லை. | no issue found | |
+| `portal.publicGrievance.body` | This goes to the hospital without signing in. A person at the hospital reads it. | இது உள்நுழையாமலே மருத்துவமனைக்குச் செல்லும். மருத்துவமனையில் ஒருவர் இதைப் படிப்பார். | B: Says the complaint goes to the hospital without signing in; check it does not suggest it is anonymous. | |
+| `portal.publicGrievance.confirmBody` | This sends your message to the hospital. It is stored encrypted. | இது உங்கள் செய்தியை மருத்துவமனைக்கு அனுப்பும். இது மறைகுறியாக்கப்பட்டுச் சேமிக்கப்படும். | B: "மறைகுறியாக்கப்பட்டு" (encrypted) is technical for a patient. | |
+| `portal.publicGrievance.filed` | Your message was sent. | உங்கள் செய்தி அனுப்பப்பட்டது. | no issue found | |
+| `portal.publicGrievance.noClinic` | No hospital is set up to receive this right now. Nothing was sent. | இதைப் பெற இப்போது எந்த மருத்துவமனையும் அமைக்கப்படவில்லை. எதுவும் அனுப்பப்படவில்லை. | B: Check "எந்த மருத்துவமனையும் அமைக்கப்படவில்லை" reads as a setup state, not a fault of the patient. | |
+| `portal.publicGrievance.refused` | This cannot be done right now. Nothing was sent. | இதை இப்போது செய்ய முடியாது. எதுவும் அனுப்பப்படவில்லை. | no issue found | |
+| `portal.publicGrievance.title` | Send a complaint without signing in | உள்நுழையாமல் ஒரு புகாரை அனுப்புங்கள் | no issue found | |
+| `portal.publicGrievance.unavailable` | This is not available right now. Nothing was sent. | இது இப்போது கிடைக்கவில்லை. எதுவும் அனுப்பப்படவில்லை. | no issue found | |
 | `portal.register.body` | You are signed in, but you do not have a patient account here yet. Creating it does not link you to any record. | நீங்கள் உள்நுழைந்துள்ளீர்கள், ஆனால் இங்கு உங்களுக்கு இன்னும் நோயாளிக் கணக்கு இல்லை. அதை உருவாக்குவது உங்களை எந்தப் பதிவுடனும் இணைக்காது. | no issue found | |
 | `portal.register.create` | Create my account | என் கணக்கை உருவாக்கு | no issue found | |
 | `portal.register.refused` | This sign-in cannot be used for a patient account. | இந்த உள்நுழைவை நோயாளிக் கணக்குக்குப் பயன்படுத்த முடியாது. | no issue found | |
 | `portal.register.title` | Create your patient account | உங்கள் நோயாளிக் கணக்கை உருவாக்குங்கள் | no issue found | |
+| `portal.requests.already` | This request was already on record. | இந்தக் கோரிக்கை ஏற்கெனவே பதிவில் உள்ளது. | B: Says the request was already on record; check it is not read as a refusal. | |
+| `portal.requests.body` | You can ask for your record to be erased, for a detail to be corrected, or for a nominee to be recorded. The request has no free text. The hospital's front desk takes it from there. | உங்கள் பதிவை அழிக்கவும், ஒரு விவரத்தைத் திருத்தவும் அல்லது ஒரு நியமனதாரரைப் பதிவு செய்யவும் நீங்கள் கேட்கலாம். இந்தக் கோரிக்கையில் தனி உரை எதுவும் இல்லை. மருத்துவமனையின் வரவேற்புப் பணியாளர்கள் அடுத்ததைப் பார்ப்பார்கள். | A: Explains what the three requests are and that the front desk takes it from there; check "வரவேற்புப் பணியாளர்கள்" for front desk and that nothing reads as a promise of outcome. | |
+| `portal.requests.chooseField` | Choose | தேர்ந்தெடுக்கவும் | no issue found | |
+| `portal.requests.chooseKind` | Choose | தேர்ந்தெடுக்கவும் | no issue found | |
+| `portal.requests.confirmBody` | This sends a request to the hospital. A correction names the detail only, never the new value. Nothing is changed by sending it. | இது மருத்துவமனைக்கு ஒரு கோரிக்கையை அனுப்பும். திருத்தத்தில் விவரத்தின் பெயர் மட்டுமே இருக்கும், புதிய மதிப்பு இருக்காது. அனுப்புவதால் எதுவும் மாறாது. | A: Tells the patient that sending a request changes nothing by itself and that a correction names the detail, not the new value. It sits next to an erasure request, so it must not read as "your record will be erased". Counsel should approve the English first. | |
+| `portal.requests.confirmTitle` | Send this request? | இந்தக் கோரிக்கையை அனுப்பவா? | no issue found | |
+| `portal.requests.field` | Which detail? | எந்த விவரம்? | no issue found | |
+| `portal.requests.fields.date_of_birth` | Date of birth | பிறந்த தேதி | no issue found | |
+| `portal.requests.fields.name` | Name | பெயர் | no issue found | |
+| `portal.requests.fields.phone` | Phone number | தொலைபேசி எண் | no issue found | |
+| `portal.requests.invalid` | That request was not accepted. Check your choices. Nothing was sent. | அந்தக் கோரிக்கை ஏற்கப்படவில்லை. உங்கள் தேர்வுகளைச் சரிபார்க்கவும். எதுவும் அனுப்பப்படவில்லை. | no issue found | |
+| `portal.requests.kind` | What do you want to ask? | என்ன கேட்க விரும்புகிறீர்கள்? | no issue found | |
+| `portal.requests.kinds.correction` | Correct a detail | ஒரு விவரத்தைத் திருத்த | B: Check "திருத்த" reads as correcting a detail on the record. | |
+| `portal.requests.kinds.erasure` | Erase my record | என் பதிவை அழிக்க | A: "என் பதிவை அழிக்க" (to erase my record) must read as asking, not as doing. Check the verb. | |
+| `portal.requests.kinds.nominee` | Record a nominee | ஒரு நியமனதாரரைப் பதிவு செய்ய | B: "நியமனதாரர்" (nominee) is a legal term; check the word clinics and patients use. | |
+| `portal.requests.mine` | Your requests | உங்கள் கோரிக்கைகள் | no issue found | |
+| `portal.requests.none` | You have not sent any. | நீங்கள் எதையும் அனுப்பவில்லை. | no issue found | |
+| `portal.requests.refused` | This cannot be done for this account: it must be active and linked to a record at that hospital. | இந்தக் கணக்கிற்கு இதைச் செய்ய முடியாது: அது செயலில் இருக்க வேண்டும், அந்த மருத்துவமனையின் பதிவுடன் இணைக்கப்பட்டிருக்க வேண்டும். | B: Long condition sentence; check it is understood. | |
+| `portal.requests.send` | Send request | கோரிக்கையை அனுப்பு | no issue found | |
+| `portal.requests.sent` | Your request was sent. | உங்கள் கோரிக்கை அனுப்பப்பட்டது. | no issue found | |
+| `portal.requests.status.acknowledged` | Seen | பார்க்கப்பட்டது | B: "பார்க்கப்பட்டது" (seen) must not be read as "approved". | |
+| `portal.requests.status.declined` | Declined | ஏற்கப்படவில்லை | B: "ஏற்கப்படவில்லை" (not accepted) must read as the hospital declining, and be neutral in tone. | |
+| `portal.requests.status.open` | Open | திறந்துள்ளது | no issue found | |
+| `portal.requests.status.resolved` | Resolved | தீர்க்கப்பட்டது | no issue found | |
+| `portal.requests.title` | Ask the hospital about your record | உங்கள் பதிவைப் பற்றி மருத்துவமனையிடம் கேளுங்கள் | no issue found | |
 | `portal.signIn.change` | Use a different number | வேறு எண்ணைப் பயன்படுத்து | B: Informal singular imperative on a patient page, see portal.signIn.send. | |
 | `portal.signIn.code` | 6-digit code | 6 இலக்கக் குறியீடு | no issue found | |
 | `portal.signIn.codeFailed` | That code did not work. Check it and try again, or ask for a new one. | அந்தக் குறியீடு செயல்படவில்லை. சரிபார்த்து மீண்டும் முயற்சிக்கவும், அல்லது புதியதைக் கேட்கவும். | no issue found | |

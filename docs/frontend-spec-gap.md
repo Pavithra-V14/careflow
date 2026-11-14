@@ -26,10 +26,10 @@ Status words:
 | 19.2 | Hospital-supplied content (about, departments, doctors, hours, privacy promise, FAQ answers, grievance contact) | blocked: external | Rendered as marked placeholders until the hospital and counsel supply it. The frontend writes none of it. The medical-advertising check with counsel is also theirs |
 | 19.2 | Features list only what is available | built | `src/patient/features.ts`; a test fails if an unbuilt feature loses its "Coming soon" label |
 | 19.3 | Patient header: initials avatar and name | blocked: route | `GET /v1/portal/me` returns no name. Request 20 |
-| 19.3 | Patient menu: profile | blocked: route | No profile read or write route. Request 20 |
+| 19.3 | Patient menu: profile | partly built (2026-11-14) | The "Your details" section: name read-only, sex word from the clinic's list, preferred language. The initials avatar is not built. Request 20 |
 | 19.3 | Patient menu: family-member switcher | blocked: route | No dependant routes. Request 21 (and counsel, section 20.1) |
 | 19.3 | Patient menu: language | built | Switcher on every page; the choice is kept in the browser. A server-side "preferred language" has no route (request 20) |
-| 19.3 | Patient menu: notifications | blocked: route | No notification-preference route. Request 22 |
+| 19.3 | Patient menu: notifications | partly built (2026-11-14) | The "Your notices" list (closed kinds, mark as read). The channel preferences and optional e-mail stay blocked on request 22 |
 | 19.3 | Patient menu: security (devices, passkeys) | blocked: route, and decision | No list-and-revoke-sessions route; passkeys are not configured. Request 23. Passkeys would also be a new auth feature, ask first |
 | 19.3 | Patient menu: privacy and consent (withdraw, download my data, request erasure) | partly built | Grant and withdraw per purpose with a confirmation, and download are built. The consent history (purpose, decision, notice version, date) is now shown from the file the person downloads, with no extra call (2026-11-14). Erasure for a patient has no route: it goes through the grievance channel (built) and the grievance category list is a clinic setting. Request 24 asks for an explicit patient erasure request |
 | 19.3 | Patient menu: sign out | built | |
