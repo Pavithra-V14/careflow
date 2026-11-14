@@ -127,8 +127,23 @@ Actors considered: a curious or malicious staff member; a staff member of anothe
 | A session call's spend is under-recorded or starves a clinic's ceiling | A definer function with an owner-set per-call cap and forced role and class; the ledger is append-only | a person with a direct session could under-record or fill the day (stated residual of 0016) |
 | An unknown cap is read as no cap | No limit row means every session spend is refused | none |
 
+## 13b. Patient-facing writes (migrations 0080 to 0084; whole-set review 2026-11-14)
+Scope: the patient profile, in-app notices, requests, the public grievance route, patient messaging and patient booking. The patient has NO table grant on any of it: every call is a definer function that checks `auth.uid()` itself and refuses with one answer for every reason. Messaging and booking are off unless the owner turns them on.
+
+| Threat | Control | Residual |
+|---|---|---|
+| A patient reads or writes another patient's thread, booking or request | Definer functions scope by the bound account; a thread, booking or request that is not yours gives the same answer as a missing one | none known |
+| A patient message commits unscreened | The deferred trigger `msg.require_screening` refuses to commit a patient message without a screening row; the route screens in the same transaction; any failure rolls the message back | the screening is not bound to the text screened (the 0013 residual) |
+| A patient records `clear` for their own message | A `clear` must match the database's own rule count and hash; the screening is allowed only for a message written in the same transaction | a patient with direct database access as the application role could compute both: OPEN, checklist 89a |
+| A patient learns which phrases escalate | `kb.patient_screening_rules` is limited to a bound patient of that clinic | the phrases of every rule status are readable by a patient session: OPEN, checklist 87a, 89e |
+| Staff plant an audit key to block a patient or colleague | All definer audit keys carry the reserved `sys:` prefix with a random part (0035 refuses it to the application role); 0084 fixed the two booking keys that did not | none known |
+| A slot is double-booked, or the owner's cap is passed by concurrent bookings | The slot row lock, the one-confirmed-booking index, and a row lock on the owner-managed bookable list (no advisory lock any session could take) | bookings of one visit type in one clinic are serialised (throughput, not safety) |
+| A patient books what they should not | Only visit types the owner lists; future slots only; a slot held for someone else or for nobody is never bookable | which types to list is the clinical lead's decision (checklist 88) |
+| The public grievance route is abused | No sign-in, so it is off unless the per-address limit, the owner-managed hourly cap and a published clinic all exist; unguessable key; same encrypted storage | one attacker can fill the cap; the per-address limit is per process (checklist 85) |
+| New personal data survives erasure | Message bodies and grievance text are erased with the patient | the profile row, open requests and public grievance text: OPEN, checklist 84, 89d |
+
 ## 14. Dependencies
-`pip-audit` (the pinned CI job) was re-run on 2026-11-13: one advisory, `opentelemetry-api` 1.45.1 (GHSA-mf5v-w3w3-f6cg, fixed in 1.45.2); the lock was raised to 1.45.2. The job is still report-only (checklist 69).
+`pip-audit` was re-run on 2026-11-14 over the exported lock (pip-audit 2.9.0): no known vulnerabilities. Earlier, on 2026-11-13, it found one advisory, `opentelemetry-api` 1.45.1 (GHSA-mf5v-w3w3-f6cg, fixed in 1.45.2); the lock was raised to 1.45.2. The job is still report-only (checklist 69).
 
 ## What this note does NOT claim
 That the system is secure against a compromised API process, a stolen database password or a hostile operator. Those depend on hosting, secrets management and monitoring that do not exist yet (items 26 to 28). The review of all migrations (`rls-security-reviewer`) and the spec review are separate passes; their findings are recorded where they are reported, not here.
