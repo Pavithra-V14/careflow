@@ -18,7 +18,7 @@ Everything not listed here is built and tested (against the real database, as pu
 ## 5 and 6. Models, decision tier, gateway, caching
 | Item | Status | Reason |
 |---|---|---|
-| Real model adapters (vision, decision hosted, translation, embeddings, rerank, `llm_*`) (§5.1) | FAKE | Only fakes are merged; the hosted adapters live on the unmerged branch `c1-providers` (synthetic demo only) and need provider approvals |
+| Real model adapters (vision, decision hosted, translation, embeddings, rerank, `llm_*`) (§5.1) | FAKE | Fakes are the default. The hosted adapters (Gemini vision, Jev decision through OpenRouter, Sarvam translation) are MERGED for the SYNTHETIC demo only: built only in profile `demo` with data policy `synthetic_only`, with the key, a recorded live-check date, a daily ceiling per role and a required per-run cap (no defaults), never `phi_approved`, never under CI; the clinic's daily total uses the durable ledger when a worker identity exists. Setup: `docs/design/real-model-demo.md`. Nothing consumes them yet; a clinical route needs provider approvals |
 | Laya local engine (§5.2) | NOT BUILT | Adapter over an injectable client exists; no local model is installed; CPU latency is an Appendix B spike |
 | Three-engine contract test (§14.3 hard gate) | UNMEASURED | Needs real engines and a clinician-reviewed set |
 | Safety-net second opinion, fail-closed (§5.2, §16.2) | NOT BUILT | Escalate-only design needs a clinician-designed path |
