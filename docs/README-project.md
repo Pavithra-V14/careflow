@@ -158,3 +158,6 @@ The full list with a reason each is `docs/gap-audit.md` (kept current: FAKE, NOT
 ## 8. Reading order for a new developer
 
 `CLAUDE.md`, then `BUILD-SPEC.md` sections 1 to 9 and Appendix D, then `docs/gap-audit.md`, `docs/design/pre-launch-checklist.md`, `docs/design/threat-model.md`, `docs/design/grants-ledger.md`, then the design note of the area you are changing (`docs/design/`).
+
+## 9. Where things stand today
+`docs/status-now.md` lists, in plain words, what is built and demo-verified, what is built but only tested offline, what is deliberately not built (and why), and what waits on a named person. The hosted providers (Gemini, Jev via OpenRouter, Sarvam, and Gemini embeddings) are wired to the DEMO flow only, behind `CAREFLOW_DEMO_REAL_MODELS` and `CAREFLOW_KNOWLEDGE_SEARCH`, synthetic data only, refused in the clinical profile; every model output is a suggestion and a person decides; the decision engine's confidence is never calibrated. The retrieval mechanism (pgvector, migrations 0085 to 0088) runs over invented placeholder cards only. Run guide: `docs/first-run-guide.md`; the real-model demo: `docs/design/real-model-demo.md`.

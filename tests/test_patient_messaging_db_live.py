@@ -42,11 +42,13 @@ async def _conn():
 
 @pytest_asyncio.fixture(loop_scope="module")
 async def db(_conn):
+    await _conn.exec_driver_sql("set constraints all deferred")  # a test that says `set constraints all immediate` must not change the next test's mode (the outer transaction is shared)
     sp = await _conn.begin_nested()
     try:
         yield _conn
     finally:
         await sp.rollback()
+        await _conn.exec_driver_sql("set constraints all deferred")
 
 
 async def pg(db):

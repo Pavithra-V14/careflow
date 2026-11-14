@@ -1,0 +1,33 @@
+# CareFlow: what is built and what is not, as of 2026-11-14
+
+Plain words. Everything here is **synthetic demo data in the dev project**; nothing has touched a real patient. "Demo-verified" means the owner ran it for real on the demo clinic and it worked. "Built, offline only" means the code and its tests pass (the offline suite, and in CI the live database tests where they exist) but nobody has run that feature by hand against real services. The detail behind each line is in `docs/spec-compliance.md` (per spec section), `docs/gap-audit.md` and `docs/design/pre-launch-checklist.md`.
+
+## (a) Built and demo-verified
+- **The hosted models in the demo flow, end to end.** A made-up scanned letter is read by Gemini through the gateway (about 4 to 5 s); the red-flag rules screen that text before any other model; the decision model (Jev via OpenRouter) suggests which of two invented cards fits; a triage proposal is stored with the engine, model, confidence, rule and each alternative's probability and waits for a person; Sarvam drafts a Tamil suggestion that is not sent. Every output is only a suggestion.
+- **Key setup and the live check.** `scripts/set_provider_keys.ps1` (hidden key entry, writes only your `.env`, refuses outside the demo profile) and `scripts/provider_live_check.py` (status, time and cost only). The three providers passed.
+- **The run tooling.** `--fresh` (a new dummy document every time), a fixed-words reason for every failed or skipped stage (`budget refused`, `timed out x3`, `provider refused the request ... (status 404)`, `answer rejected: ...`, `gate missing`), and "rules NOT RUN" whenever the page was not read.
+- **Database migrations 0085 to 0088** (`create extension vector` and the card vector table) applied on a fresh CI database.
+
+## (b) Built, but only tested offline (and, where one exists, by the live database tests in CI)
+- **Knowledge search over invented cards** (pgvector, `POST /v1/staff/knowledge/search`, `scripts/index_demo_cards.py`): the local fake embedder, the Gemini embedding adapter, the reranker port with its fake, the context assembler under a declared budget and the quality harness (every threshold a required setting). The Gemini embedding lines of the live check (E1 to E3) have not been run by hand yet. Its live database tests are in CI shard 6, which had not finished at the last read (the same shard had one test-defect failure in an earlier run, fixed test-side).
+- **Sarvam spend in the durable ledger** (migration 0086) and the card-vector hardening (0087, 0088); both were reviewed by the rls-security-reviewer; their live tests are in CI.
+- **Patient messaging and patient booking** (off unless `CAREFLOW_PATIENT_MESSAGING=on` / `CAREFLOW_PATIENT_BOOKING=on`); the public grievance category list; the per-field null rule of the patient profile; `allowed_next` on the staff patient-request list; the `model_id` and `decision_rule` fields of the review view; the `front_desk_supervisor` option of `scripts/seed_dev_staff.py`.
+- **The agents that have no hand-run yet:** Care Journey, Visit Readiness, Care Gaps producers, the voice monitor (no real voice engine exists; the session route answers 503), the scheduling offer and backfill flow on fake engines. They run in the walkthrough script and the tests.
+- **The deterministic red-flag engine and the two-person rule approval for rules.** The engine runs first on every text path and is well tested; no clinician-approved rule set exists yet (the demo has one invented DRAFT token rule).
+
+## (c) Deliberately not built, and why
+- **Real protocol cards, red-flag rules, thresholds and wording.** They are clinician-owned; the software never authors them (`kb/cards` stays empty; the demo cards are invented words that mean nothing).
+- **A calibrated decision confidence.** Jev is a router whose downstream model is not pinned; its number is never calibrated, its output is never evidence, nothing may auto-approve on it. The demo mode is shadow: a person decides.
+- **Anything real-patient on a hosted provider.** The providers are `synthetic_only` and refused in the clinical profile, under CI and under any other data policy; sending patient data to a hosted model needs a new decision overriding BUILD-SPEC 16.5.
+- **Qdrant.** Vectors live in the existing Postgres (pgvector): a documented deviation, no new service.
+- **Family and guardian accounts (21), the card and template editor (27), patient visit-readiness routes (30), devices and push.** Each depends on a decision or on clinician content that does not exist yet, so building them would invent policy.
+- **A tombstone for a mistaken card version, an ANN index, a local Laya model, the safety-net second opinion, the malware scanner, hosted tracing.** Each needs a design decision or a service nobody has approved; a wrong card version is corrected by indexing the next one.
+- **Docker, anywhere.** Project rule.
+
+## (d) Waiting on a person
+- **Priya (the clinician):** the clinician sheet (`docs/design/clinician-sheet.md`): who reviews a proposal and how fast, the red-flag rules (two named approvers), the protocol cards and the **card lifecycle (item 38)**, the **retrieval gold set and its thresholds (item 39)**, the match confidence, priority levels, reason codes, recurrence and readiness content, the wording of patient messages. Nothing the demo shows stands in for these.
+- **Counsel:** consent notice texts, the breach-notification wording and contacts, grievance handling wording, the retention rules, the nominee and erasure flows.
+- **The privacy owner:** written confirmation of the data-flow register for each external call, the document-storage region, what erasure keeps, and whether the new patient routes may go on.
+- **A Tamil reader:** a review of the Tamil screens and of the Sarvam draft before anything Tamil is ever sent to a patient (today every Tamil string is unreviewed and nothing is sent).
+- **The clinic owner:** the real settings (time zone, grievance categories, visit types a patient may book, deadlines, spend limits), the clinic's own approvers, and the decision on turning each off-by-default feature on.
+- **You (the owner), not a person to chase:** run the Gemini embedding live check and `scripts/index_demo_cards.py` if you want the knowledge search shown for real; decide whether a version N+1 of a card should be able to retire N (today it can).

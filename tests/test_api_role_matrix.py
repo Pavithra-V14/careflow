@@ -2989,7 +2989,7 @@ def portal_register_cases(ids) -> list[tuple]:
 
 
 def portal_me_cases(ids) -> list[tuple]:
-    ok = lambda b: set(b) == {"status", "bound_to_a_patient_record", "consents", "stage"} and b["stage"] == "new_patient" and b["status"] == "active" and b["bound_to_a_patient_record"] is False and set(b["consents"]) == {"care_delivery", "ai_processing", "service_improvement"}
+    ok = lambda b: set(b) == {"status", "bound_to_a_patient_record", "consents", "stage"} and b["stage"] == "new_patient" and b["status"] == "active" and b["bound_to_a_patient_record"] is False and set(b["consents"]) == {"care_delivery", "ai_processing", "service_improvement", "voice_session"}
     cases = [_case(ids, "an active patient account reads its state", "patient", 200, PORTAL_ME, key=None, body=ok)]
     cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, PORTAL_ME, key=None, body=NOT_A_PATIENT) for p in _non_patients(ids)]
     cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, PORTAL_ME, key=None, body=NOT_A_PATIENT))
