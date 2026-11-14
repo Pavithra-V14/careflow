@@ -1,0 +1,26 @@
+{
+  "admin": {
+    "rules": {
+      "statuses": {
+        "withdrawn": "Withdrawn"
+      },
+      "decisionWords": {
+        "retire": "Retired it"
+      },
+      "youWrote": "You wrote this version. A different doctor has to approve or reject it.",
+      "withdraw": "Withdraw this draft",
+      "withdrawTitle": "Withdraw this draft red-flag rule version?",
+      "withdrawBody": "A withdrawn draft is closed for good. It can never be approved and it is never in force. A withdrawn version is not the same as a retired one. Only a draft can be withdrawn. To change a rule, write a new version.",
+      "retire": "Retire this version",
+      "retireTitle": "Retire this approved red-flag rule version?",
+      "retireBody": "Your retire decision is recorded now, and nothing is retired until a second, different doctor also records one. A retired version never comes back: a new version is the way back. If this is the newest version of its rule code, the whole rule code stops being in force.",
+      "retireCount": "Retire decisions recorded so far: {{count}}. Two different doctors are needed.",
+      "youRetired": "You have recorded your retire decision on this version.",
+      "result": {
+        "retired": "Your retire decision was recorded and this version is now retired.",
+        "withdrawn": "This draft is withdrawn. It is closed for good and is not in force.",
+        "not_approved": "This version is not approved, so it cannot be retired. Nothing was recorded."
+      }
+    }
+  }
+}

@@ -20,11 +20,13 @@ type Rule = components['schemas']['RuleVersionOut'];
 // MECHANISM ONLY: every phrase, pattern and word on this screen is shown exactly as the API sends it. The console does not write,
 // edit, suggest or translate rule content, and it never decides anything by itself: a version becomes approved only when a SECOND,
 // different doctor approves it (the database enforces that, with a verified second factor). Admins read this list; they decide nothing.
-// The API does not say who wrote a version. This screen therefore cannot hide the buttons from the author: it hides them from anyone
-// who has already decided, and the database's refusal (`author_cannot_decide`) is told plainly.
-// There is no "retire" action in the API: `retired` is only a status that is shown.
+// The API says whether the signed-in person wrote a version (`authored_by_you`): Approve and Reject are not offered to the author, and
+// not to anyone who already decided. The database still decides everything, and its refusal (`author_cannot_decide`) is told plainly.
+// Two more doctor actions, each with its own confirmation showing the content: Withdraw (a DRAFT; closed for good, never the same as
+// retired) and Retire (an APPROVED version; nothing is retired until two different doctors have each recorded it).
 
-const RESULT_WORDS = ['recorded', 'approved', 'rejected', 'already_decided', 'not_draft', 'origin_mismatch', 'author_cannot_decide', 'empty_rule', 'rejected_earlier', 'platform_rule'] as const;
+const RESULT_WORDS = ['recorded', 'approved', 'rejected', 'retired', 'withdrawn', 'already_decided', 'not_draft', 'not_approved', 'origin_mismatch', 'author_cannot_decide', 'empty_rule', 'rejected_earlier', 'platform_rule'] as const;
+type RuleAction = RuleDecision | 'withdraw';
 const isResult = (v: unknown): v is (typeof RESULT_WORDS)[number] => (RESULT_WORDS as readonly string[]).includes(v as string);
 
 export function RedFlagRules() {
@@ -32,13 +34,14 @@ export function RedFlagRules() {
   const { api } = useAuth();
   const { active, hasRole, account } = useSession();
   const queryClient = useQueryClient();
-  const [deciding, setDeciding] = useState<{ rule: Rule; decision: RuleDecision } | null>(null);
+  const [deciding, setDeciding] = useState<{ rule: Rule; decision: RuleAction } | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const rules = useApiQuery(['red-flag-rules'], () => unwrap(api.listRedFlagRules(active.clinicId)));
   const canDecide = hasRole(CAN_DECIDE_RULE);
 
   const decide = useIdempotentWrite(
-    (v: { rule: Rule; decision: RuleDecision }, key) => unwrap(api.decideRedFlagRule(v.rule.rule_id, v.decision, { idempotencyKey: key })),
+    (v: { rule: Rule; decision: RuleAction }, key) =>
+      unwrap(v.decision === 'withdraw' ? api.withdrawRedFlagDraft(v.rule.rule_id, { idempotencyKey: key }) : api.decideRedFlagRule(v.rule.rule_id, v.decision, { idempotencyKey: key })),
     (r) => {
       setDeciding(null);
       // An unknown word is never read as "approved": it gets the neutral line.
@@ -57,10 +60,14 @@ export function RedFlagRules() {
         {(d) => (
           <ul className="rule-list" aria-label={t('admin.rules.listLabel')}>
             {d.rules.map((rule) => {
-              const mine = rule.decisions.some((x) => x.decided_by === account.accountId);
+              const mine = rule.decisions.some((x) => x.decided_by === account.accountId && x.decision !== 'retire');
               const rejected = rule.decisions.some((x) => x.decision === 'reject');
-              // Offered only on an open draft this person has not decided on. The database decides everything else.
-              const open = rule.status === 'draft_unreviewed' && !mine && !rejected;
+              const author = rule.authored_by_you === true; // an older answer without the flag is not read as "not the author": the database still refuses
+              const draft = rule.status === 'draft_unreviewed';
+              // Approve and Reject: an open draft this person did not write and has not decided on. The database decides everything else.
+              const open = draft && !mine && !rejected && !author;
+              const retires = rule.decisions.filter((x) => x.decision === 'retire');
+              const retiredByMe = retires.some((x) => x.decided_by === account.accountId);
               const label = `${rule.rule_code} v${rule.version_id}`;
               return (
                 <li key={`${rule.rule_id}`}>
@@ -75,7 +82,29 @@ export function RedFlagRules() {
                       </button>
                     </div>
                   )}
-                  {canDecide && rule.status === 'draft_unreviewed' && mine && <p className="hint">{t('admin.rules.youDecided')}</p>}
+                  {canDecide && draft && author && <p className="hint">{t('admin.rules.youWrote')}</p>}
+                  {canDecide && draft && mine && <p className="hint">{t('admin.rules.youDecided')}</p>}
+                  {canDecide && draft && (
+                    <div className="toolbar">
+                      <button type="button" aria-label={`${t('admin.rules.withdraw')} ${label}`} onClick={() => { setNote(null); setDeciding({ rule, decision: 'withdraw' }); }}>
+                        {t('admin.rules.withdraw')}
+                      </button>
+                    </div>
+                  )}
+                  {canDecide && rule.status === 'approved' && (
+                    <>
+                      {retires.length > 0 && <p className="hint">{t('admin.rules.retireCount', { count: retires.length })}</p>}
+                      {retiredByMe ? (
+                        <p className="hint">{t('admin.rules.youRetired')}</p>
+                      ) : (
+                        <div className="toolbar">
+                          <button type="button" aria-label={`${t('admin.rules.retire')} ${label}`} onClick={() => { setNote(null); setDeciding({ rule, decision: 'retire' }); }}>
+                            {t('admin.rules.retire')}
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </li>
               );
             })}
@@ -84,8 +113,8 @@ export function RedFlagRules() {
       </QueryView>
       {deciding && (
         <ConfirmDialog
-          title={t(deciding.decision === 'approve' ? 'admin.rules.approveTitle' : 'admin.rules.rejectTitle')}
-          confirmLabel={t(deciding.decision === 'approve' ? 'admin.rules.approve' : 'admin.rules.reject')}
+          title={t(`admin.rules.${deciding.decision}Title`)}
+          confirmLabel={t(`admin.rules.${deciding.decision}`)}
           busy={decide.isPending}
           onConfirm={() => decide.mutate(deciding)}
           onCancel={() => {
@@ -99,7 +128,7 @@ export function RedFlagRules() {
               {deciding.rule.rule_code} v{deciding.rule.version_id}
             </strong>
           </p>
-          <p>{t(deciding.decision === 'approve' ? 'admin.rules.approveBody' : 'admin.rules.rejectBody')}</p>
+          <p>{t(`admin.rules.${deciding.decision}Body`)}</p>
           <p className="hint">{t('admin.stepUp')}</p>
           <RuleContent rule={deciding.rule} />
         </ConfirmDialog>
@@ -168,7 +197,7 @@ function RuleCard({ rule, accountId }: { rule: Rule; accountId: string }) {
       <dl className="facts">
         <dt>{t('admin.rules.status')}</dt>
         <dd>
-          <Badge tone={rule.status === 'approved' ? 'ok' : 'warn'}>{word('admin.rules.statuses', rule.status)}</Badge>
+          <Badge tone={rule.status === 'approved' ? 'ok' : rule.status === 'draft_unreviewed' ? 'warn' : 'neutral'}>{word('admin.rules.statuses', rule.status)}</Badge>
         </dd>
         <dt>{t('admin.rules.origin')}</dt>
         <dd>{word('admin.rules.origins', rule.origin)}</dd>

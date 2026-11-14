@@ -53,7 +53,7 @@ Status words:
 | 20.1 | Grievance reachable without signing in (PATIENT-WORKFLOWS H2) | blocked: route | The only grievance route needs an active patient account; the public footer shows the grievance contact as a marked placeholder. Request 26 |
 | 20.1 | Under-18 accounts: guardian consent and a recorded proxy-booking trail | blocked: route, and decision | No route. Counsel has to confirm the specifics first. Request 21 |
 | 20.1 | Training data only from de-identified, clinician-confirmed labels | not a frontend item | Backend and evaluation side |
-| 20.2 | Seeded cards, red-flag rules and templates start `draft_unreviewed` and are unusable in `clinical` until two-person approval | partly built | Red-flag rules: list, author a draft, approve or reject, all with the draft shown as never active. Protocol cards and message templates have no routes at all |
+| 20.2 | Seeded cards, red-flag rules and templates start `draft_unreviewed` and are unusable in `clinical` until two-person approval | partly built | Red-flag rules: list, author a draft, approve or reject (hidden from the author), withdraw a draft, two-doctor retire, all with the draft shown as never active. Protocol cards and message templates have no routes at all |
 | 20.2 | Admin card editor with schema validation and the card's own test cases | blocked: route | No card or template routes in the snapshot. Request 27 |
 | 20.2 | Never invent a clinical threshold, dose or red-flag phrase | built | The console supplies no rule content, no default text and no code list |
 
