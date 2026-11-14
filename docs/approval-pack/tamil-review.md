@@ -1,6 +1,6 @@
 # Tamil review pack (AI-prepared, NOT reviewed by a native speaker)
 
-Prepared 2026-11-14. Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 1778 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
+Prepared 2026-11-14. Machine-checked on 2026-11-14; NOT human-reviewed; the Tamil reader must still approve (Part 0). Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 1778 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
 
 **Regenerated 2026-11-14** by `npm run i18n:pack` from the strings as they are now, so it covers every current string, including the newest screens (patient voice setting, consent withdrawal and history, activating a staff account, withdrawing and retiring a red-flag rule). Each is written and second-passed in the same way and is just as unreviewed.
 
@@ -17,6 +17,69 @@ How it was done, honestly: all 1778 pairs were checked by script (placeholders, 
 Automatic checks: 1778 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
 
 Notes: 71 grade A, 125 grade B, 58 grade C (254 rows with a note; some notes cover a group of similar strings, named in the note).
+
+## Part 0. Machine first pass (back-translation)
+
+**Machine-checked on 2026-11-14; NOT human-reviewed; the Tamil reader must still approve.** This is a first pass by an AI model, not a native speaker, and not a substitute for the human reviewer. No string was marked reviewed.
+
+How it was done: every Tamil string was back-translated to English on its own, without the English original in view, and only then compared with the original. Strings that are identical in English and Tamil on purpose (Part 6) were not translated, so they were not back-translated. A script also checked every string for lost or reordered {{placeholders}}, changed numbers, a lost negation, informal pronouns and a different number of sentences.
+
+| Count | Strings |
+|---|---|
+| Checked | 1778 (1747 back-translated, 31 left in English by design) |
+| Fixed (a clear defect) | 1 |
+| Flagged for the human reviewer | 35 (grade A: 4, B: 14, C: 17) |
+| Strings added since this check, not covered | 0 |
+
+Automatic findings: 0 placeholder mismatches, 0 changed numbers, 0 lost negations, 0 informal pronouns, 1 string with a different number of sentences (fixed). 199 strings whose back-translation overlapped little with the English, or that the script flagged, were read side by side; the rest agreed. Most of the low-overlap ones were synonyms ("Expires" and "Expiry", "Phone" and "Telephone") and are not listed.
+
+### Fixed
+
+| Key | English | Tamil before | Tamil now | What was wrong |
+|---|---|---|---|---|
+| `scheduling.offersNote` | A read-only view of the draft offer. It is computed when you ask and stored nowhere. Nothing is sent. | வரைவு வாய்ப்பின் படிக்க-மட்டும் பார்வை. நீங்கள் கேட்கும்போது கணக்கிடப்படுகிறது, எங்கும் சேமிக்கப்படுவதில்லை. | வரைவு வாய்ப்பின் படிக்க-மட்டும் பார்வை. நீங்கள் கேட்கும்போது கணக்கிடப்படுகிறது, எங்கும் சேமிக்கப்படுவதில்லை. எதுவும் அனுப்பப்படாது. | The English ends with "Nothing is sent." and the Tamil had no such sentence (the English was extended on 2026-11-14 and the Tamil was not). A lost "nothing is sent" on the offer draft screen is a safety-relevant omission. |
+
+### Flagged (left as they are, for the human reviewer)
+
+Grade A: a safety, privacy or patient-rights meaning could be misread. B: a wrong or unclear meaning, or a term that clashes with another. C: minor, or register.
+
+| Key | Grade | English | Tamil | What looks wrong | Suggested fix |
+|---|---|---|---|---|---|
+| `admin.rules.approve` | A | Approve | ஒப்புக்கொள் | "Approve" on a red-flag rule version is ஒப்புக்கொள் (agree, admit). This button brings a safety rule into force with a second doctor; the Tamil does not clearly say "authorise". The back-translation read "agree". | Use one clear word for approve/authorise (for example அங்கீகரி, matching the status அங்கீகரிக்கப்பட்டது) on the button, the dialog and the table. |
+| `admin.autonomy.approve` | A | Approve | ஒப்புக்கொள் | "Approve" an autonomy proposal is ஒப்புக்கொள் (agree, admit): same problem as the rule approval, on the switch that lets the system act without a person. | Same word as the rule approval, chosen by the reviewer. |
+| `portal.consent.withdraw` | A | Withdraw | திரும்பப் பெறு | Consent "Withdraw" is திரும்பப் பெறு (take back), the same verb used for revoke, withdraw a draft and "cannot be undone" elsewhere. Withdrawal is one click in the portal, so the word must be unmistakable. | A word that clearly means "I no longer consent", chosen by the reviewer; keep it different from the rule "withdraw". |
+| `care.results.changes.amendment` | A | Amendment | மேம்படுத்தல் | "Amendment" of a result is மேம்படுத்தல் (improvement, upgrade). It suggests the result got better; it is a new measurement that replaces an earlier one, and it must stay distinct from "correction" (திருத்தம்). | A word meaning "a newer measurement replaces the older" that is not திருத்தம்; the reviewer chooses. |
+| `backfill.hold` | B | Hold | நிறுத்தம் | "Hold" (keep a slot for the current candidate) is நிறுத்தம் (stop, halt). A held slot is reserved, not stopped. The back-translation read "Stop". | ஒதுக்கி வை / ஒதுக்கீடு (reserve). |
+| `tasks.kind.referral_hold` | B | Referral hold | பரிந்துரை நிறுத்தம் | Task kind "Referral hold" is பரிந்துரை நிறுத்தம் (referral stop). It can be read as the referral being cancelled; it means a referral waiting on a person. | பரிந்துரை நிறுத்தி வைப்பு. |
+| `admin.rules.decisionWords.retire` | B | Retired it | நிறுத்தினார் | "Retired it" (a rule version) is நிறுத்தினார் (stopped it): the same root as "hold" (நிறுத்தம்) and "stop". Retire and hold mean different things for whether a rule is in force. | A word that means "took out of use", different from the one for hold. |
+| `admin.rules.withdraw` | B | Withdraw this draft | இந்த வரைவைத் திரும்பப் பெறு | "Withdraw this draft" is திரும்பப் பெறு, the same verb as consent withdrawal and revoke; a withdrawn draft is closed for good and is not the same as retired. | Keep distinct from the retire word and from the consent word; reviewer chooses. |
+| `admin.grievances.acknowledge` | B | Acknowledge | ஏற்றுக்கொள் | "Acknowledge" a grievance is ஏற்றுக்கொள் (accept). Acknowledging only records that you have seen it; "accept" can be read as agreeing the complaint is right. | A word for "noted/seen" (for example பார்த்ததாகப் பதிவு செய்). |
+| `admin.grievances.acknowledgeTitle` | B | Acknowledge this grievance? | இந்தக் குறையை ஏற்றுக்கொள்ளவா? | "Acknowledge this grievance?" is இந்தக் குறையை ஏற்றுக்கொள்ளவா? ("Accept this complaint?"): same problem. | Same word as the button. |
+| `alerts.acknowledge` | B | Acknowledge | ஏற்றுக்கொள் | Alerts "Acknowledge" is ஏற்றுக்கொள் (accept): same problem. | Same word as the grievance button. |
+| `tasks.acknowledge` | B | Acknowledge | ஏற்றுக்கொள் | Tasks "Acknowledge" is ஏற்றுக்கொள் (accept): same problem; the action takes ownership of the task. | Same family of word, reviewer chooses. |
+| `admin.reviewer.col.decisions` | B | Decisions | முடிவுகள் | "Decisions" in the reviewer statistics is முடிவுகள், which also means "results" and "ends". The back-translation read "Results". | தீர்மானங்கள் (decisions), or keep with a clarifying word. |
+| `audit.end` | B | That is the end of the log for this search. | இந்தத் தேடலுக்கான பதிவின் முடிவு இதுவே. | "That is the end of the log for this search" ends with முடிவு, which also means "result": the back-translation read "this is the result of the record". | இந்தத் தேடலுக்கான பதிவு இத்துடன் முடிகிறது. |
+| `dashboard.metric.fallback_and_abstention_spike` | B | Fallback and abstention spike | மாற்று வழி மற்றும் விலகல் அதிகரிப்பு | "Abstention" (the system declined to answer) is விலகல் (deviation, withdrawal); an administrator may read it as a deviation. | பதிலளிக்காமல் தவிர்த்தல் (declining to answer). |
+| `dev.note` | B | Development builds only. Shows the structure of aal, amr and iat with values blanked. It never shows the token. | உருவாக்கப் பதிப்புகளில் மட்டும். aal, amr, iat ஆகியவற்றின் அமைப்பை மதிப்புகள் மறைக்கப்பட்டு காட்டும். டோக்கனைக் காட்டாது. | Developer panel "Development builds only" is உருவாக்கப் பதிப்புகளில் மட்டும் (build versions only); it can be read as production builds. The next string uses வளர்ச்சிக்கு மட்டும் for development. | வளர்ச்சிப் பதிப்புகளில் மட்டும். |
+| `portal.requests.status.declined` | B | Declined | ஏற்கப்படவில்லை | Patient-facing status "Declined" is ஏற்கப்படவில்லை (not accepted): it can read as "the system did not accept your request" rather than "the hospital declined it". | நிராகரிக்கப்பட்டது, or a gentler word for a patient; reviewer chooses. |
+| `preq.status.declined` | B | Declined | ஏற்கப்படவில்லை | Staff table status "Declined" is ஏற்கப்படவில்லை (not accepted): same as the patient string. | Same word as the patient string, chosen by the reviewer. |
+| `access.title` | C | Break-glass access | அவசரகால அணுகல் | "Break-glass access" is அவசரகால அணுகல் (emergency access): loses that this is an emergency override of privacy that is reviewed afterwards. | Keep அவசரகால, and let the reviewer decide whether a short explanation is needed. |
+| `nav.access` | C | Break-glass | அவசரகால அணுகல் | Navigation "Break-glass" is அவசரகால அணுகல் (emergency access): same. | Same as the page title. |
+| `notes.addend` | C | Add an addendum | இணைப்புக் குறிப்பைச் சேர் | "Add an addendum" is இணைப்புக் குறிப்பு (attachment note); இணைப்பு can also mean an attached file or a link. | கூடுதல் குறிப்பு. |
+| `notes.addendumTo` | C | addendum to | இணைப்புக் குறிப்பு: | "addendum to" is இணைப்புக் குறிப்பு: same. | Same as above. |
+| `patients.col.label` | C | Label | குறிப்பு | Patient-search "Label" is குறிப்பு (note); the label is a short tag, not a note. | அடையாளச் சொல் (reviewer chooses). |
+| `scheduling.col.label` | C | Label | குறிப்பு | Scheduling "Label" is குறிப்பு (note): same. | Same as above. |
+| `scheduling.col.slot` | C | Slot | நேரம் | Scheduling column "Slot" is நேரம் (time), while the screens elsewhere say நேர இடம். | நேர இடம். |
+| `roles.patient` | C | Patient | நோயாளர் | Role "Patient" is நோயாளர் (collective, plural form) while most strings say நோயாளி (Part 4). | நோயாளி. |
+| `dashboard.metric.index_freshness_lag` | C | Index freshness lag | குறியீட்டுப் புதுமைத் தாமதம் | Metric "Index freshness lag" is குறியீட்டுப் புதுமைத் தாமதம்: குறியீடு here reads as "code", not "index". Administrator-only. | Reviewer chooses a word for "search index". |
+| `scheduling.offerStatus.empty` | C | No candidates | பொருத்தமானவை இல்லை | Offer status "No candidates" is பொருத்தமானவை இல்லை ("no suitable ones"). An earlier pass removed an election word; the sense "no one is ranked" is not stated. | Reviewer chooses. |
+| `profiles.clinical` | C | Clinical | மருத்துவப் பயன்பாடு | Operating profile "Clinical" is மருத்துவப் பயன்பாடு ("medical use"); it means real clinical operation, as against the demo. | Reviewer chooses. |
+| `common.signIn` | C | Sign in | உள்நுழைக | Register: patient and staff sign-in use the archaic -க imperative (உள்நுழைக), while other patient buttons use the bare imperative and sentences use -ங்கள். Part 5. | One polite register, for example உள்நுழையுங்கள். |
+| `common.signOut` | C | Sign out | வெளியேறுக | Register: வெளியேறுக (archaic -க imperative). Part 5. | வெளியேறுங்கள். |
+| `pages.signInTitle` | C | Sign in | உள்நுழைக | Register: உள்நுழைக as a patient page title. Part 5. | One polite register. |
+| `portal.signIn.title` | C | Sign in or create an account | உள்நுழைக அல்லது கணக்கை உருவாக்குக | Register: "உள்நுழைக அல்லது கணக்கை உருவாக்குக" mixes the archaic -க forms on the first patient page. Part 5. | உள்நுழையுங்கள் அல்லது கணக்கை உருவாக்குங்கள். |
+| `portal.signIn.change` | C | Use a different number | வேறு எண்ணைப் பயன்படுத்து | Register: "வேறு எண்ணைப் பயன்படுத்து" is a bare imperative on a patient sign-in button; the sentences nearby use -ங்கள். Part 5. | வேறு எண்ணைப் பயன்படுத்துங்கள். |
+| `portal.signIn.send` | C | Send me a code | எனக்குக் குறியீட்டை அனுப்பு | Register: "எனக்குக் குறியீட்டை அனுப்பு" is a bare imperative on a patient button. Part 5. | எனக்குக் குறியீட்டை அனுப்புங்கள். |
 
 ## Part 1. Strings that most need a native speaker (safety first)
 
@@ -430,7 +493,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `access.sender.patient` | Patient | நோயாளி | no issue found | |
 | `access.sender.staff` | Staff | பணியாளர் | no issue found | |
 | `access.sender.system` | System | அமைப்பு | no issue found | |
-| `access.title` | Break-glass access | அவசரகால அணுகல் | no issue found | |
+| `access.title` | Break-glass access | அவசரகால அணுகல் | no issue found; machine back-translation check: flagged C (Part 0) | |
 | `access.topic.appointments` | Appointments | சந்திப்புகள் | no issue found | |
 | `access.topic.care` | Care | பராமரிப்பு | no issue found | |
 | `access.topic.readiness` | Readiness | தயார்நிலை | no issue found | |
@@ -476,7 +539,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `admin.accounts.suspendBody` | The account can no longer sign in to this system until it is reinstated. | மீண்டும் செயல்படுத்தப்படும் வரை இந்தக் கணக்கு இந்த அமைப்பில் உள்நுழைய முடியாது. | no issue found | |
 | `admin.accounts.suspendTitle` | Suspend this account? | இந்தக் கணக்கை இடைநிறுத்தவா? | no issue found | |
 | `admin.autonomy.alreadyPending` | A proposal is already pending. | ஒரு முன்மொழிவு ஏற்கனவே நிலுவையில் உள்ளது. | no issue found | |
-| `admin.autonomy.approve` | Approve | ஒப்புக்கொள் | no issue found | |
+| `admin.autonomy.approve` | Approve | ஒப்புக்கொள் | no issue found; machine back-translation check: flagged A (Part 0) | |
 | `admin.autonomy.approveTitle` | Approve this proposal? | இந்த முன்மொழிவை ஒப்புக்கொள்ளவா? | no issue found | |
 | `admin.autonomy.change` | Change the mode | முறையை மாற்று | no issue found | |
 | `admin.autonomy.changeBody` | Sets the clinic to shadow or assisted. Switching to autonomous is only done through a proposal that a second person approves. | மருத்துவமனையை நிழல் அல்லது உதவியுடன் முறைக்கு அமைக்கிறது. தன்னாட்சிக்கு மாற்றுவது, இரண்டாம் நபர் ஒப்புக்கொள்ளும் முன்மொழிவு மூலம் மட்டுமே செய்யப்படும். | B: "shadow" and "assisted" are mode names rendered as நிழல் and உதவியுடன்; system terms, confirm they are understood by clinic staff and used the same way everywhere. | |
@@ -549,9 +612,9 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `admin.cost.term.total` | Total per month | மாதத்திற்கு மொத்தம் | no issue found | |
 | `admin.cost.term.variable` | Variable cost per month | மாதத்திற்கு மாறுபடும் செலவு | no issue found | |
 | `admin.cost.term.workflows` | Workflows per day | நாளொன்றுக்கு பணிப்பாய்வுகள் | no issue found | |
-| `admin.grievances.acknowledge` | Acknowledge | ஏற்றுக்கொள் | no issue found | |
+| `admin.grievances.acknowledge` | Acknowledge | ஏற்றுக்கொள் | no issue found; machine back-translation check: flagged B (Part 0) | |
 | `admin.grievances.acknowledgeBody` | Records that you have seen it, under your name. | நீங்கள் இதைப் பார்த்தீர்கள் என்று உங்கள் பெயரில் பதிவு செய்கிறது. | no issue found | |
-| `admin.grievances.acknowledgeTitle` | Acknowledge this grievance? | இந்தக் குறையை ஏற்றுக்கொள்ளவா? | no issue found | |
+| `admin.grievances.acknowledgeTitle` | Acknowledge this grievance? | இந்தக் குறையை ஏற்றுக்கொள்ளவா? | no issue found; machine back-translation check: flagged B (Part 0) | |
 | `admin.grievances.col.action` | Action | செயல் | no issue found | |
 | `admin.grievances.col.category` | Category | வகை | no issue found | |
 | `admin.grievances.col.grievance` | Grievance | குறை | no issue found | |
@@ -607,7 +670,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `admin.reviewer.canaryCount` | {{approved}} of {{seen}} | {{seen}} இல் {{approved}} | no issue found | |
 | `admin.reviewer.col.approvals` | Approvals | ஒப்புதல்கள் | no issue found | |
 | `admin.reviewer.col.canaries` | Test cases approved | ஒப்புக்கொண்ட சோதனை நிகழ்வுகள் | no issue found | |
-| `admin.reviewer.col.decisions` | Decisions | முடிவுகள் | no issue found | |
+| `admin.reviewer.col.decisions` | Decisions | முடிவுகள் | no issue found; machine back-translation check: flagged B (Part 0) | |
 | `admin.reviewer.col.edits` | Edits | திருத்தங்கள் | no issue found | |
 | `admin.reviewer.col.median` | Median seconds to decide | முடிவெடுக்க இடைநிலை நொடிகள் | no issue found | |
 | `admin.reviewer.col.rate` | Approval rate | ஒப்புதல் விகிதம் | no issue found | |
@@ -622,7 +685,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `admin.reviewer.verdicts.review` | Needs a look | பார்க்க வேண்டும் | no issue found | |
 | `admin.reviewer.verdicts.too_few` | Too few decisions | முடிவுகள் மிகக் குறைவு | no issue found | |
 | `admin.reviewer.window` | The last {{days}} days. | கடந்த {{days}} நாட்கள். | no issue found | |
-| `admin.rules.approve` | Approve | ஒப்புக்கொள் | A: "Approve" is rendered ஒப்புக்கொள், the same verb that is also used for "acknowledge" (alerts) and that can mean "admit". For a two-doctor safety approval a clinician must choose the verb (for example ஒப்புதல் அளி). Same issue in approveTitle, approveBody and the result strings. | |
+| `admin.rules.approve` | Approve | ஒப்புக்கொள் | A: "Approve" is rendered ஒப்புக்கொள், the same verb that is also used for "acknowledge" (alerts) and that can mean "admit". For a two-doctor safety approval a clinician must choose the verb (for example ஒப்புதல் அளி). Same issue in approveTitle, approveBody and the result strings.; machine back-translation check: flagged A (Part 0) | |
 | `admin.rules.approveBody` | You are approving exactly the content shown below. The version becomes approved only if a second, different doctor also approves it. The person who wrote a version cannot decide it. | கீழே காட்டப்பட்டுள்ள உள்ளடக்கத்தையே நீங்கள் ஒப்புக்கொள்கிறீர்கள். இரண்டாவது, வேறொரு மருத்துவரும் ஒப்புக்கொண்டால் மட்டுமே இந்தப் பதிப்பு அங்கீகரிக்கப்படும். ஒரு பதிப்பை எழுதியவர் அதில் முடிவெடுக்க முடியாது. | A: Safety text for the approval confirmation. Check that it is unmistakable that a SECOND, different doctor is also needed, and that "the person who wrote it cannot decide it" reads as a rule, not a suggestion. | |
 | `admin.rules.approveTitle` | Approve this red-flag rule version? | இந்தச் சிவப்புக் கொடி விதிப் பதிப்பை ஒப்புக்கொள்ளலாமா? | A: Same verb issue as admin.rules.approve: this is the confirmation question before a doctor approves a red-flag rule. | |
 | `admin.rules.approvedAt` | Approved at | அங்கீகரிக்கப்பட்ட நேரம் | no issue found | |
@@ -659,7 +722,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `admin.rules.col.decision` | Decision | முடிவு | no issue found | |
 | `admin.rules.decisionWords.approve` | Approved | ஒப்புக்கொண்டார் | no issue found | |
 | `admin.rules.decisionWords.reject` | Rejected | நிராகரித்தார் | no issue found | |
-| `admin.rules.decisionWords.retire` | Retired it | நிறுத்தினார் | B: "நிறுத்தினார்" (he/she stopped it) as the decision word in a table of who decided; the honorific form is neutral, check it matches "ஒப்புக்கொண்டார்" and "நிராகரித்தார்". | |
+| `admin.rules.decisionWords.retire` | Retired it | நிறுத்தினார் | B: "நிறுத்தினார்" (he/she stopped it) as the decision word in a table of who decided; the honorific form is neutral, check it matches "ஒப்புக்கொண்டார்" and "நிராகரித்தார்".; machine back-translation check: flagged B (Part 0) | |
 | `admin.rules.decisions` | Decisions so far | இதுவரை எடுத்த முடிவுகள் | no issue found | |
 | `admin.rules.draftNote` | This is a draft. It is never active. It becomes approved only when two different doctors approve it, and its author cannot be one of them. | இது ஒரு வரைவு. இது ஒருபோதும் செயலில் இருக்காது. இரண்டு வெவ்வேறு மருத்துவர்கள் ஒப்புக்கொண்டால் மட்டுமே இது அங்கீகரிக்கப்படும்; அதை எழுதியவர் அவர்களில் ஒருவராக இருக்க முடியாது. | A: Says a draft is never active. A wrong word here could make a draft look live. Check "never" (ஒருபோதும்) and "active" (செயலில்). | |
 | `admin.rules.empty` | There are no red-flag rule versions to show. | காட்ட சிவப்புக் கொடி விதிப் பதிப்புகள் இல்லை. | no issue found | |
@@ -706,7 +769,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `admin.rules.vitals` | Vital-sign criteria | உடல்நிலை அளவீட்டு நிபந்தனைகள் | B: "Vital-sign criteria" rendered உடல்நிலை அளவீட்டு நிபந்தனைகள்: check the clinical term clinicians use for vital signs. | |
 | `admin.rules.vitalsNo` | This version has no vital-sign criteria. | இந்தப் பதிப்பில் உடல்நிலை அளவீட்டு நிபந்தனைகள் இல்லை. | no issue found | |
 | `admin.rules.vitalsYes` | This version has vital-sign criteria. | இந்தப் பதிப்பில் உடல்நிலை அளவீட்டு நிபந்தனைகள் உள்ளன. | no issue found | |
-| `admin.rules.withdraw` | Withdraw this draft | இந்த வரைவைத் திரும்பப் பெறு | B: Button label "திரும்பப் பெறு" for withdraw a draft; same verb as revoke. | |
+| `admin.rules.withdraw` | Withdraw this draft | இந்த வரைவைத் திரும்பப் பெறு | B: Button label "திரும்பப் பெறு" for withdraw a draft; same verb as revoke.; machine back-translation check: flagged B (Part 0) | |
 | `admin.rules.withdrawBody` | A withdrawn draft is closed for good. It can never be approved and it is never in force. A withdrawn version is not the same as a retired one. Only a draft can be withdrawn. To change a rule, write a new version. | திரும்பப் பெறப்பட்ட வரைவு முற்றிலும் மூடப்படும். அதை ஒருபோதும் ஒப்புக்கொள்ள முடியாது; அது ஒருபோதும் நடைமுறையில் இருக்காது. திரும்பப் பெறுதல் என்பது நிறுத்துதலிலிருந்து வேறுபட்டது. வரைவை மட்டுமே திரும்பப் பெற முடியும். ஒரு விதியை மாற்ற, புதிய பதிப்பை எழுதுங்கள். | A: Says a withdrawn draft is closed for good and is NOT the same as retired. "திரும்பப் பெறுதல்" and "நிறுத்துதல்" are close in everyday Tamil, so the contrast may not come across. Clinician sheet item 37. | |
 | `admin.rules.withdrawTitle` | Withdraw this draft red-flag rule version? | இந்தச் சிவப்புக் கொடி விதி வரைவுப் பதிப்பைத் திரும்பப் பெறவா? | B: Check "திரும்பப் பெறவா" for a draft (a withdrawal, not a deletion). | |
 | `admin.rules.youDecided` | You have already decided on this version. | இந்தப் பதிப்பில் நீங்கள் ஏற்கெனவே முடிவெடுத்துவிட்டீர்கள். | no issue found | |
@@ -749,7 +812,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `admin.voice.workflows.intake_question` | Intake question | உள்வாங்கல் கேள்வி | C: "intake" rendered உள்வாங்கல் ("absorbing"); the usual clinic wording is different. | |
 | `admin.voice.workflows.readiness_item` | Readiness item | தயார்நிலை உருப்படி | no issue found | |
 | `admin.voice.workflows.slot_offer` | Slot offer | நேர இட வாய்ப்பு | no issue found | |
-| `alerts.acknowledge` | Acknowledge | ஏற்றுக்கொள் | A: Button "Acknowledge" is rendered ஏற்றுக்கொள் ("accept / agree to"), the same verb as Approve (ஒப்புக்கொள்) in many places. Acknowledging an alert only records that you have seen it. Also in admin.grievances.acknowledge and tasks. Check the verb. | |
+| `alerts.acknowledge` | Acknowledge | ஏற்றுக்கொள் | A: Button "Acknowledge" is rendered ஏற்றுக்கொள் ("accept / agree to"), the same verb as Approve (ஒப்புக்கொள்) in many places. Acknowledging an alert only records that you have seen it. Also in admin.grievances.acknowledge and tasks. Check the verb.; machine back-translation check: flagged B (Part 0) | |
 | `alerts.acknowledged` | The alert was acknowledged. | எச்சரிக்கை ஏற்கப்பட்டது. | A: "acknowledged" is rendered ஏற்கப்பட்டது ("accepted"); an alert that is only SEEN could be read as accepted or agreed with. Check the verb; the same verb is used in alerts.already and on the alert buttons. | |
 | `alerts.already` | This alert was already acknowledged. The list will refresh. | இந்த எச்சரிக்கை ஏற்கனவே ஏற்கப்பட்டது. பட்டியல் புதுப்பிக்கப்படும். | A: Same verb issue as alerts.acknowledged. | |
 | `alerts.class.canary_approved` | A test case was approved | ஒரு சோதனை நிகழ்வு ஒப்புக்கொள்ளப்பட்டது | no issue found | |
@@ -791,7 +854,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `audit.col.when` | When | எப்போது | no issue found | |
 | `audit.col.who` | Who | யார் | no issue found | |
 | `audit.empty` | No rows match. | பொருந்தும் வரிகள் இல்லை. | no issue found | |
-| `audit.end` | That is the end of the log for this search. | இந்தத் தேடலுக்கான பதிவின் முடிவு இதுவே. | no issue found | |
+| `audit.end` | That is the end of the log for this search. | இந்தத் தேடலுக்கான பதிவின் முடிவு இதுவே. | no issue found; machine back-translation check: flagged B (Part 0) | |
 | `audit.filterHint` | All filters are optional. Leave a box empty to not filter on it. | எல்லா வடிகட்டிகளும் விருப்பமானவை. வடிகட்ட வேண்டாத பெட்டியை காலியாக விடுங்கள். | no issue found | |
 | `audit.noClinic` | No clinic | மருத்துவமனை இல்லை | no issue found | |
 | `audit.noDetails` | None | இல்லை | no issue found | |
@@ -827,7 +890,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `backfill.decided.skip` | The candidate was skipped. Finished: {{finished}}. | வேட்பாளர் தவிர்க்கப்பட்டார். முடிந்ததா: {{finished}}. | no issue found | |
 | `backfill.decided.stop` | The run was stopped. Finished: {{finished}}. | ஓட்டம் நிறுத்தப்பட்டது. முடிந்ததா: {{finished}}. | no issue found | |
 | `backfill.finished` | Finished | முடிந்தது | no issue found | |
-| `backfill.hold` | Hold | நிறுத்தம் | C: "Hold" rendered நிறுத்தம் ("a halt"). | |
+| `backfill.hold` | Hold | நிறுத்தம் | C: "Hold" rendered நிறுத்தம் ("a halt").; machine back-translation check: flagged B (Part 0) | |
 | `backfill.noRun` | There is no offer run for this slot yet. | இந்த நேர இடத்திற்கு இன்னும் வாய்ப்பு ஓட்டம் இல்லை. | no issue found | |
 | `backfill.noTask` | None raised | எதுவும் எழுப்பப்படவில்லை | no issue found | |
 | `backfill.noWaiting` | Nobody on the waitlist matches this slot. | இந்த இடத்திற்குப் பொருந்தும் யாரும் காத்திருப்புப் பட்டியலில் இல்லை. | C: "slot" is இடம் here and நேர இடம் elsewhere. | |
@@ -999,7 +1062,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `care.results.change` | What kind of change is this? | இது எந்த வகை மாற்றம்? | no issue found | |
 | `care.results.changeHint` | Only when this result replaces another. An amendment is a new measurement; a correction means the earlier value was wrong and starts a review. | இந்த முடிவு மற்றொன்றை மாற்றும்போது மட்டும். மேம்படுத்தல் என்பது புதிய அளவீடு; திருத்தம் என்பது முந்தைய மதிப்பு தவறானது என்று பொருள்படும், மதிப்பாய்வைத் தொடங்கும். | A: "amendment" is rendered மேம்படுத்தல் ("improvement / upgrade"), which is not what an amended result means. The difference between an amendment (a new measurement) and a correction (the earlier value was wrong, starts a review) is safety-relevant. | |
 | `care.results.changeNone` | Not stated (the system works it out) | குறிப்பிடப்படவில்லை (அமைப்பு கண்டறியும்) | no issue found | |
-| `care.results.changes.amendment` | Amendment | மேம்படுத்தல் | A: See care.results.changeHint: amendment rendered மேம்படுத்தல் ("improvement"). | |
+| `care.results.changes.amendment` | Amendment | மேம்படுத்தல் | A: See care.results.changeHint: amendment rendered மேம்படுத்தல் ("improvement").; machine back-translation check: flagged A (Part 0) | |
 | `care.results.changes.correction` | Correction | திருத்தம் | no issue found | |
 | `care.results.code` | Result code | முடிவுக் குறியீடு | no issue found | |
 | `care.results.done` | The result was recorded. | முடிவு பதிவானது. | A: "result" = முடிவு, same ambiguity as care.results.body. | |
@@ -1051,8 +1114,8 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `common.notFoundTitle` | Not found | கிடைக்கவில்லை | no issue found | |
 | `common.refresh` | Refresh | புதுப்பி | no issue found | |
 | `common.retry` | Try again | மீண்டும் முயற்சிக்கவும் | no issue found | |
-| `common.signIn` | Sign in | உள்நுழைக | no issue found | |
-| `common.signOut` | Sign out | வெளியேறுக | no issue found | |
+| `common.signIn` | Sign in | உள்நுழைக | no issue found; machine back-translation check: flagged C (Part 0) | |
+| `common.signOut` | Sign out | வெளியேறுக | no issue found; machine back-translation check: flagged C (Part 0) | |
 | `common.signUp` | Sign up | பதிவு செய்க | no issue found | |
 | `common.skipToContent` | Skip to main content | முதன்மை உள்ளடக்கத்திற்குச் செல்க | no issue found | |
 | `common.staffSignIn` | Staff sign in | பணியாளர் உள்நுழைவு | no issue found | |
@@ -1087,14 +1150,14 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `dashboard.metric.escalation_rate_and_accuracy` | Escalation rate and accuracy | உயர்நிலை அனுப்புதல் விகிதமும் துல்லியமும் | C: "escalation" rendered உயர்நிலை அனுப்புதல் ("sending to a higher level"); used in several dashboard and alert strings. | |
 | `dashboard.metric.evaluation_spend` | Evaluation spend | மதிப்பீட்டுச் செலவு | no issue found | |
 | `dashboard.metric.failure_multiplier` | Failure multiplier | தோல்விப் பெருக்கி | no issue found | |
-| `dashboard.metric.fallback_and_abstention_spike` | Fallback and abstention spike | மாற்று வழி மற்றும் விலகல் அதிகரிப்பு | no issue found | |
+| `dashboard.metric.fallback_and_abstention_spike` | Fallback and abstention spike | மாற்று வழி மற்றும் விலகல் அதிகரிப்பு | no issue found; machine back-translation check: flagged B (Part 0) | |
 | `dashboard.metric.false_routing_rate` | False routing rate | தவறான வழிப்படுத்தல் விகிதம் | no issue found | |
 | `dashboard.metric.first_pass_success_rate` | First-pass success rate | முதல் முயற்சி வெற்றி விகிதம் | no issue found | |
 | `dashboard.metric.followups_closed_vs_lost` | Follow-ups closed against lost | முடிந்த மற்றும் தவறவிட்ட தொடர்ச்சிகள் | no issue found | |
 | `dashboard.metric.golden_set_vs_variance_band` | Golden set against the variance band | தங்கத் தொகுப்பு மற்றும் மாறுபாட்டு எல்லை | no issue found | |
 | `dashboard.metric.grounding_rate` | Grounding rate | அடிப்படை ஆதார விகிதம் | no issue found | |
 | `dashboard.metric.guardrail_trigger_accuracy` | Guardrail trigger accuracy | பாதுகாப்பு வரம்பு தூண்டல் துல்லியம் | no issue found | |
-| `dashboard.metric.index_freshness_lag` | Index freshness lag | குறியீட்டுப் புதுமைத் தாமதம் | no issue found | |
+| `dashboard.metric.index_freshness_lag` | Index freshness lag | குறியீட்டுப் புதுமைத் தாமதம் | no issue found; machine back-translation check: flagged C (Part 0) | |
 | `dashboard.metric.intake_completion_rate` | Intake completion rate | உள்வாங்கல் முடிவு விகிதம் | no issue found | |
 | `dashboard.metric.latency_external_wait` | Wait for an outside party | வெளியாருக்கான காத்திருப்பு | no issue found | |
 | `dashboard.metric.latency_human_wait` | Wait for a person | ஒருவருக்கான காத்திருப்பு | no issue found | |
@@ -1130,7 +1193,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `dashboard.title` | Dashboard | கட்டுப்பாட்டுப் பலகை | no issue found | |
 | `dev.capture` | Capture claim structure | கோரிக்கை அமைப்பைப் பெறுக | no issue found | |
 | `dev.failed` | Could not read the session. | அமர்வைப் படிக்க முடியவில்லை. | no issue found | |
-| `dev.note` | Development builds only. Shows the structure of aal, amr and iat with values blanked. It never shows the token. | உருவாக்கப் பதிப்புகளில் மட்டும். aal, amr, iat ஆகியவற்றின் அமைப்பை மதிப்புகள் மறைக்கப்பட்டு காட்டும். டோக்கனைக் காட்டாது. | no issue found | |
+| `dev.note` | Development builds only. Shows the structure of aal, amr and iat with values blanked. It never shows the token. | உருவாக்கப் பதிப்புகளில் மட்டும். aal, amr, iat ஆகியவற்றின் அமைப்பை மதிப்புகள் மறைக்கப்பட்டு காட்டும். டோக்கனைக் காட்டாது. | no issue found; machine back-translation check: flagged B (Part 0) | |
 | `dev.refresh` | Refresh session, then capture | அமர்வைப் புதுப்பித்து, பின் பெறுக | no issue found | |
 | `dev.reveal` | Also show enum-like values (the aal level and amr method names) | enum போன்ற மதிப்புகளையும் காட்டு (aal நிலை, amr முறைப் பெயர்கள்) | no issue found | |
 | `dev.title` | Developer: claim structure | உருவாக்குநர்: கிளெய்ம் அமைப்பு | no issue found; earlier AI pass: corrected (meaning problem) | |
@@ -1317,7 +1380,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `medications.validTo` | To (leave empty if no end is recorded) | முடிவு (முடிவு நேரம் பதிவு செய்யப்படாவிட்டால் காலியாக விடவும்) | no issue found | |
 | `medications.validToHint` | An empty end is saved as "no end recorded". It is not read as "still taking". | காலியான முடிவு "முடிவு பதிவு செய்யப்படவில்லை" என்று சேமிக்கப்படும். அது "இன்னும் எடுத்துக்கொள்ளப்படுகிறது" என்று கருதப்படாது. | A: The "still taking" statement was reworded without a gendered verb (இன்னும் எடுத்துக்கொள்ளப்படுகிறது, passive). A native clinician should confirm it reads naturally and clearly says an empty end is NOT read as ongoing. Item 36 on docs/design/clinician-sheet.md. | |
 | `medications.verified` | Verified | சரிபார்க்கப்பட்டது | B: சரிபார்க்கப்பட்டது (verified): check who verified is not implied. | |
-| `nav.access` | Break-glass | அவசரகால அணுகல் | no issue found | |
+| `nav.access` | Break-glass | அவசரகால அணுகல் | no issue found; machine back-translation check: flagged C (Part 0) | |
 | `nav.admin` | Admin | நிர்வாகம் | no issue found | |
 | `nav.alerts` | Alerts | எச்சரிக்கைகள் | no issue found | |
 | `nav.audit` | Audit log | தணிக்கைப் பதிவு | no issue found | |
@@ -1336,9 +1399,9 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `nav.referrals` | Referrals | பரிந்துரைகள் | no issue found | |
 | `nav.scheduling` | Scheduling | நேர அட்டவணை | no issue found; earlier AI pass flag (ambiguous): Timetable reads as a schedule table; a main navigation label should be unambiguous. | |
 | `nav.tasks` | Tasks | பணிகள் | no issue found | |
-| `notes.addend` | Add an addendum | இணைப்புக் குறிப்பைச் சேர் | no issue found | |
+| `notes.addend` | Add an addendum | இணைப்புக் குறிப்பைச் சேர் | no issue found; machine back-translation check: flagged C (Part 0) | |
 | `notes.addendBody` | Writes a new note that adds to the earlier one. The earlier note is not changed. | முந்தைய குறிப்பில் சேர்க்கும் புதிய குறிப்பை எழுதுகிறது. முந்தைய குறிப்பு மாற்றப்படுவதில்லை. | B: "addendum" (a new note that adds to an earlier one) is rendered இணைப்புக் குறிப்பு ("attachment/link note"); the same word (இணைப்பு) is used for link, merge and attachment. A clearer word for "additional note" is needed. Same in notes.note. | |
-| `notes.addendumTo` | addendum to | இணைப்புக் குறிப்பு: | no issue found | |
+| `notes.addendumTo` | addendum to | இணைப்புக் குறிப்பு: | no issue found; machine back-translation check: flagged C (Part 0) | |
 | `notes.by` | by | எழுதியவர் | no issue found | |
 | `notes.empty` | There are no notes for this patient. | இந்த நோயாளிக்குக் குறிப்புகள் இல்லை. | no issue found | |
 | `notes.erased` | Erased | அழிக்கப்பட்டது | no issue found | |
@@ -1356,10 +1419,10 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `offline.banner` | You are offline. Changes cannot be saved until the connection is back. | நீங்கள் இணைப்பில் இல்லை. இணைப்பு திரும்பும் வரை மாற்றங்களைச் சேமிக்க முடியாது. | no issue found | |
 | `pages.backHome` | Back to the home page | முகப்புப் பக்கத்திற்குத் திரும்பு | no issue found | |
 | `pages.privacyTitle` | Privacy notice | தனியுரிமை அறிவிப்பு | no issue found | |
-| `pages.signInTitle` | Sign in | உள்நுழைக | no issue found | |
+| `pages.signInTitle` | Sign in | உள்நுழைக | no issue found; machine back-translation check: flagged C (Part 0) | |
 | `pages.signUpTitle` | Sign up | பதிவு செய்க | no issue found | |
 | `patients.back` | Back to patients | நோயாளர்களுக்குத் திரும்பு | no issue found | |
-| `patients.col.label` | Label | குறிப்பு | no issue found; earlier AI pass flag (ambiguous): Note/hint instead of label; withheld note text could be taken as clinical notes. | |
+| `patients.col.label` | Label | குறிப்பு | no issue found; earlier AI pass flag (ambiguous): Note/hint instead of label; withheld note text could be taken as clinical notes.; machine back-translation check: flagged C (Part 0) | |
 | `patients.col.matched` | Matched on | பொருந்திய விவரம் | no issue found | |
 | `patients.col.record` | Record | பதிவு | no issue found | |
 | `patients.col.verified` | Verified | சரிபார்க்கப்பட்டது | no issue found | |
@@ -1519,7 +1582,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `portal.consent.regrant` | Grant again | மீண்டும் வழங்கு | C: "மீண்டும் வழங்கு" (give again) is a button label. | |
 | `portal.consent.title` | Notices and your decisions | அறிவிப்புகளும் உங்கள் முடிவுகளும் | no issue found | |
 | `portal.consent.version` | version {{version}} | பதிப்பு {{version}} | no issue found | |
-| `portal.consent.withdraw` | Withdraw | திரும்பப் பெறு | no issue found | |
+| `portal.consent.withdraw` | Withdraw | திரும்பப் பெறு | no issue found; machine back-translation check: flagged A (Part 0) | |
 | `portal.consent.withdrawn` | Withdrawn | திரும்பப் பெறப்பட்டது | no issue found | |
 | `portal.consent.withdrawnDone` | Your consent was withdrawn. You can grant it again at any time. | உங்கள் ஒப்புதல் திரும்பப் பெறப்பட்டது. எப்போது வேண்டுமானாலும் மீண்டும் வழங்கலாம். | A: Tells the patient their consent was withdrawn, at once, with no confirmation step. It must read as done and reversible ("மீண்டும் வழங்கலாம்"). "திரும்பப் பெறப்பட்டது" shares its verb with revoke and cannot-be-undone elsewhere (Part 4). | |
 | `portal.erased` | Erased | அழிக்கப்பட்டது | no issue found | |
@@ -1646,21 +1709,21 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `portal.requests.send` | Send request | கோரிக்கையை அனுப்பு | no issue found | |
 | `portal.requests.sent` | Your request was sent. | உங்கள் கோரிக்கை அனுப்பப்பட்டது. | no issue found | |
 | `portal.requests.status.acknowledged` | Seen | பார்க்கப்பட்டது | B: "பார்க்கப்பட்டது" (seen) must not be read as "approved". | |
-| `portal.requests.status.declined` | Declined | ஏற்கப்படவில்லை | B: "ஏற்கப்படவில்லை" (not accepted) must read as the hospital declining, and be neutral in tone. | |
+| `portal.requests.status.declined` | Declined | ஏற்கப்படவில்லை | B: "ஏற்கப்படவில்லை" (not accepted) must read as the hospital declining, and be neutral in tone.; machine back-translation check: flagged B (Part 0) | |
 | `portal.requests.status.open` | Open | திறந்துள்ளது | no issue found | |
 | `portal.requests.status.resolved` | Resolved | தீர்க்கப்பட்டது | no issue found | |
 | `portal.requests.title` | Ask the hospital about your record | உங்கள் பதிவைப் பற்றி மருத்துவமனையிடம் கேளுங்கள் | no issue found | |
-| `portal.signIn.change` | Use a different number | வேறு எண்ணைப் பயன்படுத்து | B: Informal singular imperative on a patient page, see portal.signIn.send. | |
+| `portal.signIn.change` | Use a different number | வேறு எண்ணைப் பயன்படுத்து | B: Informal singular imperative on a patient page, see portal.signIn.send.; machine back-translation check: flagged C (Part 0) | |
 | `portal.signIn.code` | 6-digit code | 6 இலக்கக் குறியீடு | no issue found | |
 | `portal.signIn.codeFailed` | That code did not work. Check it and try again, or ask for a new one. | அந்தக் குறியீடு செயல்படவில்லை. சரிபார்த்து மீண்டும் முயற்சிக்கவும், அல்லது புதியதைக் கேட்கவும். | no issue found | |
 | `portal.signIn.intro` | We send a one-time code to your mobile number. The same steps sign you in or create your sign-in account. | உங்கள் கைபேசி எண்ணுக்கு ஒருமுறை குறியீடு அனுப்புவோம். அதே படிகள் உங்களை உள்நுழைவிக்கும் அல்லது உங்கள் உள்நுழைவுக் கணக்கை உருவாக்கும். | no issue found | |
 | `portal.signIn.phone` | Mobile number | கைபேசி எண் | no issue found | |
 | `portal.signIn.phoneBad` | Enter the number with a plus sign and the country code, using digits only. | கூட்டல் குறி மற்றும் நாட்டுக் குறியீட்டுடன், இலக்கங்களை மட்டும் பயன்படுத்தி எண்ணை உள்ளிடுங்கள். | no issue found | |
 | `portal.signIn.phoneHint` | With the country code, for example +91 followed by your number. | நாட்டுக் குறியீட்டுடன், எடுத்துக்காட்டாக +91 மற்றும் உங்கள் எண். | no issue found | |
-| `portal.signIn.send` | Send me a code | எனக்குக் குறியீட்டை அனுப்பு | B: Register on PATIENT pages: எனக்குக் குறியீட்டை அனுப்பு and வேறு எண்ணைப் பயன்படுத்து (portal.signIn.change) are informal singular imperatives; portal.signIn.title uses the archaic -க form (உள்நுழைக, உருவாக்குக); most other patient strings use the polite -ங்கள் form. Pick one polite register for every patient-facing string. | |
+| `portal.signIn.send` | Send me a code | எனக்குக் குறியீட்டை அனுப்பு | B: Register on PATIENT pages: எனக்குக் குறியீட்டை அனுப்பு and வேறு எண்ணைப் பயன்படுத்து (portal.signIn.change) are informal singular imperatives; portal.signIn.title uses the archaic -க form (உள்நுழைக, உருவாக்குக); most other patient strings use the polite -ங்கள் form. Pick one polite register for every patient-facing string.; machine back-translation check: flagged C (Part 0) | |
 | `portal.signIn.sendFailed` | The code could not be sent. Check the number and try again in a moment. | குறியீட்டை அனுப்ப முடியவில்லை. எண்ணைச் சரிபார்த்து சிறிது நேரம் கழித்து மீண்டும் முயற்சிக்கவும். | no issue found | |
 | `portal.signIn.sent` | A code was sent if the number can receive one. | எண்ணுக்குப் பெற முடிந்தால் ஒரு குறியீடு அனுப்பப்பட்டது. | B: Privacy-sensitive wording ("A code was sent if the number can receive one": the page must not reveal whether a number is registered). The Tamil is awkward (எண்ணுக்குப் பெற முடிந்தால்); check that it still does not reveal that. | |
-| `portal.signIn.title` | Sign in or create an account | உள்நுழைக அல்லது கணக்கை உருவாக்குக | B: Archaic -க imperative (உள்நுழைக ... உருவாக்குக) on a patient page, see portal.signIn.send. | |
+| `portal.signIn.title` | Sign in or create an account | உள்நுழைக அல்லது கணக்கை உருவாக்குக | B: Archaic -க imperative (உள்நுழைக ... உருவாக்குக) on a patient page, see portal.signIn.send.; machine back-translation check: flagged C (Part 0) | |
 | `portal.signIn.verify` | Continue | தொடரவும் | no issue found | |
 | `portal.stage.active` | Active | செயலில் | no issue found | |
 | `portal.stage.label` | Where your account is | உங்கள் கணக்கு இருக்கும் நிலை | no issue found | |
@@ -1724,7 +1787,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `preq.result.recorded` | Recorded. The patient has been told. | பதிவு செய்யப்பட்டது. நோயாளிக்குத் தெரிவிக்கப்பட்டது. | no issue found | |
 | `preq.result.replay` | This was already recorded. | இது ஏற்கெனவே பதிவு செய்யப்பட்டது. | no issue found | |
 | `preq.status.acknowledged` | Seen | பார்க்கப்பட்டது | no issue found | |
-| `preq.status.declined` | Declined | ஏற்கப்படவில்லை | no issue found | |
+| `preq.status.declined` | Declined | ஏற்கப்படவில்லை | no issue found; machine back-translation check: flagged B (Part 0) | |
 | `preq.status.open` | Open | திறந்துள்ளது | no issue found | |
 | `preq.status.resolved` | Resolved | தீர்க்கப்பட்டது | no issue found | |
 | `preq.title` | Patient requests | நோயாளி கோரிக்கைகள் | no issue found | |
@@ -1740,7 +1803,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `problem.unauthorized` | Please sign in again. | தயவுசெய்து மீண்டும் உள்நுழையவும். | no issue found | |
 | `problem.unavailable` | This is not available right now. Try again in a moment. | இது இப்போது கிடைக்கவில்லை. சிறிது நேரம் கழித்து மீண்டும் முயற்சிக்கவும். | no issue found | |
 | `problem.unknown` | Something went wrong. Try again. | ஏதோ தவறு ஏற்பட்டது. மீண்டும் முயற்சிக்கவும். | no issue found | |
-| `profiles.clinical` | Clinical | மருத்துவப் பயன்பாடு | no issue found | |
+| `profiles.clinical` | Clinical | மருத்துவப் பயன்பாடு | no issue found; machine back-translation check: flagged C (Part 0) | |
 | `profiles.demo` | Demo | டெமோ | no issue found | |
 | `readiness.col.action` | Action | செயல் | no issue found | |
 | `readiness.col.ends` | Ends | முடிவு | B: முடிவு means "decision", "result" AND "end" in this interface (readiness.col.ends, scheduling.col.ends, care.results, referrals.col.decision). One word for three meanings in a clinical setting. | |
@@ -1882,7 +1945,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `roles.front_desk_supervisor` | Front desk supervisor | வரவேற்பு மேசை மேற்பார்வையாளர் | C: வரவேற்பு மேசை மேற்பார்வையாளர்: consistent with வரவேற்பு மேசை but the project also uses முன்பணியாளர் for front desk. | |
 | `roles.guardian` | Guardian | பாதுகாவலர் | no issue found | |
 | `roles.nurse` | Nurse | செவிலியர் | no issue found | |
-| `roles.patient` | Patient | நோயாளர் | no issue found | |
+| `roles.patient` | Patient | நோயாளர் | no issue found; machine back-translation check: flagged C (Part 0) | |
 | `scheduling.active` | Active | செயலில் | no issue found | |
 | `scheduling.add` | Add | சேர் | no issue found | |
 | `scheduling.addLocation` | Add a location | இடத்தைச் சேர் | no issue found | |
@@ -1917,7 +1980,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `scheduling.col.heldUntil` | Held until | வரை நிறுத்தம் | C: "Held until" rendered வரை நிறுத்தம் ("until halt"); awkward. | |
 | `scheduling.col.hold` | Hold | ஒதுக்கீடு | no issue found; earlier AI pass flag (ambiguous): Same allocation-for-hold term issue. | |
 | `scheduling.col.joined` | Joined | சேர்ந்த நேரம் | no issue found | |
-| `scheduling.col.label` | Label | குறிப்பு | no issue found; earlier AI pass flag (ambiguous): Same label/note term issue. | |
+| `scheduling.col.label` | Label | குறிப்பு | no issue found; earlier AI pass flag (ambiguous): Same label/note term issue.; machine back-translation check: flagged C (Part 0) | |
 | `scheduling.col.location` | Location | இடம் | no issue found | |
 | `scheduling.col.name` | Name | பெயர் | no issue found | |
 | `scheduling.col.offer` | Offer | வாய்ப்பு | no issue found | |
@@ -1925,7 +1988,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `scheduling.col.priority` | Priority | முன்னுரிமை | no issue found | |
 | `scheduling.col.provider` | Provider | வழங்குநர் | no issue found | |
 | `scheduling.col.rank` | Rank | தரவரிசை | no issue found; earlier AI pass: corrected (meaning problem) | |
-| `scheduling.col.slot` | Slot | நேரம் | no issue found | |
+| `scheduling.col.slot` | Slot | நேரம் | no issue found; machine back-translation check: flagged C (Part 0) | |
 | `scheduling.col.starts` | Starts | தொடக்கம் | no issue found | |
 | `scheduling.col.state` | State | நிலை | no issue found | |
 | `scheduling.col.status` | Status | நிலை | no issue found | |
@@ -2004,12 +2067,12 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `scheduling.offerState.expired` | Expired | காலாவதியானது | no issue found | |
 | `scheduling.offerState.released` | Released | விடுவிக்கப்பட்டது | no issue found | |
 | `scheduling.offerStatus.degraded` | Partly available | ஓரளவு கிடைக்கிறது | no issue found | |
-| `scheduling.offerStatus.empty` | No candidates | பொருத்தமானவை இல்லை | no issue found; earlier AI pass: corrected (meaning problem) | |
+| `scheduling.offerStatus.empty` | No candidates | பொருத்தமானவை இல்லை | no issue found; earlier AI pass: corrected (meaning problem); machine back-translation check: flagged C (Part 0) | |
 | `scheduling.offerStatus.ok` | A draft is ready | வரைவு தயாராக உள்ளது | no issue found | |
 | `scheduling.offerStatus.unavailable` | Not set up yet | இன்னும் அமைக்கப்படவில்லை | no issue found | |
 | `scheduling.offers` | Offers | வாய்ப்புகள் | no issue found; earlier AI pass flag (ambiguous): Means opportunities rather than offers. | |
 | `scheduling.offersListTitle` | Offers | வாய்ப்புகள் | no issue found | |
-| `scheduling.offersNote` | A read-only view of the draft offer. It is computed when you ask and stored nowhere. Nothing is sent. | வரைவு வாய்ப்பின் படிக்க-மட்டும் பார்வை. நீங்கள் கேட்கும்போது கணக்கிடப்படுகிறது, எங்கும் சேமிக்கப்படுவதில்லை. | no issue found | |
+| `scheduling.offersNote` | A read-only view of the draft offer. It is computed when you ask and stored nowhere. Nothing is sent. | வரைவு வாய்ப்பின் படிக்க-மட்டும் பார்வை. நீங்கள் கேட்கும்போது கணக்கிடப்படுகிறது, எங்கும் சேமிக்கப்படுவதில்லை. எதுவும் அனுப்பப்படாது. | no issue found | |
 | `scheduling.patientChosen` | Patient chosen | நோயாளி தேர்ந்தெடுக்கப்பட்டார் | no issue found | |
 | `scheduling.patientDob` | Date of birth | பிறந்த தேதி | no issue found | |
 | `scheduling.patientFind` | Find | தேடு | no issue found | |
@@ -2093,7 +2156,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `staff.stepUp.title` | Confirm it is you | நீங்கள்தான் என உறுதிப்படுத்துங்கள் | no issue found | |
 | `tasks.ackBody` | You will be recorded as the person who took this task. | இந்தப் பணியை எடுத்தவராக நீங்கள் பதிவு செய்யப்படுவீர்கள். | B: "acknowledge" (take and be recorded as holding a task) is rendered ஏற்றுக்கொள்; the same verb as "approve". A reader may think acknowledging a task approves something. See alerts.acknowledged. | |
 | `tasks.ackTitle` | Acknowledge this task? | இந்தப் பணியை ஏற்றுக்கொள்ளவா? | no issue found | |
-| `tasks.acknowledge` | Acknowledge | ஏற்றுக்கொள் | no issue found; earlier AI pass flag (register): Accept is not quite acknowledge and shares a word with accepting an appointment. | |
+| `tasks.acknowledge` | Acknowledge | ஏற்றுக்கொள் | no issue found; earlier AI pass flag (register): Accept is not quite acknowledge and shares a word with accepting an appointment.; machine back-translation check: flagged B (Part 0) | |
 | `tasks.acknowledgedBy` | Acknowledged by | ஏற்றுக்கொண்டவர் | no issue found | |
 | `tasks.actions` | Actions | செயல்கள் | no issue found | |
 | `tasks.back` | Back to tasks | பணிகளுக்குத் திரும்பு | no issue found | |
@@ -2113,7 +2176,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `tasks.kind.identity_confirmation_revoked` | Identity confirmation revoked | அடையாள உறுதிப்படுத்தல் திரும்பப் பெறப்பட்டது | no issue found | |
 | `tasks.kind.red_flag` | Red flag | Red flag | kept in English by design | |
 | `tasks.kind.referral_dead_letter` | Referral failed | பரிந்துரை தோல்வியடைந்தது | no issue found | |
-| `tasks.kind.referral_hold` | Referral hold | பரிந்துரை நிறுத்தம் | no issue found; earlier AI pass flag (ambiguous): Same hold term issue. | |
+| `tasks.kind.referral_hold` | Referral hold | பரிந்துரை நிறுத்தம் | no issue found; earlier AI pass flag (ambiguous): Same hold term issue.; machine back-translation check: flagged B (Part 0) | |
 | `tasks.kind.result_correction` | Result correction | முடிவுத் திருத்தம் | no issue found | |
 | `tasks.kind.screening_unassessable` | Unassessable | Unassessable | kept in English by design | |
 | `tasks.kind.triage_proposal` | Triage proposal | Triage proposal | kept in English by design | |

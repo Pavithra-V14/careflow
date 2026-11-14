@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-14",
+  "checked": 1778,
+  "backTranslated": 1747,
+  "keptInEnglish": 31,
+  "fixed": [
+    {
+      "key": "scheduling.offersNote",
+      "why": "The English ends with \"Nothing is sent.\" and the Tamil had no such sentence (the English was extended on 2026-11-14 and the Tamil was not). A lost \"nothing is sent\" on the offer draft screen is a safety-relevant omission.",
+      "before": "வரைவு வாய்ப்பின் படிக்க-மட்டும் பார்வை. நீங்கள் கேட்கும்போது கணக்கிடப்படுகிறது, எங்கும் சேமிக்கப்படுவதில்லை.",
+      "after": "வரைவு வாய்ப்பின் படிக்க-மட்டும் பார்வை. நீங்கள் கேட்கும்போது கணக்கிடப்படுகிறது, எங்கும் சேமிக்கப்படுவதில்லை. எதுவும் அனுப்பப்படாது."
+    }
+  ],
+  "automatic": {
+    "placeholderMismatches": 0,
+    "numberMismatches": 0,
+    "lostNegations": 0,
+    "informalPronouns": 0,
+    "sentenceCountMismatches": 1,
+    "sentenceCountMismatchesFixed": 1
+  },
+  "candidatesReadSideBySide": 199
+}
