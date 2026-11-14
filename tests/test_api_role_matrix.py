@@ -1397,7 +1397,7 @@ def offer_draft_cases(ids) -> list[tuple]:
     q = lambda **o: f"{OFFER_DRAFT}?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, "visit_type_id": ids.vt_a, **o}.items())
     cases = [
         _case(ids, "front desk reads the draft: unavailable, naming the missing settings, nothing guessed", "front_desk_a", 200, q(), key=None,
-              body=lambda b: b["status"] == "unavailable" and b["reason"].startswith("not_configured:") and b["data"] is None),
+              body=lambda b: b["status"] == "unavailable" and b["reason"] == "not_configured" and isinstance(b["missing_settings"], list) and b["missing_settings"] and b["data"] is None and b["data"] is None),
         _case(ids, "an unknown clinic is not found", "front_desk_a", 404, q(clinic_id=uuid.uuid4()), key=None, body=_fixed(404)),
         _case(ids, "a missing visit type is rejected", "front_desk_a", 422, f"{OFFER_DRAFT}?clinic_id={ids.clinic_a}", key=None, body=_fixed(422)),
         _case(ids, "a clinic id that is not a uuid is rejected", "front_desk_a", 422, q(clinic_id="nope"), key=None, body=_fixed(422)),

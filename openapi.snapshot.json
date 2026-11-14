@@ -2547,54 +2547,6 @@
         "title": "DuplicateOut",
         "type": "object"
       },
-      "Envelope": {
-        "additionalProperties": false,
-        "description": "The result of every tool. `data` holds ids, numbers and closed words only; a degraded or unavailable result says so in `status` and `reason` (a fixed word).",
-        "properties": {
-          "data": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "items": {},
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Data"
-          },
-          "reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reason"
-          },
-          "status": {
-            "enum": [
-              "ok",
-              "empty",
-              "degraded",
-              "unavailable"
-            ],
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "status"
-        ],
-        "title": "Envelope",
-        "type": "object"
-      },
       "EpisodeIn": {
         "additionalProperties": false,
         "properties": {
@@ -4626,6 +4578,170 @@
           "decision"
         ],
         "title": "NoticeOut",
+        "type": "object"
+      },
+      "OfferCandidateOut": {
+        "additionalProperties": false,
+        "properties": {
+          "joined_at": {
+            "format": "date-time",
+            "title": "Joined At",
+            "type": "string"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "priority_code": {
+            "title": "Priority Code",
+            "type": "string"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "waitlist_id": {
+            "format": "uuid",
+            "title": "Waitlist Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "waitlist_id",
+          "patient_id",
+          "priority_code",
+          "rank",
+          "joined_at"
+        ],
+        "title": "OfferCandidateOut",
+        "type": "object"
+      },
+      "OfferDraftBodyOut": {
+        "additionalProperties": false,
+        "description": "The DRAFT offer for the first ranked candidate: the clinician-approved template verbatim, the two clinician-owned times, and the only ordering rule used.",
+        "properties": {
+          "candidate_patient_id": {
+            "format": "uuid",
+            "title": "Candidate Patient Id",
+            "type": "string"
+          },
+          "hold_lifetime_seconds": {
+            "title": "Hold Lifetime Seconds",
+            "type": "integer"
+          },
+          "offer_expiry_seconds": {
+            "title": "Offer Expiry Seconds",
+            "type": "integer"
+          },
+          "rule": {
+            "const": "rank_then_joined_at",
+            "title": "Rule",
+            "type": "string"
+          },
+          "template": {
+            "title": "Template",
+            "type": "string"
+          },
+          "waitlist_id": {
+            "format": "uuid",
+            "title": "Waitlist Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidate_patient_id",
+          "waitlist_id",
+          "template",
+          "offer_expiry_seconds",
+          "hold_lifetime_seconds",
+          "rule"
+        ],
+        "title": "OfferDraftBodyOut",
+        "type": "object"
+      },
+      "OfferDraftDataOut": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/OfferCandidateOut"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "draft": {
+            "$ref": "#/components/schemas/OfferDraftBodyOut"
+          }
+        },
+        "required": [
+          "candidates",
+          "draft"
+        ],
+        "title": "OfferDraftDataOut",
+        "type": "object"
+      },
+      "OfferDraftOut": {
+        "additionalProperties": false,
+        "description": "Typed (frontend request 6): a closed reason word, the names of any missing clinician-owned settings in their own field, and typed data. `ok` carries `data`; `empty` and `unavailable` carry a reason.",
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OfferDraftDataOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "missing_settings": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing Settings"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "not_configured",
+                  "no_ranked_candidates"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "empty",
+              "unavailable",
+              "degraded"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "reason",
+          "missing_settings",
+          "data"
+        ],
+        "title": "OfferDraftOut",
         "type": "object"
       },
       "OfferRowList": {
@@ -18872,7 +18988,7 @@
     },
     "/v1/staff/scheduling/offers/draft": {
       "get": {
-        "description": "The ranked candidates for a freed slot and a DRAFT offer for the first, computed now and stored nowhere (`status`: ok, empty, or unavailable with `not_configured:` and the names of the\nmissing clinician-owned settings). 404 for a clinic you cannot see, 403 unless you are front desk there.",
+        "description": "The ranked candidates for a freed slot and a DRAFT offer for the first, computed now and stored nowhere (`status`: ok, empty, or unavailable; `reason` is a closed word, `not_configured` or `no_ranked_candidates`, and\n`missing_settings` names the clinician-owned settings that are unset). 404 for a clinic you cannot see, 403 unless you are front desk there.",
         "operationId": "draft_offer_v1_staff_scheduling_offers_draft_get",
         "parameters": [
           {
@@ -18901,7 +19017,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope"
+                  "$ref": "#/components/schemas/OfferDraftOut"
                 }
               }
             },

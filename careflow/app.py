@@ -1403,17 +1403,65 @@ class SendOfferOut(_Out):
     replayed: bool
 
 
-@scheduling.get("/offers/draft", response_model=Envelope)
+class OfferCandidateOut(_Out):
+    waitlist_id: uuid.UUID
+    patient_id: uuid.UUID
+    priority_code: str
+    rank: int
+    joined_at: datetime
+
+
+class OfferDraftBodyOut(_Out):
+    """The DRAFT offer for the first ranked candidate: the clinician-approved template verbatim, the two clinician-owned times, and the only ordering rule used."""
+
+    candidate_patient_id: uuid.UUID
+    waitlist_id: uuid.UUID
+    template: str
+    offer_expiry_seconds: int
+    hold_lifetime_seconds: int
+    rule: Literal["rank_then_joined_at"]
+
+
+class OfferDraftDataOut(_Out):
+    candidates: list[OfferCandidateOut]
+    draft: OfferDraftBodyOut
+
+
+OfferDraftReason = Literal["not_configured", "no_ranked_candidates"]
+
+
+class OfferDraftOut(_Out):
+    """Typed (frontend request 6): a closed reason word, the names of any missing clinician-owned settings in their own field, and typed data. `ok` carries `data`; `empty` and `unavailable` carry a reason."""
+
+    status: Literal["ok", "empty", "unavailable", "degraded"]
+    reason: OfferDraftReason | None
+    missing_settings: list[str] | None
+    data: OfferDraftDataOut | None
+
+
+def _offer_draft_out(env: Envelope) -> OfferDraftOut:
+    reason, missing = None, None
+    if env.reason:
+        word, _, names = env.reason.partition(":")
+        reason = word if word in ("not_configured", "no_ranked_candidates") else None
+        missing = [n for n in names.split(",") if n] if word == "not_configured" else None
+    data = OfferDraftDataOut(**env.data) if env.status == "ok" and isinstance(env.data, dict) else None
+    return OfferDraftOut(status=env.status, reason=reason, missing_settings=missing, data=data)  # type: ignore[arg-type]
+
+
+@scheduling.get("/offers/draft", response_model=OfferDraftOut)
 async def draft_offer(
     clinic_id: uuid.UUID, visit_type_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims),
     settings: SchedulingSettings = Depends(scheduling_settings),
-) -> Envelope:
-    """The ranked candidates for a freed slot and a DRAFT offer for the first, computed now and stored nowhere (`status`: ok, empty, or unavailable with `not_configured:` and the names of the
-    missing clinician-owned settings). 404 for a clinic you cannot see, 403 unless you are front desk there."""
+) -> OfferDraftOut:
+    """The ranked candidates for a freed slot and a DRAFT offer for the first, computed now and stored nowhere (`status`: ok, empty, or unavailable; `reason` is a closed word, `not_configured` or `no_ranked_candidates`, and
+    `missing_settings` names the clinician-owned settings that are unset). 404 for a clinic you cannot see, 403 unless you are front desk there."""
     await _front_desk_gate(conn, claims, clinic_id)
-    return await mcp_invoke(
-        build_scheduling_server(settings), "propose_offer", {"clinic_id": str(clinic_id), "visit_type_id": str(visit_type_id)},
-        account_id=uuid.UUID(claims["sub"]), conn=conn, origin="live",
+    return _offer_draft_out(
+        await mcp_invoke(
+            build_scheduling_server(settings), "propose_offer", {"clinic_id": str(clinic_id), "visit_type_id": str(visit_type_id)},
+            account_id=uuid.UUID(claims["sub"]), conn=conn, origin="live",
+        )
     )
 
 
