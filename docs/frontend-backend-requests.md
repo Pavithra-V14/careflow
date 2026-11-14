@@ -292,6 +292,29 @@ Threads and messages exist only under `/v1/staff`. The patient needs to list the
 ### 30. Patient visit-readiness routes (requested 2026-11-14)
 No patient route for intake questions, the procedure checklist or reporting a barrier (E2 to E4).
 
+## Backend status, 2026-11-14 (answers to the open items; the frontend may delete a line once it has read it)
+
+Built in this pass (no new decision was needed):
+
+- **19 (red-flag rules):** `authored_by_you` is on each version in `GET /v1/staff/console/red-flag-rules` (a boolean; the author id is never returned). `POST /v1/staff/console/red-flag-rules/{rule_id}/withdraw` withdraws a DRAFT (status `withdrawn`). `POST .../{rule_id}/decision` now takes `retire` as well as `approve` and `reject`: two different doctors each record `retire` on an APPROVED version; a retired version never comes back. `POST /v1/staff/console/red-flag-rules` lets a doctor write a DRAFT in a restricted language (literal phrases and token sets, no regular expression). Decision words added: `retired`, `withdrawn`, `not_approved`. The supervisor sees only the task inbox by design (the alerts route does not list that role).
+- **6 / 5 (typed envelope):** `GET /v1/staff/scheduling/offers/draft` now returns `OfferDraftOut`: `status`, a closed `reason` (`not_configured` or `no_ranked_candidates`), `missing_settings` (the setting names, in their own field) and typed `data` (`candidates`, `draft`). Review-task `kind` stays a string by decision (new kinds appear with new features); `resolvable` and `priority` already carry what the console needs.
+- **11 (closed words as enums), 2 (clinic name, origin, profile), 9 (clinic time zone), 10 (`message_id` on an offer row):** already in the snapshot (`Me`, `OfferRowOut`, the enums).
+- **Revoke response:** `admin_alert` (`raised`, `not_for_this_reason`, `not_configured`, `on_record`) is on the revoke result; a new alert class `identity_revoked_suspect`; a new staff role `front_desk_supervisor`.
+- **Medications:** `POST` and `GET /v1/staff/medications` (a code from the clinic's vocabulary setting, a verified flag, times; no dose or free text).
+
+NOT built, and why (each needs a decision or a service first):
+
+- **5 (scan status on the referral list, a signed read URL):** no table records a malware verdict per document yet, and a signed read URL is a storage call that is only verified for the synthetic demo. Waits on the scanner decision (checklist 2).
+- **20 (profile: name, sex, preferred language):** new personal data fields: the privacy owner's field list (and the sex word list) must be decided first.
+- **21 (family members and guardians):** counsel confirms the under-18 specifics first.
+- **22 (notification channels, optional e-mail):** no SMS or e-mail provider is approved; the preference words and e-mail as a verified contact are undecided.
+- **23 (devices and sessions):** a call to the Auth admin API, which stays unwired (owner decision); passkeys are excluded.
+- **24 (erasure, correction, nominee as separate request types):** counsel decides whether they are separate types or categories; the category list is the clinic's required setting `CAREFLOW_GRIEVANCE_CATEGORIES`.
+- **25 (staff invite fields):** new personal data fields and the unwired Auth admin call.
+- **26 (grievance without signing in):** an unauthenticated route taking free text needs abuse limits and counsel's wording; undecided.
+- **27 (card and template editor):** protocol cards and templates are clinician content with no table yet (`kb.cards` does not exist); needs a card-schema design and a clinician first.
+- **28 to 30 (patient scheduling, messaging and readiness routes):** they depend on the account-stage gating, consent and guardian decisions (items 21 and 22) and on the patient-facing channel decision for readiness (owner decision so far: none; a nurse or doctor relays replies).
+
 ## Decisions recorded here for later readers
 
 - **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;
