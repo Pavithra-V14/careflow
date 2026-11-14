@@ -34,6 +34,25 @@ async function sweep(page: Page, name: string, lang: string) {
 }
 
 for (const lang of LANGS) {
+  test(`voice: the setting, then the session form with nothing chosen [${lang}]`, async ({ page }) => {
+    await open(page, lang, { start: 'active', granted: true, voiceOn: true });
+    await signIn(page);
+    await expect(page.locator('#portal-voice')).toBeVisible();
+    await expect(page.locator('#portal-voice').locator('..').getByRole('radio')).toHaveCount(3);
+    await sweep(page, 'portal-voice', lang);
+  });
+
+  test(`voice: opening a session when voice is not set up (503) [${lang}]`, async ({ page }) => {
+    await open(page, lang, { start: 'active', granted: true, voiceUnavailable: true, voiceOn: true });
+    await signIn(page);
+    const voice = page.locator('#portal-voice').locator('..');
+    await voice.getByRole('radio').first().check();
+    await voice.getByRole('checkbox').check();
+    await voice.locator('button.button-primary').click();
+    await expect(voice.locator('[role=status]').last()).toBeVisible();
+    await sweep(page, 'portal-voice-503', lang);
+  });
+
   test(`sign in: the number form [${lang}]`, async ({ page }) => {
     await open(page, lang);
     await expect(page.locator('input[type=tel]')).toBeVisible();
@@ -143,4 +162,24 @@ test('nothing outside the page origin and the two configured hosts is contacted'
   await signIn(page);
   await expect(page.locator('#portal-mydata')).toBeVisible();
   expect(foreign).toEqual([]);
+});
+
+test('voice: opened with the keyboard only, and nothing asks for the microphone', async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as unknown as { __mic: number }).__mic = 0;
+    Object.defineProperty(navigator, 'mediaDevices', { value: { getUserMedia: () => { (window as unknown as { __mic: number }).__mic++; return Promise.reject(new Error('no')); } }, configurable: true });
+  });
+  const mock = await open(page, 'en', { start: 'active', granted: true, voiceOn: true });
+  await signIn(page);
+  const radio = page.getByRole('radio', { name: 'Replying to an appointment offer' });
+  await radio.focus();
+  await page.keyboard.press('Space');
+  await page.getByRole('checkbox', { name: /I have read the notice above/ }).focus();
+  await page.keyboard.press('Space');
+  const open2 = page.getByRole('button', { name: 'Open voice session' });
+  await open2.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByText('A voice session was opened.')).toBeVisible();
+  expect(await page.evaluate(() => (window as unknown as { __mic: number }).__mic)).toBe(0);
+  expect(mock.calls.filter((c) => c.path === '/v1/portal/voice/sessions')).toHaveLength(1);
 });

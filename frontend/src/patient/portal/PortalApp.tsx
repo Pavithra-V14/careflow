@@ -7,6 +7,7 @@ import { ApiProblem, toProblem, unwrap } from '../../staff/apiState';
 import { ProblemText } from '../../staff/ui/states';
 import { PATHS } from '../paths';
 import { normalisePhone, type PortalAuth } from './auth';
+import { VoiceSection } from './VoiceSection';
 import { ClaimSection, ConsentSection, GrievanceSection, MyDataSection } from './PortalSections';
 
 // The patient portal (BUILD-SPEC sections 15 and 19). Mobile first, one column. Patient session checks only: nothing about the patient is
@@ -235,6 +236,7 @@ function Account({ auth, apiBaseUrl, onSignedOut }: { auth: PortalAuth; apiBaseU
         <>
           <ClaimSection api={api} bound={account.bound_to_a_patient_record} />
           <GrievanceSection api={api} />
+          <VoiceSection api={api} />
           <MyDataSection api={api} />
         </>
       ) : (

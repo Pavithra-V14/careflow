@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-1558 of 1558 strings are unreviewed.
+1591 of 1591 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -1116,6 +1116,7 @@ Terms standardised: proposal, resolve / resolved.
 | `placeholder.reviewReasons` | PLACEHOLDER - clinician to define | PLACEHOLDER - clinician to define | kept in English by design |
 | `placeholder.revokeReasons` | [PLACEHOLDER: the wording of these reasons is not final. To be confirmed by the clinic.] | [PLACEHOLDER: the wording of these reasons is not final. To be confirmed by the clinic.] | kept in English by design |
 | `placeholder.taskClose` | PLACEHOLDER - clinician to define how this kind of task is closed. It cannot be closed here. | PLACEHOLDER - clinician to define how this kind of task is closed. It cannot be closed here. | kept in English by design |
+| `placeholder.voiceDisclosure` | [PLACEHOLDER: voice session consent and recording disclosure. To be supplied by the hospital and approved by its legal counsel.] | [PLACEHOLDER: voice session consent and recording disclosure. To be supplied by the hospital and approved by its legal counsel.] | kept in English by design |
 | `portal.activate.activated` | Your account is active. | உங்கள் கணக்கு செயலில் உள்ளது. | ok |
 | `portal.activate.already_active` | Your account was already active. | உங்கள் கணக்கு ஏற்கனவே செயலில் இருந்தது. | ok |
 | `portal.activate.body` | You can activate your account once you have granted the care-delivery notice. | பராமரிப்பு வழங்கல் அறிவிப்பை வழங்கிய பிறகு உங்கள் கணக்கைச் செயல்படுத்தலாம். | ok |
@@ -1176,12 +1177,21 @@ Terms standardised: proposal, resolve / resolved.
 | `portal.linked.label` | Linked to a record | ஒரு பதிவுடன் இணைக்கப்பட்டுள்ளது | ok |
 | `portal.myData.body` | Downloads one file with everything the system holds about you that you may see. Each download is recorded. | நீங்கள் பார்க்க அனுமதிக்கப்பட்ட, அமைப்பு உங்களைப் பற்றி வைத்திருக்கும் அனைத்தையும் ஒரே கோப்பாகப் பதிவிறக்குகிறது. ஒவ்வொரு பதிவிறக்கமும் பதிவு செய்யப்படும். | ok |
 | `portal.myData.button` | Download my data | என் தரவைப் பதிவிறக்கு | ok |
+| `portal.myData.col.decision` | Decision | முடிவு | ok |
+| `portal.myData.col.purpose` | Purpose | நோக்கம் | ok |
+| `portal.myData.col.version` | Notice version | அறிவிப்புப் பதிப்பு | ok |
+| `portal.myData.col.when` | When | எப்போது | ok |
 | `portal.myData.count.bookings` | bookings: {{count}} | முன்பதிவுகள்: {{count}} | ok |
 | `portal.myData.count.consents` | consent decisions: {{count}} | சம்மத முடிவுகள்: {{count}} | ok |
 | `portal.myData.count.grievances` | messages you sent to the hospital: {{count}} | நீங்கள் மருத்துவமனைக்கு அனுப்பிய செய்திகள்: {{count}} | ok |
 | `portal.myData.count.messages` | messages: {{count}} | செய்திகள்: {{count}} | ok |
 | `portal.myData.count.records` | records: {{count}} | பதிவுகள்: {{count}} | ok |
 | `portal.myData.done` | Your file was downloaded. It holds: | உங்கள் கோப்பு பதிவிறக்கப்பட்டது. அதில் உள்ளவை: | ok |
+| `portal.myData.history` | Your consent history | உங்கள் ஒப்புதல் வரலாறு | ok |
+| `portal.myData.historyNone` | There are no consent entries in the file. | கோப்பில் ஒப்புதல் பதிவுகள் எதுவும் இல்லை. | ok |
+| `portal.myData.purpose.ai_processing` | AI-assisted processing | செயற்கை நுண்ணறிவு உதவியுடன் செயலாக்கம் | ok |
+| `portal.myData.purpose.care_delivery` | Care delivery | சிகிச்சை வழங்கல் | ok |
+| `portal.myData.purpose.service_improvement` | Service improvement | சேவை மேம்பாடு | ok |
 | `portal.myData.title` | Download my data | என் தரவைப் பதிவிறக்கு | ok |
 | `portal.myData.truncated` | The file does not hold everything: some lists were cut short. | கோப்பில் அனைத்தும் இல்லை: சில பட்டியல்கள் சுருக்கப்பட்டன. | ok |
 | `portal.notAvailable` | This is not available to you yet. | இது இன்னும் உங்களுக்குக் கிடைக்கவில்லை. | ok |
@@ -1208,6 +1218,29 @@ Terms standardised: proposal, resolve / resolved.
 | `portal.stage.registered` | Created | உருவாக்கப்பட்டது | ok |
 | `portal.title` | Your account | உங்கள் கணக்கு | ok |
 | `portal.unreadable` | Not readable | படிக்க இயலவில்லை | ok |
+| `portal.voice.agree` | I have read the notice above and I agree to this voice session. | மேலே உள்ள அறிவிப்பைப் படித்தேன்; இந்தக் குரல் அமர்வுக்கு ஒப்புக்கொள்கிறேன். | ok |
+| `portal.voice.confirmBody` | This changes one setting on your account. You can change it back at any time. | இது உங்கள் கணக்கின் ஓர் அமைப்பை மாற்றும். எப்போது வேண்டுமானாலும் மீண்டும் மாற்றலாம். | ok |
+| `portal.voice.confirmOffTitle` | Turn voice off? | குரலை அணைக்கவா? | ok |
+| `portal.voice.confirmOnTitle` | Turn voice on? | குரலை இயக்கவா? | ok |
+| `portal.voice.intro` | Voice lets you say a reply out loud instead of typing it. It is optional and it stays off until you turn it on. | தட்டச்சு செய்வதற்குப் பதிலாக உங்கள் பதிலை வாய்மொழியாகச் சொல்ல குரல் உதவும். இது விருப்பத்துக்குரியது; நீங்கள் இயக்கும் வரை அணைந்தே இருக்கும். | ok |
+| `portal.voice.invalid` | The session could not be opened as asked. No session was opened. | கேட்டபடி அமர்வைத் திறக்க முடியவில்லை. எந்த அமர்வும் திறக்கப்படவில்லை. | ok |
+| `portal.voice.noAudio` | This screen does not record or play sound yet. The audio connection is not set up. | இந்தத் திரை இன்னும் ஒலியைப் பதிவு செய்யாது, ஒலிக்கவும் செய்யாது. ஒலி இணைப்பு அமைக்கப்படவில்லை. | ok |
+| `portal.voice.notYours` | No session was opened. You are not recorded as a patient of this hospital. | எந்த அமர்வும் திறக்கப்படவில்லை. நீங்கள் இந்த மருத்துவமனையின் நோயாளியாகப் பதிவாகவில்லை. | ok |
+| `portal.voice.off` | Voice is off for your account. | உங்கள் கணக்கில் குரல் அணைந்துள்ளது. | ok |
+| `portal.voice.on` | Voice is on for your account. | உங்கள் கணக்கில் குரல் இயக்கத்தில் உள்ளது. | ok |
+| `portal.voice.open` | Open voice session | குரல் அமர்வைத் திற | ok |
+| `portal.voice.opened` | A voice session was opened. | ஒரு குரல் அமர்வு திறக்கப்பட்டது. | ok |
+| `portal.voice.repeat` | This repeated an earlier request. No new session was made. | இது முன்னர் செய்த அதே கோரிக்கையின் மறுமுறை. புதிய அமர்வு உருவாக்கப்படவில்லை. | ok |
+| `portal.voice.saved` | Your voice setting was saved. | உங்கள் குரல் அமைப்பு சேமிக்கப்பட்டது. | ok |
+| `portal.voice.sessionTitle` | Open a voice session | குரல் அமர்வைத் திற | ok |
+| `portal.voice.title` | Voice | குரல் | ok |
+| `portal.voice.turnOff` | Turn voice off | குரலை அணை | ok |
+| `portal.voice.turnOn` | Turn voice on | குரலை இயக்கு | ok |
+| `portal.voice.unavailable` | Voice is not available at this hospital right now. No session was opened. | இந்த மருத்துவமனையில் குரல் இப்போது கிடைக்கவில்லை. எந்த அமர்வும் திறக்கப்படவில்லை. | ok |
+| `portal.voice.workflow.intake_question` | Answering a question before a visit | வருகைக்கு முன் கேட்கப்படும் கேள்விக்குப் பதில் சொல்ல | ok |
+| `portal.voice.workflow.readiness_item` | Answering an item on a visit checklist | வருகைக்கான தயார்நிலைப் பட்டியலில் ஒரு உருப்படிக்குப் பதில் சொல்ல | ok |
+| `portal.voice.workflow.slot_offer` | Replying to an appointment offer | சந்திப்பு வாய்ப்புக்குப் பதில் சொல்ல | ok |
+| `portal.voice.workflowLegend` | What is this session for? | இந்த அமர்வு எதற்காக? | ok |
 | `problem.conflict` | That conflicts with the current state. Refresh and try again. | இது தற்போதைய நிலையுடன் முரண்படுகிறது. புதுப்பித்து மீண்டும் முயற்சிக்கவும். | ok |
 | `problem.forbidden` | This is not available to your role. | இது உங்கள் பங்கிற்குக் கிடைக்காது. | ok |
 | `problem.invalid` | Check what you entered and try again. | நீங்கள் உள்ளிட்டதைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும். | ok |

@@ -151,7 +151,7 @@ function Activate({ api }: { api: Api }) {
  * The hospital the patient is dealing with, from the public clinic route (its id and name), so the patient never types an id. If the owner
  * has marked no clinic public (404) or the read fails, the form falls back to asking for the clinic code the hospital gave the patient.
  */
-function useClinicField(api: Api, idPrefix: string, typed: string, setTyped: (v: string) => void) {
+export function useClinicField(api: Api, idPrefix: string, typed: string, setTyped: (v: string) => void) {
   const { t } = useTranslation();
   const clinic = usePortalQuery(['public-clinic'], () => unwrap(api.publicClinic()));
   const clinicId = clinic.data ? clinic.data.clinic_id : typed.trim();
@@ -369,7 +369,7 @@ export function GrievanceSection({ api }: { api: Api }) {
  */
 export function MyDataSection({ api }: { api: Api }) {
   const { t } = useTranslation();
-  const [summary, setSummary] = useState<{ bookings: number; messages: number; consents: number; grievances: number; records: number; truncated: boolean } | null>(null);
+  const [summary, setSummary] = useState<{ bookings: number; messages: number; consents: number; grievances: number; records: number; truncated: boolean; history: components['schemas']['ExportConsentOut'][] } | null>(null);
   const download = useMutation<components['schemas']['MyDataOut'], ApiProblem, void>({
     gcTime: 0,
     retry: false,
@@ -390,7 +390,7 @@ export function MyDataSection({ api }: { api: Api }) {
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
-      setSummary({ bookings: data.bookings.length, messages: data.messages.length, consents: data.consents.length, grievances: data.grievances.length, records: data.records.length, truncated: data.truncated });
+      setSummary({ bookings: data.bookings.length, messages: data.messages.length, consents: data.consents.length, grievances: data.grievances.length, records: data.records.length, truncated: data.truncated, history: data.consents });
     },
   });
   return (
@@ -427,8 +427,41 @@ export function MyDataSection({ api }: { api: Api }) {
             <li>{t('portal.myData.count.grievances', { count: summary.grievances })}</li>
           </ul>
           {summary.truncated && <p>{t('portal.myData.truncated')}</p>}
+          <ConsentHistory rows={summary.history} />
         </div>
       )}
     </section>
+  );
+}
+
+// The person's own consent history, taken from the file they just asked for (no extra call, so no extra audit row). Newest first as sent.
+function ConsentHistory({ rows }: { rows: components['schemas']['ExportConsentOut'][] }) {
+  const { t } = useTranslation();
+  const word = useWord();
+  if (rows.length === 0) return <p>{t('portal.myData.historyNone')}</p>;
+  return (
+    <table>
+      <caption>{t('portal.myData.history')}</caption>
+      <thead>
+        <tr>
+          <th scope="col">{t('portal.myData.col.purpose')}</th>
+          <th scope="col">{t('portal.myData.col.decision')}</th>
+          <th scope="col">{t('portal.myData.col.version')}</th>
+          <th scope="col">{t('portal.myData.col.when')}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r, i) => (
+          <tr key={`${r.purpose}-${r.occurred_at}-${i}`}>
+            <th scope="row">{word('portal.myData.purpose', r.purpose)}</th>
+            <td>{word('portal.consent', r.action)}</td>
+            <td>{r.notice_version}</td>
+            <td>
+              <Time value={r.occurred_at} />
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
