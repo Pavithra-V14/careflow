@@ -235,3 +235,18 @@ No defect was found in the screens themselves: 0 schema mismatches in 397 calls 
 Run at the user's request. Nurse (pavithra.v2022ece@sece.ac.in), password only, read-only, 83 calls, 0 schema mismatches. The walk now opened the first patient record it had seen on a referral: the medications panel was shown (no merged-away notice) and `GET /v1/staff/medications` answered **200 with 0 schema issues**. Medications: **pass** (read only; recording, correcting and stopping were not exercised, they are writes). This also confirms the earlier "not exercised" cause: the record opened from a merge was a merged-away one, which hides the panel.
 
 Still open: re-run the doctor referral review walk once the backend's decision stage makes demo proposals carry an engine, confidence, rule and probabilities (the user will say when). The front desk supervisor walk waits for the role to be granted. Patient request status buttons stay as they are (no `allowed_next` from the backend).
+
+# Front desk supervisor walk (14 Nov 2026)
+
+Account pavithravenkatesh341@gmail.com, which now holds `front_desk` AND `front_desk_supervisor` in the dev clinic. The user typed the password and picked "Front desk supervisor" in the role picker (shell: "Active role: Front desk supervisor", TEST, Demo). Read-only walk, no writes. 62 calls, **0 schema mismatches**. Backend `127.0.0.1:8000` with `CAREFLOW_REQUIRE_AAL2=false`; dev-only skip switch on.
+
+| Check | Result | Cause |
+|---|---|---|
+| Routes the supervisor reaches that plain front desk does not | none | Every route answered the SAME as in the plain front desk walk (14 Nov, second walk): all the 200s (referrals, review tasks, scheduling lists, offers and the offer draft, slots, bookings, waitlist, alerts, patient requests, portal claims, identity merges and duplicates, autonomy mode, a merge detail, one patient record) and all the 403s (dashboard, care gaps and plans, red-flag rules, accounts, autonomy history and proposals, reviewer statistics, cost, recovery, grievances, voice sessions). `GET /break-glass/mine` was not called in this walk (the plain front desk walk did). |
+| Patient requests and the offer draft for the supervisor | 200, expected | They are front desk routes, and this account also holds `front_desk`. This is NOT something the supervisor role unlocks. |
+| 403s | all expected | Identical to plain front desk: admin, doctor and nurse routes, and voice sessions (needs a verified second factor). |
+| Anything the supervisor role unlocks | not seen, and not separable here | Two reasons. (1) The account holds both grants, and the console does not send the active-role header (`SEND_ACTIVE_ROLE_HEADER` is off), so the backend authorizes with ALL of the person's grants; picking "Front desk supervisor" in the picker changes what the console shows, not what the backend allows. (2) No route description in the snapshot names the supervisor role. The role appears only in task assignment (`assigned_role`), and the review-task list was empty or not distinguishable by role in this data. |
+
+**What this means for the earlier decision** (the supervisor sees the task inbox only): that is a console convenience, and it holds: the console offers the supervisor only Tasks. The live result shows the backend's own enforcement for a supervisor-only person has NOT been exercised, because every available account that holds the role also holds `front_desk`.
+
+To test the supervisor role on its own, either create an account that holds only `front_desk_supervisor`, or switch on the active-role header (`SEND_ACTIVE_ROLE_HEADER`, which needs the backend's migration 0028 live check). Neither was done: no write, no flag change.
