@@ -3466,6 +3466,54 @@ def portal_message_thread_read_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(), None)[:4]
 
 
+# ---- patient booking (migration 0083, frontend request 28). OFF unless the owner sets CAREFLOW_PATIENT_BOOKING=on, so the matrix patient gets a fixed 503 "not set up"; who-you-are is checked FIRST, so every other role is refused 403 whatever the
+# setting. The flows with the setting on (offered visit types only, future slots only, held-for-someone-else, the cap, cancel only a future own booking) are in tests/test_patient_booking_db_live.py.
+
+PORTAL_BOOKING = PORTAL + "/booking"
+BOOKING_NOT_SET_UP = lambda b: b == {"detail": "patient booking is not set up"}
+
+
+def portal_booking_slots_cases(ids) -> list[tuple]:
+    path = lambda **o: PORTAL_BOOKING + "/slots?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
+    cases = [_case(ids, "with patient booking not turned on an active patient account is told it is not set up", "patient", 503, path(), key=None, body=BOOKING_NOT_SET_UP)]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path(), key=None, body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases += [
+        _case(ids, "limit=0 is rejected", "patient", 422, path(limit=0), key=None, body=_fixed(422)),
+        _case(ids, "limit=101 is rejected", "patient", 422, path(limit=101), key=None, body=_fixed(422)),
+        _case(ids, "a clinic id that is not a uuid is rejected", "patient", 422, PORTAL_BOOKING + "/slots?clinic_id=nope", key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
+def portal_booking_book_cases(ids) -> list[tuple]:
+    path = lambda: f"{PORTAL_BOOKING}/slots/{uuid.uuid4()}/book"
+    cases = [_case(ids, "with patient booking not turned on an active patient account is told it is not set up", "patient", 503, path(), body=BOOKING_NOT_SET_UP)]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path(), body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases += [
+        _case(ids, "missing X-Idempotency-Key is rejected", "patient", 422, path(), key=None, body=_fixed(422)),
+        _case(ids, "a slot id that is not a uuid is rejected", "patient", 422, f"{PORTAL_BOOKING}/slots/nope/book", body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)
+
+
+def portal_booking_list_cases(ids) -> list[tuple]:
+    path = PORTAL_BOOKING + "/bookings"
+    cases = [_case(ids, "with patient booking not turned on an active patient account is told it is not set up", "patient", 503, path, key=None, body=BOOKING_NOT_SET_UP)]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path, key=None, body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    return cases + _unauthenticated(ids, path, None)[:4]
+
+
+def portal_booking_cancel_cases(ids) -> list[tuple]:
+    path = lambda: f"{PORTAL_BOOKING}/bookings/{uuid.uuid4()}/cancel"
+    cases = [_case(ids, "with patient booking not turned on an active patient account is told it is not set up", "patient", 503, path(), body=BOOKING_NOT_SET_UP)]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path(), body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases += [
+        _case(ids, "missing X-Idempotency-Key is rejected", "patient", 422, path(), key=None, body=_fixed(422)),
+        _case(ids, "a booking id that is not a uuid is rejected", "patient", 422, f"{PORTAL_BOOKING}/bookings/nope/cancel", body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)
+
+
 def staff_patient_request_list_cases(ids) -> list[tuple]:
     path = lambda **o: STAFF_PATIENT_REQUESTS + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
     visible = ("nurse_a", "doctor_a", "admin_a", "business_owner_a", "auditor_a", "multi")
@@ -3929,6 +3977,10 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", PORTAL_MESSAGES): portal_message_send_cases,
     ("GET", PORTAL_MESSAGE_THREADS): portal_message_threads_cases,
     ("GET", PORTAL_MESSAGE_THREADS + "/{thread_id}"): portal_message_thread_read_cases,
+    ("GET", PORTAL_BOOKING + "/slots"): portal_booking_slots_cases,
+    ("POST", PORTAL_BOOKING + "/slots/{slot_id}/book"): portal_booking_book_cases,
+    ("GET", PORTAL_BOOKING + "/bookings"): portal_booking_list_cases,
+    ("POST", PORTAL_BOOKING + "/bookings/{booking_id}/cancel"): portal_booking_cancel_cases,
     ("GET", STAFF_PATIENT_REQUESTS): staff_patient_request_list_cases,
     ("POST", STAFF_PATIENT_REQUESTS + "/{request_id}/status"): staff_patient_request_status_cases,
     ("POST", MEDICATIONS): medication_record_cases,

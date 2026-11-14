@@ -84,6 +84,7 @@ from careflow import (
     offers,
     openapi_errors,
     patient_view,
+    portal_booking_sql,
     portal_extras_sql,
     portal_messages_sql,
     portal_sql,
@@ -5719,6 +5720,110 @@ async def read_my_message_thread(thread_id: uuid.UUID, request: Request, conn: T
                 log.warning("a patient's own message could not be read (account=%s error=%s)", account_id, type(exc).__name__)
         out.append(PatientMessageOut(message_id=r.message_id, sender=r.sender_kind, created_at=r.created_at, text=body_text, erased=bool(r.erased), readable=body_text is not None or bool(r.erased)))  # type: ignore[arg-type]
     return PatientMessageList(thread_id=thread_id, messages=out)
+
+
+# ---- patient booking (migration 0083; frontend request 28) ----------------------------------------------------------------------------------------------------------------------------
+# MECHANISM, OFF BY DEFAULT: every route answers 503 (after your identity is checked) unless the owner sets CAREFLOW_PATIENT_BOOKING=on. Even then a patient is offered only the visit types the owner listed in sched.patient_bookable_visit_types
+# (empty means none). A patient books only an open FUTURE slot, or one held for THEM; cancels only a FUTURE booking of their own; and can never see or touch anyone else's. No clinical content is involved.
+
+
+class PatientSlotOut(_Out):
+    slot_id: uuid.UUID
+    starts_at: datetime
+    ends_at: datetime
+    visit_type_id: uuid.UUID
+    visit_type_name: str
+    location_name: str
+
+
+class PatientSlotList(_Out):
+    slots: list[PatientSlotOut]
+
+
+class PatientBookedOut(_Out):
+    booking_id: uuid.UUID
+    slot_id: uuid.UUID
+    created: bool
+
+
+class PatientBookingOut(_Out):
+    booking_id: uuid.UUID
+    clinic_id: uuid.UUID
+    slot_id: uuid.UUID
+    status: Literal["confirmed", "cancelled"]
+    starts_at: datetime
+    ends_at: datetime
+    visit_type_name: str
+    location_name: str
+    cancellable: bool
+
+
+class PatientBookingList(_Out):
+    bookings: list[PatientBookingOut]
+
+
+class PatientCancelledOut(_Out):
+    booking_id: uuid.UUID
+    changed: bool
+
+
+def _patient_booking_on() -> None:
+    if not portal_booking_sql.enabled():
+        raise HTTPException(status_code=503, detail="patient booking is not set up")
+
+
+@portal.get("/booking/slots", response_model=PatientSlotList)
+async def list_bookable_slots(clinic_id: uuid.UUID, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims), limit: Annotated[int, Query(ge=1, le=100)] = 50) -> PatientSlotList:
+    """Open future slots of the visit types the clinic lets patients book, soonest first. 403 unless you are an active patient account with a live record at that clinic; 503 unless the owner turned patient booking on."""
+    await _patient_account(conn, claims)
+    _patient_booking_on()
+    try:
+        rows = await portal_booking_sql.open_slots(conn, clinic_id, limit)
+    except portal_booking_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return PatientSlotList(slots=[PatientSlotOut(slot_id=r.slot_id, starts_at=r.starts_at, ends_at=r.ends_at, visit_type_id=r.visit_type_id, visit_type_name=r.visit_type_name, location_name=r.location_name) for r in rows])
+
+
+@portal.post("/booking/slots/{slot_id}/book", response_model=PatientBookedOut, status_code=201)
+async def book_my_slot(slot_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> PatientBookedOut:
+    """Book an open future slot of a visit type the clinic lets patients book (or one held for you). Idempotent on the key. 403 for a slot you may not book (missing, another clinic's, a visit type not offered: one answer), 409 if the slot is taken, held for someone
+    else or no longer open, or you are at the clinic's maximum of future bookings, or the key was used for another request; 503 unless the owner turned patient booking on."""
+    await _patient_account(conn, claims)
+    _patient_booking_on()
+    try:
+        booking_id, booked_slot, created = await portal_booking_sql.book(conn, slot_id, idempotency_key)
+    except portal_booking_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    except (portal_booking_sql.SlotNotOpen, portal_booking_sql.CapReached, portal_booking_sql.KeyReused):
+        raise HTTPException(status_code=409, detail="that slot cannot be booked") from None
+    return PatientBookedOut(booking_id=booking_id, slot_id=booked_slot, created=created)
+
+
+@portal.get("/booking/bookings", response_model=PatientBookingList)
+async def list_my_bookings(conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> PatientBookingList:
+    """Your own bookings, latest first, each saying whether you can still cancel it (confirmed and in the future). 403 unless you are an active patient account; 503 unless the owner turned patient booking on."""
+    await _patient_account(conn, claims)
+    _patient_booking_on()
+    try:
+        rows = await portal_booking_sql.my_bookings(conn)
+    except portal_booking_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return PatientBookingList(bookings=[PatientBookingOut(booking_id=r.booking_id, clinic_id=r.clinic_id, slot_id=r.slot_id, status=r.status, starts_at=r.starts_at, ends_at=r.ends_at, visit_type_name=r.visit_type_name, location_name=r.location_name, cancellable=r.cancellable) for r in rows])  # type: ignore[arg-type]
+
+
+@portal.post("/booking/bookings/{booking_id}/cancel", response_model=PatientCancelledOut)
+async def cancel_my_booking(booking_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> PatientCancelledOut:
+    """Cancel one of your own FUTURE bookings; the slot reopens and nobody is contacted. Idempotent on the key. 404 for a booking that is not yours or does not exist (one answer), 409 if it is already cancelled by another request or its slot has started;
+    503 unless the owner turned patient booking on."""
+    await _patient_account(conn, claims)
+    _patient_booking_on()
+    try:
+        changed = await portal_booking_sql.cancel(conn, booking_id, idempotency_key)
+    except portal_booking_sql.Refused:
+        raise HTTPException(status_code=404, detail="not found") from None
+    except portal_booking_sql.NotCancellable:
+        raise HTTPException(status_code=409, detail="that booking cannot be cancelled") from None
+    return PatientCancelledOut(booking_id=booking_id, changed=changed)
 
 
 class StaffPatientRequestOut(_Out):

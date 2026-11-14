@@ -10,8 +10,9 @@
 --   * msg.guard_patient_live (0011) is re-issued with one added condition: the caller is the patient's own bound, active patient account. Staff behaviour is unchanged.
 --
 -- NEW GRANTS (ledger): EXECUTE on msg.patient_open_thread, msg.patient_post_message, msg.patient_threads, msg.patient_thread_messages, kb.patient_screening_rules to careflow_app. No table grant changes.
--- Residual risk: the same as 0013 (the database cannot prove the rule engine ran on the text that was stored). A patient session can call kb.patient_screening_rules and so can read the rule phrases of its own clinic's rules; the rules
--- are clinician data, not patient data, but a determined patient could learn which phrases escalate. Recorded in the pre-launch checklist.
+-- Residual risks (pre-launch checklist 87): (1) the same as 0013, the database cannot prove the rule engine ran on the text that was stored; and now the party who can call msg.record_screening for a patient message is the patient who wrote it
+-- (only for a message written in the same transaction, and a `clear` still has to match the database's own rule count and hash, which the patient can read through kb.patient_screening_rules); (2) that function returns the clinic's rules of every status
+-- (draft and retired too, as the engine reads them): clinician data, not patient data, but a determined patient could learn which phrases escalate.
 
 -- ---- helper: is this message the caller's own patient message? ----------------------------------------------------------
 
@@ -24,7 +25,7 @@ as $$
           join msg.threads t on t.id = m.thread_id and t.clinic_id = m.clinic_id
           join mpi.patients pt on pt.id = t.patient_id and pt.clinic_id = t.clinic_id
           join iam.accounts a on a.id = auth.uid() and a.account_type = 'patient' and a.status = 'active'
-         where m.id = p_message_id and m.sender_kind = 'patient' and m.recorded_by = auth.uid()
+         where m.id = p_message_id and m.sender_kind = 'patient' and m.recorded_by = auth.uid() and m.created_at >= transaction_timestamp()  -- only a message written in THIS transaction
            and pt.account_id = auth.uid() and pt.erased_at is null
     )
 $$;
@@ -76,7 +77,7 @@ end $$;
 -- ---- kb.patient_screening_rules: the rules the engine reads, for a bound patient of that clinic only -----------------------
 
 create function kb.patient_screening_rules(p_clinic_id uuid, p_origin text)
-    returns table (id uuid, clinic_id uuid, rule_code text, version_id integer, status text, phrases jsonb, patterns jsonb, token_sets jsonb)
+    returns table (id uuid, clinic_id uuid, rule_code text, version_id integer, status text, phrases text[], patterns text[], token_sets jsonb)
     language plpgsql stable security definer set search_path = ''
 as $$
 begin
@@ -118,8 +119,8 @@ begin
         return;
     end if;
     insert into msg.threads (id, clinic_id, patient_id, topic, created_by, origin, idempotency_key)
-    values (p_new_thread_id, p_clinic_id, v_patient, p_topic, v_actor, v_origin, 'patient-thread:' || v_actor::text || ':' || p_topic)
-    on conflict (patient_id, topic) do nothing
+    values (p_new_thread_id, p_clinic_id, v_patient, p_topic, v_actor, v_origin, 'patient-thread:' || p_new_thread_id::text)
+    on conflict do nothing
     returning id into v_id;
     if v_id is null then
         select t.id into v_id from msg.threads t where t.patient_id = v_patient and t.topic = p_topic;
@@ -128,7 +129,7 @@ begin
     end if;
     insert into audit.log (origin, clinic_id, actor_id, action, resource_type, resource_id, details, idempotency_key)
     values (v_origin, p_clinic_id, v_actor, 'msg.patient_thread.opened', 'msg.threads', v_id::text, jsonb_build_object('topic', p_topic),
-            'patient-thread-audit:' || v_id::text);
+            'sys:patient-thread:' || gen_random_uuid()::text);
     return query select v_id, p_clinic_id, v_origin, true;
 end
 $$;
@@ -157,16 +158,26 @@ begin
         raise exception 'message refused' using errcode = '42501';
     end if;
     v_key := 'patient-msg:' || v_actor::text || ':' || p_idempotency_key;
-    select m.id into v_prior from msg.messages m where m.idempotency_key = v_key and m.recorded_by = v_actor and m.thread_id = p_thread_id;
+    select m.id into v_prior from msg.messages m where m.idempotency_key = v_key and m.recorded_by = v_actor;
     if v_prior is not null then
         return query select v_prior, false;
         return;
     end if;
-    insert into msg.messages (id, clinic_id, origin, topic, thread_id, sender_kind, recorded_by, body_ct, body_key_version, idempotency_key)
-    values (p_message_id, v_t.clinic_id, v_t.origin, v_t.topic, p_thread_id, 'patient', v_actor, p_body_ct, p_key_version, v_key);
+    begin
+        insert into msg.messages (id, clinic_id, origin, topic, thread_id, sender_kind, recorded_by, body_ct, body_key_version, idempotency_key)
+        values (p_message_id, v_t.clinic_id, v_t.origin, v_t.topic, p_thread_id, 'patient', v_actor, p_body_ct, p_key_version, v_key);
+    exception when unique_violation then
+        -- a concurrent identical post answers as a replay; any other collision (a key or id that is not this caller's) is the one fixed refusal
+        select m.id into v_prior from msg.messages m where m.idempotency_key = v_key and m.recorded_by = v_actor;
+        if v_prior is null then
+            raise exception 'message refused' using errcode = '42501';
+        end if;
+        return query select v_prior, false;
+        return;
+    end;
     insert into audit.log (origin, clinic_id, actor_id, action, resource_type, resource_id, details, idempotency_key)
     values (v_t.origin, v_t.clinic_id, v_actor, 'msg.patient_message.sent', 'msg.messages', p_message_id::text, jsonb_build_object('topic', v_t.topic),
-            'patient-msg-audit:' || p_message_id::text);
+            'sys:patient-msg:' || gen_random_uuid()::text);
     return query select p_message_id, true;
 end
 $$;
@@ -191,6 +202,7 @@ begin
                (select count(*) from msg.messages m where m.thread_id = t.id),
                (select max(m.created_at) from msg.messages m where m.thread_id = t.id)
           from msg.threads t join mpi.patients pt on pt.id = t.patient_id and pt.clinic_id = t.clinic_id
+           join iam.accounts a on a.id = pt.account_id and a.account_type = 'patient' and a.status = 'active'
          where pt.account_id = v_actor and pt.erased_at is null and (t.topic <> 'care' or v_stage = 'active')
          order by t.created_at;
 end
@@ -212,6 +224,7 @@ begin
         select m.id, m.clinic_id, m.thread_id, m.topic, m.sender_kind, m.created_at, m.body_ct, m.body_key_version, (m.erased_at is not null)
           from msg.messages m join msg.threads t on t.id = m.thread_id and t.clinic_id = m.clinic_id
           join mpi.patients pt on pt.id = t.patient_id and pt.clinic_id = t.clinic_id
+          join iam.accounts a on a.id = pt.account_id and a.account_type = 'patient' and a.status = 'active'
          where m.thread_id = p_thread_id and pt.account_id = v_actor and pt.erased_at is null and (t.topic <> 'care' or v_stage = 'active')
          order by m.created_at;
 end

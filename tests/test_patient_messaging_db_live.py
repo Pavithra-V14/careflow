@@ -95,7 +95,11 @@ async def world(db):
             ids[rec], ids["clinic"], ids[acct], f"pm-{ids[rec]}",
         )
     # pa1 is `active` (a resolved claim at the clinic); pa2 and pa3 are only `new_patient`
-    await h.execute("insert into mpi.claim_requests (clinic_id, origin, account_id, status) values ($1, 'test', $2, 'resolved')", ids["clinic"], ids["pa1"])
+    await h.execute("insert into mpi.claim_requests (clinic_id, origin, account_id) values ($1, 'test', $2)", ids["clinic"], ids["pa1"])
+    await h.execute(
+        "update mpi.claim_requests set status = 'resolved', resolved_by = $1, resolved_at = clock_timestamp(), resolved_patient_id = $2 where account_id = $3",
+        ids["fd"], ids["rec1"], ids["pa1"],
+    )
     return ids
 
 
@@ -134,7 +138,7 @@ async def test_a_patient_cannot_open_a_thread_at_another_clinic_or_without_a_rec
     assert await open_thread(db, w, "pa1", clinic=w["other"]) == "42501"
     assert await open_thread(db, w, "nurse") == "42501"
     assert await open_thread(db, w, "fd") == "42501"
-    await owner(db, "update mpi.patients set erased_at = clock_timestamp() where id = :p", p=w["rec3"])
+    await owner(db, "update mpi.patients set erased_at = clock_timestamp(), name_ct = null, dob_ct = null, phone_ct = null where id = :p", p=w["rec3"])
     assert await open_thread(db, w, "pa3") == "42501"  # an erased record
 
 
@@ -151,8 +155,10 @@ async def test_a_posted_message_cannot_commit_unscreened_and_the_patient_can_scr
     args = {"m": mid, "h": "0" * 64, "k": "s1"}
     assert await as_app(db, w["pa1"], (screen, args)) == "42501"
     assert await as_app(db, w["nurse"], (screen, {**args, "k": "s2"})) == [("unassessable",)]
-    done = await as_app(db, w["pa2"], (screen, {**args, "k": "s3"}), ("set constraints all immediate", {}))
-    assert not isinstance(done, str)  # no SQLSTATE: the message is now screened and may commit
+    # a fresh message with no earlier screening: the patient who wrote it screens it themselves in the same transaction, and then the deferred check passes
+    own = uuid.uuid4()
+    done = await as_app(db, w["pa2"], (POST, {"t": thread, "m": own, "k": "m3"}), (screen, {**args, "m": own, "k": "s3"}), ("set constraints all immediate", {}))
+    assert not isinstance(done, str), done
     assert (await owner(db, "select count(*) from agents.review_tasks where source_message_id = :m and assigned_role = 'nurse'", m=str(mid)))[0][0] >= 1
 
 
@@ -162,6 +168,7 @@ async def test_a_patient_cannot_screen_a_staff_message_or_post_into_a_thread_tha
     assert await as_app(db, w["pa3"], (POST, {"t": thread, "m": uuid.uuid4(), "k": "x"})) == "42501"
     assert await as_app(db, w["pa1"], (POST, {"t": uuid.uuid4(), "m": uuid.uuid4(), "k": "x"})) == "42501"
     staff_msg = uuid.uuid4()
+    await db.execute(text("select set_config('request.jwt.claims', :c, true)"), {"c": claims_for(w["nurse"])})  # the staff insert is made as the nurse, explicitly
     await owner(
         db,
         "insert into msg.messages (id, clinic_id, origin, topic, thread_id, sender_kind, recorded_by, body_ct, body_key_version, idempotency_key) "
@@ -186,14 +193,14 @@ async def test_a_post_replays_and_reads_are_private_to_the_owner_of_the_thread(d
     assert await as_app(db, w["pa2"], ("select count(*) from msg.messages", {})) == [(0,)]  # no table access at all
     assert await as_app(db, w["pa2"], ("select count(*) from msg.threads", {})) == [(0,)]
     assert await as_app(db, w["nurse"], ("select count(*) from msg.messages where thread_id = :t", {"t": thread})) == [(1,)]  # the clinic's nurse reads it as before
-    assert await as_app(db, w["nurse"], ("select count(*) from msg.patient_threads()", {})) == [(0,)]
+    assert await as_app(db, w["nurse"], ("select count(*) from msg.patient_threads()", {})) == "42501"  # staff have no patient stage
 
 
 async def test_a_care_thread_is_hidden_from_a_patient_who_is_not_active_even_if_it_exists(db):
     w = await world(db)
     thread = await thread_of(db, w, "pa1", "care")
-    await owner(db, "update mpi.claim_requests set status = 'rejected' where account_id = :a", a=w["pa1"])  # no longer active
-    assert await as_app(db, w["pa1"], ("select count(*) from msg.patient_threads()", {})) == [(0,)]
+    await owner(db, "update iam.accounts set status = 'suspended' where id = :a", a=w["pa1"])  # no longer an active account
+    assert await as_app(db, w["pa1"], ("select count(*) from msg.patient_threads()", {})) == [(0,)]  # a suspended account reads nothing
     assert await as_app(db, w["pa1"], ("select message_id from msg.patient_thread_messages(:t)", {"t": thread})) == []
     assert await as_app(db, w["pa1"], (POST, {"t": thread, "m": uuid.uuid4(), "k": "c"})) == "42501"
 
