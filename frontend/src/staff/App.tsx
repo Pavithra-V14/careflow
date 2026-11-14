@@ -36,7 +36,7 @@ function Screens() {
  */
 export function App({ port, apiBaseUrl }: { port: AuthPort | null; apiBaseUrl: string }) {
   const { t } = useTranslation();
-  const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false } } }));
+  const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false, gcTime: 0 }, mutations: { gcTime: 0 } } }));
   return (
     <>
       {/* The staff app routes by URL hash, so the skip link focuses <main> itself instead of navigating to #main. */}

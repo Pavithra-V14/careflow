@@ -337,6 +337,9 @@ The voice consent text must come only from the API. The frontend currently looks
 
 **32 (null in the profile write), answered 2026-11-14:** a field you leave out of `PUT /v1/portal/profile` is left as it is; a field you send as an explicit `null` is cleared, and a person may clear either one. Clearing needs no word from the clinic's list (a cleared sex is no value, not a word), so it works whether or not `CAREFLOW_SEX_WORDS` is set; a non-null sex word is still checked against the list (422 if not on it, 503 if the list is not configured). The route description says so.
 
+### 33. Idle sign-out durations (requested 2026-11-14, owner decision)
+BUILD-SPEC 18 to 21 give no idle duration for staff or patients. The frontend has the mechanism, OFF: after the configured minutes with no activity the session ends like any other sign-out. Please give the approved number of minutes for staff and for patients, and say whether a "still there?" warning should come first and for how long. They are set in `frontend/src/shared/idle.ts` as a reviewed edit; until then both are null and nobody is signed out for being idle. (This is a frontend-side setting; it is listed here so the owner's answer has a home.)
+
 ## Decisions recorded here for later readers
 
 - **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;

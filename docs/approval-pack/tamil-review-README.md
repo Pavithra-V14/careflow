@@ -4,7 +4,7 @@
 
 ## What this is
 
-CareFlow is a clinic system with a staff console (nurses, doctors, front desk, administrators) and a patient portal. Every screen has an English and a Tamil version. The Tamil was written by an AI model. This pack lists every Tamil string (1729) next to its English so a native Tamil speaker can check it before anyone relies on it. The strings are interface text only. There is no patient data in this file.
+CareFlow is a clinic system with a staff console (nurses, doctors, front desk, administrators) and a patient portal. Every screen has an English and a Tamil version. The Tamil was written by an AI model. This pack lists every Tamil string (1730) next to its English so a native Tamil speaker can check it before anyone relies on it. The strings are interface text only. There is no patient data in this file.
 
 The pack was regenerated on 2026-11-14 (`npm run i18n:pack`) and covers every string the screens use today. The file to review is [tamil-review.md](tamil-review.md). Part 7 is the full table. Parts 1 to 3 are the strings the AI was least sure about, safety-related ones first.
 
@@ -24,7 +24,7 @@ The pack was regenerated on 2026-11-14 (`npm run i18n:pack`) and covers every st
 
 ## How long it should take
 
-This is an estimate by the preparer, not a measured time. Part 1 and Part 2 together: about 2 to 3 hours. The full table: roughly 9 to 11 hours in all, best done in sittings of about 2 hours, because most of it is short labels (about 15 minutes per 100 labels) and about 718 sentences (about 40 seconds each). If you can only give two to three hours, do Parts 1, 2, 4 and 5.
+This is an estimate by the preparer, not a measured time. Part 1 and Part 2 together: about 2 to 3 hours. The full table: roughly 9 to 11 hours in all, best done in sittings of about 2 hours, because most of it is short labels (about 15 minutes per 100 labels) and about 719 sentences (about 40 seconds each). If you can only give two to three hours, do Parts 1, 2, 4 and 5.
 
 ## How to send corrections back
 

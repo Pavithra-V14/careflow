@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-1729 of 1729 strings are unreviewed.
+1730 of 1730 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -1210,6 +1210,7 @@ Terms standardised: proposal, resolve / resolved.
 | `portal.grievance.title` | Send a complaint | புகாரை அனுப்புங்கள் | ok |
 | `portal.grievance.unavailable` | This is not available right now (the category list or the encryption is not set up). Nothing was sent. | இது இப்போது கிடைக்கவில்லை (வகைப் பட்டியல் அல்லது குறியாக்கம் அமைக்கப்படவில்லை). எதுவும் அனுப்பப்படவில்லை. | ok |
 | `portal.hospital` | Hospital: {{name}} | மருத்துவமனை: {{name}} | ok |
+| `portal.idleEnded` | You were signed out because the page was not used for a while. What was on the screen was cleared. Sign in again to continue. | சிறிது நேரம் பக்கம் பயன்படுத்தப்படாததால் நீங்கள் வெளியேற்றப்பட்டீர்கள். திரையில் இருந்தவை அழிக்கப்பட்டன. தொடர மீண்டும் உள்நுழையுங்கள். | ok |
 | `portal.linked.label` | Linked to a record | ஒரு பதிவுடன் இணைக்கப்பட்டுள்ளது | ok |
 | `portal.messages.chooseTopic` | Choose | தேர்ந்தெடுக்கவும் | ok |
 | `portal.messages.confirmBody` | This sends your message to the hospital. It is stored encrypted. | இது உங்கள் செய்தியை மருத்துவமனைக்கு அனுப்பும். இது மறைகுறியாக்கப்பட்டுச் சேமிக்கப்படும். | ok |

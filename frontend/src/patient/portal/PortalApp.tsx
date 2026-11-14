@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/reac
 import { usePortalQuery } from './portalQuery';
 import { useTranslation } from 'react-i18next';
 import { createApi } from '../../shared/api/client';
+import { IDLE_SIGN_OUT_MINUTES, useIdleSignOut } from '../../shared/idle';
 import { ApiProblem, toProblem, unwrap } from '../../staff/apiState';
 import { ProblemText } from '../../staff/ui/states';
 import { PATHS } from '../paths';
@@ -21,7 +22,8 @@ type Phase = 'loading' | 'signed-out' | 'signed-in';
 export function PortalApp({ auth, apiBaseUrl }: { auth: PortalAuth | null; apiBaseUrl: string }) {
   const { t } = useTranslation();
   const [phase, setPhase] = useState<Phase>('loading');
-  const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false, retry: false } } }));
+  const [idleEnded, setIdleEnded] = useState(false);
+  const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false, retry: false, gcTime: 0 }, mutations: { gcTime: 0 } } }));
 
   useEffect(() => {
     if (!auth) return;
@@ -45,6 +47,12 @@ export function PortalApp({ auth, apiBaseUrl }: { auth: PortalAuth | null; apiBa
     setPhase('signed-out');
   }, [auth, queryClient]);
 
+  // Off until the owner supplies an approved number of minutes (src/shared/idle.ts). When on, the person is signed out and told so.
+  useIdleSignOut(IDLE_SIGN_OUT_MINUTES.patient, phase === 'signed-in', () => {
+    setIdleEnded(true);
+    void signOut();
+  });
+
   if (!auth) {
     return (
       <section aria-labelledby="portal-title">
@@ -66,7 +74,14 @@ export function PortalApp({ auth, apiBaseUrl }: { auth: PortalAuth | null; apiBa
       )}
       {phase === 'signed-out' && (
         <>
-          <SignIn auth={auth} onDone={() => setPhase('signed-in')} />
+          {idleEnded && <p role="status">{t('portal.idleEnded')}</p>}
+          <SignIn
+            auth={auth}
+            onDone={() => {
+              setIdleEnded(false);
+              setPhase('signed-in');
+            }}
+          />
           <QueryClientProvider client={queryClient}>
             <PublicGrievanceSection api={publicApi} />
           </QueryClientProvider>

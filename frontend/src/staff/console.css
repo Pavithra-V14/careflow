@@ -275,3 +275,9 @@ main form > label:not(.choice) {
   margin-top: var(--space-3);
   font-weight: 700;
 }
+
+/* Plain text kept as written: line breaks stay, long words wrap. */
+.pre-wrap {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

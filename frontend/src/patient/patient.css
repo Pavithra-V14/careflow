@@ -224,3 +224,9 @@ summary {
   margin: 0;
   font-weight: 800;
 }
+
+/* Plain text kept as written: line breaks stay, long words wrap. */
+.pre-wrap {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
