@@ -221,6 +221,31 @@ Press sign out in the page. In window B look at the last lines.
 
 ---
 
+## Optional: one dummy letter through the real models (window A)
+
+Only after the three keys, limits and live checks are done (`docs/design/real-model-demo.md`) and the demo seed has been run (step above). Add these two lines to the `.env` in `E:\Claude\careflow-run` the same way you added the others (the key script cannot do these):
+
+```
+CAREFLOW_DEMO_PHASE3=1
+CAREFLOW_DEMO_REAL_MODELS=on
+```
+
+Then, in window A:
+
+```powershell
+cd E:\Claude\careflow-run
+.\.venv\Scripts\python.exe scripts\demo_real_models.py --clinic-id <CLINIC-ID>
+```
+
+It asks you to type the project host once. It then makes one made-up page (invented names and tokens, never real ones), has Gemini read it, runs the red-flag rules on the text first, asks the decision model for a suggestion, writes a triage proposal that waits for a person, and asks Sarvam for a Tamil draft of a made-up sentence. **It prints only: each stage, real or fake, its status, seconds and cost, whether the rules fired, the order the stages ran in, and the proposal id.** Nothing is sent to anyone.
+
+- *Variations:* add `--kind pdf` (a PDF with a text layer, read without the vision model) or `--flagged` (the page carries the demo rule's invented token: the rules fire and no other model is asked).
+- *What I should see:* a line per stage; `real` for each provider whose key and live-check date are set, `fake` plus a reason otherwise; `PROPOSAL WAITING FOR REVIEW: <id>`; and the sign-in console showing a new triage task for "Demo Kilo Sample".
+- *Safe to run twice:* the second run reports the same proposal and calls no model.
+- *Paste me:* the printed lines (they carry no text or keys).
+
+---
+
 ## When something fails: the three quick checks
 
 1. Window B still open and showing `Uvicorn running`? If not, restart step 7.
