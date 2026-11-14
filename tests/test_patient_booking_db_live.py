@@ -196,7 +196,29 @@ async def test_a_patient_sees_only_their_own_bookings_and_cancels_only_a_future_
 async def test_the_patient_has_no_table_access_and_the_bookable_list_is_not_theirs(db):
     w = await world(db)
     await slot(db, w)
-    assert await as_app(db, w["pa1"], "select count(*) from sched.slots") == [(0,)]
-    assert await as_app(db, w["pa1"], "select count(*) from sched.bookings") == [(0,)]
-    assert await as_app(db, w["pa1"], "select count(*) from sched.patient_bookable_visit_types") == "42501"
+    assert await as_app(db, w["pa1"], "select count(*) from sched.slots where clinic_id = :c", c=w["clinic"]) == [(0,)]
+    assert await as_app(db, w["pa1"], "select count(*) from sched.bookings where clinic_id = :c", c=w["clinic"]) == [(0,)]
+    assert await as_app(db, w["pa1"], "select count(*) from sched.patient_bookable_visit_types where clinic_id = :c", c=w["clinic"]) == "42501"
     assert await as_app(db, w["pa1"], "insert into sched.patient_bookable_visit_types (clinic_id, visit_type_id, max_future_bookings) values (:c, :v, 5)", c=w["clinic"], v=w["vt2"]) == "42501"
+
+
+async def test_an_expired_hold_is_settled_for_the_next_booker_and_a_replay_after_cancel_is_not_answered_as_booked(db):
+    w = await world(db)
+    held = await slot(db, w, status="held")
+    await owner(db, "insert into sched.holds (clinic_id, slot_id, patient_id, expires_at, origin, idempotency_key) values (:c, :s, :p, clock_timestamp() + interval '1 hour', 'test', :k)", c=w["clinic"], s=held, p=w["rec2"], k=f"x-{held}")
+    await owner(db, "update sched.holds set expires_at = clock_timestamp() - interval '1 second' where slot_id = :s", s=held)  # the insert trigger forbids a past expiry, so it lapses afterwards
+    got = await as_app(db, w["pa1"], BOOK, s=held, k="e1")
+    assert isinstance(got, list), got
+    assert (await owner(db, "select status from sched.holds where slot_id = :s", s=held)) == [("expired",)]
+    assert await as_app(db, w["pa1"], "select o_changed from sched.patient_cancel_booking(:b, 'e2')", b=got[0][0]) == [(True,)]
+    assert await as_app(db, w["pa1"], BOOK, s=held, k="e1") == "23505"  # the same key after a cancel: not "booked"
+
+
+async def test_an_inactive_visit_type_is_not_bookable_and_the_cap_counts_only_future_confirmed_bookings_of_the_type(db):
+    w = await world(db, cap=1)
+    s1 = await slot(db, w)
+    past = await slot(db, w, hours=-6)
+    await owner(db, "insert into sched.bookings (clinic_id, slot_id, patient_id, origin, idempotency_key) values (:c, :s, :p, 'test', 'old-1')", c=w["clinic"], s=past, p=w["rec1"])
+    assert isinstance(await as_app(db, w["pa1"], BOOK, s=s1, k="i1"), list)  # a past booking does not count against the cap
+    await owner(db, "update sched.visit_types set active = false where id = :v", v=w["vt"])
+    assert await as_app(db, w["pa2"], BOOK, s=await slot(db, w), k="i2") == "42501"

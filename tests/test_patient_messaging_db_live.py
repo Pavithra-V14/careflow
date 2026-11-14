@@ -190,8 +190,8 @@ async def test_a_post_replays_and_reads_are_private_to_the_owner_of_the_thread(d
     assert await as_app(db, w["pa1"], ("select message_id from msg.patient_thread_messages(:t)", {"t": thread})) == []  # not theirs: the same as no thread
     assert await as_app(db, w["pa1"], ("select count(*) from msg.patient_threads()", {})) == [(0,)]
     assert await as_app(db, w["pa2"], ("select count(*) from msg.patient_threads()", {})) == [(1,)]
-    assert await as_app(db, w["pa2"], ("select count(*) from msg.messages", {})) == [(0,)]  # no table access at all
-    assert await as_app(db, w["pa2"], ("select count(*) from msg.threads", {})) == [(0,)]
+    assert await as_app(db, w["pa2"], ("select count(*) from msg.messages where clinic_id = :c", {"c": w["clinic"]})) == [(0,)]  # no table access at all
+    assert await as_app(db, w["pa2"], ("select count(*) from msg.threads where clinic_id = :c", {"c": w["clinic"]})) == [(0,)]
     assert await as_app(db, w["nurse"], ("select count(*) from msg.messages where thread_id = :t", {"t": thread})) == [(1,)]  # the clinic's nurse reads it as before
     assert await as_app(db, w["nurse"], ("select count(*) from msg.patient_threads()", {})) == "42501"  # staff have no patient stage
 

@@ -67,12 +67,15 @@ declare
     v_hold     uuid;
     v_hold_pt  uuid;
     v_status   text;
+    v_cur_status text;
+    v_cur_starts timestamptz;
     v_booking  uuid;
 begin
     if v_actor is null or p_slot_id is null or p_idempotency_key is null or length(btrim(p_idempotency_key)) = 0 or length(p_idempotency_key) > 200 then
         raise exception 'booking refused' using errcode = '42501';
     end if;
-    select s.id, s.clinic_id, s.origin, s.status, s.visit_type_id, s.starts_at into v_s from sched.slots s where s.id = p_slot_id for update;
+    -- read WITHOUT a lock first and authorise, so a caller who may not book the slot never takes its row lock (no lock-wait oracle); then lock and re-read the status
+    select s.id, s.clinic_id, s.origin, s.visit_type_id, s.location_id into v_s from sched.slots s where s.id = p_slot_id;
     if not found then
         raise exception 'booking refused' using errcode = '42501';
     end if;
@@ -80,37 +83,41 @@ begin
       from mpi.patients pt join iam.accounts a on a.id = pt.account_id and a.account_type = 'patient' and a.status = 'active'
      where pt.account_id = v_actor and pt.clinic_id = v_s.clinic_id and pt.origin = v_s.origin and pt.erased_at is null;
     select b.max_future_bookings into v_max from sched.patient_bookable_visit_types b where b.clinic_id = v_s.clinic_id and b.visit_type_id = v_s.visit_type_id;
-    if v_patient is null or v_max is null then
+    if v_patient is null or v_max is null
+       or not exists (select 1 from sched.visit_types vt where vt.id = v_s.visit_type_id and vt.clinic_id = v_s.clinic_id and vt.active)
+       or not exists (select 1 from sched.locations l where l.id = v_s.location_id and l.clinic_id = v_s.clinic_id and l.active) then
         raise exception 'booking refused' using errcode = '42501';
     end if;
+    select s.status, s.starts_at into v_cur_status, v_cur_starts from sched.slots s where s.id = p_slot_id for update;
+    -- one booking at a time per patient, so the owner's cap cannot be passed by two concurrent bookings of different slots (the slot lock is already held: slot first, then patient)
+    perform pg_advisory_xact_lock(hashtextextended('patient-booking-cap:' || v_patient::text, 0));
     v_key := 'patient-booking:' || v_actor::text || ':' || p_idempotency_key;
-    select bk.id, bk.slot_id, bk.patient_id into v_prior from sched.bookings bk where bk.idempotency_key = v_key;
+    select bk.id, bk.slot_id, bk.patient_id, bk.status into v_prior from sched.bookings bk where bk.idempotency_key = v_key;
     if found then
-        if v_prior.slot_id <> p_slot_id or v_prior.patient_id <> v_patient then
-            raise exception 'idempotency key reused' using errcode = '23505';
+        if v_prior.slot_id <> p_slot_id or v_prior.patient_id <> v_patient or v_prior.status <> 'confirmed' then
+            raise exception 'idempotency key reused' using errcode = '23505';  -- a different request, or a booking since cancelled: never answered as if it were still booked
         end if;
         return query select v_prior.id, p_slot_id, false;
         return;
     end if;
-    if v_s.starts_at <= clock_timestamp() then
+    if v_cur_starts <= clock_timestamp() then
         raise exception 'slot not open' using errcode = '55006';
     end if;
     if (select count(*) from sched.bookings bk join sched.slots s2 on s2.id = bk.slot_id
-         where bk.patient_id = v_patient and bk.status = 'confirmed' and s2.starts_at > clock_timestamp()) >= v_max then
+         where bk.patient_id = v_patient and bk.status = 'confirmed' and s2.starts_at > clock_timestamp() and s2.visit_type_id = v_s.visit_type_id) >= v_max then
         raise exception 'booking cap reached' using errcode = '54000';
     end if;
     -- settle expired holds under the slot lock, as the staff path does
     update sched.holds h set status = 'expired' where h.slot_id = p_slot_id and h.status = 'active' and h.expires_at <= clock_timestamp();
     select h.id, h.patient_id into v_hold, v_hold_pt from sched.holds h where h.slot_id = p_slot_id and h.status = 'active';
-    v_status := v_s.status;
+    v_status := v_cur_status;
     if v_status = 'held' and v_hold is null then
         v_status := 'open';
     end if;
-    if v_status = 'held' then
-        if v_hold_pt is distinct from v_patient then
-            raise exception 'slot not open' using errcode = '55006';
-        end if;
-    elsif v_status <> 'open' then
+    if v_hold is not null and v_hold_pt is distinct from v_patient then
+        raise exception 'slot not open' using errcode = '55006';
+    end if;
+    if v_status not in ('open', 'held') then
         raise exception 'slot not open' using errcode = '55006';
     end if;
     insert into sched.bookings (clinic_id, slot_id, patient_id, hold_id, origin, idempotency_key)
@@ -163,6 +170,8 @@ declare
     v_b       record;
     v_key     text;
     v_starts  timestamptz;
+    v_bstatus text;
+    v_bkey    text;
 begin
     if v_actor is null or p_booking_id is null or p_idempotency_key is null or length(btrim(p_idempotency_key)) = 0 or length(p_idempotency_key) > 200 then
         raise exception 'cancel refused' using errcode = '42501';
@@ -177,8 +186,10 @@ begin
     end if;
     v_key := 'patient-cancel:' || v_actor::text || ':' || p_idempotency_key;
     select s.starts_at into v_starts from sched.slots s where s.id = v_b.slot_id for update;
-    if v_b.status = 'cancelled' then
-        if v_b.cancel_idempotency_key = v_key then
+    -- re-read the booking now that the slot is locked: a concurrent cancel may have won while this call waited
+    select bk.status, bk.cancel_idempotency_key into v_bstatus, v_bkey from sched.bookings bk where bk.id = p_booking_id;
+    if v_bstatus = 'cancelled' then
+        if v_bkey = v_key then
             return query select p_booking_id, false;
             return;
         end if;
@@ -187,7 +198,7 @@ begin
     if v_starts <= clock_timestamp() then
         raise exception 'booking cannot be cancelled' using errcode = '55000';
     end if;
-    update sched.bookings bk set status = 'cancelled', cancelled_at = clock_timestamp(), cancel_idempotency_key = v_key where bk.id = p_booking_id;
+    update sched.bookings bk set status = 'cancelled', cancelled_at = clock_timestamp(), cancel_idempotency_key = v_key where bk.id = p_booking_id and bk.status = 'confirmed';
     update sched.slots s set status = 'open' where s.id = v_b.slot_id and s.status = 'booked';
     insert into audit.log (origin, clinic_id, actor_id, action, resource_type, resource_id, details, idempotency_key)
     values (v_b.origin, v_b.clinic_id, v_actor, 'sched.patient_booking.cancelled', 'sched.bookings', p_booking_id::text, jsonb_build_object('slot_id', v_b.slot_id),
