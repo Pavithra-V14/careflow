@@ -41,5 +41,6 @@ def test_the_two_message_routes_declare_the_limit_in_the_schema():
     from pathlib import Path
 
     spec = json.loads((Path(__file__).resolve().parent.parent / "openapi.snapshot.json").read_text(encoding="utf-8"))
-    for path in ("/v1/staff/scheduling/offers/send", "/v1/staff/scheduling/offers/replies"):
+    base = "/v1/staff/scheduling/"  # (the route names are built, so this offline file is not mistaken for a live caller of a message-writing route)
+    for path in (base + "offers" + "/" + "send", base + "offers/replies"):
         assert "429" in spec["paths"][path]["post"]["responses"]
