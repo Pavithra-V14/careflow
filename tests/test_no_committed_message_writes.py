@@ -27,12 +27,13 @@ NEVER_COMMITTED = {
     "test_break_glass_db_live.py": "the `db` fixture: every test in a rolled-back savepoint of one never-committed outer transaction",
     "test_plan_erasure_rotation_live.py": "the `db` fixture: every test in a rolled-back savepoint of one never-committed outer transaction",
     "test_visit_readiness_db_live.py": "the `db` fixture: every test in a rolled-back savepoint of one never-committed outer transaction",
+    "test_patient_messaging_db_live.py": "the `db` fixture: every test in a rolled-back savepoint of one never-committed outer transaction",
     "test_rotation_live.py": "rolled-back transactions; its precondition requires an empty database of committed version-1 messages",
 }
 
 
 # Routes that write a message. A file that calls one must be a never-committed harness, or the committed-fixture matrix (whose teardown guard fails if a message was committed).
-MESSAGE_WRITING_ROUTES = re.compile(r"offers/send|OFFER_SEND")
+MESSAGE_WRITING_ROUTES = re.compile(r"offers/send|OFFER_SEND|PORTAL_MESSAGES\b")
 ROUTE_DRIVERS = {
     "test_api_offers_live.py": "an outer transaction, rolled back at the end",
     "test_e2e_demo_flow_live.py": "the offers harness (imported from test_api_offers_live.py): an outer transaction, rolled back at the end",

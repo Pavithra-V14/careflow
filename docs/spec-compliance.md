@@ -136,7 +136,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 | 11.3 | PII masking, pattern recognizers only; minimisation after identity extraction | BUILT (heuristic) | Presidio itself is a new dependency; not wired to a real retriever | `careflow/text_guard.py` |
 | 11.4 | Scope enforcement: clinical questions go to a human; the agent never answers | BUILT (rule routes) | The model classifier is a port | `careflow/reply_interpretation.py`, `voice.py` |
 | 11.5 | Upload size and type allowlists; malware scan before real use | BUILT / FAKE | Allowlists built; ClamAV client and rescan worker built, no daemon installed or wired; real uploads refused outside demo | `careflow/documents.py`, `malware.py`, `scanner_worker.py` |
-| 11.5b | Per-account message rate limit | BUILT (staff-written messages) | A required setting `CAREFLOW_MESSAGE_MAX_PER_MINUTE` (no default: unset means no limit, stated in the code) limits the two routes that write a patient-facing message (offer send, recorded reply) with a fixed 429; patient-sent messages wait on the patient messaging routes (frontend request 29) | `careflow/app.py` (`message_limiter`), `tests/test_message_limit.py` |
+| 11.5b | Per-account message rate limit | BUILT | A required setting `CAREFLOW_MESSAGE_MAX_PER_MINUTE` (no default: unset means no limit, stated in the code) limits the two routes that write a patient-facing message (offer send, recorded reply) with a fixed 429; the patient send route needs the limit set (503 without it), see 17.5c | `careflow/app.py` (`message_limiter`), `tests/test_message_limit.py` |
 | 11.6 | Voice: the same rules on the live transcript, in parallel; interrupt to the fixed safety response; nurse task | BUILT (mechanism) | The interrupt gap is unmeasured (no engine) | `careflow/voice.py` (`StreamEvaluator` in `rules.py`) |
 
 ## 12. Human approval (spec 12)
@@ -210,7 +210,8 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 | 17.3 | Documents pipeline: signed upload, server re-verification, registration, extraction, grounding, identity, match, triage, approval | BUILT (stand-ins) | Storage is Supabase Storage for synthetic data; the signed-upload overwrite behaviour is unverified (Appendix B) | `careflow/documents.py`, `front_door.py`, `adapters/storage.py` |
 | 17.4 | Prompts versioned with a hash; calibration in the database with an approver | BUILT (prompts) / DECISION | Calibration data does not exist | `careflow/prompts.py` |
 | 17.5 | Messaging topics (care, appointments, safety, readiness) | BUILT | | migrations 0011, 0050 |
-| 17.5b | Account states enforced server-side per feature | BUILT (partial) | States derived by the database; only the data export is gated; no patient feature routes exist to gate | `careflow/portal_sql.py`, migration 0062 |
+| 17.5b | Account states enforced server-side per feature | BUILT (partial) | States derived by the database; the data export and patient messaging (17.5c) are gated; the other patient features are not built | `careflow/portal_sql.py`, migration 0062 |
+| 17.5c | A patient sends and reads messages; care only after activation; server-enforced | BUILT (mechanism, off by default) | `POST /v1/portal/messages` (care at stage active, appointments; never safety), `GET /v1/portal/messages/threads`, `GET .../threads/{id}`; needs `CAREFLOW_PATIENT_MESSAGING=on`, the keys and the per-minute limit; the red-flag rules screen the text in the same transaction before it can commit (the database refuses an unscreened patient message); no model, no reply wording, the answer never says what was found; another's or a hidden thread is one 404 | `careflow/portal_messages_sql.py`, `careflow/app.py`, migration 0082, `tests/test_patient_messaging_db_live.py` |
 | 17.6 | The data-flow register as a literal table | BUILT | Checked by a test | `data-flow-register.yaml`, `tests/test_data_flow_register.py` |
 | 17.7 | Local versus hosted split | FAKE | No local model is installed; every hosted service is a port | `careflow/ports.py` |
 
@@ -347,7 +348,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 
 ## Patient-facing routes still not built (owner decision 2026-11-14 to build them as mechanism)
 
-Family members and guardians (request 21), the protocol-card and message-template editor (27), patient booking (28), patient messaging (29) and patient visit readiness (30) are NOT built yet. Each needs its own design before code: patient booking and messaging need patient-scoped policies or definer functions over the scheduling and message tables, the screening of a patient-sent message by the red-flag rules from a patient session, and the account-stage rules; the editor needs a card and template schema and a two-person publish like the rules; family needs the proxy trail. They are the next batch, not forgotten.
+Family members and guardians (request 21), the protocol-card and message-template editor (27), patient booking (28) and patient visit readiness (30) are NOT built yet (patient messaging, 29, is built as mechanism, off by default). Each needs its own design before code: patient booking needs patient-scoped policies or definer functions over the scheduling and message tables, the screening of a patient-sent message by the red-flag rules from a patient session, and the account-stage rules; the editor needs a card and template schema and a two-person publish like the rules; family needs the proxy trail. They are the next batch, not forgotten.
 
 ## What remains and why (the short list)
 

@@ -85,6 +85,7 @@ from careflow import (
     openapi_errors,
     patient_view,
     portal_extras_sql,
+    portal_messages_sql,
     portal_sql,
     producers_sql,
     provider_setup,
@@ -5599,6 +5600,125 @@ async def list_my_requests(conn: TxConnAllGrants, claims: dict[str, Any] = Depen
     account_id, _ = await _patient_account(conn, claims)
     rows = await portal_extras_sql.list_own_requests(conn, account_id, limit)
     return PatientRequestList(requests=[PatientRequestOut(request_id=r.id, clinic_id=r.clinic_id, kind=r.kind, field=r.field, status=r.status, created_at=r.created_at, updated_at=r.updated_at) for r in rows])
+
+
+# ---- patient messaging (migration 0082; frontend request 29) ----------------------------------------------------------------------------------------------------------------------------
+# MECHANISM, OFF BY DEFAULT: every route answers 503 unless the owner sets CAREFLOW_PATIENT_MESSAGING=on, and sending also needs the encryption keys and a per-minute limit (CAREFLOW_MESSAGE_MAX_PER_MINUTE, required here). A patient may send on
+# `care` (only at stage active) and `appointments`; never `safety`. The deterministic red-flag rules screen the message in the SAME transaction before it commits; a failure rolls the whole message back, so nothing is ever stored unscreened.
+# No model is consulted, no reply is written and the response says nothing about the screening. A thread that is not yours, does not exist or is hidden by your stage all look the same (404 on read, one fixed 403 on send).
+
+_patient_rule_engine = portal_messages_sql.PatientRuleEngine()
+
+
+class PatientMessageIn(_Body):
+    clinic_id: uuid.UUID
+    topic: Literal["care", "appointments"]
+    text: str = Field(min_length=1, max_length=messages_mod.MAX_BODY_CHARS)
+
+
+class PatientMessageSentOut(_Out):
+    thread_id: uuid.UUID
+    message_id: uuid.UUID
+    created: bool
+
+
+class PatientThreadOut(_Out):
+    thread_id: uuid.UUID
+    clinic_id: uuid.UUID
+    topic: Literal["care", "appointments", "safety"]
+    message_count: int
+    last_message_at: datetime | None
+
+
+class PatientThreadList(_Out):
+    threads: list[PatientThreadOut]
+
+
+class PatientMessageOut(_Out):
+    message_id: uuid.UUID
+    sender: Literal["patient", "staff", "system"]
+    created_at: datetime
+    text: str | None  # null when the body was erased or cannot be read
+    erased: bool
+    readable: bool
+
+
+class PatientMessageList(_Out):
+    thread_id: uuid.UUID
+    messages: list[PatientMessageOut]
+
+
+def _patient_messaging_on() -> None:
+    if not portal_messages_sql.enabled():
+        raise HTTPException(status_code=503, detail="patient messaging is not set up")
+
+
+@portal.post("/messages", response_model=PatientMessageSentOut, status_code=201)
+async def send_patient_message(
+    body: PatientMessageIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims),
+    limiter: "patient_view.OpenRateLimiter | None" = Depends(message_limiter),
+) -> PatientMessageSentOut:
+    """Send a message on `care` (active accounts only) or `appointments`. 503 unless the owner turned patient messaging on, the keys are configured and the per-minute limit is set; 403 unless you are an active patient account with a live record at that clinic
+    (and, for care, at stage active); 429 over the per-minute limit; 422 for a blank or over-long text. The red-flag rules screen it before it is stored; the answer never says what they found. Idempotent on the key."""
+    account_id, _ = await _patient_account(conn, claims)  # who you are is checked first, so the answer for a non-patient never depends on the owner's setting
+    _patient_messaging_on()
+    vault: DemographicVault | None = request.app.state.vault
+    key_version = _active_key_version(request) if vault is not None else None
+    if vault is None or key_version is None or limiter is None:
+        raise HTTPException(status_code=503, detail="patient messaging is not set up")
+    _charge_message_limit(limiter, account_id)
+    try:
+        thread = await portal_messages_sql.open_thread(conn, clinic_id=body.clinic_id, topic=body.topic, new_thread_id=uuid.uuid5(uuid.NAMESPACE_URL, f"careflow-patient-thread:{account_id}:{body.topic}"), idempotency_key=f"thread:{body.topic}")
+        message_id = uuid.uuid5(uuid.NAMESPACE_URL, f"careflow-patient-message:{account_id}:{idempotency_key}")
+        try:
+            encrypted = messages_mod.encrypt_body(vault, body.text, clinic_id=thread.clinic_id, thread_id=thread.thread_id, key_version=key_version, message_id=message_id)
+        except messages_mod.MessageError:
+            raise HTTPException(status_code=422, detail="message rejected") from None
+        stored_id, created = await portal_messages_sql.post_message(conn, thread_id=thread.thread_id, message_id=message_id, body_ct=encrypted.body_ct, key_version=encrypted.body_key_version, idempotency_key=idempotency_key)
+    except portal_messages_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    if created:
+        # the rules run on the text BEFORE the transaction can commit (the database refuses to commit an unscreened patient message); any failure here rolls the message back
+        await _patient_rule_engine.evaluate_and_escalate(conn, thread.clinic_id, thread.origin, body.text, stored_id, idempotency_key=f"screen-patient-message:{stored_id}")  # type: ignore[arg-type]
+    return PatientMessageSentOut(thread_id=thread.thread_id, message_id=stored_id, created=created)
+
+
+@portal.get("/messages/threads", response_model=PatientThreadList)
+async def list_my_message_threads(conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> PatientThreadList:
+    """Your own threads (care only at stage active). 503 unless patient messaging is on; 403 unless you are an active patient account."""
+    await _patient_account(conn, claims)
+    _patient_messaging_on()
+    try:
+        rows = await portal_messages_sql.list_threads(conn)
+    except portal_messages_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return PatientThreadList(threads=[PatientThreadOut(thread_id=r.thread_id, clinic_id=r.clinic_id, topic=r.topic, message_count=r.message_count, last_message_at=r.last_message_at) for r in rows])  # type: ignore[arg-type]
+
+
+@portal.get("/messages/threads/{thread_id}", response_model=PatientMessageList)
+async def read_my_message_thread(thread_id: uuid.UUID, request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> PatientMessageList:
+    """The messages of one of your own threads, oldest first. A thread that is not yours, does not exist or is hidden by your stage is the same 404. 503 unless patient messaging is on and the keys are configured."""
+    account_id, _ = await _patient_account(conn, claims)
+    _patient_messaging_on()
+    vault: DemographicVault | None = request.app.state.vault
+    if vault is None:
+        raise HTTPException(status_code=503, detail="patient messaging is not set up")
+    try:
+        rows = await portal_messages_sql.thread_messages(conn, thread_id)
+    except portal_messages_sql.Refused:
+        raise HTTPException(status_code=404, detail="not found") from None
+    if not rows:
+        raise HTTPException(status_code=404, detail="not found")
+    out: list[PatientMessageOut] = []
+    for r in rows:
+        body_text: str | None = None
+        if not r.erased and r.body_ct is not None:
+            try:
+                body_text = messages_mod.decrypt_body(vault, r.body_ct, clinic_id=r.clinic_id, thread_id=r.thread_id, message_id=r.message_id, key_version=r.body_key_version)
+            except (messages_mod.DecryptionError, messages_mod.UnknownKeyVersionError) as exc:  # the class name only: never the text
+                log.warning("a patient's own message could not be read (account=%s error=%s)", account_id, type(exc).__name__)
+        out.append(PatientMessageOut(message_id=r.message_id, sender=r.sender_kind, created_at=r.created_at, text=body_text, erased=bool(r.erased), readable=body_text is not None or bool(r.erased)))  # type: ignore[arg-type]
+    return PatientMessageList(thread_id=thread_id, messages=out)
 
 
 class StaffPatientRequestOut(_Out):

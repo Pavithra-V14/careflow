@@ -3428,6 +3428,44 @@ def portal_request_list_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, PORTAL_REQUESTS, None)[:4]
 
 
+# ---- patient messaging (migration 0082, frontend request 29). The feature is OFF unless the owner sets CAREFLOW_PATIENT_MESSAGING=on, so for the matrix patient every route answers a fixed 503 "not set up"; who-you-are is checked FIRST, so every
+# other role is refused 403 whatever the setting. The flows with the setting on (send, screening before commit, stage gating, thread privacy) are in tests/test_patient_messaging_db_live.py.
+
+PORTAL_MESSAGES = PORTAL + "/messages"
+PORTAL_MESSAGE_THREADS = PORTAL_MESSAGES + "/threads"
+NOT_SET_UP = lambda b: b == {"detail": "patient messaging is not set up"}
+
+
+def portal_message_send_cases(ids) -> list[tuple]:
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "topic": "appointments", "text": "SYNTHETIC test message", **o}
+    cases = [_case(ids, "with patient messaging not turned on an active patient account is told it is not set up", "patient", 503, PORTAL_MESSAGES, json=body(), body=NOT_SET_UP)]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, PORTAL_MESSAGES, json=body(), body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, PORTAL_MESSAGES, json=body(), body=NOT_A_PATIENT))
+    cases += [
+        _case(ids, "the safety topic is never patient-sent", "patient", 422, PORTAL_MESSAGES, json=body(topic="safety"), body=_fixed(422)),
+        _case(ids, "a blank text is rejected", "patient", 422, PORTAL_MESSAGES, json=body(text=""), body=_fixed(422)),
+        _case(ids, "an over-long text is rejected", "patient", 422, PORTAL_MESSAGES, json=body(text="x" * 10_001), body=_fixed(422)),
+        _case(ids, "an extra field is rejected", "patient", 422, PORTAL_MESSAGES, json=body(patient_id=str(uuid.uuid4())), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "patient", 422, PORTAL_MESSAGES, json=body(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, PORTAL_MESSAGES, body())
+
+
+def portal_message_threads_cases(ids) -> list[tuple]:
+    cases = [_case(ids, "with patient messaging not turned on an active patient account is told it is not set up", "patient", 503, PORTAL_MESSAGE_THREADS, key=None, body=NOT_SET_UP)]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, PORTAL_MESSAGE_THREADS, key=None, body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases.append(_case(ids, "valid user with no iam account is refused", bearer(mint(ids.no_account)), 403, PORTAL_MESSAGE_THREADS, key=None, body=NOT_A_PATIENT))
+    return cases + _unauthenticated(ids, PORTAL_MESSAGE_THREADS, None)[:4]
+
+
+def portal_message_thread_read_cases(ids) -> list[tuple]:
+    path = lambda: f"{PORTAL_MESSAGE_THREADS}/{uuid.uuid4()}"
+    cases = [_case(ids, "with patient messaging not turned on an active patient account is told it is not set up", "patient", 503, path(), key=None, body=NOT_SET_UP)]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path(), key=None, body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases.append(_case(ids, "a thread id that is not a uuid is rejected", "patient", 422, f"{PORTAL_MESSAGE_THREADS}/nope", key=None, body=_fixed(422)))
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
 def staff_patient_request_list_cases(ids) -> list[tuple]:
     path = lambda **o: STAFF_PATIENT_REQUESTS + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
     visible = ("nurse_a", "doctor_a", "admin_a", "business_owner_a", "auditor_a", "multi")
@@ -3888,6 +3926,9 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", PORTAL_NOTIFICATIONS + "/{notification_id}/read"): portal_notification_read_cases,
     ("POST", PORTAL_REQUESTS): portal_request_file_cases,
     ("GET", PORTAL_REQUESTS): portal_request_list_cases,
+    ("POST", PORTAL_MESSAGES): portal_message_send_cases,
+    ("GET", PORTAL_MESSAGE_THREADS): portal_message_threads_cases,
+    ("GET", PORTAL_MESSAGE_THREADS + "/{thread_id}"): portal_message_thread_read_cases,
     ("GET", STAFF_PATIENT_REQUESTS): staff_patient_request_list_cases,
     ("POST", STAFF_PATIENT_REQUESTS + "/{request_id}/status"): staff_patient_request_status_cases,
     ("POST", MEDICATIONS): medication_record_cases,
