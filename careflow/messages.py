@@ -17,8 +17,9 @@ The length cap is a technical guard (it bounds the ciphertext column and the wor
 
 import json
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Final
+from typing import Any, Final
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
@@ -300,3 +301,32 @@ async def read_stored_message(conn: AsyncConnection, vault: DemographicVault, me
         },
     )
     return ReadMessage(row.id, row.thread_id, row.clinic_id, row.topic, row.sender_kind, plaintext)
+
+
+# ---- a patient reading their OWN thread (migration 0082): the rows come from a definer function that already limited them to the caller's own thread ----------------------------------------------
+
+
+@dataclass(frozen=True)
+class OwnMessage:
+    """One message of the caller's own thread. `text` is None when the body was erased or cannot be read; `unreadable_reason` is then an error CLASS NAME only (never any text), for the route's operational log."""
+
+    message_id: uuid.UUID
+    sender_kind: str
+    created_at: Any
+    text: str | None = field(repr=False)
+    erased: bool
+    unreadable_reason: str | None = None
+
+
+def decrypt_own_messages(vault: DemographicVault, rows: Iterable[Any]) -> list[OwnMessage]:
+    out: list[OwnMessage] = []
+    for r in rows:
+        text_: str | None = None
+        reason: str | None = None
+        if not r.erased and r.body_ct is not None:
+            try:
+                text_ = decrypt_body(vault, r.body_ct, clinic_id=r.clinic_id, thread_id=r.thread_id, message_id=r.message_id, key_version=r.body_key_version)
+            except (UnknownKeyVersionError, DecryptionError) as exc:
+                reason = type(exc).__name__
+        out.append(OwnMessage(r.message_id, r.sender_kind, r.created_at, text_, bool(r.erased), reason))
+    return out

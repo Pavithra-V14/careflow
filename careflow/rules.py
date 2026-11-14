@@ -345,18 +345,16 @@ class RedFlagEngine:
     """Loads clinician-authored rules for a tenant and screens text. Runs as the restricted app role with the
     verified claims set; row-level security decides which rules the caller may read."""
 
+    # The query that reads the rules. A subclass for a PATIENT session replaces it (a patient has no table grant; migration 0082 gives a definer function with the same columns); nothing else about the engine changes.
+    RULES_SQL = """select id, clinic_id, rule_code, version_id, status, phrases, patterns, token_sets
+                   from kb.red_flag_rules
+                   where (clinic_id = :c or clinic_id is null) and origin = :o"""
+
     async def load_rules(self, conn: AsyncConnection, clinic_id: uuid.UUID, origin: Origin, profile: Profile | None = None) -> RuleSet:
         if origin not in ORIGINS:
             raise ValueError(f"origin must be one of {ORIGINS}, got {origin!r}")
         resolved = profile if profile in USABLE_STATUSES else resolve_profile(profile)
-        result = await conn.execute(
-            text(
-                """select id, clinic_id, rule_code, version_id, status, phrases, patterns, token_sets
-                   from kb.red_flag_rules
-                   where (clinic_id = :c or clinic_id is null) and origin = :o"""
-            ),
-            {"c": clinic_id, "o": origin},
-        )
+        result = await conn.execute(text(self.RULES_SQL), {"c": clinic_id, "o": origin})
         chosen, drafts_passed = select_active_versions([dict(r._mapping) for r in result], resolved)
         rules, problems = [], []
         for row in chosen:

@@ -84,7 +84,9 @@ from careflow import (
     offers,
     openapi_errors,
     patient_view,
+    portal_booking_sql,
     portal_extras_sql,
+    portal_messages_sql,
     portal_sql,
     producers_sql,
     provider_setup,
@@ -5599,6 +5601,225 @@ async def list_my_requests(conn: TxConnAllGrants, claims: dict[str, Any] = Depen
     account_id, _ = await _patient_account(conn, claims)
     rows = await portal_extras_sql.list_own_requests(conn, account_id, limit)
     return PatientRequestList(requests=[PatientRequestOut(request_id=r.id, clinic_id=r.clinic_id, kind=r.kind, field=r.field, status=r.status, created_at=r.created_at, updated_at=r.updated_at) for r in rows])
+
+
+# ---- patient messaging (migration 0082; frontend request 29) ----------------------------------------------------------------------------------------------------------------------------
+# MECHANISM, OFF BY DEFAULT: every route answers 503 unless the owner sets CAREFLOW_PATIENT_MESSAGING=on, and sending also needs the encryption keys and a per-minute limit (CAREFLOW_MESSAGE_MAX_PER_MINUTE, required here). A patient may send on
+# `care` (only at stage active) and `appointments`; never `safety`. The deterministic red-flag rules screen the message in the SAME transaction before it commits; a failure rolls the whole message back, so nothing is ever stored unscreened.
+# No model is consulted, no reply is written and the response says nothing about the screening. A thread that is not yours, does not exist or is hidden by your stage all look the same (404 on read, one fixed 403 on send).
+
+_patient_rule_engine = portal_messages_sql.PatientRuleEngine()
+
+
+class PatientMessageIn(_Body):
+    clinic_id: uuid.UUID
+    topic: Literal["care", "appointments"]
+    text: str = Field(min_length=1, max_length=messages_mod.MAX_BODY_CHARS)
+
+
+class PatientMessageSentOut(_Out):
+    thread_id: uuid.UUID
+    message_id: uuid.UUID
+    created: bool
+
+
+class PatientThreadOut(_Out):
+    thread_id: uuid.UUID
+    clinic_id: uuid.UUID
+    topic: Literal["care", "appointments", "safety"]
+    message_count: int
+    last_message_at: datetime | None
+
+
+class PatientThreadList(_Out):
+    threads: list[PatientThreadOut]
+
+
+class PatientMessageOut(_Out):
+    message_id: uuid.UUID
+    sender: Literal["patient", "staff", "system"]
+    created_at: datetime
+    text: str | None  # null when the body was erased or cannot be read
+    erased: bool
+    readable: bool
+
+
+class PatientMessageList(_Out):
+    thread_id: uuid.UUID
+    messages: list[PatientMessageOut]
+
+
+def _patient_messaging_on() -> None:
+    if not portal_messages_sql.enabled():
+        raise HTTPException(status_code=503, detail="patient messaging is not set up")
+
+
+@portal.post("/messages", response_model=PatientMessageSentOut, status_code=201)
+async def send_patient_message(
+    body: PatientMessageIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims),
+    limiter: "patient_view.OpenRateLimiter | None" = Depends(message_limiter),
+) -> PatientMessageSentOut:
+    """Send a message on `care` (active accounts only) or `appointments`. 503 unless the owner turned patient messaging on, the keys are configured and the per-minute limit is set; 403 unless you are an active patient account with a live record at that clinic
+    (and, for care, at stage active); 429 over the per-minute limit; 422 for a blank or over-long text. The red-flag rules screen it before it is stored; the answer never says what they found. Idempotent on the key."""
+    account_id, _ = await _patient_account(conn, claims)  # who you are is checked first, so the answer for a non-patient never depends on the owner's setting
+    _patient_messaging_on()
+    vault: DemographicVault | None = request.app.state.vault
+    key_version = _active_key_version(request) if vault is not None else None
+    if vault is None or key_version is None or limiter is None:
+        raise HTTPException(status_code=503, detail="patient messaging is not set up")
+    _charge_message_limit(limiter, account_id)
+    try:
+        thread = await portal_messages_sql.open_thread(conn, clinic_id=body.clinic_id, topic=body.topic, new_thread_id=uuid.uuid5(uuid.NAMESPACE_URL, f"careflow-patient-thread:{account_id}:{body.topic}"), idempotency_key=f"thread:{body.topic}")
+        message_id = uuid.uuid5(uuid.NAMESPACE_URL, f"careflow-patient-message:{account_id}:{idempotency_key}")
+        try:
+            encrypted = messages_mod.encrypt_body(vault, body.text, clinic_id=thread.clinic_id, thread_id=thread.thread_id, key_version=key_version, message_id=message_id)
+        except messages_mod.MessageError:
+            raise HTTPException(status_code=422, detail="message rejected") from None
+        stored_id, created = await portal_messages_sql.post_message(conn, thread_id=thread.thread_id, message_id=message_id, body_ct=encrypted.body_ct, key_version=encrypted.body_key_version, idempotency_key=idempotency_key)
+    except portal_messages_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    if created:
+        # the rules run on the text BEFORE the transaction can commit (the database refuses to commit an unscreened patient message); any failure here rolls the message back
+        await _patient_rule_engine.evaluate_and_escalate(conn, thread.clinic_id, thread.origin, body.text, stored_id, idempotency_key=f"screen-patient-message:{stored_id}")  # type: ignore[arg-type]
+    return PatientMessageSentOut(thread_id=thread.thread_id, message_id=stored_id, created=created)
+
+
+@portal.get("/messages/threads", response_model=PatientThreadList)
+async def list_my_message_threads(conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> PatientThreadList:
+    """Your own threads (care only at stage active). 503 unless patient messaging is on; 403 unless you are an active patient account."""
+    await _patient_account(conn, claims)
+    _patient_messaging_on()
+    try:
+        rows = await portal_messages_sql.list_threads(conn)
+    except portal_messages_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return PatientThreadList(threads=[PatientThreadOut(thread_id=r.thread_id, clinic_id=r.clinic_id, topic=r.topic, message_count=r.message_count, last_message_at=r.last_message_at) for r in rows])  # type: ignore[arg-type]
+
+
+@portal.get("/messages/threads/{thread_id}", response_model=PatientMessageList)
+async def read_my_message_thread(thread_id: uuid.UUID, request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> PatientMessageList:
+    """The messages of one of your own threads, oldest first. A thread that is not yours, does not exist or is hidden by your stage is the same 404. 503 unless patient messaging is on and the keys are configured."""
+    account_id, _ = await _patient_account(conn, claims)
+    _patient_messaging_on()
+    vault: DemographicVault | None = request.app.state.vault
+    if vault is None:
+        raise HTTPException(status_code=503, detail="patient messaging is not set up")
+    try:
+        rows = await portal_messages_sql.thread_messages(conn, thread_id)
+    except portal_messages_sql.Refused:
+        raise HTTPException(status_code=404, detail="not found") from None
+    if not rows:
+        raise HTTPException(status_code=404, detail="not found")
+    out: list[PatientMessageOut] = []
+    for m in messages_mod.decrypt_own_messages(vault, rows):
+        if m.unreadable_reason is not None:
+            log.warning("a patient's own message could not be read (account=%s error=%s)", account_id, m.unreadable_reason)  # the class name only: never the text
+        out.append(PatientMessageOut(message_id=m.message_id, sender=m.sender_kind, created_at=m.created_at, text=m.text, erased=m.erased, readable=m.text is not None or m.erased))  # type: ignore[arg-type]
+    return PatientMessageList(thread_id=thread_id, messages=out)
+
+
+# ---- patient booking (migration 0083; frontend request 28) ----------------------------------------------------------------------------------------------------------------------------
+# MECHANISM, OFF BY DEFAULT: every route answers 503 (after your identity is checked) unless the owner sets CAREFLOW_PATIENT_BOOKING=on. Even then a patient is offered only the visit types the owner listed in sched.patient_bookable_visit_types
+# (empty means none). A patient books only an open FUTURE slot, or one held for THEM; cancels only a FUTURE booking of their own; and can never see or touch anyone else's. No clinical content is involved.
+
+
+class PatientSlotOut(_Out):
+    slot_id: uuid.UUID
+    starts_at: datetime
+    ends_at: datetime
+    visit_type_id: uuid.UUID
+    visit_type_name: str
+    location_name: str
+
+
+class PatientSlotList(_Out):
+    slots: list[PatientSlotOut]
+
+
+class PatientBookedOut(_Out):
+    booking_id: uuid.UUID
+    slot_id: uuid.UUID
+    created: bool
+
+
+class PatientBookingOut(_Out):
+    booking_id: uuid.UUID
+    clinic_id: uuid.UUID
+    slot_id: uuid.UUID
+    status: Literal["confirmed", "cancelled"]
+    starts_at: datetime
+    ends_at: datetime
+    visit_type_name: str
+    location_name: str
+    cancellable: bool
+
+
+class PatientBookingList(_Out):
+    bookings: list[PatientBookingOut]
+
+
+class PatientCancelledOut(_Out):
+    booking_id: uuid.UUID
+    changed: bool
+
+
+def _patient_booking_on() -> None:
+    if not portal_booking_sql.enabled():
+        raise HTTPException(status_code=503, detail="patient booking is not set up")
+
+
+@portal.get("/booking/slots", response_model=PatientSlotList)
+async def list_bookable_slots(clinic_id: uuid.UUID, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims), limit: Annotated[int, Query(ge=1, le=100)] = 50) -> PatientSlotList:
+    """Open future slots of the visit types the clinic lets patients book, soonest first. 403 unless you are an active patient account with a live record at that clinic; 503 unless the owner turned patient booking on."""
+    await _patient_account(conn, claims)
+    _patient_booking_on()
+    try:
+        rows = await portal_booking_sql.open_slots(conn, clinic_id, limit)
+    except portal_booking_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return PatientSlotList(slots=[PatientSlotOut(slot_id=r.slot_id, starts_at=r.starts_at, ends_at=r.ends_at, visit_type_id=r.visit_type_id, visit_type_name=r.visit_type_name, location_name=r.location_name) for r in rows])
+
+
+@portal.post("/booking/slots/{slot_id}/book", response_model=PatientBookedOut, status_code=201)
+async def book_my_slot(slot_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> PatientBookedOut:
+    """Book an open future slot of a visit type the clinic lets patients book (or one held for you). Idempotent on the key. 403 for a slot you may not book (missing, another clinic's, a visit type not offered: one answer), 409 if the slot is taken, held for someone
+    else or no longer open, or you are at the clinic's maximum of future bookings, or the key was used for another request; 503 unless the owner turned patient booking on."""
+    await _patient_account(conn, claims)
+    _patient_booking_on()
+    try:
+        booking_id, booked_slot, created = await portal_booking_sql.book(conn, slot_id, idempotency_key)
+    except portal_booking_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    except (portal_booking_sql.SlotNotOpen, portal_booking_sql.CapReached, portal_booking_sql.KeyReused):
+        raise HTTPException(status_code=409, detail="that slot cannot be booked") from None
+    return PatientBookedOut(booking_id=booking_id, slot_id=booked_slot, created=created)
+
+
+@portal.get("/booking/bookings", response_model=PatientBookingList)
+async def list_my_bookings(conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> PatientBookingList:
+    """Your own bookings, latest first, each saying whether you can still cancel it (confirmed and in the future). 403 unless you are an active patient account; 503 unless the owner turned patient booking on."""
+    await _patient_account(conn, claims)
+    _patient_booking_on()
+    try:
+        rows = await portal_booking_sql.my_bookings(conn)
+    except portal_booking_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return PatientBookingList(bookings=[PatientBookingOut(booking_id=r.booking_id, clinic_id=r.clinic_id, slot_id=r.slot_id, status=r.status, starts_at=r.starts_at, ends_at=r.ends_at, visit_type_name=r.visit_type_name, location_name=r.location_name, cancellable=r.cancellable) for r in rows])  # type: ignore[arg-type]
+
+
+@portal.post("/booking/bookings/{booking_id}/cancel", response_model=PatientCancelledOut)
+async def cancel_my_booking(booking_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> PatientCancelledOut:
+    """Cancel one of your own FUTURE bookings; the slot reopens and nobody is contacted. Idempotent on the key. 404 for a booking that is not yours or does not exist (one answer), 409 if it is already cancelled by another request or its slot has started;
+    503 unless the owner turned patient booking on."""
+    await _patient_account(conn, claims)
+    _patient_booking_on()
+    try:
+        changed = await portal_booking_sql.cancel(conn, booking_id, idempotency_key)
+    except portal_booking_sql.Refused:
+        raise HTTPException(status_code=404, detail="not found") from None
+    except portal_booking_sql.NotCancellable:
+        raise HTTPException(status_code=409, detail="that booking cannot be cancelled") from None
+    return PatientCancelledOut(booking_id=booking_id, changed=changed)
 
 
 class StaffPatientRequestOut(_Out):
