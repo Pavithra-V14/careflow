@@ -49,6 +49,7 @@ from fastapi import (
     FastAPI,
     Header,
     HTTPException,
+    Path,
     Query,
     Request,
     Response,
@@ -99,6 +100,7 @@ from careflow import (
     rights_sql,
     rule_approval_sql,
     schema_check,
+    visit_prep_sql,
     visit_readiness_content,
     visit_readiness_sql,
     voice_sql,
@@ -4659,6 +4661,82 @@ async def list_medications(clinic_id: uuid.UUID, patient_id: uuid.UUID, conn: Tx
     )
 
 
+# ---- patient visit preparation (migration 0089; deferred item 30) ----------------------------------------------------------------------------------------------------------------------
+# MECHANISM, OFF BY DEFAULT: every route answers 503 (after your identity is checked) unless the owner sets CAREFLOW_PATIENT_VISIT_PREP=on. The ITEMS are the clinic's own checklist (CAREFLOW_VISIT_READINESS_CONTENT), picked by the
+# visit's type; nothing is invented here. A patient sees and marks only their OWN confirmed visit; with no checklist configured for it they are told, in one fixed sentence, that there is nothing to prepare.
+
+
+class PrepItemOut(_Out):
+    item_id: str
+    text: str
+    done: bool | None
+    marked_at: datetime | None
+
+
+class PatientPrepOut(_Out):
+    booking_id: uuid.UUID
+    visit_type: str
+    starts_at: datetime | None
+    items: list[PrepItemOut]
+    nothing_to_prepare: bool
+    note: str | None
+
+
+class PrepMarkIn(_Body):
+    done: bool
+
+
+class PrepMarkOut(_Out):
+    booking_id: uuid.UUID
+    item_id: str
+    done: bool
+    created: bool
+
+
+def _patient_prep_on() -> None:
+    if not visit_prep_sql.enabled():
+        raise HTTPException(status_code=503, detail="visit preparation is not set up")
+
+
+def _prep_out(booking_id: uuid.UUID, request: Request, state: "visit_prep_sql.PrepState") -> PatientPrepOut:
+    items = visit_prep_sql.items_for(request.app.state.visit_content, state)
+    return PatientPrepOut(
+        booking_id=booking_id, visit_type=state.visit_type, starts_at=state.starts_at, items=[PrepItemOut(item_id=i.item_id, text=i.text, done=i.done, marked_at=i.marked_at) for i in items],
+        nothing_to_prepare=not items, note=None if items else visit_prep_sql.NOTHING_TO_PREPARE,
+    )
+
+
+@portal.get("/visits/{booking_id}/prep", response_model=PatientPrepOut)
+async def patient_visit_prep(booking_id: uuid.UUID, request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> PatientPrepOut:
+    """What to prepare for one of your own confirmed visits, with what you have marked. 503 unless visit preparation is switched on; 403 unless you are an active patient account; 404 for a visit that is not yours (missing,
+    someone else's and cancelled are one answer). With no checklist configured for the visit type the answer has no items and the fixed note "Nothing to prepare for this visit."."""
+    await _patient_account(conn, claims)
+    _patient_prep_on()
+    try:
+        state = await visit_prep_sql.patient_prep(conn, booking_id)
+    except visit_prep_sql.Refused:
+        raise HTTPException(status_code=404, detail="not found") from None
+    return _prep_out(booking_id, request, state)
+
+
+@portal.post("/visits/{booking_id}/prep/{item_id}/done", response_model=PrepMarkOut)
+async def patient_mark_visit_prep(booking_id: uuid.UUID, item_id: Annotated[str, Path(pattern=r"^[a-z][a-z0-9_]{0,59}$")], body: PrepMarkIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> PrepMarkOut:
+    """Mark one checklist item of your own upcoming visit done or not done (`done` true or false). Idempotent on the key. 503 unless visit preparation is switched on; 403 unless you are an active patient account; 404 for a visit that is not
+    yours, has started or is cancelled, and for an item that is not on that visit type's checklist; 409 if the key was used for a different mark."""
+    await _patient_account(conn, claims)
+    _patient_prep_on()
+    try:
+        state = await visit_prep_sql.patient_prep(conn, booking_id)
+        if item_id not in {i for i, _ in visit_prep_sql.checklist_for(request.app.state.visit_content, state.visit_type)}:
+            raise HTTPException(status_code=404, detail="not found")  # only the clinic's own items can be marked
+        _, created = await visit_prep_sql.mark(conn, booking_id=booking_id, item=item_id, done=body.done, idempotency_key=idempotency_key)
+    except visit_prep_sql.Refused:
+        raise HTTPException(status_code=404, detail="not found") from None
+    except visit_prep_sql.KeyReused:
+        raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request") from None
+    return PrepMarkOut(booking_id=booking_id, item_id=item_id, done=body.done, created=created)
+
+
 # ---- Knowledge search (migration 0085; BUILD-SPEC.md 10): MECHANISM over SYNTHETIC placeholder cards ------------------------------------------------------------------------------------------------------------
 #
 # A nurse or doctor asks a question and gets back card IDS, versions and scores: never a card's text, never the question (it is masked before any embedding model and stored nowhere). The search always filters by
@@ -6052,6 +6130,23 @@ class UpcomingVisitList(_Out):
     visits: list[UpcomingVisitOut]
 
 
+@staff_visits.get("/{visit_id}/prep", response_model=PatientPrepOut)
+async def staff_visit_prep(visit_id: uuid.UUID, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> PatientPrepOut:
+    """What the patient has marked for a visit's preparation checklist (read-only). 404 if the visit is not visible to you, 403 unless you are a nurse or doctor there (with a recent second factor, checked again by the database),
+    503 unless visit preparation is switched on. With no checklist configured the answer has no items and the fixed note."""
+    visit = await visit_readiness_sql.load_visit(conn, visit_id, confirmed_only=False)
+    if visit is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _clinic_role_held(conn, visit.clinic_id, READINESS_ROLES):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    _patient_prep_on()
+    try:
+        state = await visit_prep_sql.staff_prep(conn, visit_id)
+    except visit_prep_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return _prep_out(visit_id, request, state)
+
+
 @staff_visits.get("/upcoming", response_model=UpcomingVisitList)
 async def upcoming_visits(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 50) -> UpcomingVisitList:
     """Confirmed visits that have not started yet, soonest first: ids and times only (never a name). It gives visit readiness the visit id to work with. 404 if the clinic is not visible to you, 403 unless you are a nurse or doctor there."""
@@ -6161,6 +6256,7 @@ def create_app(
         except visit_readiness_content.VisitContentError:
             log.error("CAREFLOW_VISIT_READINESS_CONTENT is invalid: no readiness run can start")
             vr_content = None
+        app.state.visit_content = vr_content  # the clinic's checklist (or None): read by the visit preparation routes
         vr_priority = (p4env.get("CAREFLOW_VISIT_READINESS_TASK_PRIORITY") or "").strip()
         if vr_content is not None and app.state.vault is not None and visit_readiness_enabled(dict(os.environ)) and vr_priority in visit_readiness_sql.TASK_PRIORITIES:  # the flag, the vault, the content and the required priority
             vr_components = visit_readiness_sql.VisitReadinessComponents(app.state.vault, RedFlagEngine(), vr_content, vr_priority, None, durable=True)  # the model roles have NO approved route: every reply is unclear

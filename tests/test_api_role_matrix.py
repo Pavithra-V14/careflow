@@ -3538,6 +3538,50 @@ def portal_booking_cancel_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(), None)
 
 
+# ---- patient visit preparation (migration 0089, deferred item 30). OFF unless the owner sets CAREFLOW_PATIENT_VISIT_PREP=on, so the matrix patient gets a fixed 503 "not set up"; who-you-are is checked FIRST, so every other role is refused 403
+# whatever the setting. Staff view: nurse and doctor get the same fixed 503, front desk sees the booking and is refused 403, everyone who cannot see the booking gets the one 404. The flows with the setting on are in tests/test_visit_prep_db_live.py.
+
+PORTAL_VISITS = PORTAL + "/visits"
+PREP_NOT_SET_UP = lambda b: b == {"detail": "visit preparation is not set up"}
+
+
+def portal_prep_get_cases(ids) -> list[tuple]:
+    path = lambda: f"{PORTAL_VISITS}/{uuid.uuid4()}/prep"
+    cases = [_case(ids, "with visit preparation not turned on an active patient account is told it is not set up", "patient", 503, path(), key=None, body=PREP_NOT_SET_UP)]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path(), key=None, body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases.append(_case(ids, "a booking id that is not a uuid is rejected", "patient", 422, f"{PORTAL_VISITS}/nope/prep", key=None, body=_fixed(422)))
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
+def portal_prep_mark_cases(ids) -> list[tuple]:
+    path = lambda item="bring_item": f"{PORTAL_VISITS}/{uuid.uuid4()}/prep/{item}/done"
+    cases = [_case(ids, "with visit preparation not turned on an active patient account is told it is not set up", "patient", 503, path(), json={"done": True}, body=PREP_NOT_SET_UP)]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path(), json={"done": True}, body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases += [
+        _case(ids, "missing X-Idempotency-Key is rejected", "patient", 422, path(), json={"done": True}, key=None, body=_fixed(422)),
+        _case(ids, "an item id with capitals or spaces is rejected", "patient", 422, path("Bad Item"), json={"done": True}, body=_fixed(422)),
+        _case(ids, "done must be a boolean", "patient", 422, path(), json={"done": "yes"}, body=_fixed(422)),
+        _case(ids, "done is required", "patient", 422, path(), json={}, body=_fixed(422)),
+        _case(ids, "an extra field is rejected", "patient", 422, path(), json={"done": True, "patient_id": str(uuid.uuid4())}, body=_fixed(422)),
+        _case(ids, "a booking id that is not a uuid is rejected", "patient", 422, f"{PORTAL_VISITS}/nope/prep/bring_item/done", json={"done": True}, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), {"done": True})
+
+
+def staff_visit_prep_cases(ids) -> list[tuple]:
+    path = f"{VISITS}/{ids.pools['cancel'][-1]}/prep"
+    unavailable = lambda b: b == {"detail": "visit preparation is not set up"}
+    cases = [_case(ids, f"{p} is told visit preparation is not set up", p, 503, path, key=None, body=unavailable) for p in VR_ALLOWED]
+    cases.append(_case(ids, "front_desk_a sees the booking but is refused", "front_desk_a", 403, path, key=None, body=NOT_YOUR_ROLE))
+    others = [p for p in ids.people if p not in (*VR_ALLOWED, "front_desk_a")]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused with the one not-found", p, 404, path, key=None, body=_fixed(404)) for p in others]
+    cases += [
+        _case(ids, "a visit that does not exist is not found", "nurse_a", 404, f"{VISITS}/{uuid.uuid4()}/prep", key=None, body=_fixed(404)),
+        _case(ids, "a visit id that is not a uuid is rejected", "nurse_a", 422, f"{VISITS}/nope/prep", key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path, None)[:4]
+
+
 def staff_patient_request_list_cases(ids) -> list[tuple]:
     path = lambda **o: STAFF_PATIENT_REQUESTS + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
     visible = ("nurse_a", "doctor_a", "admin_a", "business_owner_a", "auditor_a", "multi")
@@ -4002,6 +4046,9 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", PORTAL_MESSAGE_THREADS): portal_message_threads_cases,
     ("GET", PORTAL_MESSAGE_THREADS + "/{thread_id}"): portal_message_thread_read_cases,
     ("GET", PORTAL_BOOKING + "/slots"): portal_booking_slots_cases,
+    ("GET", PORTAL_VISITS + "/{booking_id}/prep"): portal_prep_get_cases,
+    ("POST", PORTAL_VISITS + "/{booking_id}/prep/{item_id}/done"): portal_prep_mark_cases,
+    ("GET", VISITS + "/{visit_id}/prep"): staff_visit_prep_cases,
     ("POST", PORTAL_BOOKING + "/slots/{slot_id}/book"): portal_booking_book_cases,
     ("GET", PORTAL_BOOKING + "/bookings"): portal_booking_list_cases,
     ("POST", PORTAL_BOOKING + "/bookings/{booking_id}/cancel"): portal_booking_cancel_cases,
