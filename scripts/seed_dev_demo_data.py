@@ -21,6 +21,9 @@ hold the label); no clinical content is authored here (no thresholds, red-flag r
 It also writes ONE red-flag rule over invented, non-medical tokens as a DRAFT (`draft_unreviewed`, clinic-scoped, labelled DEMO ONLY - NOT A CLINICAL DECISION): no approver is named and nothing is approved, so only the demo
 profile uses it (a clinical profile ignores a draft and holds every letter as unassessable). With it in place a letter that matches no token is CLEAR in the demo profile and a demo run can reach the review step.
 
+It also writes rows for the newer features, all synthetic and labelled DEMO: one result and one medication (DEMO codes, unverified, no value or dose), one care plan with one step (left in `screening`),
+three open patient requests and three in-app notices for a CLOSED demo patient account that cannot sign in. No value is clinical and no rule is approved.
+
 It writes NO human decision: no agents.review_decisions row, no acknowledged or resolved task, no approval by a real person (a review decision is the one thing the project allows to become a training label, and
 those tables are append-only). The documents' `registered_by`, the priority levels' `approved_by` and the merge's FIRST signature are a placeholder account "demo seed (not a clinician)": status closed, no roles, cannot
 sign in. Acknowledged and resolved tasks, a second merge approval and every other decision are made BY HAND through the real routes. KNOWN WEAKENING (synthetic dev data only): once a real
@@ -54,6 +57,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 from careflow import demo_phase3
 from careflow.crypto import DemographicVault
 from careflow.demo_front_door import DEMO_RULE_CODE, DEMO_RULE_PHRASES
+from careflow.messages import encrypt_plan_text
 from careflow.mpi import PatientIngestionPipeline
 from careflow.rules import PLACEHOLDER
 
@@ -289,6 +293,57 @@ async def seed(conn: AsyncConnection, clinic: uuid.UUID, vault: DemographicVault
     await task("referral_hold", pack.triage_task_role, pack.hold_task_priority, documents[3], {"status": "held_unassessable", "reasons": ["screening_unassessable"], **demo}, f"{k}:hold-task:4")
     say("referrals: 4 documents (1 waiting to run, 2 with an OPEN proposal and review task, 1 held with an open hold task); no decision is recorded")
     say("every priority, role, mode and card id above is an INVENTED DEMO VALUE: " + DEMO_LABEL)
+    # ---- rows for the newer features: a result, a medication, a care plan, a patient account with requests and notices. Every row is SYNTHETIC and labelled DEMO; no value here is clinical (codes are DEMO-*, no dose, no
+    # threshold, no wording of any protocol), nothing is verified, and no decision of a person is invented. -----------------------------------------------------------------------------------------------
+    subject = patient_ids[0]
+    await conn.execute(
+        text(
+            "insert into clinical.results (clinic_id, origin, patient_id, code, measures, verified, valid_from, recorded_by, idempotency_key) "
+            "values (:c, 'test', :p, 'DEMO-RESULT-A', cast(:m as jsonb), false, clock_timestamp() - interval '1 day', :u, :k) on conflict (clinic_id, idempotency_key) do nothing"
+        ),
+        {"c": clinic, "p": subject, "m": json.dumps({"demo_flag": True}), "u": placeholder, "k": f"{k}:result:demo-a"},
+    )
+    await conn.execute(
+        text(
+            "insert into clinical.medications (clinic_id, origin, patient_id, code, verified, valid_from, recorded_by, idempotency_key) "
+            "values (:c, 'test', :p, 'DEMO-MED-A', false, clock_timestamp() - interval '1 day', :u, :k) on conflict (clinic_id, idempotency_key) do nothing"
+        ),
+        {"c": clinic, "p": subject, "u": placeholder, "k": f"{k}:medication:demo-a"},
+    )
+    plan = det(clinic, f"{SEED}:care-plan:1")
+    await conn.execute(
+        text(
+            "insert into ops.care_plans (id, clinic_id, origin, patient_id, plan_ct, plan_key_version, created_by, idempotency_key) "
+            "values (:i, :c, 'test', :p, :ct, :v, :u, :k) on conflict (clinic_id, idempotency_key) do nothing"
+        ),
+        {"i": plan, "c": clinic, "p": subject, "ct": encrypt_plan_text(vault, f"{DEMO_LABEL}. An invented plan with no clinical content.", clinic_id=clinic, plan_id=plan, key_version=key_version), "v": key_version, "u": placeholder, "k": f"{k}:care-plan:1"},
+    )
+    await conn.execute(
+        text(
+            "insert into ops.care_plan_steps (clinic_id, plan_id, step_key, position, kind, label, idempotency_key) "
+            "values (:c, :pl, 'demo_step', 0, 'task', :l, :k) on conflict (clinic_id, idempotency_key) do nothing"
+        ),
+        {"c": clinic, "pl": plan, "l": "DEMO ONLY - an invented step", "k": f"{k}:care-plan-step:1"},
+    )
+    portal_account = det(SEED, "portal-account")
+    await conn.execute(text("insert into iam.accounts (id, account_type, status, origin) values (:i, 'patient', 'closed', 'test') on conflict (id) do nothing"), {"i": portal_account})
+    for n, (kind, field) in enumerate((("correction", "phone"), ("nominee", None), ("erasure", None)), start=1):
+        request_id = det(clinic, f"{SEED}:patient-request:{n}")
+        await conn.execute(
+            text(
+                "insert into iam.patient_requests (id, clinic_id, origin, account_id, patient_id, kind, field, idempotency_key) "
+                "values (:i, :c, 'test', :a, :p, :kind, :f, :k) on conflict (account_id, idempotency_key) do nothing"
+            ),
+            {"i": request_id, "c": clinic, "a": portal_account, "p": patient_ids[n], "kind": kind, "f": field, "k": f"{k}:patient-request:{n}"},
+        )
+        await conn.execute(
+            text(
+                "insert into iam.notifications (account_id, origin, kind, ref, idempotency_key) values (:a, 'test', 'request_update', :r, :k) on conflict (account_id, idempotency_key) do nothing"
+            ),
+            {"a": portal_account, "r": str(request_id), "k": f"{k}:notification:{n}"},
+        )
+    say("newer features: 1 result and 1 medication (DEMO codes, unverified), 1 care plan with 1 step (still in screening), 3 open patient requests and 3 in-app notices for a closed demo patient account")
+    say("  none of these values is clinical; the account cannot sign in (closed, no auth user). The two-person rule-approval flow is NOT pre-filled: write and approve a rule by hand with two doctor accounts.")
     say("")
     say("Patient search by hand (FICTIONAL demo values, not secrets): type the exact name and date of birth; the last four digits of the phone are shown on the list row.")
     for name, dob, phone in PATIENTS:

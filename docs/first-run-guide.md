@@ -118,7 +118,7 @@ Add `--dry-run` to any command to see what it would do without doing it.
 .\.venv\Scripts\python.exe scripts\seed_break_glass_reasons.py --clinic-id <CLINIC-ID>
 ```
 
-- The first prints the project host and asks you to **type it exactly**; it then adds made-up patients, slots, referrals and a merge. It is safe to run again.
+- The first prints the project host and asks you to **type it exactly**; it then adds made-up patients, slots, referrals and a merge, and (new) one DEMO result, one DEMO medication, one care plan with a step, three patient requests and three in-app notices for a closed demo patient account. All are synthetic and labelled; none is clinical. It is safe to run again.
 - The second publishes the labelled **demo** consent text (the real wording is counsel's).
 - The third adds the demo break-glass reason `demo_reason` to the clinic.
 
