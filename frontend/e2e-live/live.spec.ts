@@ -116,9 +116,28 @@ test('walk every screen, read-only, and record each call', async ({ page }) => {
       incomplete.push(name);
     }
   };
+  // What the reviewer view SHOWS for a model-made proposal (dev data, synthetic): the suggestion note, the facts and the alternatives as text,
+  // so "shown exactly as sent" and "Not recorded" can be read from a real answer. Written beside the report, never into it.
+  const observed: string[] = [];
+  const observeReview = async (n: number) => {
+    const view = page.locator('section[aria-labelledby^="rv-"]');
+    if ((await view.count()) === 0) {
+      observed.push(`- referral detail ${n}: no reviewer view on the screen`);
+      return;
+    }
+    const note = ((await view.locator('p.hint').first().innerText({ timeout: 3000 }).catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+    const cells = (await view.locator('dl.facts').first().locator('dt, dd').allInnerTexts().catch(() => [])).map((t) => t.replace(/\s+/g, ' ').trim());
+    const facts: string[] = [];
+    for (let i = 0; i + 1 < cells.length; i += 2) facts.push(`${cells[i]}: ${cells[i + 1]}`);
+    const alts = await view.locator('table').last().locator('tbody tr').allInnerTexts().catch(() => []);
+    observed.push(`- referral detail ${n}: suggestion note "${note}"; facts [${facts.join(' | ')}]; alternatives [${alts.map((a) => a.replace(/\s+/g, ' ').trim()).join(' | ')}]`);
+  };
   let seenPatientLink: string | null = null;
+  const patientLinks = new Set<string>();
   const noteLink = async () => {
-    if (seenPatientLink === null) seenPatientLink = await optionalHref(page.locator('main a[href^="#/patients/"]'));
+    const hrefs = await page.locator('main a[href^="#/patients/"]').evaluateAll((els) => els.map((e) => e.getAttribute('href') ?? '')).catch(() => [] as string[]);
+    for (const h of hrefs) if (h) patientLinks.add(h);
+    if (seenPatientLink === null) seenPatientLink = hrefs[0] ?? null;
   };
   const optionalHref = async (locator: ReturnType<Page['locator']>) => ((await locator.count()) > 0 ? await locator.first().getAttribute('href', { timeout: 5000 }) : null);
 
@@ -149,6 +168,9 @@ test('walk every screen, read-only, and record each call', async ({ page }) => {
     await step('offers', async () => {
       await visit('scheduling offers', '#/scheduling/offers');
       const select = page.locator('main select');
+      // The visit types arrive after the first loading box, so wait for the select and its choices (up to 15 s) before deciding there are none.
+      await select.first().waitFor({ timeout: 15_000 }).catch(() => undefined);
+      await expect.poll(async () => select.locator('option').count(), { timeout: 15_000 }).toBeGreaterThan(1).catch(() => undefined);
       if ((await select.count()) > 0 && (await select.locator('option').count()) > 1) {
         phase.current = 'offer draft (read-only)';
         await select.selectOption({ index: 1 });
@@ -200,6 +222,7 @@ test('walk every screen, read-only, and record each call', async ({ page }) => {
       for (const [i, href] of hrefs.entries()) {
         await visit(`referral detail ${i + 1}`, href);
         await noteLink();
+        await observeReview(i + 1);
       }
     });
     let patientLink: string | null = null;
@@ -212,9 +235,22 @@ test('walk every screen, read-only, and record each call', async ({ page }) => {
       await visit('identity duplicates', '#/identity/duplicates');
       await clickIf('duplicates (resolved)', page.getByRole('button', { name: 'Resolved', exact: true }));
     });
-    const toOpen = (patientLink as string | null) ?? (seenPatientLink as string | null);
-    if (toOpen) await step('patient record', () => visit('patient record (with its medications panel, read-only)', toOpen));
+    // Prefer a patient seen on a referral or another screen: the one opened from a merge may be the merged-away record, whose medications panel is hidden.
+    // Open up to six distinct patient records until one shows the medications panel (a merged-away record hides it), and say what each showed.
+    const candidates = [...new Set([...patientLinks, ...(patientLink ? [patientLink as string] : [])])].slice(0, 6);
+    for (const [i, href] of candidates.entries()) {
+      let shown = false;
+      await step(`patient record ${i + 1}`, async () => {
+        await visit(`patient record ${i + 1} (read-only)`, href);
+        await page.locator('#meds-title').waitFor({ timeout: 4000 }).then(() => (shown = true)).catch(() => undefined);
+        await settle(page);
+      });
+      const merged = (await page.locator('main .state-forbidden').count()) > 0;
+      observed.push(`- patient record ${i + 1}: medications panel ${shown ? 'shown' : 'not shown'}; merged-away notice ${merged ? 'shown' : 'not shown'}`);
+      if (shown) break;
+    }
   } finally {
+    await page.waitForTimeout(2500).catch(() => undefined); // let the last responses be recorded before the report is written
     // What the shell itself shows (closed words: the role label and the LIVE / TEST / unknown badge), so a clinic_origin the console
     // does not recognise (the database also allows eval and canary) is visible in the report as "Environment unknown".
     let shell = '';
@@ -224,6 +260,8 @@ test('walk every screen, read-only, and record each call', async ({ page }) => {
     } catch {
       /* the page may already be closed */
     }
+    mkdirSync(REPORT_DIR, { recursive: true });
+    if (observed.length > 0) writeFileSync(resolve(REPORT_DIR, `review-observations${SUFFIX}.md`), `# Reviewer view as shown (dev data, synthetic)\n\n${observed.join('\n')}\n`);
     const base = incomplete.length === 0 ? 'read-only walk' : `read-only walk; steps that did not complete: ${incomplete.join(', ')}`;
     save(calls, shell ? `${base}. The shell showed: ${shell}` : base);
   }

@@ -197,3 +197,35 @@ The API's reviewer view has these fields: `engine` (the label), `confidence`, al
 ## What is needed to run the pass
 
 Either restart the backend with `CAREFLOW_REQUIRE_AAL2=false` (the 8010 setup; demo profile and synthetic data only), or sign in with real authenticator codes (the dev accounts have no authenticator today). Then the four walks (front desk, nurse, admin, doctor) are redone with the walk now covering: patient requests, red-flag rules and the rule authoring form (opened, never saved), up to six referral details, and the patient record with its medications panel.
+
+# Second live pass, redone (14 Nov 2026, second half)
+
+Backend `127.0.0.1:8000` restarted by the user with `CAREFLOW_REQUIRE_AAL2=false` (demo, synthetic data only). Dev server `127.0.0.1:5173/staff/` with the dev-only skip switch on (set in the shell for the run only). The user typed every password; no credential, token or storage was read. All walks are READ-ONLY (the tool fails if it makes a write): no screen was changed, no rule was drafted or saved, no request status was changed.
+
+| Step | Result | Cause |
+|---|---|---|
+| Front desk (pavithravenkatesh341@gmail.com) | pass | 58 calls, 0 schema mismatches. Scheduling lists, offers, slots, bookings, waitlist, alerts, patient requests (200), identity merges and one detail, possible duplicates, break-glass, autonomy mode, portal claims, one patient record. 403 only on routes a front desk is not offered (dashboard, care, rules, accounts, reviewer stats, cost, recovery, grievances, autonomy history). |
+| Nurse (pavithra.v2022ece@sece.ac.in) | pass | 73 calls, 0 mismatches. Referral details and ten reviewer views (200), review tasks and one task detail, scheduling lists, alerts, care gaps and plans, red-flag rules (read), accounts, autonomy, reviewer stats, cost, recovery, grievances, one patient record. 403: offer draft, patient requests, portal claims, voice sessions, possible duplicates (not the nurse's routes). |
+| Admin (same account, Admin role, a separate sign-in) | pass | 62 calls, 0 mismatches. 403: offer draft, patient requests, portal claims, possible duplicates (not the admin's routes). |
+| Doctor (pavithravenkatesh1974@gmail.com) | pass | 73 calls, 0 mismatches. Referral details, ten reviewer views, red-flag rules (200), care. 403 only on admin and front-desk routes. |
+| Scheduling offer draft | pass (front desk) | The first front desk walk skipped it: the walk tool did not wait for the visit types to load (fixed). A second front desk walk got `GET /scheduling/offers/draft` 200 with 0 schema issues. 403 for nurse, doctor and admin, as the route says. Screen text of the draft was not read. |
+| Red-flag rule list | pass | Doctor and admin 200; front desk and nurse-less roles as expected. The rule authoring form was opened by the walk and never saved (nothing is written). |
+| Patient requests (front desk) | pass | `GET /patient-requests` 200, 0 schema issues. The status route was not called (a write). |
+| Alerts, referral review | pass | Alerts 200 (empty list: row shape unchecked). Referral review: see the next table. |
+| Medications | not exercised | The patient record opened 200 in the nurse and doctor walks but `GET /medications` was never called. Cause not yet known: most likely the record opened was a merged-away one (its medications panel is hidden); the walk could not tell. The tool now opens up to six distinct patient records until the panel shows and says what each showed. Needs one more nurse walk. |
+| Voice sessions (admin), consent and voice settings for staff | not tested live: needs second factor | `GET /voice/sessions` answered 403 to admin: the route says "403 unless you are an admin there with a verified second factor", a database-level check. Not a failure. |
+| Staff views of a patient (profile-related) | pass | `GET /patients/{id}` 200 in every walk. The full-record view and break-glass reads were not exercised (second factor / writes). |
+| Front desk supervisor | not run | Waiting for the user to say the role is granted. |
+| Patient request status buttons from `allowed_next` | nothing new | No `allowed_next` or transitions in the snapshot (checked at main c75110e). |
+
+## Referral review of a model-made proposal, as shown (doctor walk, dev data)
+
+The doctor walk read what the reviewer view shows on four referrals (file `frontend/live-report/review-observations-doctor.md`, synthetic data): the suggestion note "This is a suggestion made by the system, shown as the system recorded it. It is not a decision: a person decides."; Task kind "Triage proposal"; **Mode: assisted** exactly as sent; Abstained: No; Candidates: 2; **Engine, Confidence and Rule that triggered review: "Not recorded"**; two alternatives (`demo-synthetic-card-A@1`, `demo-synthetic-card-B@1`) each with probability "Not recorded". So on this data the backend sent no engine, no confidence and no probabilities, and the screen said so instead of showing zero. An engine label and real probabilities were NOT seen live because the demo proposals carry none; those cases are covered by the unit tests only.
+
+## Frontend defects found and fixed in this half
+
+1. The live walk's offer-draft step did not wait for the visit types, so it silently skipped the draft (fixed: it waits up to 15 s).
+2. The live walk preferred the patient record opened from a merge (possibly merged-away, so no medications panel) and saved the report before the last responses were recorded (fixed: it tries up to six records and waits 2.5 s before saving).
+3. The reviewer-view observation is now part of the walk, so "shown exactly as sent" can be read from a real answer.
+
+No defect was found in the screens themselves: 0 schema mismatches in 337 calls across the six walks, and every refusal was a role the walk visits directly or a database-level second-factor check.
