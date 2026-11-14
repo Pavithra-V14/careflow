@@ -5711,14 +5711,10 @@ async def read_my_message_thread(thread_id: uuid.UUID, request: Request, conn: T
     if not rows:
         raise HTTPException(status_code=404, detail="not found")
     out: list[PatientMessageOut] = []
-    for r in rows:
-        body_text: str | None = None
-        if not r.erased and r.body_ct is not None:
-            try:
-                body_text = messages_mod.decrypt_body(vault, r.body_ct, clinic_id=r.clinic_id, thread_id=r.thread_id, message_id=r.message_id, key_version=r.body_key_version)
-            except (messages_mod.DecryptionError, messages_mod.UnknownKeyVersionError) as exc:  # the class name only: never the text
-                log.warning("a patient's own message could not be read (account=%s error=%s)", account_id, type(exc).__name__)
-        out.append(PatientMessageOut(message_id=r.message_id, sender=r.sender_kind, created_at=r.created_at, text=body_text, erased=bool(r.erased), readable=body_text is not None or bool(r.erased)))  # type: ignore[arg-type]
+    for m in messages_mod.decrypt_own_messages(vault, rows):
+        if m.unreadable_reason is not None:
+            log.warning("a patient's own message could not be read (account=%s error=%s)", account_id, m.unreadable_reason)  # the class name only: never the text
+        out.append(PatientMessageOut(message_id=m.message_id, sender=m.sender_kind, created_at=m.created_at, text=m.text, erased=m.erased, readable=m.text is not None or m.erased))  # type: ignore[arg-type]
     return PatientMessageList(thread_id=thread_id, messages=out)
 
 
