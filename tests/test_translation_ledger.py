@@ -111,3 +111,16 @@ def test_migration_0087_hardens_the_card_vectors_without_touching_0085():
     assert not re.search(r"\bgrant\b", code)  # revokes only
     original = (ROOT / "db" / "migrations" / "0085_card_embeddings.sql").read_text(encoding="utf-8")
     assert "p_card_version > v_max" not in original  # (0085 is as merged: the fix is a new migration)
+
+
+def test_migration_0088_fixes_the_race_handler_the_vector_tolerance_and_the_owner_assertion_only():
+    sql = (ROOT / "db" / "migrations" / "0088_card_embeddings_index_race_fix.sql").read_text(encoding="utf-8")
+    code = "\n".join(line for line in sql.splitlines() if not line.lstrip().startswith("--"))
+    assert code.count("create or replace function") == 1 and "create function" not in code and not re.search(r"\bgrant\b", code)  # the same signature: the EXECUTE grant stays; nothing new is granted
+    handler = code[code.index("exception when unique_violation then") :]
+    handler = handler[: handler.index("end;\n    insert into audit.log")]
+    for needed in ("v_prior.card_id <> p_card_id", "v_prior.card_version <> p_card_version", "v_prior.model_id <> p_model_id", "order by (e.idempotency_key = v_key) desc"):
+        assert needed in handler, needed  # the race answer compares the card, the version and the model, and prefers the key's row
+    assert "operator(extensions.=)" not in code and code.count("operator(extensions.<=>) v_vec) > 0.001") == 3  # a replay tolerates a vector within a tiny cosine distance, never an exact float match
+    assert "p.proowner" in code and "c.relowner" in code and "rolbypassrls" in code  # the owner of the functions and the table, not only the migrator
+    assert "security definer set search_path = ''" in code and "errcode = '42501'" in code and "p_card_version > v_max + 1" in code
