@@ -67,9 +67,10 @@ function ProfileForm({ api, profile }: { api: Api; profile: Profile }) {
     (_: void, key) =>
       unwrap(
         api.putProfile(
+          // Only what the person changed: an unchanged field is left out, so nothing depends on what null would mean.
           {
-            sex: sex === '' ? null : sex,
-            preferred_language: language === 'en' || language === 'ta' ? language : null,
+            ...(sex !== (profile.sex ?? '') && sex !== '' ? { sex } : {}),
+            ...(language !== (profile.preferred_language ?? '') && (language === 'en' || language === 'ta') ? { preferred_language: language } : {}),
           },
           { idempotencyKey: key },
         ),
@@ -79,7 +80,8 @@ function ProfileForm({ api, profile }: { api: Api; profile: Profile }) {
       void queryClient.invalidateQueries({ queryKey: ['portal-profile'] });
     },
   );
-  const changed = sex !== (profile.sex ?? '') || language !== (profile.preferred_language ?? '');
+  // Choosing "Choose" again is not a change: clearing a value is not offered, because the route does not say what null does (backend request 32).
+  const changed = (sex !== (profile.sex ?? '') && sex !== '') || (language !== (profile.preferred_language ?? '') && language !== '');
   const touch = (set: (v: string) => void) => (v: string) => {
     set(v);
     setNote(null);

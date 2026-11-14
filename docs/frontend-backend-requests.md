@@ -332,6 +332,9 @@ The voice consent text must come only from the API. The frontend currently looks
 
 **31 (voice notice), answered 2026-11-14:** `voice_session` is now a closed value of the consent notice `purpose` (the schema enum on `NoticeOut` and `ConsentIn`), served by the existing `GET /v1/portal/consents` like the other purposes; the demo pack carries a labelled DEMO ONLY placeholder notice and label for it; outside the demo the text is the owner's `CAREFLOW_CONSENT_NOTICES` entry (counsel's wording); with no notice published the list has no `voice_session` item. It can be granted or withdrawn like the others (an ordinary consent event on the current notice), so the console may offer or hide those buttons as it chooses. The separate route and setting added earlier in this pass (`/voice/consent-notice`) were removed.
 
+### 32. What does null mean in the profile write? (requested 2026-11-14)
+`PUT /v1/portal/profile` takes `sex` and `preferred_language`, each a value or null. The description says it "sets values", but not whether null leaves a field alone or clears it. The portal sends ONLY the fields the person changed, never null, and offers no way to clear a value. Please say in the route description what null does and whether a person may clear a field; if clearing is allowed, say how the clinic's list (or none) applies. Until then clearing stays unbuilt.
+
 ## Decisions recorded here for later readers
 
 - **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;
