@@ -254,3 +254,25 @@ To test the supervisor role on its own, either create an account that holds only
 ## Supervisor item: closed (decided 14 Nov 2026)
 
 **No supervisor-only person can exist; supervisor = front desk plus a console view.** By design a front desk supervisor always holds `front_desk` too, so the walk of 14 Nov (account holding both grants, merged at 8631640) IS the real supervisor case. The supervisor-only walk is cancelled; no supervisor-only test account and no active-role header switch-on are needed for it.
+
+# Doctor referral review walk with a real engine and probabilities (14 Nov 2026)
+
+Doctor (pavithravenkatesh1974@gmail.com), password only, **read-only: 86 calls, 0 writes, 0 schema mismatches**. Backend `127.0.0.1:8000` with the new review-view fields; dev-only skip switch on. The user typed the password. The first run of this walk (62 calls) opened no referral details because the walk tool read the referral list before its rows had arrived (fixed: it waits up to 15 s for the rows and up to 8 s for each reviewer view); the second run below is the one that counts.
+
+The proposal the user named (id `1939f256-c052-5e1c-8abe-de1bd35eeb9c`; the screen does not show a proposal id, so the referral was identified by its values). Referral detail 1 in the list showed it. What the reviewer view showed, taken from the screen text (`frontend/live-report/review-observations-doctor_review_2.md`), against the numbers the user gave:
+
+| Field | Expected (given) | Screen showed | Match |
+|---|---|---|---|
+| Engine | `jev` (via openrouter) | **jev** | yes. "via openrouter" is not a field of the API's reviewer view, so the screen cannot show it. |
+| Model | `typesafe/jev-router` | **typesafe/jev-router** | yes |
+| Confidence | 0.51 | **51%** | yes |
+| Decision rule | `chosen_option_ranks_first` | **chosen_option_ranks_first** | yes (shown under "Decision rule", `decision_rule`) |
+| Alternative `demo-synthetic-card-A@1` | 0.51 | **51%** | yes |
+| Alternative `demo-synthetic-card-B@1` | 0.49 | **49%** | yes |
+| Rule that triggered review | not given | **Not recorded** | `triggering_rule` is null for this proposal: the separate "rule that triggered review" field, not the decision rule |
+| Mode, abstained, candidates | not given | assisted, No, 2 | as the API sends them |
+| Suggestion note | | "This is a suggestion made by the system, shown as the system recorded it. It is not a decision: a person decides." | present |
+
+The other six referrals of the clinic (details 2 and 4 to 7) showed Engine, Model, Decision rule, Confidence and both probabilities as **"Not recorded"** (their proposals predate the new decision stage), so the null case also behaves live: no zero, no blank. Referral detail 3 was read before its reviewer view had loaded, so its observation is empty (a walk timing gap, not a screen result); it is not counted.
+
+Verdict: **pass**. The screen shows engine, model id, confidence, decision rule and each alternative's probability exactly as the API sent them, and "Not recorded" for null. Nothing was written.
