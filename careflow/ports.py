@@ -189,6 +189,8 @@ class TranslationRequest:
     text: str = field(repr=False)
     source: str
     target: str
+    # REQUIRED, no default (like DecisionRequest): a request that does not say what it carries is not assumed to be synthetic. A hosted adapter refuses PHI itself.
+    data_class: DataClass
 
 
 @dataclass(frozen=True)

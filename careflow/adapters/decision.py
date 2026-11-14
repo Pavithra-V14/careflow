@@ -142,9 +142,19 @@ class JevClient(Protocol):
 
 
 def _to_jev_payload(request: DecisionRequest) -> dict[str, object]:
-    """UNVERIFIED (BUILD-SPEC.md Appendix B): Jev's request shape via OpenRouter is a "decisions" endpoint, distinct from /chat/completions.
-    This is the ONE place that knows the shape, so a correction after a real call is a one-place change. Do not depend on it before then."""
+    """UNVERIFIED (BUILD-SPEC.md Appendix B): the spec expected a "decisions" endpoint; OpenRouter documents Jev as a router MODEL on /chat/completions (careflow/adapters/openrouter.py turns this
+    payload into that request; docs/design/hosted-providers.md). This is the ONE place that knows the payload shape; confirm with scripts/provider_live_check.py before depending on it."""
     return {"task": "choice", "question": request.question_type, "input": request.text, "options": list(request.options)}
+
+
+# Engines whose output is NEVER evidence: Jev is a router whose downstream model is not pinned and changes per request (owner decision 2026-10-30), so nothing it says may be used as evidence for an
+# acceptance check, a gold set, a calibration table or a golden-input comparison. It is a synthetic-only convenience engine for the demo.
+NOT_EVIDENCE_ENGINES: Final = frozenset({"jev"})
+
+
+def counts_as_evidence(result: DecisionResult) -> bool:
+    """False for an engine in NOT_EVIDENCE_ENGINES. Acceptance, gold-set and calibration code must filter on this before it counts a decision."""
+    return result.engine not in NOT_EVIDENCE_ENGINES
 
 
 @dataclass
@@ -166,7 +176,13 @@ class JevAdapter:
         if not isinstance(probabilities, Mapping):
             raise PermanentError("jev's reply has no probabilities")
         probs = _validated(request.options, probabilities)  # type: ignore[arg-type]
-        return AdapterResult(_decide_from(probs, engine=self.name, calibrated=False, route="jev"), Usage(max(1, len(request.text.split())), 1))
+        reported = reply.get("usage")  # a real client reports the tokens the provider counted; without it the estimate is HIGH (characters over 3, plus the fixed prompt and the reply cap): unknown is not cheap
+        usage = Usage(len(request.text) // 3 + 400, 64)
+        if isinstance(reported, Mapping):
+            used_in, used_out = reported.get("input_tokens"), reported.get("output_tokens")
+            if isinstance(used_in, int) and isinstance(used_out, int) and not isinstance(used_in, bool) and not isinstance(used_out, bool) and used_in >= 0 and used_out >= 0:
+                usage = Usage(used_in, used_out)
+        return AdapterResult(_decide_from(probs, engine=self.name, calibrated=False, route="jev"), usage)
 
 
 # ---- the general LLM fallback ---------------------------------------------------------------------------------------------------------------

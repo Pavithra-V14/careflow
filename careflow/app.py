@@ -86,6 +86,7 @@ from careflow import (
     patient_view,
     portal_sql,
     producers_sql,
+    provider_setup,
     recovery_sql,
     reply_interpretation,
     review_tasks,
@@ -220,6 +221,7 @@ from careflow.scheduling_runner import (
     SchedulingRunner,
     WrongStep,
 )
+from careflow.spend import PostgresSpendLedger
 from careflow.tick import Poker, worker_loop
 from careflow.triage_store import DecisionConflict, TriageStoreError
 from careflow.triage_store import NotPermitted as TriageNotPermitted
@@ -5559,6 +5561,12 @@ def create_app(
         intake = document_intake
         if intake is None:
             intake, app.state.storage_adapter = _intake_from_environment(cfg.supabase_url)
+        try:  # hosted providers (demo + synthetic only, keys/verified date/ceilings required): none is built unless every gate passes; nothing consumes them yet
+            durable = PostgresSpendLedger(app.state.engine, cfg.worker_account_id) if cfg.worker_account_id else None  # the worker identity writes the durable ledger (0016); with no worker identity the in-memory one is used
+            app.state.providers = provider_setup.build_providers(profile=resolve_profile(), ledger=durable)
+        except Exception:  # noqa: BLE001 - ANY fault in the provider configuration degrades to 'no hosted provider', never a startup crash (CLAUDE.md: degrade explicitly and visibly)
+            log.error("the hosted-provider configuration is refused: no hosted provider is available")
+            app.state.providers = provider_setup.ProviderSet()
         app.state.document_intake = intake  # None unless storage is configured AND verified (below): the upload routes answer 503
         app.state.poker = Poker()  # routes that enqueue call `app.state.poker.poke()` after their transaction commits (7.4)
         handlers = {FRONT_DOOR_TASK: front_door_handler(components, session_for=front_door_session_for)} if components is not None else {}
