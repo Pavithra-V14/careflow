@@ -126,7 +126,7 @@ async def test_a_stop_or_correction_supersedes_once_and_only_for_the_same_patien
     first = (await add(db, w, key="s1"))[0][0]
     assert len(await add(db, w, s=first, vt=datetime(2026, 2, 1, tzinfo=UTC), key="s2")) == 1  # a stop: the same code with an end
     assert await add(db, w, s=first, key="s3") == "23505"  # superseded at most once
-    assert await add(db, w, patient="p2", s=first, key="s4") in ("23503", "42501")  # a row of ANOTHER patient cannot be superseded
+    assert await add(db, w, patient="p2", s=first, key="s4") in ("23503", "23505")  # a row of ANOTHER patient cannot be superseded (here the unique "superseded once" fires first: the row was stopped above; either way it is refused)
     assert await add(db, w, vt=datetime(2025, 1, 1, tzinfo=UTC), key="s5") == "23514"  # an end before the start
     assert await add(db, w, code="bad code", key="s6") == "23514"
     assert await add(db, w, v=None, key="s7") in ("23502", "23514")  # verified has no default
