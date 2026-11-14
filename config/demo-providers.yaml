@@ -26,6 +26,19 @@ rows:
     shadow_out_per_1k: "0.0025"
     label: "DEMO ONLY - SYNTHETIC DATA, PRICES TO BE CONFIRMED (Appendix B)"
 
+  - role: embed
+    provider: gemini
+    model_id: gemini-embedding-2  # text in, 768 numbers out (the table's size); free tier per Google's pricing page of 2026-11-14; the response shape is confirmed only by the live check
+    data_policy: synthetic_only
+    priority: 1
+    timeout_seconds: 20
+    free_tier: true
+    price_in_per_1k: "0"
+    price_out_per_1k: "0"
+    shadow_in_per_1k: "0.0002"
+    shadow_out_per_1k: "0"
+    label: "DEMO ONLY - SYNTHETIC DATA, PRICES TO BE CONFIRMED (Appendix B)"
+
   - role: decision
     provider: jev
     model_id: typesafe/jev-router

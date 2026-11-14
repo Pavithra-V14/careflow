@@ -54,6 +54,12 @@ VARIABLES: Final = {
     "public_grievance_ip_per_hour": "CAREFLOW_PUBLIC_GRIEVANCE_IP_PER_HOUR",
     "message_max_per_minute": "CAREFLOW_MESSAGE_MAX_PER_MINUTE",
     "public_read_ip_per_minute": "CAREFLOW_PUBLIC_READ_IP_PER_MINUTE",
+    "retrieval_min_dense_similarity": "CAREFLOW_RETRIEVAL_MIN_DENSE_SIMILARITY",
+    "retrieval_min_bm25_ratio": "CAREFLOW_RETRIEVAL_MIN_BM25_RATIO",
+    "context_budget_tokens": "CAREFLOW_CONTEXT_BUDGET_TOKENS",
+    "retrieval_eval_k": "CAREFLOW_RETRIEVAL_EVAL_K",
+    "retrieval_eval_min_recall": "CAREFLOW_RETRIEVAL_EVAL_MIN_RECALL",
+    "retrieval_eval_min_mrr": "CAREFLOW_RETRIEVAL_EVAL_MIN_MRR",
 }
 
 

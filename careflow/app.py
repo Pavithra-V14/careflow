@@ -77,6 +77,8 @@ from careflow import (
     demo_phase4,
     demo_real_models,
     identity,
+    knowledge,
+    knowledge_sql,
     learning_labels,
     medications_sql,
     metrics_catalog,
@@ -4653,6 +4655,55 @@ async def list_medications(clinic_id: uuid.UUID, patient_id: uuid.UUID, conn: Tx
     )
 
 
+# ---- Knowledge search (migration 0085; BUILD-SPEC.md 10): MECHANISM over SYNTHETIC placeholder cards ------------------------------------------------------------------------------------------------------------
+#
+# A nurse or doctor asks a question and gets back card IDS, versions and scores: never a card's text, never the question (it is masked before any embedding model and stored nowhere). The search always filters by
+# clinic, origin, embedding model, CURRENT version and the caller's role (kb.search_card_embeddings), and ABSTAINS unless both required thresholds are met. 503 until CAREFLOW_KNOWLEDGE_SEARCH is `on` in a demo +
+# synthetic_only deployment: in the clinical profile there are no real cards (kb/cards is clinician-owned and empty), so there is nothing to serve.
+
+staff_knowledge = APIRouter(prefix="/v1/staff/knowledge", tags=["staff knowledge"])
+KNOWLEDGE_ROLES = ("nurse", "doctor")
+
+
+class KnowledgeSearchIn(_Body):
+    clinic_id: uuid.UUID
+    query: str = Field(min_length=1, max_length=500)
+
+
+class KnowledgeCandidateOut(_Out):
+    card_id: str
+    version: int
+    similarity: float | None
+    bm25_ratio: float | None
+
+
+class KnowledgeSearchOut(_Out):
+    abstained: bool
+    reason: Literal["no_calibrated_policy", "no_candidates", "dense_unavailable", "below_threshold", "all_stale"] | None
+    candidates: list[KnowledgeCandidateOut]
+    embedding: Literal["fake", "hosted"]
+    reranked: bool
+
+
+@staff_knowledge.post("/search", response_model=KnowledgeSearchOut)
+async def knowledge_search_route(body: KnowledgeSearchIn, conn: TxConn, request: Request, claims: dict[str, Any] = Depends(verified_claims)) -> KnowledgeSearchOut:
+    """Search the knowledge cards. 404 if the clinic is not visible to you, 403 unless you are a nurse or doctor there, 503 until knowledge search is switched on (demo + synthetic_only only). Returns card ids, versions and
+    scores, and `abstained` with a fixed `reason` when nothing clears the required thresholds (an answer, not an error). The query is masked before any model and is not stored."""
+    origin = await _console_clinic(conn, body.clinic_id, KNOWLEDGE_ROLES)
+    search: knowledge.KnowledgeSearch | None = request.app.state.knowledge
+    if search is None:
+        raise HTTPException(status_code=503, detail="knowledge search is unavailable: not configured")
+    try:
+        outcome = await search.search(conn, body.clinic_id, origin, body.query)
+    except knowledge_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    r = outcome.retrieval
+    return KnowledgeSearchOut(
+        abstained=r.abstained, reason=r.reason, embedding="fake" if outcome.embedding_model == knowledge.FAKE_MODEL_ID else "hosted", reranked=outcome.reranked,
+        candidates=[KnowledgeCandidateOut(card_id=c.card_id, version=c.version, similarity=c.dense_similarity, bm25_ratio=c.bm25_ratio) for c in r.candidates],
+    )
+
+
 # ---- Portal claim resolution and consent notice publication (migration 0051; BUILD-SPEC.md 17.2, 20.1) --------------------------------------------------------------------------------------------------------
 #
 # A claim that found no single confirmed record becomes a pending request; a FRONT-DESK person of the clinic resolves it (audited by the database): approve binds the claimant's account to a CONFIRMED, unbound
@@ -6025,7 +6076,7 @@ def create_app(
     settings: Settings | None = None, *, jwks: JWKSClient | None = None, engine: AsyncEngine | None = None,
     vault: DemographicVault | None = None, clock: Callable[[], float] = time.time, front_door: FrontDoorComponents | None = None,
     front_door_session_for: Callable[..., Any] = worker_session, document_intake: DocumentIntake | None = None, reply_interpreter: DecisionService | None = None,
-    auth_admin: AuthAdminPort | None = None, scheduling_components: SchedulingComponents | None = None,
+    auth_admin: AuthAdminPort | None = None, scheduling_components: SchedulingComponents | None = None, knowledge_search: "knowledge.KnowledgeSearch | None" = None,
     care_journey_components: "care_journey_sql.CareJourneyComponents | None" = None,
     visit_readiness_components: "visit_readiness_sql.VisitReadinessComponents | None" = None,
 ) -> FastAPI:
@@ -6130,6 +6181,7 @@ def create_app(
             components = upgrade.components
             app.state.front_door = components
             log.warning("DEMO REAL MODELS (synthetic data only; every output is a suggestion): text: %s; decision: %s", upgrade.text, upgrade.decision)
+        app.state.knowledge = knowledge_search if knowledge_search is not None else knowledge.from_environment(os.environ, p4env, resolve_profile(), app.state.providers)  # None unless demo + synthetic_only + CAREFLOW_KNOWLEDGE_SEARCH=on (or injected): the route answers 503
         app.state.document_intake = intake  # None unless storage is configured AND verified (below): the upload routes answer 503
         app.state.poker = Poker()  # routes that enqueue call `app.state.poker.poke()` after their transaction commits (7.4)
         handlers = {FRONT_DOOR_TASK: front_door_handler(components, session_for=front_door_session_for)} if components is not None else {}
@@ -6231,6 +6283,7 @@ def create_app(
     app.include_router(staff_care_plans)
     app.include_router(staff_results)
     app.include_router(staff_medications)
+    app.include_router(staff_knowledge)
     app.include_router(staff_break_glass)
     app.include_router(portal_rights)
     app.include_router(staff_grievances)
@@ -6239,7 +6292,7 @@ def create_app(
     app.include_router(staff_notes)
     app.include_router(health)
     app.include_router(public_config)
-    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, portal, staff_voice, staff_care_plans, staff_results, staff_medications, staff_portal_claims, staff_visits, staff_break_glass, portal_rights, staff_grievances, staff_recovery, staff_notes, patient_requests_staff, public_config])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
+    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, portal, staff_voice, staff_care_plans, staff_results, staff_medications, staff_knowledge, staff_portal_claims, staff_visits, staff_break_glass, portal_rights, staff_grievances, staff_recovery, staff_notes, patient_requests_staff, public_config])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
     return app
 
 

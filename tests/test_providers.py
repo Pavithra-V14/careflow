@@ -341,7 +341,7 @@ def good_env(**extra):
 
 def test_the_shipped_provider_file_is_synthetic_only_labelled_and_pinned():
     cfg = load_provider_config()
-    assert {r.role for r in cfg.rows} == {"vlm", "decision"} and all(r.data_policy == "synthetic_only" for r in cfg.rows)
+    assert {r.role for r in cfg.rows} == {"vlm", "embed", "decision"} and all(r.data_policy == "synthetic_only" for r in cfg.rows)
     assert all(r.timeout_seconds > 0 for r in cfg.rows) and cfg.translation.timeout_seconds > 0
     paid = [r for r in cfg.rows if r.price_in_per_1k > 0]
     assert paid and all(r.price_out_per_1k > 0 for r in paid)
@@ -350,7 +350,7 @@ def test_the_shipped_provider_file_is_synthetic_only_labelled_and_pinned():
 def test_a_provider_file_that_says_phi_approved_or_drops_the_label_is_refused_whole(tmp_path):
     doc = yaml.safe_load((ROOT / "config" / "demo-providers.yaml").read_text(encoding="utf-8"))
     for mutate in (lambda d: d["rows"][0].__setitem__("data_policy", "phi_approved"), lambda d: d["translation"].__setitem__("data_policy", "phi_approved"),
-                   lambda d: d["rows"][0].__setitem__("label", "x"), lambda d: d.__setitem__("label", "x"), lambda d: d["rows"][1].__setitem__("price_in_per_1k", "0"),
+                   lambda d: d["rows"][0].__setitem__("label", "x"), lambda d: d.__setitem__("label", "x"), lambda d: d["rows"][2].__setitem__("price_in_per_1k", "0"), lambda d: d["rows"][1].__setitem__("data_policy", "phi_approved"), lambda d: d["rows"][1].__setitem__("label", "x"),
                    lambda d: d["rows"][0].__setitem__("price_in_per_1k", "0.1"), lambda d: d["rows"][0].__setitem__("extra", 1), lambda d: d["rows"][0].pop("timeout_seconds")):
         bad = yaml.safe_load(yaml.safe_dump(doc))
         mutate(bad)

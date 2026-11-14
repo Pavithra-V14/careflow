@@ -76,3 +76,6 @@ Suggested starting values for the app's own limits (your choice, not a recommend
 
 ## After the keys: run one dummy letter through the whole flow
 `docs/first-run-guide.md`, section "Optional: one dummy letter through the real models" (`scripts/demo_real_models.py`). What is wired, what stays fake and the limits: `docs/design/hosted-providers.md`, "Update 2026-11-14 (b)".
+
+## Embeddings (the knowledge search)
+The key script now also asks for **`CAREFLOW_SPEND_CEILING_EMBED_USD`** (Gemini's embedding model, free tier: `0` is the usual answer). Nothing else to create: it uses the same Gemini key. The live check's Gemini block now has lines E1 to E3 for it. Then `docs/first-run-guide.md`, "Optional: the knowledge search over invented cards".

@@ -106,3 +106,21 @@ settings:
   public_read_ip_per_minute:
     value: "30"
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  retrieval_min_dense_similarity:
+    value: "0.30"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  retrieval_min_bm25_ratio:
+    value: "0.30"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  context_budget_tokens:
+    value: "400"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  retrieval_eval_k:
+    value: "3"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  retrieval_eval_min_recall:
+    value: "0.8"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"
+  retrieval_eval_min_mrr:
+    value: "0.6"
+    label: "DEMO ONLY - NOT A CLINICAL DECISION"

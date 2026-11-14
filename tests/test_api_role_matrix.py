@@ -3315,6 +3315,30 @@ def medication_list_cases(ids) -> list[tuple]:
     ]
     return cases + _unauthenticated(ids, path(), None)[:4]
 
+# ---- knowledge search (migration 0085): nurse and doctor search; with knowledge search not switched on (the matrix app injects none) the route answers the visible 503 AFTER the role check. The success path (the
+# search itself, over the real vector table) is tests/test_knowledge_db_live.py. ----
+
+KNOWLEDGE = "/v1/staff/knowledge/search"
+KNOWLEDGE_UNAVAILABLE = lambda b: b == {"detail": "knowledge search is unavailable: not configured"}
+KNOWLEDGE_VISIBLE_REFUSED = ("front_desk_a", "admin_a", "business_owner_a", "auditor_a")
+
+
+def knowledge_search_cases(ids) -> list[tuple]:
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "query": "where do I hand back a zorblat widget", **o}
+    cases = [_case(ids, f"{p} is told knowledge search is not configured", p, 503, KNOWLEDGE, json=body(), key=None, body=KNOWLEDGE_UNAVAILABLE) for p in ("nurse_a", "doctor_a", "multi")]
+    cases += [_case(ids, f"{p} sees the clinic but is refused", p, 403, KNOWLEDGE, json=body(), key=None, body=NOT_YOUR_ROLE) for p in KNOWLEDGE_VISIBLE_REFUSED]
+    others = [p for p in ids.people if p not in ("nurse_a", "doctor_a", "multi", *KNOWLEDGE_VISIBLE_REFUSED)]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused with the one not-found", p, 404, KNOWLEDGE, json=body(), key=None, body=_fixed(404)) for p in others]
+    cases += [
+        _case(ids, "an unknown clinic is not found", "nurse_a", 404, KNOWLEDGE, json=body(clinic_id=str(uuid.uuid4())), key=None, body=_fixed(404)),
+        _case(ids, "an empty query is rejected", "nurse_a", 422, KNOWLEDGE, json=body(query=""), key=None, body=_fixed(422)),
+        _case(ids, "a query over 500 characters is rejected", "nurse_a", 422, KNOWLEDGE, json=body(query="x" * 501), key=None, body=_fixed(422)),
+        _case(ids, "an extra field is rejected", "nurse_a", 422, KNOWLEDGE, json=body(role="doctor"), key=None, body=_fixed(422)),
+        _case(ids, "a missing query is rejected", "nurse_a", 422, KNOWLEDGE, json={"clinic_id": str(ids.clinic_a)}, key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, KNOWLEDGE, body())
+
+
 RULE_AUTHOR_REFUSED = ("front_desk_a", "nurse_a", "admin_a", "business_owner_a", "auditor_a", "multi")  # (only a doctor authors; multi is a nurse here)
 
 
@@ -3985,6 +4009,7 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", STAFF_PATIENT_REQUESTS + "/{request_id}/status"): staff_patient_request_status_cases,
     ("POST", MEDICATIONS): medication_record_cases,
     ("GET", MEDICATIONS): medication_list_cases,
+    ("POST", KNOWLEDGE): knowledge_search_cases,
     ("GET", AUTONOMY): autonomy_get_cases,
     ("POST", AUTONOMY): autonomy_set_cases,
     ("GET", DASHBOARD): dashboard_cases,

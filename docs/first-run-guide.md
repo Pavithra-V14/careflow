@@ -246,6 +246,29 @@ It asks you to type the project host once. It then makes one made-up page (inven
 
 ---
 
+## Optional: the knowledge search over invented cards (window A)
+
+For seeing the retrieval mechanism work, on **invented placeholder cards only** (no clinical card exists). The demo seed must have been run, and the migration with it (`migrate` in step 2 applies 0085; it needs the `vector` extension, which Supabase allows). In the `.env` of `E:\Claude\careflow-run` add:
+
+```
+CAREFLOW_DEMO_PHASE4=1
+CAREFLOW_KNOWLEDGE_SEARCH=on
+```
+
+(The thresholds and the budget come from the labelled demo pack under `CAREFLOW_DEMO_PHASE4=1`.) Then, in window A, index the cards and measure the search:
+
+```powershell
+cd E:\Claude\careflow-run
+.\.venv\Scripts\python.exe scripts\index_demo_cards.py --clinic-id <CLINIC-ID>
+```
+
+It asks you to type the project host once, writes the vectors as the clinic's worker (a second run changes nothing) and prints only: the mode (`fake` or `real`), the model, how many cards were created, seconds, cost, and how many of the made-up questions found their card. Add `--real` to use Gemini's embedding model instead of the local fake (needs the embeddings ceiling and `CAREFLOW_DEMO_REAL_MODELS=on`; the key script asks for the ceiling). Restart the backend, then `POST /v1/staff/knowledge/search` (a nurse or doctor, body `{clinic_id, query}`) returns card ids, versions and scores, or `abstained: true` with a reason.
+
+- *What I should see:* `indexing: 6 created`, then `search ... 10 of 10 questions found their card first` with the fake; a doctor-only card is never returned to a nurse.
+- *Paste me:* the printed lines (they carry no text or keys).
+
+---
+
 ## When something fails: the three quick checks
 
 1. Window B still open and showing `Uvicorn running`? If not, restart step 7.
