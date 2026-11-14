@@ -271,7 +271,7 @@ export function createConsoleApi(role: string, options: ConsoleOptions = {}, ses
       if (path.endsWith('/visit-types')) return page([{ active: true, clinic_id: ID.clinic, duration_minutes: 30, name: 'Placeholder Visit', visit_type_id: ID.visitType }]);
       if (path.endsWith('/priority-levels')) return page([{ active: true, clinic_id: ID.clinic, code: 'P1', label: 'Placeholder One', rank: 1 }]);
       if (path.endsWith('/holds')) return page(holds.filter((h) => h.status === (query.get('status') ?? 'active')));
-      if (path.endsWith('/offers/draft')) return ok({ status: 'unavailable', reason: `not_configured: ${LEAK}`, data: null });
+      if (path.endsWith('/offers/draft')) return ok({ status: 'ok', reason: null, missing_settings: null, data: { candidates: [{ joined_at: '2026-10-01T05:00:00Z', patient_id: ID.patient, priority_code: 'P1', rank: 1, waitlist_id: ID.hold }], draft: { candidate_patient_id: ID.patient, hold_lifetime_seconds: 900, offer_expiry_seconds: 86400, rule: 'rank_then_joined_at', template: 'PLACEHOLDER template line one.\nPLACEHOLDER line two.', waitlist_id: ID.hold } } });
     }
     const release = m(/^\/v1\/staff\/scheduling\/holds\/([^/]+)\/release$/);
     if (method === 'POST' && release) {

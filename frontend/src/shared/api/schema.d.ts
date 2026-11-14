@@ -24,6 +24,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/public/grievances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * File Public Grievance
+         * @description File a grievance WITHOUT signing in, to the hospital's published clinic: a category from the clinic's list and the text (stored encrypted, same handling as a signed-in grievance; the clinic's admin sees and works it). Needs an X-Idempotency-Key. 404 while no clinic is
+         *     published, 422 for a category not on the list, 429 over the per-address or the clinic's hourly limit (both required settings or owner-managed numbers; with either missing the route answers 503, never an unlimited door). The key must be 32 to 300 characters (use a random uuid): a short or guessable key is a 422. The per-address limit counts `request.client.host`: behind a proxy that is the proxy's address unless the deployment forwards the real one, 503 while the category list, the limits or the keys are not configured.
+         */
+        post: operations["file_public_grievance_public_grievances_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/readyz": {
         parameters: {
             query?: never;
@@ -213,6 +234,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/portal/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Notifications
+         * @description Your in-app notices, newest first (a closed kind and an opaque reference; no text). 403 unless you are an active patient account. In-app only: no e-mail or SMS exists.
+         */
+        get: operations["list_notifications_v1_portal_notifications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/portal/notifications/{notification_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read Notification
+         * @description Mark one of your notices read (once; a repeat answers `changed` false). 404 for one that is not yours or does not exist (one answer), 403 unless you are an active patient account.
+         */
+        post: operations["read_notification_v1_portal_notifications__notification_id__read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/portal/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Profile
+         * @description Your own profile: the name on your record, your sex word and preferred language, and the closed lists you can choose from. 403 unless you are an active patient account.
+         */
+        get: operations["get_profile_v1_portal_profile_get"];
+        /**
+         * Put Profile
+         * @description Set your sex word and preferred language (it sets values, so a repeat is the same). 403 unless you are an active patient account, 422 for a sex word that is not on the clinic's list, 503 for a sex word while the clinic has not set its list.
+         */
+        put: operations["put_profile_v1_portal_profile_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/portal/register": {
         parameters: {
             query?: never;
@@ -227,6 +312,51 @@ export interface paths {
          * @description Create your patient sign-in account (invited, not yet active). Repeating it returns `exists`. 403 if you already hold a staff or other non-patient account.
          */
         post: operations["portal_register_v1_portal_register_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/portal/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List My Requests
+         * @description Your own requests with their status, newest first. 403 unless you are an active patient account.
+         */
+        get: operations["list_my_requests_v1_portal_requests_get"];
+        put?: never;
+        /**
+         * File Patient Request
+         * @description Ask for your record to be erased, a detail corrected, or a nominee recorded. It carries NO free text: a correction names which detail (name, date of birth or phone), never the value. Front desk of your clinic takes it from there (erasure goes
+         *     through the existing two-person flow); nothing is changed by the request itself. Idempotent on the key. 403 unless you are an active patient account with a live record at that clinic, 422 for a correction without a field or another kind with one.
+         */
+        post: operations["file_patient_request_v1_portal_requests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/portal/voice/consent-notice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Voice Consent Notice
+         * @description The notice shown before any audio is processed in a voice session (spec 23.4), exactly as configured: the wording is counsel's and is NOT written here; the demo pack carries a labelled placeholder. `configured` is false while it is unset. 403 unless you are an active patient account.
+         */
+        get: operations["voice_consent_notice_v1_portal_voice_consent_notice_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1391,6 +1521,47 @@ export interface paths {
          * @description Write a clinical note for a patient of the clinic, or an addendum to an earlier note of the same patient (notes are never edited). 404 if the clinic, the patient or the note it adds to is not visible to you, 403 unless you are a nurse or doctor there (with a recent second factor), 503 while the encryption keys are not configured.
          */
         post: operations["write_clinical_note_v1_staff_notes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/patient-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Patient Requests
+         * @description The clinic's patient requests, oldest first (ids, a closed kind, the field NAME for a correction, status; no text). 404 if the clinic is not visible to you, 403 unless you are front desk there.
+         */
+        get: operations["list_patient_requests_v1_staff_patient_requests_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/patient-requests/{request_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Update Patient Request
+         * @description Acknowledge, resolve or decline a patient request as front desk of its clinic (a second factor is required and checked again by the database); the patient gets an in-app notice. An erasure request may LINK the two-person erasure request you started
+         *     (same clinic, same patient). Audited by the database. 404 if you cannot see it, 403 unless you are front desk of its clinic.
+         */
+        post: operations["update_patient_request_v1_staff_patient_requests__request_id__status_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3803,6 +3974,11 @@ export interface components {
              */
             grievance_id: string;
             /**
+             * Source
+             * @enum {string}
+             */
+            source: "patient" | "public";
+            /**
              * Status
              * @enum {string}
              */
@@ -4424,6 +4600,43 @@ export interface components {
             /** Version */
             version: number;
         };
+        /** NotificationList */
+        NotificationList: {
+            /** Notifications */
+            notifications: components["schemas"]["NotificationOut"][];
+        };
+        /** NotificationOut */
+        NotificationOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "request_update" | "grievance_update" | "offer_sent";
+            /**
+             * Notification Id
+             * Format: uuid
+             */
+            notification_id: string;
+            /** Read */
+            read: boolean;
+            /** Ref */
+            ref: string | null;
+        };
+        /** NotificationReadOut */
+        NotificationReadOut: {
+            /** Changed */
+            changed: boolean;
+            /**
+             * Notification Id
+             * Format: uuid
+             */
+            notification_id: string;
+        };
         /** OfferCandidateOut */
         OfferCandidateOut: {
             /**
@@ -4580,6 +4793,89 @@ export interface components {
             /** Phone Last4 */
             phone_last4: string | null;
         };
+        /** PatientRequestFiledOut */
+        PatientRequestFiledOut: {
+            /** Created */
+            created: boolean;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+        };
+        /** PatientRequestIn */
+        PatientRequestIn: {
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /** Field */
+            field?: ("name" | "date_of_birth" | "phone") | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "erasure" | "correction" | "nominee";
+        };
+        /** PatientRequestList */
+        PatientRequestList: {
+            /** Requests */
+            requests: components["schemas"]["PatientRequestOut"][];
+        };
+        /** PatientRequestOut */
+        PatientRequestOut: {
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Field */
+            field: ("name" | "date_of_birth" | "phone") | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "erasure" | "correction" | "nominee";
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "acknowledged" | "resolved" | "declined";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** PatientRequestStatusIn */
+        PatientRequestStatusIn: {
+            /** Erasure Request Id */
+            erasure_request_id?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "acknowledged" | "resolved" | "declined";
+        };
+        /** PatientRequestStatusOut */
+        PatientRequestStatusOut: {
+            /**
+             * Result
+             * @enum {string}
+             */
+            result: "recorded" | "replay" | "invalid_transition";
+        };
         /** PatientSearchIn */
         PatientSearchIn: {
             /**
@@ -4729,6 +5025,26 @@ export interface components {
             /** Rank */
             rank: number;
         };
+        /** ProfileIn */
+        ProfileIn: {
+            /** Preferred Language */
+            preferred_language?: ("en" | "ta") | null;
+            /** Sex */
+            sex?: string | null;
+        };
+        /** ProfileOut */
+        ProfileOut: {
+            /** Display Name */
+            display_name: string | null;
+            /** Languages */
+            languages: ("en" | "ta")[];
+            /** Preferred Language */
+            preferred_language: ("en" | "ta") | null;
+            /** Sex */
+            sex: string | null;
+            /** Sex Words */
+            sex_words: string[];
+        };
         /** ProposalOut */
         ProposalOut: {
             /** Abstained */
@@ -4824,6 +5140,13 @@ export interface components {
             clinic_id: string;
             /** Name */
             name: string;
+        };
+        /** PublicGrievanceIn */
+        PublicGrievanceIn: {
+            /** Category */
+            category: string;
+            /** Text */
+            text: string;
         };
         /** ReadinessReplyIn */
         ReadinessReplyIn: {
@@ -5854,6 +6177,43 @@ export interface components {
              */
             status: "invited" | "active" | "suspended" | "closed";
         };
+        /** StaffPatientRequestList */
+        StaffPatientRequestList: {
+            /** Requests */
+            requests: components["schemas"]["StaffPatientRequestOut"][];
+        };
+        /** StaffPatientRequestOut */
+        StaffPatientRequestOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Erasure Request Id */
+            erasure_request_id: string | null;
+            /** Field */
+            field: ("name" | "date_of_birth" | "phone") | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "erasure" | "correction" | "nominee";
+            /**
+             * Patient Id
+             * Format: uuid
+             */
+            patient_id: string;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "acknowledged" | "resolved" | "declined";
+        };
         /** StatusOut */
         StatusOut: {
             /**
@@ -6022,6 +6382,15 @@ export interface components {
             seq: number;
             /** Text */
             text: string;
+        };
+        /** VoiceConsentNoticeOut */
+        VoiceConsentNoticeOut: {
+            /** Configured */
+            configured: boolean;
+            /** Is Placeholder */
+            is_placeholder: boolean;
+            /** Text */
+            text: string | null;
         };
         /** VoicePreferenceIn */
         VoicePreferenceIn: {
@@ -6228,6 +6597,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicClinicOut"];
+                };
+            };
+        };
+    };
+    file_public_grievance_public_grievances_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicGrievanceIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GrievanceFiledOut"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+            /** @description Too many requests: the per-user limit was reached; wait and try again. Fixed body. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -6739,6 +7171,217 @@ export interface operations {
             };
         };
     };
+    list_notifications_v1_portal_notifications_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationList"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+        };
+    };
+    read_notification_v1_portal_notifications__notification_id__read_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path: {
+                notification_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationReadOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+        };
+    };
+    get_profile_v1_portal_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    put_profile_v1_portal_profile_put: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+            /** @description Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     portal_register_v1_portal_register_post: {
         parameters: {
             query?: never;
@@ -6785,6 +7428,147 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+        };
+    };
+    list_my_requests_v1_portal_requests_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatientRequestList"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+        };
+    };
+    file_patient_request_v1_portal_requests_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatientRequestIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatientRequestFiledOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+        };
+    };
+    voice_consent_notice_v1_portal_voice_consent_notice_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceConsentNoticeOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -10712,6 +11496,130 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_patient_requests_v1_staff_patient_requests_get: {
+        parameters: {
+            query: {
+                clinic_id: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPatientRequestList"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+        };
+    };
+    update_patient_request_v1_staff_patient_requests__request_id__status_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatientRequestStatusIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatientRequestStatusOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
                 };
             };
         };

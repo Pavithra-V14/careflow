@@ -10,7 +10,7 @@ import { useApiQuery, useIdempotentWrite } from '../hooks';
 import { CAN_RELEASE_HOLD } from '../sections';
 import { useSession } from '../session/SessionContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import { Badge, ComingSoon, PageHeading, ShortId, Time, useLang, useWord } from '../ui/bits';
+import { Badge, PageHeading, ShortId, Time, useLang, useWord } from '../ui/bits';
 import { NotAvailableToRole, ProblemText, QueryView } from '../ui/states';
 import { formatNumber } from '../../shared/i18n/format';
 import { inClinic } from '../ui/clinic';
@@ -319,7 +319,82 @@ function HoldsList() {
   );
 }
 
-/** Read-only: the draft is computed now and stored nowhere. Sending an offer is not built in the console yet. */
+/** Read-only: the draft is computed now and stored nowhere. Nothing here sends anything; a person decides. */
+function DraftView({ draft }: { draft: components['schemas']['OfferDraftOut'] }) {
+  const { t } = useTranslation();
+  const lang = useLang();
+  const word = useWord();
+  const data = draft.data;
+  return (
+    <div role="status" className="state state-empty">
+      <p>
+        <Badge tone={draft.status === 'ok' ? 'ok' : 'warn'}>{t(`scheduling.offerStatus.${draft.status}`)}</Badge>
+      </p>
+      {draft.reason && <p>{word('scheduling.offerReason', draft.reason)}</p>}
+      {draft.missing_settings && draft.missing_settings.length > 0 && (
+        <>
+          <p>{t('scheduling.draft.missing')}</p>
+          <ul>
+            {draft.missing_settings.map((m) => (
+              <li key={m}>{m}</li>
+            ))}
+          </ul>
+        </>
+      )}
+      {data && (
+        <section aria-labelledby="offer-draft-h">
+          <h3 id="offer-draft-h">{t('scheduling.draft.title')}</h3>
+          <p>{t('scheduling.draft.notice')}</p>
+          <h4>{t('scheduling.offerCandidates')}</h4>
+          {data.candidates.length === 0 ? (
+            <p>{t('scheduling.draft.noCandidates')}</p>
+          ) : (
+            <div>
+              <table>
+                <caption className="visually-hidden">{t('scheduling.offerCandidates')}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{t('scheduling.draft.col.rank')}</th>
+                    <th scope="col">{t('scheduling.draft.col.patient')}</th>
+                    <th scope="col">{t('scheduling.draft.col.priority')}</th>
+                    <th scope="col">{t('scheduling.draft.col.joined')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.candidates.map((c) => (
+                    <tr key={c.waitlist_id}>
+                      <th scope="row">{formatNumber(c.rank, lang)}</th>
+                      <td>
+                        <ShortId id={c.patient_id} />
+                      </td>
+                      <td>{c.priority_code}</td>
+                      <td>
+                        <Time value={c.joined_at} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <h4>{t('scheduling.draft.text')}</h4>
+          <p className="hint">{t('scheduling.draft.forCandidate')} <ShortId id={data.draft.candidate_patient_id} /></p>
+          <blockquote style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{data.draft.template}</blockquote>
+          <dl className="facts">
+            <dt>{t('scheduling.draft.holdLifetime')}</dt>
+            <dd>{t('scheduling.draft.seconds', { n: formatNumber(data.draft.hold_lifetime_seconds, lang) })}</dd>
+            <dt>{t('scheduling.draft.offerExpiry')}</dt>
+            <dd>{t('scheduling.draft.seconds', { n: formatNumber(data.draft.offer_expiry_seconds, lang) })}</dd>
+            <dt>{t('scheduling.draft.rule')}</dt>
+            <dd>{t('scheduling.draft.ruleRank')}</dd>
+          </dl>
+        </section>
+      )}
+    </div>
+  );
+}
+
+
 function OffersView() {
   const { t } = useTranslation();
   const { api } = useAuth();
@@ -376,24 +451,7 @@ function OffersView() {
             </p>
           </div>
         ))}
-      {draft.data && (
-        // Only the status word is shown. `reason` and `data` are not rendered: reason can name clinician-owned settings
-        // and data has no declared shape yet. Both are "Coming soon" below.
-        <div role="status" className="state state-empty">
-          <p>
-            <Badge tone={draft.data.status === 'ok' ? 'ok' : 'warn'}>{t(`scheduling.offerStatus.${draft.data.status}`)}</Badge>
-          </p>
-          <p>
-            {t('scheduling.offerCandidates')} <ComingSoon />
-          </p>
-        </div>
-      )}
-      <p>
-        <button type="button" disabled>
-          {t('scheduling.sendOffer')}
-        </button>{' '}
-        <ComingSoon />
-      </p>
+      {draft.data && <DraftView draft={draft.data} />}
     </>
   );
 }

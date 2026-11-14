@@ -203,3 +203,14 @@ staff.activate.button	C	Button label.
 staff.activate.title	C	Heading.
 staff.activate.confirmTitle	C	Dialog title.
 staff.activate.done	C	Plain state line.
+scheduling.draft.notice	A	Says the draft sends nothing and a person decides. "ஒரு நபர் முடிவு செய்வார்" must read as a person decides, not that the system will decide later. A wrong reading could make staff think an offer went out.
+scheduling.draft.missing	B	Introduces names of clinic settings still to be supplied; check "வழங்க வேண்டும்" reads as the clinic supplying them.
+scheduling.offerReason.not_configured	B	Check it reads as "not set up yet" and not as a fault.
+scheduling.offerReason.no_ranked_candidates	B	"தரவரிசைப்படுத்தப்பட்டவர்" (ranked person) is a long coined form; check how clinics say a waitlist ranking.
+scheduling.draft.ruleRank	B	States the only ordering rule: by rank, then by join time. Check the order of the two parts is clear.
+scheduling.draft.forCandidate	C	Short lead-in before a patient id.
+scheduling.draft.holdLifetime	B	Label for how long a held slot is kept; "ஒதுக்கீடு" for hold may differ from the word used elsewhere.
+scheduling.draft.offerExpiry	B	Label for how long until an offer lapses.
+scheduling.draft.seconds	C	Number plus the unit word.
+scheduling.draft.title	C	Heading.
+scheduling.draft.text	C	Heading.

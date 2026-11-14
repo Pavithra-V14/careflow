@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-1614 of 1614 strings are unreviewed.
+1630 of 1630 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -1463,6 +1463,21 @@ Terms standardised: proposal, resolve / resolved.
 | `scheduling.createConflict` | That overlaps another slot of the same provider, or was already used for a different request. | இது அதே வழங்குநரின் மற்றொரு நேர இடத்துடன் மேலோங்குகிறது, அல்லது வேறொரு கோரிக்கைக்கு ஏற்கனவே பயன்படுத்தப்பட்டது. | ok |
 | `scheduling.createInvalid` | Check what you entered. The times must be a real range. | நீங்கள் உள்ளிட்டதைச் சரிபார்க்கவும். நேரங்கள் சரியான வரம்பாக இருக்க வேண்டும். | ok |
 | `scheduling.created` | Created. | உருவாக்கப்பட்டது. | ok |
+| `scheduling.draft.col.joined` | Joined the waitlist | பட்டியலில் சேர்ந்த நேரம் | ok |
+| `scheduling.draft.col.patient` | Patient | நோயாளி | ok |
+| `scheduling.draft.col.priority` | Priority | முன்னுரிமை | ok |
+| `scheduling.draft.col.rank` | Rank | தரவரிசை | ok |
+| `scheduling.draft.forCandidate` | For the first ranked candidate: | முதல் தரவரிசை பெற்றவருக்கு: | ok |
+| `scheduling.draft.holdLifetime` | Hold lasts | ஒதுக்கீடு நீடிக்கும் நேரம் | ok |
+| `scheduling.draft.missing` | These settings are still to be provided by the clinic: | இந்த அமைப்புகளை மருத்துவமனை இன்னும் வழங்க வேண்டும்: | ok |
+| `scheduling.draft.noCandidates` | There are no candidates. | யாரும் இல்லை. | ok |
+| `scheduling.draft.notice` | This is a draft only. A person decides what happens next. Nothing is sent to anyone from this screen. | இது வரைவு மட்டுமே. அடுத்து என்ன நடக்கும் என்பதை ஒரு நபர் முடிவு செய்வார். இந்தத் திரையிலிருந்து யாருக்கும் எதுவும் அனுப்பப்படாது. | ok |
+| `scheduling.draft.offerExpiry` | Offer expires after | வாய்ப்பு காலாவதியாகும் நேரம் | ok |
+| `scheduling.draft.rule` | Ordering rule | வரிசைப்படுத்தும் விதி | ok |
+| `scheduling.draft.ruleRank` | By rank, then by the time they joined the waitlist | தரவரிசைப்படி, பிறகு பட்டியலில் சேர்ந்த நேரப்படி | ok |
+| `scheduling.draft.seconds` | {{n}} seconds | {{n}} வினாடிகள் | ok |
+| `scheduling.draft.text` | Draft text | வரைவு உரை | ok |
+| `scheduling.draft.title` | Draft offer | வரைவு வாய்ப்பு | ok |
 | `scheduling.draftTitle` | Offer draft | வாய்ப்பு வரைவு | ok |
 | `scheduling.durationMinutes` | Length in minutes | நீளம் (நிமிடங்களில்) | ok |
 | `scheduling.empty` | Nothing to show. | காட்டுவதற்கு எதுவும் இல்லை. | ok |
@@ -1506,6 +1521,8 @@ Terms standardised: proposal, resolve / resolved.
 | `scheduling.noWaitlist` | Nobody is waiting. | யாரும் காத்திருக்கவில்லை. | ok |
 | `scheduling.offerCandidates` | Candidate details | பொருத்தமானவற்றின் விவரங்கள் | corrected after AI review (meaning problem); blind re-check: minor-drift |
 | `scheduling.offerFilter` | Filter offers by state | நிலை வாரியாக வாய்ப்புகளை வடிகட்டு | ok |
+| `scheduling.offerReason.no_ranked_candidates` | Nobody on the waitlist is ranked for this visit type. | இந்தச் சந்திப்பு வகைக்குக் காத்திருப்புப் பட்டியலில் தரவரிசைப்படுத்தப்பட்டவர் யாருமில்லை. | ok |
+| `scheduling.offerReason.not_configured` | Offers are not set up for this visit type yet. | இந்தச் சந்திப்பு வகைக்கு வாய்ப்புகள் இன்னும் அமைக்கப்படவில்லை. | ok |
 | `scheduling.offerState.awaiting_delivery` | Awaiting delivery | வழங்கக் காத்திருக்கிறது | ok |
 | `scheduling.offerState.booked` | Booked | முன்பதிவானது | ok |
 | `scheduling.offerState.delivered` | Delivered | வழங்கப்பட்டது | ok |
@@ -1517,7 +1534,7 @@ Terms standardised: proposal, resolve / resolved.
 | `scheduling.offerStatus.unavailable` | Not set up yet | இன்னும் அமைக்கப்படவில்லை | ok |
 | `scheduling.offers` | Offers | வாய்ப்புகள் | minor drift; flag (ambiguous): Means opportunities rather than offers. |
 | `scheduling.offersListTitle` | Offers | வாய்ப்புகள் | ok |
-| `scheduling.offersNote` | A read-only view of the draft offer. It is computed when you ask and stored nowhere. | வரைவு வாய்ப்பின் படிக்க-மட்டும் பார்வை. நீங்கள் கேட்கும்போது கணக்கிடப்படுகிறது, எங்கும் சேமிக்கப்படுவதில்லை. | ok |
+| `scheduling.offersNote` | A read-only view of the draft offer. It is computed when you ask and stored nowhere. Nothing is sent. | வரைவு வாய்ப்பின் படிக்க-மட்டும் பார்வை. நீங்கள் கேட்கும்போது கணக்கிடப்படுகிறது, எங்கும் சேமிக்கப்படுவதில்லை. | ok |
 | `scheduling.patientChosen` | Patient chosen | நோயாளி தேர்ந்தெடுக்கப்பட்டார் | ok |
 | `scheduling.patientDob` | Date of birth | பிறந்த தேதி | ok |
 | `scheduling.patientFind` | Find | தேடு | ok |
@@ -1532,7 +1549,6 @@ Terms standardised: proposal, resolve / resolved.
 | `scheduling.releaseBody` | The slot is given back now. | நேரம் இப்போதே திருப்பி வழங்கப்படும். | minor drift |
 | `scheduling.releaseConflict` | This hold was already booked or has expired. The list will refresh. | இந்த ஒதுக்கீடு ஏற்கனவே முன்பதிவாகிவிட்டது அல்லது காலாவதியானது. பட்டியல் புதுப்பிக்கப்படும். | minor drift |
 | `scheduling.releaseTitle` | Release this hold? | இந்த ஒதுக்கீட்டை விடுவிக்கவா? | minor drift |
-| `scheduling.sendOffer` | Send offer | வாய்ப்பை அனுப்பு | ok |
 | `scheduling.showDraft` | Show draft | வரைவைக் காட்டு | ok |
 | `scheduling.showInactive` | Show inactive | செயலற்றவற்றையும் காட்டு | minor drift |
 | `scheduling.slotStatus.booked` | Booked | முன்பதிவானது | ok |

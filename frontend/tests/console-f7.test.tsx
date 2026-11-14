@@ -261,7 +261,7 @@ describe('offers: list, copy the text, mark delivered (the system sends nothing)
     await user.click(within(dialog).getByRole('button', { name: 'Mark delivered' }));
     await screen.findByText('The offer is marked delivered.');
     expect(writes(calls).every((c) => c.path.endsWith('/mark-delivered') && !!c.key)).toBe(true);
-    expect(screen.getByRole('button', { name: 'Send offer' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Send offer' })).toBeNull();
   });
 
   it('offers no mark-delivered button to a nurse', async () => {
