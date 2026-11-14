@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-1630 of 1630 strings are unreviewed.
+1683 of 1683 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -1209,10 +1209,63 @@ Terms standardised: proposal, resolve / resolved.
 | `portal.myData.title` | Download my data | என் தரவைப் பதிவிறக்கு | ok |
 | `portal.myData.truncated` | The file does not hold everything: some lists were cut short. | கோப்பில் அனைத்தும் இல்லை: சில பட்டியல்கள் சுருக்கப்பட்டன. | ok |
 | `portal.notAvailable` | This is not available to you yet. | இது இன்னும் உங்களுக்குக் கிடைக்கவில்லை. | ok |
+| `portal.notifications.gone` | This notice is no longer there. | இந்த அறிவிப்பு இப்போது இல்லை. | ok |
+| `portal.notifications.kind.grievance_update` | An update on one of your messages to the hospital | மருத்துவமனைக்கு நீங்கள் அனுப்பிய செய்திகளில் ஒன்றைப் பற்றிய புதிய தகவல் | ok |
+| `portal.notifications.kind.offer_sent` | An appointment offer | ஒரு சந்திப்பு வாய்ப்பு | ok |
+| `portal.notifications.kind.request_update` | An update on one of your requests | உங்கள் கோரிக்கைகளில் ஒன்றைப் பற்றிய புதிய தகவல் | ok |
+| `portal.notifications.markRead` | Mark as read | படித்ததாகக் குறி | ok |
+| `portal.notifications.new` | New | புதியது | ok |
+| `portal.notifications.none` | You have no notices. | உங்களுக்கு அறிவிப்புகள் எதுவும் இல்லை. | ok |
+| `portal.notifications.read` | Read | படித்தது | ok |
+| `portal.notifications.title` | Your notices | உங்கள் அறிவிப்புகள் | ok |
+| `portal.notifications.unread` | Unread: {{n}} | படிக்காதவை: {{n}} | ok |
+| `portal.profile.choose` | Choose | தேர்ந்தெடுக்கவும் | ok |
+| `portal.profile.invalid` | That choice is not on the hospital's list. Nothing was saved. | அந்தத் தேர்வு மருத்துவமனையின் பட்டியலில் இல்லை. எதுவும் சேமிக்கப்படவில்லை. | ok |
+| `portal.profile.language` | Preferred language | விருப்பமான மொழி | ok |
+| `portal.profile.name` | Name on your record | உங்கள் பதிவில் உள்ள பெயர் | ok |
+| `portal.profile.noName` | Not available | கிடைக்கவில்லை | ok |
+| `portal.profile.noSexList` | The hospital has not set up a list of choices yet. | தேர்வுகளின் பட்டியலை மருத்துவமனை இன்னும் அமைக்கவில்லை. | ok |
+| `portal.profile.save` | Save | சேமி | ok |
+| `portal.profile.saved` | Your details were saved. | உங்கள் விவரங்கள் சேமிக்கப்பட்டன. | ok |
+| `portal.profile.sex` | Sex | பாலினம் | ok |
+| `portal.profile.title` | Your details | உங்கள் விவரங்கள் | ok |
+| `portal.profile.unavailable` | This is not set up yet. Nothing was saved. | இது இன்னும் அமைக்கப்படவில்லை. எதுவும் சேமிக்கப்படவில்லை. | ok |
+| `portal.publicGrievance.body` | This goes to the hospital without signing in. A person at the hospital reads it. | இது உள்நுழையாமலே மருத்துவமனைக்குச் செல்லும். மருத்துவமனையில் ஒருவர் இதைப் படிப்பார். | ok |
+| `portal.publicGrievance.confirmBody` | This sends your message to the hospital. It is stored encrypted. | இது உங்கள் செய்தியை மருத்துவமனைக்கு அனுப்பும். இது மறைகுறியாக்கப்பட்டுச் சேமிக்கப்படும். | ok |
+| `portal.publicGrievance.filed` | Your message was sent. | உங்கள் செய்தி அனுப்பப்பட்டது. | ok |
+| `portal.publicGrievance.noClinic` | No hospital is set up to receive this right now. Nothing was sent. | இதைப் பெற இப்போது எந்த மருத்துவமனையும் அமைக்கப்படவில்லை. எதுவும் அனுப்பப்படவில்லை. | ok |
+| `portal.publicGrievance.refused` | This cannot be done right now. Nothing was sent. | இதை இப்போது செய்ய முடியாது. எதுவும் அனுப்பப்படவில்லை. | ok |
+| `portal.publicGrievance.title` | Send a complaint without signing in | உள்நுழையாமல் ஒரு புகாரை அனுப்புங்கள் | ok |
+| `portal.publicGrievance.unavailable` | This is not available right now. Nothing was sent. | இது இப்போது கிடைக்கவில்லை. எதுவும் அனுப்பப்படவில்லை. | ok |
 | `portal.register.body` | You are signed in, but you do not have a patient account here yet. Creating it does not link you to any record. | நீங்கள் உள்நுழைந்துள்ளீர்கள், ஆனால் இங்கு உங்களுக்கு இன்னும் நோயாளிக் கணக்கு இல்லை. அதை உருவாக்குவது உங்களை எந்தப் பதிவுடனும் இணைக்காது. | ok |
 | `portal.register.create` | Create my account | என் கணக்கை உருவாக்கு | ok |
 | `portal.register.refused` | This sign-in cannot be used for a patient account. | இந்த உள்நுழைவை நோயாளிக் கணக்குக்குப் பயன்படுத்த முடியாது. | ok |
 | `portal.register.title` | Create your patient account | உங்கள் நோயாளிக் கணக்கை உருவாக்குங்கள் | ok |
+| `portal.requests.already` | This request was already on record. | இந்தக் கோரிக்கை ஏற்கெனவே பதிவில் உள்ளது. | ok |
+| `portal.requests.body` | You can ask for your record to be erased, for a detail to be corrected, or for a nominee to be recorded. The request has no free text. The hospital's front desk takes it from there. | உங்கள் பதிவை அழிக்கவும், ஒரு விவரத்தைத் திருத்தவும் அல்லது ஒரு நியமனதாரரைப் பதிவு செய்யவும் நீங்கள் கேட்கலாம். இந்தக் கோரிக்கையில் தனி உரை எதுவும் இல்லை. மருத்துவமனையின் வரவேற்புப் பணியாளர்கள் அடுத்ததைப் பார்ப்பார்கள். | ok |
+| `portal.requests.chooseField` | Choose | தேர்ந்தெடுக்கவும் | ok |
+| `portal.requests.chooseKind` | Choose | தேர்ந்தெடுக்கவும் | ok |
+| `portal.requests.confirmBody` | This sends a request to the hospital. A correction names the detail only, never the new value. Nothing is changed by sending it. | இது மருத்துவமனைக்கு ஒரு கோரிக்கையை அனுப்பும். திருத்தத்தில் விவரத்தின் பெயர் மட்டுமே இருக்கும், புதிய மதிப்பு இருக்காது. அனுப்புவதால் எதுவும் மாறாது. | ok |
+| `portal.requests.confirmTitle` | Send this request? | இந்தக் கோரிக்கையை அனுப்பவா? | ok |
+| `portal.requests.field` | Which detail? | எந்த விவரம்? | ok |
+| `portal.requests.fields.date_of_birth` | Date of birth | பிறந்த தேதி | ok |
+| `portal.requests.fields.name` | Name | பெயர் | ok |
+| `portal.requests.fields.phone` | Phone number | தொலைபேசி எண் | ok |
+| `portal.requests.invalid` | That request was not accepted. Check your choices. Nothing was sent. | அந்தக் கோரிக்கை ஏற்கப்படவில்லை. உங்கள் தேர்வுகளைச் சரிபார்க்கவும். எதுவும் அனுப்பப்படவில்லை. | ok |
+| `portal.requests.kind` | What do you want to ask? | என்ன கேட்க விரும்புகிறீர்கள்? | ok |
+| `portal.requests.kinds.correction` | Correct a detail | ஒரு விவரத்தைத் திருத்த | ok |
+| `portal.requests.kinds.erasure` | Erase my record | என் பதிவை அழிக்க | ok |
+| `portal.requests.kinds.nominee` | Record a nominee | ஒரு நியமனதாரரைப் பதிவு செய்ய | ok |
+| `portal.requests.mine` | Your requests | உங்கள் கோரிக்கைகள் | ok |
+| `portal.requests.none` | You have not sent any. | நீங்கள் எதையும் அனுப்பவில்லை. | ok |
+| `portal.requests.refused` | This cannot be done for this account: it must be active and linked to a record at that hospital. | இந்தக் கணக்கிற்கு இதைச் செய்ய முடியாது: அது செயலில் இருக்க வேண்டும், அந்த மருத்துவமனையின் பதிவுடன் இணைக்கப்பட்டிருக்க வேண்டும். | ok |
+| `portal.requests.send` | Send request | கோரிக்கையை அனுப்பு | ok |
+| `portal.requests.sent` | Your request was sent. | உங்கள் கோரிக்கை அனுப்பப்பட்டது. | ok |
+| `portal.requests.status.acknowledged` | Seen | பார்க்கப்பட்டது | ok |
+| `portal.requests.status.declined` | Declined | ஏற்கப்படவில்லை | ok |
+| `portal.requests.status.open` | Open | திறந்துள்ளது | ok |
+| `portal.requests.status.resolved` | Resolved | தீர்க்கப்பட்டது | ok |
+| `portal.requests.title` | Ask the hospital about your record | உங்கள் பதிவைப் பற்றி மருத்துவமனையிடம் கேளுங்கள் | ok |
 | `portal.signIn.change` | Use a different number | வேறு எண்ணைப் பயன்படுத்து | ok |
 | `portal.signIn.code` | 6-digit code | 6 இலக்கக் குறியீடு | ok |
 | `portal.signIn.codeFailed` | That code did not work. Check it and try again, or ask for a new one. | அந்தக் குறியீடு செயல்படவில்லை. சரிபார்த்து மீண்டும் முயற்சிக்கவும், அல்லது புதியதைக் கேட்கவும். | ok |

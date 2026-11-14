@@ -18,9 +18,9 @@ async function open(page: Page, lang: (typeof LANGS)[number], scenario: PortalSc
 
 async function signIn(page: Page) {
   await page.locator('input[type=tel]').fill(GOOD_PHONE);
-  await page.locator('form button[type=submit]').click();
+  await page.locator('form:has(input[type=tel], input[autocomplete=one-time-code]) button[type=submit]').click();
   await page.locator('input[autocomplete=one-time-code]').fill(GOOD_PHONE_CODE);
-  await page.locator('form button[type=submit]').click();
+  await page.locator('form:has(input[type=tel], input[autocomplete=one-time-code]) button[type=submit]').click();
 }
 
 async function sweep(page: Page, name: string, lang: string) {
@@ -62,7 +62,7 @@ for (const lang of LANGS) {
   test(`sign in: the code form [${lang}]`, async ({ page }) => {
     await open(page, lang);
     await page.locator('input[type=tel]').fill(GOOD_PHONE);
-    await page.locator('form button[type=submit]').click();
+    await page.locator('form:has(input[type=tel], input[autocomplete=one-time-code]) button[type=submit]').click();
     await expect(page.locator('input[autocomplete=one-time-code]')).toBeVisible();
     await sweep(page, 'portal-code', lang);
   });
@@ -87,7 +87,42 @@ for (const lang of LANGS) {
     await expect(page.locator('#portal-mydata')).toBeVisible();
     await sweep(page, 'portal-active', lang);
   });
+
+  test(`signed out: the number form with the complaint form below it, and its confirmation [${lang}]`, async ({ page }) => {
+    await open(page, lang);
+    await expect(page.locator('#portal-public-grievance')).toBeVisible();
+    await page.locator('#pg-category').fill('access');
+    await page.locator('#pg-text').fill('Some words');
+    await page.locator('#pg-text ~ button[type=submit]').click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await sweep(page, 'portal-public-grievance-dialog', lang);
+  });
 }
+
+test('keyboard only: change my details, mark a notice read, and send a request with its confirmation', async ({ page }) => {
+  const mock = await open(page, 'en', { start: 'active', granted: true });
+  await signIn(page);
+  await expect(page.locator('#portal-profile')).toBeVisible();
+  await page.locator('#profile-language').focus();
+  await page.keyboard.press('ArrowDown'); // the first closed choice after "Choose"
+  await page.getByRole('button', { name: 'Save' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByText('Your details were saved.')).toBeVisible();
+  expect(mock.calls.filter((c) => c.method === 'PUT' && c.path === '/v1/portal/profile')).toHaveLength(1);
+  const mark = page.getByRole('button', { name: /Mark as read/ });
+  await mark.focus();
+  await page.keyboard.press('Enter');
+  await expect.poll(() => mock.calls.filter((c) => /\/read$/.test(c.path)).length).toBe(1);
+  await page.locator('#rq-kind').selectOption('nominee');
+  await page.locator('#rq-kind ~ button[type=submit]').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('dialog')).toBeVisible();
+  expect(mock.calls.filter((c) => c.path === '/v1/portal/requests' && c.method === 'POST')).toHaveLength(0);
+  await page.getByRole('dialog').getByRole('button', { name: 'Send request' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByText('Your request was sent.')).toBeVisible();
+  expect(mock.calls.filter((c) => c.path === '/v1/portal/requests' && c.method === 'POST')).toHaveLength(1);
+});
 
 test('the notice is shown exactly as sent: line breaks kept, markup not interpreted', async ({ page }) => {
   await open(page, 'en', { start: 'registered' });
@@ -121,9 +156,9 @@ test('keyboard only: sign in with Tab and Enter, grant the notice and activate',
 test('a wrong code shows one fixed message and reveals nothing', async ({ page }) => {
   await open(page, 'en');
   await page.locator('input[type=tel]').fill(GOOD_PHONE);
-  await page.locator('form button[type=submit]').click();
+  await page.locator('form:has(input[type=tel], input[autocomplete=one-time-code]) button[type=submit]').click();
   await page.locator('input[autocomplete=one-time-code]').fill('000000');
-  await page.locator('form button[type=submit]').click();
+  await page.locator('form:has(input[type=tel], input[autocomplete=one-time-code]) button[type=submit]').click();
   await expect(page.getByRole('alert')).toContainText('That code did not work');
   expect(await page.locator('body').innerText()).not.toContain(LEAK);
 });

@@ -214,3 +214,24 @@ scheduling.draft.offerExpiry	B	Label for how long until an offer lapses.
 scheduling.draft.seconds	C	Number plus the unit word.
 scheduling.draft.title	C	Heading.
 scheduling.draft.text	C	Heading.
+portal.requests.confirmBody	A	Tells the patient that sending a request changes nothing by itself and that a correction names the detail, not the new value. It sits next to an erasure request, so it must not read as "your record will be erased". Counsel should approve the English first.
+portal.requests.kinds.erasure	A	"என் பதிவை அழிக்க" (to erase my record) must read as asking, not as doing. Check the verb.
+portal.requests.kinds.nominee	B	"நியமனதாரர்" (nominee) is a legal term; check the word clinics and patients use.
+portal.requests.kinds.correction	B	Check "திருத்த" reads as correcting a detail on the record.
+portal.requests.body	A	Explains what the three requests are and that the front desk takes it from there; check "வரவேற்புப் பணியாளர்கள்" for front desk and that nothing reads as a promise of outcome.
+portal.requests.status.declined	B	"ஏற்கப்படவில்லை" (not accepted) must read as the hospital declining, and be neutral in tone.
+portal.requests.status.acknowledged	B	"பார்க்கப்பட்டது" (seen) must not be read as "approved".
+portal.requests.already	B	Says the request was already on record; check it is not read as a refusal.
+portal.requests.refused	B	Long condition sentence; check it is understood.
+portal.publicGrievance.body	B	Says the complaint goes to the hospital without signing in; check it does not suggest it is anonymous.
+portal.publicGrievance.confirmBody	B	"மறைகுறியாக்கப்பட்டு" (encrypted) is technical for a patient.
+portal.publicGrievance.noClinic	B	Check "எந்த மருத்துவமனையும் அமைக்கப்படவில்லை" reads as a setup state, not a fault of the patient.
+portal.profile.sex	A	The label for sex. The words themselves come from the hospital's list, in the hospital's own wording, so the label must match how that list is worded. Needs the privacy owner's sign-off on the field.
+portal.profile.noSexList	B	Says the hospital has not set up a list of choices yet; check it is neutral.
+portal.profile.invalid	B	Says a choice is not on the hospital's list and nothing was saved.
+portal.profile.name	B	"உங்கள் பதிவில் உள்ள பெயர்" (the name on your record); the person cannot change it here.
+portal.notifications.kind.offer_sent	B	"ஒரு சந்திப்பு வாய்ப்பு" (an appointment offer); the notice has no text of its own.
+portal.notifications.kind.grievance_update	B	Long; check "செய்திகளில் ஒன்றைப் பற்றிய புதிய தகவல்" is clear.
+portal.notifications.kind.request_update	B	Check "கோரிக்கைகளில் ஒன்றைப் பற்றிய புதிய தகவல்".
+portal.notifications.unread	C	A count after a label.
+portal.notifications.markRead	C	Button label.
