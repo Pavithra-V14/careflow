@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-1730 of 1730 strings are unreviewed.
+1732 of 1732 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -1280,7 +1280,9 @@ Terms standardised: proposal, resolve / resolved.
 | `portal.publicGrievance.body` | This goes to the hospital without signing in. A person at the hospital reads it. | இது உள்நுழையாமலே மருத்துவமனைக்குச் செல்லும். மருத்துவமனையில் ஒருவர் இதைப் படிப்பார். | ok |
 | `portal.publicGrievance.confirmBody` | This sends your message to the hospital. It is stored encrypted. | இது உங்கள் செய்தியை மருத்துவமனைக்கு அனுப்பும். இது மறைகுறியாக்கப்பட்டுச் சேமிக்கப்படும். | ok |
 | `portal.publicGrievance.filed` | Your message was sent. | உங்கள் செய்தி அனுப்பப்பட்டது. | ok |
+| `portal.publicGrievance.noCategories` | There are no categories to choose from yet. Nothing can be sent. | தேர்ந்தெடுக்க வகைகள் எதுவும் இன்னும் இல்லை. எதுவும் அனுப்ப முடியாது. | ok |
 | `portal.publicGrievance.noClinic` | No hospital is set up to receive this right now. Nothing was sent. | இதைப் பெற இப்போது எந்த மருத்துவமனையும் அமைக்கப்படவில்லை. எதுவும் அனுப்பப்படவில்லை. | ok |
+| `portal.publicGrievance.notSetUp` | Complaints without signing in are not set up at this hospital yet. Nothing can be sent. | இந்த மருத்துவமனையில் உள்நுழையாமல் புகார் அனுப்புவது இன்னும் அமைக்கப்படவில்லை. எதுவும் அனுப்ப முடியாது. | ok |
 | `portal.publicGrievance.refused` | This cannot be done right now. Nothing was sent. | இதை இப்போது செய்ய முடியாது. எதுவும் அனுப்பப்படவில்லை. | ok |
 | `portal.publicGrievance.title` | Send a complaint without signing in | உள்நுழையாமல் ஒரு புகாரை அனுப்புங்கள் | ok |
 | `portal.publicGrievance.unavailable` | This is not available right now. Nothing was sent. | இது இப்போது கிடைக்கவில்லை. எதுவும் அனுப்பப்படவில்லை. | ok |

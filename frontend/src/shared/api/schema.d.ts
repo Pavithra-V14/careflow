@@ -24,6 +24,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/public/grievance-categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public Grievance Categories
+         * @description The closed list of category words a grievance may use, with NO sign-in, so the public grievance form can show them (the required setting CAREFLOW_GRIEVANCE_CATEGORIES, sorted; the same list the filing route checks). Nothing about any person is
+         *     read or returned and the database is not touched. 503 until the list AND the per-address limit (CAREFLOW_PUBLIC_READ_IP_PER_MINUTE, a required setting, no default) are set: never an unlimited door. 429 over the per-address limit in any 60 seconds.
+         */
+        get: operations["public_grievance_categories_public_grievance_categories_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/public/grievances": {
         parameters: {
             query?: never;
@@ -431,7 +452,7 @@ export interface paths {
         get: operations["get_profile_v1_portal_profile_get"];
         /**
          * Put Profile
-         * @description Set your sex word and preferred language (it sets values, so a repeat is the same). 403 unless you are an active patient account, 422 for a sex word that is not on the clinic's list, 503 for a sex word while the clinic has not set its list.
+         * @description Set your sex word and preferred language (it sets values, so a repeat is the same). For EACH field (`sex`, `preferred_language`): left OUT means the stored value is left as it is; an explicit null CLEARS it (a person may clear either one; clearing needs no word from the clinic's list, an unset value is simply no value); a value sets it (a sex word must be on the clinic's list). 403 unless you are an active patient account, 422 for a sex word that is not on the clinic's list, 503 for a sex word while the clinic has not set its list.
          */
         put: operations["put_profile_v1_portal_profile_put"];
         post?: never;
@@ -6906,6 +6927,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicClinicOut"];
+                };
+            };
+        };
+    };
+    public_grievance_categories_public_grievance_categories_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GrievanceCategoriesOut"];
                 };
             };
         };

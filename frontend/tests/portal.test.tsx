@@ -42,6 +42,7 @@ function backend(state: { stage: Stage | null; granted?: boolean | null; bound?:
     if (special) return special;
     const key = `${req.method} ${req.path}`;
     if (key === 'get /public/clinic') return json({ clinic_id: CLINIC_A, name: 'Placeholder Hospital' });
+    if (key === 'get /public/grievance-categories') return json({ categories: ['access', 'service_quality'] });
     if (key === 'get /v1/portal/grievance-categories') return json({ categories: ['access', 'service_quality'] });
     if (key === 'get /v1/portal/me') return state.stage === null ? json({ detail: LEAK }, 403) : json({ bound_to_a_patient_record: state.bound ?? false, consents: {}, stage: state.stage, status: 'x' });
     if (key === 'post /v1/portal/register') {
@@ -100,6 +101,7 @@ describe('sign in', () => {
 
   it('says one fixed thing for a code that did not work, and never what was wrong', async () => {
     const user = userEvent.setup();
+    stubApi(backend({ stage: null }));
     const { auth } = fakeAuth();
     await mount(auth);
     await user.type(await screen.findByLabelText('Mobile number'), '+910000000000');
@@ -112,6 +114,7 @@ describe('sign in', () => {
 
   it('says the same fixed thing when a code could not be sent', async () => {
     const user = userEvent.setup();
+    stubApi(backend({ stage: null }));
     const { auth } = fakeAuth();
     await mount(auth);
     await user.type(await screen.findByLabelText('Mobile number'), '+919999999999');

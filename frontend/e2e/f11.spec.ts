@@ -91,7 +91,7 @@ for (const lang of LANGS) {
   test(`signed out: the number form with the complaint form below it, and its confirmation [${lang}]`, async ({ page }) => {
     await open(page, lang);
     await expect(page.locator('#portal-public-grievance')).toBeVisible();
-    await page.locator('#pg-category').fill('access');
+    await page.locator('#pg-category').selectOption('access');
     await page.locator('#pg-text').fill('Some words');
     await page.locator('#pg-text ~ button[type=submit]').click();
     await expect(page.getByRole('dialog')).toBeVisible();

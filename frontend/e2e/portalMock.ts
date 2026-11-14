@@ -67,6 +67,7 @@ export async function installPortalMock(page: Page, scenario: PortalScenario = {
     const body = req.postData() ? (JSON.parse(req.postData() as string) as unknown) : undefined;
     calls.push({ method, path, key: req.headers()['x-idempotency-key'] ?? null, body });
     // The public routes need no sign-in (a grievance without signing in, MOCK ONLY).
+    if (method === 'GET' && path === '/public/grievance-categories') return reply(route, 200, { categories: ['access', 'service_quality'] });
     if (method === 'POST' && path === '/public/grievances') return reply(route, 201, { created: true, grievance_id: '33333333-3333-4333-8333-333333333333' });
     if (!req.headers()['authorization']?.startsWith('Bearer ')) return reply(route, 401, { detail: 'not authenticated' });
 

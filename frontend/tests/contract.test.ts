@@ -168,6 +168,7 @@ const INVOCATIONS: Record<keyof typeof OPERATIONS, (api: Api, o?: WriteOptions) 
   sendPatientMessage: (api, o) => api.sendPatientMessage(body<PatientMessageIn>('PatientMessageIn'), o),
   listMyThreads: (api) => api.listMyThreads(),
   readMyThread: (api) => api.readMyThread(ID),
+  publicGrievanceCategories: (api) => api.publicGrievanceCategories(),
   filePublicGrievance: (api, o) => api.filePublicGrievance(body<PublicGrievanceIn>('PublicGrievanceIn'), o),
   fileGrievance: (api, o) => api.fileGrievance(body<GrievanceIn>('GrievanceIn'), o),
   myData: (api) => api.myData(),
