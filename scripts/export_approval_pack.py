@@ -1,6 +1,7 @@
 """Make ONE single file per owner out of docs/approval-pack/ (and the drafts and sheet each owner is asked to read), so a person can open it, answer it and send it back.
 
     python scripts/export_approval_pack.py            # writes docs/approval-pack/export/<owner>.docx when pandoc is installed, otherwise <owner>.md
+    python scripts/export_approval_pack.py tamil-reader   # only the named owner(s): the other owners' files are not touched
 
 The CONTENTS of every source file are included UNCHANGED, in the order the pack's README gives; this script only adds a header at the top (who the file is for, what they must decide, how to answer, and the line that
 AI drafts are proposals) and a sign-off block at the end. It writes no clinical or legal wording of its own. It installs nothing: if `pandoc` is not on the PATH it writes the combined .md files and says so.
@@ -67,6 +68,47 @@ def tsv_as_table(path: Path) -> str:
     return "\n".join(out)
 
 
+def grade_last(text: str) -> str:
+    """The Tamil pack's flagged table is `Key | Grade | English | Tamil | What looks wrong | Suggested fix`; the reader's file shows it as key, English, Tamil, what looks wrong, suggested fix, GRADE. Only the column ORDER of that one table changes; every cell is unchanged."""
+    lines = text.split("\n")
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        if lines[i].startswith("| Key | Grade | English | Tamil |"):
+            while i < len(lines) and lines[i].startswith("|"):
+                row = lines[i]
+                if set(row) <= set("|- "):
+                    cells = [c for c in row.strip("|").split("|")]
+                    out.append("|" + "|".join(cells[:1] + cells[2:] + cells[1:2]) + "|")
+                else:
+                    parts = _split_row(row)
+                    out.append("| " + " | ".join(parts[:1] + parts[2:] + parts[1:2]) + " |")
+                i += 1
+            continue
+        out.append(lines[i])
+        i += 1
+    return "\n".join(out)
+
+
+def _split_row(row: str) -> list[str]:
+    """A table row's cells (a `\\|` inside a cell is kept)."""
+    body = row.strip()[1:-1] if row.strip().endswith("|") else row.strip()[1:]
+    cells, cur, k = [], "", 0
+    while k < len(body):
+        if body[k] == "\\" and k + 1 < len(body):
+            cur += body[k : k + 2]
+            k += 2
+            continue
+        if body[k] == "|":
+            cells.append(cur.strip())
+            cur = ""
+        else:
+            cur += body[k]
+        k += 1
+    cells.append(cur.strip())
+    return cells
+
+
 def build(name: str, spec: dict) -> str:
     head = [
         f"# {spec['title']}: one file to answer and send back",
@@ -85,6 +127,8 @@ def build(name: str, spec: dict) -> str:
     body: list[str] = []
     for n, part in enumerate(spec["parts"], start=1):
         text = tsv_as_table(part) if part.suffix == ".tsv" else part.read_text(encoding="utf-8")
+        if name == "tamil-reader" and part.name == "tamil-review.md":
+            text = grade_last(text)
         body += [f"# Part {n}: {part.name}", "", text.rstrip("\n"), "", "---", ""]
     sign = [
         "# Your answer",
@@ -108,7 +152,12 @@ def main() -> int:
     pandoc = shutil.which("pandoc")
     if pandoc is None:
         print("pandoc is not installed: writing one combined .md per owner instead (nothing was installed)")
-    for name, spec in OWNERS.items():
+    wanted = sys.argv[1:] or list(OWNERS)
+    unknown = [w for w in wanted if w not in OWNERS]
+    if unknown:
+        print(f"unknown owner: {unknown[0]} (one of {', '.join(OWNERS)})")
+        return 1
+    for name, spec in ((n, OWNERS[n]) for n in wanted):
         missing = [p for p in spec["parts"] if not p.exists()]
         if missing:
             print(f"{name}: a source file is missing: {missing[0].name}")
