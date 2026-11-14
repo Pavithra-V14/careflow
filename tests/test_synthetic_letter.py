@@ -30,7 +30,7 @@ def test_the_png_is_a_valid_grayscale_image_with_ink_and_is_deterministic():
 
 def test_only_the_dummy_text_can_be_drawn():
     with pytest.raises(ValueError):
-        synthetic_letter.png_bytes(("A REAL NAME",))  # a letter outside the tiny glyph set: nothing real can be drawn by accident
+        synthetic_letter.png_bytes(("a real name",))  # lowercase is outside the small glyph set: nothing real can be drawn by accident
 
 
 def test_the_word_counter_returns_a_number_never_the_text():

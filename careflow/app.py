@@ -75,6 +75,7 @@ from careflow import (
     demo_front_door,
     demo_phase3,
     demo_phase4,
+    demo_real_models,
     identity,
     learning_labels,
     medications_sql,
@@ -6123,6 +6124,12 @@ def create_app(
         except Exception:  # noqa: BLE001 - ANY fault in the provider configuration degrades to 'no hosted provider', never a startup crash (CLAUDE.md: degrade explicitly and visibly)
             log.error("the hosted-provider configuration is refused: no hosted provider is available")
             app.state.providers = provider_setup.ProviderSet()
+        if components is not None and demo_real_models.allowed(os.environ, resolve_profile()):  # opt-in (CAREFLOW_DEMO_REAL_MODELS): each stage whose hosted provider passes its gates replaces its fake; any missing gate keeps the fake, in words
+            loader = demo_real_models.stored_document_loader(app.state.engine, cfg.worker_account_id, intake) if intake is not None and cfg.worker_account_id is not None else None
+            upgrade = demo_real_models.upgrade_components(components, app.state.providers, loader=loader, environ=os.environ, profile=resolve_profile())
+            components = upgrade.components
+            app.state.front_door = components
+            log.warning("DEMO REAL MODELS (synthetic data only; every output is a suggestion): text: %s; decision: %s", upgrade.text, upgrade.decision)
         app.state.document_intake = intake  # None unless storage is configured AND verified (below): the upload routes answer 503
         app.state.poker = Poker()  # routes that enqueue call `app.state.poker.poke()` after their transaction commits (7.4)
         handlers = {FRONT_DOOR_TASK: front_door_handler(components, session_for=front_door_session_for)} if components is not None else {}

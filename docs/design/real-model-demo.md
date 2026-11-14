@@ -73,3 +73,6 @@ Suggested starting values for the app's own limits (your choice, not a recommend
 ## 5. Stated limits
 
 "Synthetic" is a label you declare, not something the app inspects; what keeps patient text away is the deployment gate, the gateway's data-policy filter and each adapter's own refusal of a patient-data request. Jev is a router: the downstream model varies per request, so its output is never used as evidence for acceptance, gold sets or calibration. Gemini's free tier may let Google use submitted content to improve its products: another reason no real page goes there. The rest is in `docs/design/hosted-providers.md`.
+
+## After the keys: run one dummy letter through the whole flow
+`docs/first-run-guide.md`, section "Optional: one dummy letter through the real models" (`scripts/demo_real_models.py`). What is wired, what stays fake and the limits: `docs/design/hosted-providers.md`, "Update 2026-11-14 (b)".
