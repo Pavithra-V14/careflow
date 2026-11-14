@@ -277,7 +277,7 @@ The patient path is the grievance channel with whatever category words the clini
 ### 25. Staff invite fields (requested 2026-11-14)
 `InviteIn` has only `email`, `clinic_id` and `role`. BUILD-SPEC 19.4 also lists name, mobile and the medical-council registration number (doctors and nurses). Please add them, or say they are held elsewhere.
 
-### 26. Grievance without signing in (requested 2026-11-14) - ROUTE LANDED, form built on the sign-in page (F14); no public category list exists, so the category is typed
+### 26. Grievance without signing in (requested 2026-11-14) - ROUTE LANDED, form built on the sign-in page (F14); the category is now a list from `GET /public/grievance-categories` (the typed code is gone)
 PATIENT-WORKFLOWS H2 says any patient can reach the grievance channel without signing in. The only grievance routes need an active patient account. Please add a public route, or confirm the public footer contact is the whole channel.
 
 ### 27. Protocol card and message-template editor routes (requested 2026-11-14)

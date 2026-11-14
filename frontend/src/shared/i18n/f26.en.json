@@ -1,5 +1,9 @@
 {
   "portal": {
-    "idleEnded": "You were signed out because the page was not used for a while. What was on the screen was cleared. Sign in again to continue."
+    "idleEnded": "You were signed out because the page was not used for a while. What was on the screen was cleared. Sign in again to continue.",
+    "publicGrievance": {
+      "notSetUp": "Complaints without signing in are not set up at this hospital yet. Nothing can be sent.",
+      "noCategories": "There are no categories to choose from yet. Nothing can be sent."
+    }
   }
 }

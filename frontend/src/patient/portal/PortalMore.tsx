@@ -312,6 +312,9 @@ export function PublicGrievanceSection({ api }: { api: Api }) {
   const [text, setText] = useState('');
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  // The words come from the hospital's own list, with no sign-in. Nothing is typed and nothing is pre-chosen.
+  const categories = usePortalQuery(['public-grievance-categories'], () => unwrap(api.publicGrievanceCategories()));
+  const listed = categories.data?.categories ?? [];
   const send = useIdempotentWrite(
     (_: void, key) => unwrap(api.filePublicGrievance({ category: category.trim(), text }, { idempotencyKey: key })),
     () => {
@@ -320,7 +323,7 @@ export function PublicGrievanceSection({ api }: { api: Api }) {
       setText(''); // the text is dropped from the page once it is sent
     },
   );
-  const valid = /^[a-z][a-z0-9_]{0,39}$/.test(category.trim()) && text.trim() !== '' && text.length <= 4000;
+  const valid = listed.includes(category) && text.trim() !== '' && text.length <= 4000;
   const touch = (set: (v: string) => void) => (v: string) => {
     set(v);
     setNote(null);
@@ -340,10 +343,32 @@ export function PublicGrievanceSection({ api }: { api: Api }) {
         noValidate
       >
         <label htmlFor="pg-category">{t('portal.grievance.category')}</label>
-        <input id="pg-category" type="text" autoComplete="off" spellCheck={false} value={category} onChange={(e) => touch(setCategory)(e.target.value)} aria-describedby="pg-category-hint" />
-        <p id="pg-category-hint" className="hint">
-          {t('portal.grievance.categoryHint')}
-        </p>
+        {categories.isPending ? (
+          <Loading />
+        ) : categories.isError ? (
+          categories.error.kind === 'unavailable' ? (
+            <p id="pg-category" role="status">
+              {t('portal.publicGrievance.notSetUp')}
+            </p>
+          ) : (
+            <p id="pg-category" role="alert">
+              <ProblemText kind={categories.error.kind} />
+            </p>
+          )
+        ) : listed.length === 0 ? (
+          <p id="pg-category" role="status">
+            {t('portal.publicGrievance.noCategories')}
+          </p>
+        ) : (
+          <select id="pg-category" value={category} onChange={(e) => touch(setCategory)(e.target.value)}>
+            <option value="">{t('portal.grievance.chooseCategory')}</option>
+            {listed.map((c) => (
+              <option key={c} value={c}>
+                {c.replaceAll('_', ' ')}
+              </option>
+            ))}
+          </select>
+        )}
         <label htmlFor="pg-text">{t('portal.grievance.text')}</label>
         <textarea id="pg-text" rows={5} maxLength={4000} value={text} onChange={(e) => touch(setText)(e.target.value)} />
         <button type="submit" className="button button-primary" disabled={!valid}>

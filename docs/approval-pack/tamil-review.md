@@ -1,6 +1,6 @@
 # Tamil review pack (AI-prepared, NOT reviewed by a native speaker)
 
-Prepared 2026-11-14. Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 1730 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
+Prepared 2026-11-14. Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 1732 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
 
 **Regenerated 2026-11-14** by `npm run i18n:pack` from the strings as they are now, so it covers every current string, including the newest screens (patient voice setting, consent withdrawal and history, activating a staff account, withdrawing and retiring a red-flag rule). Each is written and second-passed in the same way and is just as unreviewed.
 
@@ -12,9 +12,9 @@ Meaning errors, register for patients, medical or safety terms, unsafe ambiguity
 - **B** wrong or odd meaning, wrong register, or an inconsistent term. Needs a native speaker.
 - **C** minor wording, or an administrator-only technical label.
 
-How it was done, honestly: all 1730 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and the strings that carry meaning (sentences of four words or more, and short strings that differ from their English) were read by an AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
+How it was done, honestly: all 1732 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and the strings that carry meaning (sentences of four words or more, and short strings that differ from their English) were read by an AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
 
-Automatic checks: 1730 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
+Automatic checks: 1732 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
 
 Notes: 71 grade A, 125 grade B, 58 grade C (254 rows with a note; some notes cover a group of similar strings, named in the note).
 
@@ -330,7 +330,7 @@ Notes: 71 grade A, 125 grade B, 58 grade C (254 rows with a note; some notes cov
 | task / job | பணி (68) | A review task and a queued job share the word. |
 | approved (a status) and approve (a button) | அங்கீகரிக்கப்பட்டது (status) and ஒப்புக்கொள் (button) (14) | Two word families for one idea in the red-flag rule screens. |
 | patient | நோயாளி and நோயாளர் (76) | Two spellings. |
-| clinic / hospital | மருத்துவமனை (most strings), கிளினிக் (1) (75) | Check which is meant where. |
+| clinic / hospital | மருத்துவமனை (most strings), கிளினிக் (1) (76) | Check which is meant where. |
 | front desk | வரவேற்பு மேசை and முன்பணியாளர் (8) | Two renderings. |
 | confidence | நம்பிக்கை (2) | Means belief or hope; the strings mean how sure the system is. |
 | sample (a sampled decision) | மாதிரி (5) | Reads as a laboratory specimen. |
@@ -381,7 +381,7 @@ These are the same in English and Tamil by design, and a Tamil-speaking patient 
 - `tasks.kind.screening_unassessable`
 - `tasks.kind.triage_proposal`
 
-## Part 7. All 1730 strings
+## Part 7. All 1732 strings
 
 Fill in the last column. Write **OK**, or write the full corrected Tamil (keep every {{placeholder}} exactly as it is). Leave a row empty if you have not looked at it.
 
@@ -1607,7 +1607,9 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `portal.publicGrievance.body` | This goes to the hospital without signing in. A person at the hospital reads it. | இது உள்நுழையாமலே மருத்துவமனைக்குச் செல்லும். மருத்துவமனையில் ஒருவர் இதைப் படிப்பார். | B: Says the complaint goes to the hospital without signing in; check it does not suggest it is anonymous. | |
 | `portal.publicGrievance.confirmBody` | This sends your message to the hospital. It is stored encrypted. | இது உங்கள் செய்தியை மருத்துவமனைக்கு அனுப்பும். இது மறைகுறியாக்கப்பட்டுச் சேமிக்கப்படும். | B: "மறைகுறியாக்கப்பட்டு" (encrypted) is technical for a patient. | |
 | `portal.publicGrievance.filed` | Your message was sent. | உங்கள் செய்தி அனுப்பப்பட்டது. | no issue found | |
+| `portal.publicGrievance.noCategories` | There are no categories to choose from yet. Nothing can be sent. | தேர்ந்தெடுக்க வகைகள் எதுவும் இன்னும் இல்லை. எதுவும் அனுப்ப முடியாது. | no issue found | |
 | `portal.publicGrievance.noClinic` | No hospital is set up to receive this right now. Nothing was sent. | இதைப் பெற இப்போது எந்த மருத்துவமனையும் அமைக்கப்படவில்லை. எதுவும் அனுப்பப்படவில்லை. | B: Check "எந்த மருத்துவமனையும் அமைக்கப்படவில்லை" reads as a setup state, not a fault of the patient. | |
+| `portal.publicGrievance.notSetUp` | Complaints without signing in are not set up at this hospital yet. Nothing can be sent. | இந்த மருத்துவமனையில் உள்நுழையாமல் புகார் அனுப்புவது இன்னும் அமைக்கப்படவில்லை. எதுவும் அனுப்ப முடியாது. | no issue found | |
 | `portal.publicGrievance.refused` | This cannot be done right now. Nothing was sent. | இதை இப்போது செய்ய முடியாது. எதுவும் அனுப்பப்படவில்லை. | no issue found | |
 | `portal.publicGrievance.title` | Send a complaint without signing in | உள்நுழையாமல் ஒரு புகாரை அனுப்புங்கள் | no issue found | |
 | `portal.publicGrievance.unavailable` | This is not available right now. Nothing was sent. | இது இப்போது கிடைக்கவில்லை. எதுவும் அனுப்பப்படவில்லை. | no issue found | |

@@ -27,6 +27,7 @@ interface State {
   requests?: Response;
   postRequest?: Response;
   publicGrievance?: Response;
+  publicCategories?: Response;
 }
 const profileBody = (over: Record<string, unknown> = {}) => ({ display_name: 'Placeholder Person', languages: ['en', 'ta'], preferred_language: null, sex: null, sex_words: ['female', 'male', 'other_word'], ...over });
 function backend(s: State = {}) {
@@ -53,6 +54,7 @@ function backend(s: State = {}) {
     if (key === `post /v1/portal/notifications/${NID}/read`) return s.readN ?? json({ changed: true, notification_id: NID });
     if (key === 'get /v1/portal/requests') return s.requests ?? json({ requests: [{ clinic_id: CLINIC_A, created_at: '2026-11-09T05:00:00Z', field: 'phone', kind: 'correction', request_id: RID, status: 'open', updated_at: '2026-11-09T05:00:00Z' }] });
     if (key === 'post /v1/portal/requests') return s.postRequest ?? json({ created: true, request_id: RID }, 201);
+    if (key === 'get /public/grievance-categories') return s.publicCategories?.clone() ?? json({ categories: ['access', 'service_quality'] });
     if (key === 'post /public/grievances') return s.publicGrievance ?? json({ created: true, grievance_id: RID }, 201);
     return json({ detail: LEAK }, 404);
   };
@@ -228,7 +230,7 @@ describe('a complaint without signing in', () => {
     const user = userEvent.setup();
     const calls = stubApi(backend());
     await mount('en', false);
-    await user.type(await screen.findByLabelText('Category'), 'access');
+    await user.selectOptions(await screen.findByLabelText('Category'), 'access');
     await user.type(screen.getByLabelText('What you want to tell us'), 'Some words');
     await user.click(screen.getByRole('button', { name: 'Send' }));
     expect(posts(calls, '/public/grievances')).toHaveLength(0);
@@ -250,7 +252,7 @@ describe('a complaint without signing in', () => {
     const user = userEvent.setup();
     stubApi(backend({ publicGrievance: json({ detail: LEAK }, status) }));
     await mount('en', false);
-    await user.type(await screen.findByLabelText('Category'), 'access');
+    await user.selectOptions(await screen.findByLabelText('Category'), 'access');
     await user.type(screen.getByLabelText('What you want to tell us'), 'Some words');
     await user.click(screen.getByRole('button', { name: 'Send' }));
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Send' }));
@@ -262,11 +264,45 @@ describe('a complaint without signing in', () => {
     const user = userEvent.setup();
     stubApi(backend({ publicGrievance: json({ detail: LEAK }, 429) }));
     await mount('en', false);
-    await user.type(await screen.findByLabelText('Category'), 'access');
+    await user.selectOptions(await screen.findByLabelText('Category'), 'access');
     await user.type(screen.getByLabelText('What you want to tell us'), 'x');
     await user.click(screen.getByRole('button', { name: 'Send' }));
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Send' }));
     expect(await within(screen.getByRole('dialog')).findByText('Too many requests. Wait a moment and try again.')).toBeInTheDocument();
+  });
+});
+
+describe('the public complaint category list', () => {
+  it('shows the hospital list with nothing chosen, and the Send button stays off until one is picked', async () => {
+    const user = userEvent.setup();
+    stubApi(backend());
+    await mount('en', false);
+    const select = await screen.findByLabelText('Category');
+    expect(select).toHaveValue('');
+    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['Choose a category', 'access', 'service quality']);
+    await user.type(screen.getByLabelText('What you want to tell us'), 'Some words');
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    await user.selectOptions(select, 'service_quality');
+    expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled();
+    expect(document.querySelector('input#pg-category')).toBeNull(); // no typed code any more
+  });
+
+  it('says it is not set up (503) calmly, with no way to send, and never shows the backend text', async () => {
+    stubApi(backend({ publicCategories: json({ detail: LEAK }, 503) }));
+    await mount('en', false);
+    expect(await screen.findByText('Complaints without signing in are not set up at this hospital yet. Nothing can be sent.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    expect(document.body.textContent).not.toContain(LEAK);
+  });
+
+  it('says too many requests (429) in fixed words, and an empty list in its own', async () => {
+    stubApi(backend({ publicCategories: json({ detail: LEAK }, 429) }));
+    const a = await mount('en', false);
+    expect(await screen.findByText('Too many requests. Wait a moment and try again.')).toBeInTheDocument();
+    a.unmount();
+    stubApi(backend({ publicCategories: json({ categories: [] }) }));
+    await mount('en', false);
+    expect(await screen.findByText('There are no categories to choose from yet. Nothing can be sent.')).toBeInTheDocument();
   });
 });
 

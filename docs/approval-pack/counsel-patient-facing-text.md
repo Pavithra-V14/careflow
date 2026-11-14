@@ -119,7 +119,6 @@ What the patient sees, signed in:
 - `portal.grievance.title`: "Send a complaint"
 - `portal.grievance.body`: "Use this to send a complaint. To ask for your record to be erased, a detail corrected or a nominee recorded, use the section above. A person at the hospital reads it."
 - `portal.grievance.category`: "Category"
-- `portal.grievance.categoryHint`: "A code from the hospital's list (lowercase letters, digits and underscores). The hospital tells you which codes exist."
 - `portal.grievance.text`: "What you want to tell us"
 - `portal.grievance.confirmBody`: "This sends your message to the hospital. It is stored encrypted."
 - `portal.grievance.filed`: "Your message was sent."
@@ -145,7 +144,7 @@ Questions for counsel:
 1. Is "It is stored encrypted." the right thing to say, or should it say who reads the complaint and how long it is kept?
 2. The complaint without signing in has no identity attached. Should the screen say the hospital cannot reply, or cannot confirm who sent it? Today it says only that it goes to the hospital without signing in.
 3. Is there a statutory grievance route, form or time limit that the screen must mention or follow?
-4. The category is a code from the clinic's list. The signed-out form has no list to choose from yet (backend request 26), so the patient types a code. Is a typed code acceptable until a public list exists, or should the signed-out form wait?
+4. The category words come from the clinic's own list, shown as sent (underscores as spaces), and the patient picks one; nothing is pre-chosen. Is the clinic's wording of those categories acceptable to show to a person who is not signed in?
 5. The complaint text may contain health information. Does counsel want a warning about what to include?
 6. Should a patient be told, after sending, what happens next and when to expect an answer? Today the screen says only that the message was sent.
 

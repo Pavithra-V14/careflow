@@ -174,6 +174,7 @@ export const OPERATIONS = {
   listMyRequests: { method: 'get', path: '/v1/portal/requests' },
   filePatientRequest: { method: 'post', path: '/v1/portal/requests' },
   filePublicGrievance: { method: 'post', path: '/public/grievances' },
+  publicGrievanceCategories: { method: 'get', path: '/public/grievance-categories' },
   listMyBookings: { method: 'get', path: '/v1/portal/booking/bookings' },
   cancelMyBooking: { method: 'post', path: '/v1/portal/booking/bookings/{booking_id}/cancel' },
   listOpenSlots: { method: 'get', path: '/v1/portal/booking/slots' },
@@ -519,6 +520,7 @@ export function createApi(options: ApiOptions) {
     sendPatientMessage: (body: PatientMessageIn, o?: WriteOptions) => client.POST('/v1/portal/messages', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
     listMyThreads: () => client.GET('/v1/portal/messages/threads'),
     readMyThread: (threadId: string) => client.GET('/v1/portal/messages/threads/{thread_id}', { params: { path: { thread_id: threadId } } }),
+    publicGrievanceCategories: () => client.GET('/public/grievance-categories'),
     filePublicGrievance: (body: PublicGrievanceIn, o?: WriteOptions) => client.POST('/public/grievances', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
     openVoiceSession: (body: VoiceSessionIn, o?: WriteOptions) => client.POST('/v1/portal/voice/sessions', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
 
