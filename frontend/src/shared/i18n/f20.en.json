@@ -1,7 +1,4 @@
 {
-  "placeholder": {
-    "voiceDisclosure": "[PLACEHOLDER: voice session consent and recording disclosure. To be supplied by the hospital and approved by its legal counsel.]"
-  },
   "portal": {
     "voice": {
       "title": "Voice",
@@ -28,7 +25,8 @@
       "noAudio": "This screen does not record or play sound yet. The audio connection is not set up.",
       "unavailable": "Voice is not available at this hospital right now. No session was opened.",
       "notYours": "No session was opened. You are not recorded as a patient of this hospital.",
-      "invalid": "The session could not be opened as asked. No session was opened."
+      "invalid": "The session could not be opened as asked. No session was opened.",
+      "notSetUp": "Voice sessions are not set up yet. Nothing can be opened."
     },
     "myData": {
       "history": "Your consent history",

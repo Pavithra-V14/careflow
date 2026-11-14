@@ -326,7 +326,7 @@ function OffersView() {
   const { active } = useSession();
   const [visitType, setVisitType] = useState('');
   const types = useApiQuery(['offerTypes'], async () => inClinic(await unwrap(api.listVisitTypes(false, active.clinicId)), active.clinicId));
-  const draft = useMutation<components['schemas']['Envelope'], ApiProblem, string>({
+  const draft = useMutation<components['schemas']['OfferDraftOut'], ApiProblem, string>({
     gcTime: 0,
     retry: false,
     mutationFn: async (visitTypeId) => {

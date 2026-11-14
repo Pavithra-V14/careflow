@@ -315,6 +315,9 @@ NOT built, and why (each needs a decision or a service first):
 - **27 (card and template editor):** protocol cards and templates are clinician content with no table yet (`kb.cards` does not exist); needs a card-schema design and a clinician first.
 - **28 to 30 (patient scheduling, messaging and readiness routes):** they depend on the account-stage gating, consent and guardian decisions (items 21 and 22) and on the patient-facing channel decision for readiness (owner decision so far: none; a nurse or doctor relays replies).
 
+### 31. Where the voice session notice comes from (requested 2026-11-14, owner decision)
+The voice consent text must come only from the API. The frontend currently looks in `GET /v1/portal/consents` for a notice whose `purpose` is `voice_session` (an ASSUMED word: the snapshot types `purpose` as a free string). It shows that notice exactly as sent and blocks the Open button until one exists; with none it says voice is not set up. Please confirm the word, or give the notice its own route. The notice is not one of the three consent purposes, so the console does not offer Grant or Withdraw on it. The demo pack should supply a labelled placeholder.
+
 ## Decisions recorded here for later readers
 
 - **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;

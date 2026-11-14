@@ -57,6 +57,8 @@
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "i18n:list": "node scripts/list-unreviewed-tamil.mjs",
     "check:i18n": "node scripts/list-unreviewed-tamil.mjs --check",
-    "e2e:live": "node scripts/e2e-live.mjs"
+    "e2e:live": "node scripts/e2e-live.mjs",
+    "i18n:pack": "node scripts/tamil-pack.mjs",
+    "check:i18n-pack": "node scripts/tamil-pack.mjs --check"
   }
 }

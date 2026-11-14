@@ -1,0 +1,205 @@
+alerts.acknowledged	A	"acknowledged" is rendered ஏற்கப்பட்டது ("accepted"); an alert that is only SEEN could be read as accepted or agreed with. Check the verb; the same verb is used in alerts.already and on the alert buttons.
+alerts.already	A	Same verb issue as alerts.acknowledged.
+alerts.confirmBody	B	Says "records that you saw it"; check it matches the verb used for the button.
+admin.stepUp	B	"fresh" code is rendered புதிய ("new"). It means a RECENTLY entered code, not a never-used one; a reviewer should pick wording that says "recent".
+admin.autonomy.changeBody	B	"shadow" and "assisted" are mode names rendered as நிழல் and உதவியுடன்; system terms, confirm they are understood by clinic staff and used the same way everywhere.
+admin.autonomy.result.approved	C	Approve rendered with ஒப்புக்கொள் ("agree/admit"); formal registers usually use அங்கீகரி or ஒப்புதல். Keep one choice everywhere.
+admin.accounts.done.revoke	C	"role" rendered பங்கு, which can also mean "share"; check whether பணி or பொறுப்பு is clearer for clinic staff. Used in many strings.
+admin.recovery.completeBody	B	Safety-relevant: says the second factor is reset NOW. Check the tense and that "reset" (மீட்டமை) is not read as "restore".
+admin.voice.purgeBody	A	Irreversible deletion. The Tamil says it cannot be undone (திரும்பப் பெற முடியாது), which also means "cannot be taken back / withdrawn"; confirm it reads as "cannot be undone".
+backfill.reply.enterBody	A	"Red flag" is rendered literally as சிவப்புக் கொடி ("red flag", a flag that is red). It is the central safety term; a native clinician should confirm the phrase patients and nurses actually use (for example an "alarm sign" wording). Same term in backfill.reply.note, backfill.reply.reasons.red_flag, backfill.reply.savedOutcome.red_flag and others.
+backfill.reply.reasons.red_flag	A	Red flag wording, see backfill.reply.enterBody.
+backfill.reply.savedOutcome.red_flag	A	Red flag wording, see backfill.reply.enterBody. Also "raised a nurse task" is rendered செவிலியர் பணி எழுப்பப்பட்டது ("a nurse job was woken"): check that it reads as "a task was created for a nurse".
+backfill.reply.saveBody	B	"offer run" is rendered வாய்ப்பு ஓட்டம் ("opportunity flow"); "offer" and "run" are system terms with no everyday meaning here. Confirm the wording.
+care.gaps.recheckBody	A	"sample" (a sampled decision to be re-checked by a second person) is rendered மாதிரி, which a reader will take as a laboratory specimen. Meaning risk in a clinical setting.
+care.gaps.recheckTitle	A	Same "sample" = specimen ambiguity.
+care.gaps.rechecked	A	Same "sample" = specimen ambiguity.
+care.gaps.sameDecider	A	Same "sample" ambiguity; the sentence இந்த மாதிரி எடுக்கப்பட்ட முடிவை நீங்களே எடுத்தீர்கள் is hard to follow ("you made the decision this sample was taken from").
+care.results.body	A	"result" (a clinical result) is rendered முடிவு, the same word used for "decision" everywhere else. A reader cannot tell a test result from a decision.
+care.results.changeHint	A	"amendment" is rendered மேம்படுத்தல் ("improvement / upgrade"), which is not what an amended result means. The difference between an amendment (a new measurement) and a correction (the earlier value was wrong, starts a review) is safety-relevant.
+care.results.done	A	"result" = முடிவு, same ambiguity as care.results.body.
+care.results.doneWake	B	"A waiting care plan will be woken" rendered literally (எழுப்பப்படும், "will be woken up").
+care.results.note	B	"append-only" rendered சேர்க்க மட்டுமே முடியும் ("can only be added"); the idea that nothing is overwritten should be clear.
+claims.approveBody	B	"Approve onto the record" rendered with an awkward ... பதிவில் ஒப்புக்கொள்ளுங்கள்; the meaning (link this person to that record) should be checked.
+claims.needsPatient	B	Same phrase as claims.approveBody.
+claims.note	B	Same phrase; "decide from what the person told you in person" is the identity check, so the meaning has to be exact.
+dashboard.metric.safety_net_fail_closed_rate	B	"fail-closed" (the system stops safely when it fails) is rendered மூடுதல் ("closing"), which loses the meaning.
+dashboard.metric.escalation_rate_and_accuracy	C	"escalation" rendered உயர்நிலை அனுப்புதல் ("sending to a higher level"); used in several dashboard and alert strings.
+erasure.approveConflict	B	"live merge" rendered நேரடி இணைப்பு ("direct connection / link"); a merge of two records should not read as a connection or link (also used for linking a portal person to a record).
+erasure.approveForbidden	C	"front desk" rendered முன்பணியாளர், an unusual compound; check it is the word the clinic uses.
+erasure.keepsBody	A	Privacy meaning: "keyed fingerprints" (a hashed match key) is rendered சாவி கைரேகைகள், which reads as biometric fingerprints being kept. It must say that a one-way code used only for matching is kept, and that it ignores an erased record.
+erasure.requestTitle	B	Register: imperative கேள் is the informal singular ("ask"); staff-facing buttons should use the polite form (கேளுங்கள்).
+care.plans.write	B	Register: எழுது is the informal singular imperative; use the polite form.
+admin.recovery.includeClosed	B	Register: சேர் is the informal singular imperative.
+identity.filter	B	Register: காட்டு is the informal singular imperative.
+identity.approveBody	A	"merge" of two patient records and "link" use the same word (இணை / இணைப்பு) in identity.approveBody, identity.approved, identity.unmergeBody, identity.flagged and the portal claim strings. Merging two patients is high-consequence; the wording must make clear it is joining two records into one, not a link or connection.
+identity.unmergeBody	A	"breaks the link" (இணைப்பை உடைக்கிறது): same merge/link ambiguity, and உடை ("break") may read as damage rather than undo.
+identity.emptyDuplicates	C	"possible duplicates" rendered சாத்தியமான நகல்கள் ("possible copies"); a native speaker should choose the usual wording for duplicate patient records.
+patients.confirmBody	C	Spelling: நோயாளர் here, நோயாளி elsewhere. Pick one spelling.
+patients.revoke.title	A	"Revoke / take back" is rendered திரும்பப் பெறு, and "cannot be undone / cannot bring back" is rendered திரும்பப் பெற முடியாது in other strings. The same verb means two different things; a reader could confuse "revoke" with "cannot be reversed".
+portal.activate.consent_required	A	Consent: "the care-delivery notice has not been granted" is rendered பராமரிப்பு வழங்கல் அறிவிப்பு ... வழங்கப்படவில்லை. A notice is not "granted"; consent wording needs the hospital's counsel and a native reviewer.
+placeholder.privacyNotice	A	By design this string (and every placeholder.* string) is still ENGLISH in the Tamil interface: privacy notice, privacy promise, grievance contact, FAQ answers, erasure wording, identity checks. A Tamil-speaking patient sees English until the hospital and its counsel supply real Tamil text. This is a launch blocker for the Tamil patient pages, not a translation to fix here.
+portal.grievance.body	A	"nominee" (a person a patient names to act for them) is rendered பரிந்துரைக்கப்பட்டவர் ("a person who was recommended"). The usual legal word for a nominee differs; this is a patient-rights term, send to the hospital's counsel and a native reviewer.
+readiness.statuses.nurse_escalated	A	"Escalated to a nurse" is rendered செவிலியருக்கு அனுப்பப்பட்டது ("sent to a nurse"), which drops the sense of raising urgency. Same in readiness.statuses.red_flag_escalated and the dashboard and alert strings that use "escalation".
+readiness.statuses.red_flag_escalated	A	Red flag wording (see backfill.reply.enterBody) plus the "escalated = sent" loss of urgency.
+referrals.review.confirmBody	B	The decision word inside the sentence ("{{decision}}", for example Approve) is deliberately left in English (referrals.decision.*), so a Tamil sentence contains an English word. A native reviewer should say how the decision words should read.
+referrals.run.body	C	"Front Door" is left in English as a system name; check that is intended.
+scheduling.placeholderConfirm	B	A placeholder marker rendered as [இடஒதுக்கீடு: ...]. இடஒதுக்கீடு means a reservation or quota, not "placeholder". Every other placeholder string stays in English by design; this one should too.
+problem.step_up	B	"fresh" code rendered புதிய ("new"); see admin.stepUp.
+staff.stepUp.help	B	"fresh" code rendered புதிய ("new"); see admin.stepUp.
+access.note	B	"There is no free text" (a privacy control: only a reason code, never typed text) is rendered இலவச உரை, which means "text that costs nothing". Meaning error.
+access.open	B	Register: திற is the informal singular imperative (also admin.accounts.invite அழை, admin.autonomy.propose முன்மொழி, backfill.prepare தயார் செய்).
+admin.cost.term.failure	C	"Failure tax" rendered literally as தோல்வி வரி (a tax on failure).
+backfill.confirm.send.body	B	"Holds the slot" rendered இடத்தை நிறுத்தி ("stops/parks the place"); elsewhere a hold is ஒதுக்கீடு. "candidate" (the next waitlisted patient) is வேட்பாளர், the word for an election candidate. Choose everyday wording for a patient.
+backfill.noWaiting	C	"slot" is இடம் here and நேர இடம் elsewhere.
+backfill.reply.saved	B	"The rules' reading" rendered விதிகளின் வாசிப்பு ("the recital of the rules"); say that it is what the rules found.
+backfill.reply.screenedNote	A	"The rules did not clear this reply": "clear" (screening found no red flag) is rendered தெளிவானது ("clear" as in obvious or understandable). Safety outcome word; the same "clear" appears in the saved/outcome strings.
+care.gaps.dateRefused	C	"fall in the future" rendered எதிர்காலத்தில் விழும் ("fall into the future"); awkward.
+notes.addendBody	B	"addendum" (a new note that adds to an earlier one) is rendered இணைப்புக் குறிப்பு ("attachment/link note"); the same word (இணைப்பு) is used for link, merge and attachment. A clearer word for "additional note" is needed. Same in notes.note.
+notes.note	B	Same "addendum" wording as notes.addendBody.
+errorBoundary.home	B	Register: செல் / திற / திரும்பு are informal singular imperatives (also pages.backHome, patients.full.open, patients.openTitle). Staff and patient pages should use the polite form throughout.
+landing.features.offers	B	Content, not translation: the English promises offers "by SMS or email"; the project sends no SMS and the console says staff deliver offers by hand. The owner should confirm the promise before the Tamil is polished.
+dashboard.metric.card_recall_at_3	C	"Card" (a protocol card) is rendered அட்டை (a physical card) and "recall" மீட்பு; "cost tail" and "golden set" are literal. Admin-only metric names.
+portal.signIn.send	B	Register on PATIENT pages: எனக்குக் குறியீட்டை அனுப்பு and வேறு எண்ணைப் பயன்படுத்து (portal.signIn.change) are informal singular imperatives; portal.signIn.title uses the archaic -க form (உள்நுழைக, உருவாக்குக); most other patient strings use the polite -ங்கள் form. Pick one polite register for every patient-facing string.
+portal.signIn.change	B	Informal singular imperative on a patient page, see portal.signIn.send.
+portal.signIn.title	B	Archaic -க imperative (உள்நுழைக ... உருவாக்குக) on a patient page, see portal.signIn.send.
+portal.signIn.sent	B	Privacy-sensitive wording ("A code was sent if the number can receive one": the page must not reveal whether a number is registered). The Tamil is awkward (எண்ணுக்குப் பெற முடிந்தால்); check that it still does not reveal that.
+referrals.run.queued	C	"Job" (a queued job) is rendered பணி, the same word used for "task" (a review task). Two different things share one word.
+scheduling.createConflict	B	"overlaps another slot" is rendered மேலோங்குகிறது, which means "prevails / rises above", not "overlaps". Meaning error in a scheduling message.
+scheduling.holdDone	C	Three different wordings for a slot "hold": ஒதுக்கீடு (the holds list), நிறுத்தி வைக்கப்பட்டது (this string), வைக்கப்படும் (scheduling.holdBody). நிறுத்து also means "stop". Use one.
+scheduling.zoneNote	B	"demo placeholder" is rendered டெமோ இடஒதுக்கீடு; இடஒதுக்கீடு means a reservation or quota, not "placeholder". Same in time.zoneNotePlaceholder.
+time.zoneNotePlaceholder	B	"demo placeholder" rendered டெமோ இடஒதுக்கீடு (reservation); see scheduling.zoneNote.
+tasks.closed	C	"closed" and "resolved" are both rendered தீர்க்கப்பட்டது ("solved"); the console distinguishes closing a task from resolving it in other strings.
+tasks.ackBody	B	"acknowledge" (take and be recorded as holding a task) is rendered ஏற்றுக்கொள்; the same verb as "approve". A reader may think acknowledging a task approves something. See alerts.acknowledged.
+backfill.reply.outcome.clear	A	Safety screening outcome "Clear" (the rules found no red flag) is rendered தெளிவு ("clarity"); the lower-case form (backfill.reply.savedOutcome.clear) is the same. A nurse could read it as "the reply is clear / easy to understand" instead of "no red flag found". Highest priority for a native clinician.
+backfill.reply.outcome.red_flag	A	Red flag wording (see backfill.reply.enterBody).
+alerts.class.red_flag_overdue	A	"Red-flag task overdue" (an overdue safety task) uses the literal சிவப்புக் கொடி term; an overdue red-flag alert must be unmistakable.
+alerts.class.task_escalated	B	"escalated" rendered உயர்நிலைக்கு அனுப்பப்பட்டது ("sent to a higher level"); see readiness.statuses.nurse_escalated.
+alerts.acknowledge	A	Button "Acknowledge" is rendered ஏற்றுக்கொள் ("accept / agree to"), the same verb as Approve (ஒப்புக்கொள்) in many places. Acknowledging an alert only records that you have seen it. Also in admin.grievances.acknowledge and tasks. Check the verb.
+audit.col.resource	B	The word பதிவு is used for a patient record, an audit log (audit.title தணிக்கைப் பதிவு), a voice transcript (admin.voice.transcript), a recorded fact and for "register". Readers cannot tell which is meant; use different words.
+backfill.hold	C	"Hold" rendered நிறுத்தம் ("a halt").
+backfill.reply.confidence	B	"Confidence" (how sure the engine is) is rendered நம்பிக்கை (belief, hope, trust). Same in review.confidence if present.
+care.plans.status.screening	A	"being screened" (the rules read the text for red flags) is rendered பரிசோதனையில் உள்ளது; பரிசோதனை is the word for a medical examination or test. A clinician could read that the patient is being tested. The same word appears in backfill.reply.screening and the "rules screen" strings.
+backfill.reply.screening	A	"Rules screening" rendered விதிகள் பரிசோதனை; see care.plans.status.screening.
+admin.voice.workflows.intake_question	C	"intake" rendered உள்வாங்கல் ("absorbing"); the usual clinic wording is different.
+care.results.changes.amendment	A	See care.results.changeHint: amendment rendered மேம்படுத்தல் ("improvement").
+dashboard.metric.red_flag_recall	A	"Red-flag recall" (how many red flags the system catches, i.e. sensitivity) is rendered சிவப்புக் கொடி மீட்பு; மீட்பு means rescue or retrieval. A safety metric an administrator reads must not be ambiguous. Same in urgent_case_recall.
+dashboard.metric.urgent_case_recall	A	"recall" (sensitivity) rendered மீட்பு (rescue); see dashboard.metric.red_flag_recall.
+dashboard.metric.context_recall	C	Machine-learning metric names (context recall, grounding rate, guardrail trigger accuracy, model dependency health, loop failure rate, engine agreement, tool call accuracy, cache hit rate and others in dashboard.metric.*) are translated word for word; admin-only, a technical reviewer should confirm or leave in English.
+erasure.status.requested	B	"Open" (still waiting) is rendered திறந்தது ("it opened / was opened", past tense). Same in admin.grievances.status.open, alerts.stateOpen, portal.grievance.status.open and others; a status word should say "still open" (for example நிலுவையில்).
+nav.patients	C	Spelling: நோயாளர்கள் / நோயாளர் here and in many titles, நோயாளி elsewhere. Choose one.
+patients.via.front_desk	B	"Front desk" is வரவேற்பு மேசை here and முன்பணியாளர் in the erasure strings. Use one term.
+referrals.proposal	A	"Triage" (sorting patients by clinical urgency) is rendered வகைப்படுத்தல் ("classification"), which drops the urgency meaning. The task kind triage_proposal itself stays in English by design; a native clinician should choose the Tamil for triage.
+readiness.col.ends	B	முடிவு means "decision", "result" AND "end" in this interface (readiness.col.ends, scheduling.col.ends, care.results, referrals.col.decision). One word for three meanings in a clinical setting.
+review.candidateCount	C	"Candidates" are protocol-card candidates here and waitlisted patients elsewhere (backfill.candidate); both are வேட்பாளர்.
+shell.clinic	B	"Clinic" is கிளினிக் here but மருத்துவமனை ("hospital") in nearly every other string; the console serves clinics, the landing pages a hospital. Check which word is meant where.
+scheduling.col.heldUntil	C	"Held until" rendered வரை நிறுத்தம் ("until halt"); awkward.
+tasks.priority.standard	C	"Standard" priority rendered வழக்கமான ("usual"); check it reads as a priority level next to உடனடி (immediate).
+upload.scan.clean	C	"Clean" (a file scan found nothing) rendered சுத்தம் ("cleanliness").
+admin.rules.approve	A	"Approve" is rendered ஒப்புக்கொள், the same verb that is also used for "acknowledge" (alerts) and that can mean "admit". For a two-doctor safety approval a clinician must choose the verb (for example ஒப்புதல் அளி). Same issue in approveTitle, approveBody and the result strings.
+admin.rules.approveTitle	A	Same verb issue as admin.rules.approve: this is the confirmation question before a doctor approves a red-flag rule.
+admin.rules.approveBody	A	Safety text for the approval confirmation. Check that it is unmistakable that a SECOND, different doctor is also needed, and that "the person who wrote it cannot decide it" reads as a rule, not a suggestion.
+admin.rules.reject	B	நிராகரி is a plain word for reject; check that it reads as final for a red-flag rule version.
+admin.rules.rejectBody	A	"One rejection closes this version for good" (நிரந்தரமாக மூடிவிடும்): check that the irreversibility is clear and that "close" is not read as "pause".
+admin.rules.rejectTitle	B	Confirmation question; check the verb with admin.rules.reject.
+admin.rules.twoDoctors	A	States the two-doctor rule and "nothing is approved by default" (இயல்பாக எதுவும் அங்கீகரிக்கப்படுவதில்லை). Check that இயல்பாக reads as "by default" and not "normally".
+admin.rules.draftNote	A	Says a draft is never active. A wrong word here could make a draft look live. Check "never" (ஒருபோதும்) and "active" (செயலில்).
+admin.rules.statuses.draft_unreviewed	A	"Draft, not approved": check it cannot be read as "approved draft". The word அங்கீகரிக்கப்பட்டது is used for the status "Approved" but the button verb is ஒப்புக்கொள்: two words for one idea.
+admin.rules.statuses.approved	B	அங்கீகரிக்கப்பட்டது versus the button verb ஒப்புக்கொள்: pick one family of words for approve.
+admin.rules.statuses.retired	B	"Retired" is rendered நிறுத்தப்பட்டது ("stopped"), the same root as the "stop" and "hold" strings. Check it means taken out of use, not paused.
+admin.rules.result.recorded	A	"Your approval was recorded. It is not approved yet: a second, different doctor must approve it." Check that the two halves cannot be read as "approved".
+admin.rules.result.approved	A	"This version is now approved": check the word is the same as the status word and cannot be read as "recorded only".
+admin.rules.result.rejected	B	Check the closed state is clear.
+admin.rules.result.already_decided	B	"The other way" rendered எதிர்த் திசையில்: check it means the opposite decision.
+admin.rules.result.not_draft	B	"Not a draft any more": check the tense and that nothing was saved is clear.
+admin.rules.result.origin_mismatch	B	"Environment" rendered சூழல்; check it is understood as live, test and so on, not surroundings.
+admin.rules.result.author_cannot_decide	A	Tells the author they cannot decide their own rule. Check it is firm and not polite advice.
+admin.rules.result.empty_rule	B	No content, cannot be approved: check wording.
+admin.rules.result.rejected_earlier	B	Check it says a doctor already rejected it, so it cannot be approved.
+admin.rules.result.platform_rule	B	"This rule applies to every clinic. Who may approve it has not been decided." Check the meaning of "applies to every clinic".
+admin.rules.result.unknown	B	Fallback: "nothing is shown as approved. Reload". Check clarity.
+admin.rules.origins.canary	B	"Canary" is transliterated கேனரி; a test-case word, check whether clinicians would understand it, or keep it in English.
+admin.rules.origins.eval	C	மதிப்பீடு (evaluation): check it is a test environment and not "assessment of a person".
+admin.rules.vitals	B	"Vital-sign criteria" rendered உடல்நிலை அளவீட்டு நிபந்தனைகள்: check the clinical term clinicians use for vital signs.
+admin.rules.phrases	C	சொற்றொடர்கள் (phrases): check it is clear these are literal text matched in messages.
+admin.rules.tokenSets	B	"Token sets" rendered சொல் தொகுப்புகள் ("word sets"): a technical term; check it is understood as words that must all appear together.
+admin.rules.patterns	C	வடிவங்கள் (patterns): a technical label for older rules.
+admin.rules.author.body	B	Mentions "regular expression" in Tamil with the English words in brackets. Check whether to keep the English term for a doctor.
+admin.rules.author.err.phraseChars	B	"Control character or an invisible character": technical, check it is understandable by a doctor and that retyping is the right advice.
+admin.rules.author.err.tokenChars	B	Same as phraseChars.
+admin.rules.author.err.sameWords	B	"At least two different words" for a token set: check clarity.
+admin.rules.author.confirmBody	A	Says the draft is never active and needs two different doctors, and that you cannot approve your own. Same wording checks as admin.rules.draftNote.
+admin.rules.author.saved	A	"Not approved and not active": check both halves are unmistakable.
+admin.rules.author.setsHint	C	Numbers and limits for token sets; check number words.
+medications.noEnd	A	"No end recorded" rendered முடிவு நேரம் பதிவு செய்யப்படவில்லை: it must never read as "ongoing". Check.
+medications.correctBody	B	"Replaces the row below; the old row stays, marked replaced": check மாற்றும் (replace) versus "change".
+medications.superseded	B	"Replaced by a later row" rendered பிந்தைய வரிசையால் மாற்றப்பட்டது: check it does not read as "changed medicine".
+medications.verified	B	சரிபார்க்கப்பட்டது (verified): check who verified is not implied.
+medications.title	B	மருந்துகள் (medications) as a heading may read as a list of what the patient takes now, but it lists statements incl. stopped ones.
+medications.note	B	Says nothing is edited or deleted, a correction is a new row. Check it is clear.
+medications.recordBody	B	"Cannot be edited afterwards": check it is clear that a later change is a new row.
+medications.notSetUp	B	"The clinic's list of medication codes is not set up. Nothing was recorded.": check that "nothing was recorded" is unmistakable.
+medications.invalid	B	"Code not in the clinic's list, or times not valid. Nothing was recorded.": check.
+medications.conflict	C	Technical conflict message.
+medications.codeHint	C	Allowed characters for a code.
+alerts.class.identity_revoked_suspect	A	"An identity confirmation was revoked as suspect" rendered அடையாள உறுதிப்படுத்தல் சந்தேகத்தின் பேரில் திரும்பப் பெறப்பட்டது. திரும்பப் பெறு is the same verb as "cannot be undone" elsewhere, and சந்தேகம் may read as suspicion of the person. Needs a native reviewer.
+patients.revoke.alert.raised	B	"An alert was sent to the administrators": check நிர்வாகிகள் is who the clinic means.
+patients.revoke.alert.not_for_this_reason	B	Check it says no alert, not that nothing was recorded.
+patients.revoke.alert.not_configured	B	Settings not configured; check clarity.
+roles.front_desk_supervisor	C	வரவேற்பு மேசை மேற்பார்வையாளர்: consistent with வரவேற்பு மேசை but the project also uses முன்பணியாளர் for front desk.
+admin.tab.rules	B	"Red-flag rules" tab: literal சிவப்புக் கொடி (see the red flag theme); check the term clinicians use.
+admin.rules.intro	B	"Shown exactly as the system holds it": check it conveys that the screen cannot change a rule.
+medications.correct	A	"Correct this entry" rendered இந்தப் பதிவைத் திருத்து: for a recording mistake only. Check a clinician would read it as "I recorded this wrongly" and not as "change the treatment". Wording is item 35 on docs/design/clinician-sheet.md.
+medications.stop	A	"Stop this medicine" rendered இந்த மருந்தை நிறுத்து: the patient stopped taking it. Check it cannot be read as "stop giving it now" as an instruction to the patient. Wording is item 35 on docs/design/clinician-sheet.md.
+medications.correctTitle	B	Confirmation question for a correction; check it against medications.correct.
+medications.stopTitle	A	"Record that this medicine was stopped?" rendered இந்த மருந்து நிறுத்தப்பட்டது எனப் பதிவு செய்யலாமா?: it records a fact, it does not order a stop. Check that is clear.
+medications.stopBody	B	Adds a row with an end time; the old row stays; nothing else changes. Check clarity.
+medications.stopSave	B	"Record stop" rendered நிறுத்தத்தைப் பதிவு செய்: check it reads as recording, not ordering.
+medications.stoppedAt	C	நிறுத்தப்பட்ட நேரம் (stopped at).
+medications.validToHint	A	The "still taking" statement was reworded without a gendered verb (இன்னும் எடுத்துக்கொள்ளப்படுகிறது, passive). A native clinician should confirm it reads naturally and clearly says an empty end is NOT read as ongoing. Item 36 on docs/design/clinician-sheet.md.
+medications.stopDone	C	நிறுத்தம் பதிவு செய்யப்பட்டது.
+portal.voice.agree	A	A patient agrees to a voice session with this sentence. "ஒப்புக்கொள்கிறேன்" (I agree) shares its verb with "approve" and "admit"; a reviewer should confirm it reads as consent, in a polite patient register.
+portal.voice.noAudio	B	"ஒலி இணைப்பு அமைக்கப்படவில்லை" (the sound connection is not set up) must not read as a fault of the patient's device. Check the wording.
+portal.voice.notYours	B	"நோயாளியாகப் பதிவாகவில்லை" (not recorded as a patient) could read as a rejection of the person; check that it is neutral.
+portal.voice.unavailable	B	Check that "கிடைக்கவில்லை" (not available) reads as a temporary state, and that "எந்த அமர்வும் திறக்கப்படவில்லை" is clear to a patient.
+portal.voice.invalid	C	Plain error line; check register.
+portal.voice.repeat	B	"மறுமுறை" (repeat) for a repeated request may be unclear to a patient.
+portal.voice.notSetUp	C	Plain state line.
+portal.voice.intro	B	"வாய்மொழியாக" (by speaking) and "குரல்" (voice) as the feature name; check the word patients use for voice mode.
+portal.voice.confirmBody	C	Check the register.
+portal.voice.workflow.slot_offer	B	"சந்திப்பு வாய்ப்பு" for an appointment offer; the console uses another word for appointment in places.
+portal.voice.workflow.intake_question	B	Check that "கேள்விக்குப் பதில் சொல்ல" reads as answering a clinic question, not asking one.
+portal.voice.workflow.readiness_item	B	"தயார்நிலைப் பட்டியல்" (readiness list) is a coined term; check what clinics call a pre-visit checklist.
+portal.consent.withdrawnDone	A	Tells the patient their consent was withdrawn, at once, with no confirmation step. It must read as done and reversible ("மீண்டும் வழங்கலாம்"). "திரும்பப் பெறப்பட்டது" shares its verb with revoke and cannot-be-undone elsewhere (Part 4).
+portal.consent.regrant	C	"மீண்டும் வழங்கு" (give again) is a button label.
+portal.myData.purpose.care_delivery	A	The name of a consent purpose a patient sees in their own history; "சிகிச்சை வழங்கல்" should match how the notice names it.
+portal.myData.purpose.ai_processing	A	"செயற்கை நுண்ணறிவு உதவியுடன் செயலாக்கம்" is long and technical for a patient; a reviewer should check it is understood, and that it matches the notice wording.
+portal.myData.purpose.service_improvement	A	A consent purpose name; "சேவை மேம்பாடு" (service improvement) should match the notice, which also says the data is de-identified.
+portal.myData.history	C	Table heading.
+portal.myData.historyNone	C	Empty-state line.
+portal.myData.col.purpose	C	Column heading.
+portal.myData.col.decision	C	Column heading; முடிவு is the one word for decision, result and end (Part 4).
+portal.myData.col.version	C	Column heading.
+portal.myData.col.when	C	Column heading.
+admin.rules.withdrawBody	A	Says a withdrawn draft is closed for good and is NOT the same as retired. "திரும்பப் பெறுதல்" and "நிறுத்துதல்" are close in everyday Tamil, so the contrast may not come across. Clinician sheet item 37.
+admin.rules.retireBody	A	Says nothing is retired until a second, different doctor records it, and that a retired newest version switches off the whole rule code. A wrong reading could leave a rule in force or switch one off. A native speaker who is a clinician should check. Clinician sheet item 37.
+admin.rules.retireTitle	A	Asks whether to retire an approved red-flag rule version; "நிறுத்தவா" can read as "stop it now" although one doctor alone cannot retire it.
+admin.rules.withdrawTitle	B	Check "திரும்பப் பெறவா" for a draft (a withdrawal, not a deletion).
+admin.rules.retire	B	Button label "நிறுத்து" (stop) for retire; check the word clinicians use for taking a rule out of use.
+admin.rules.withdraw	B	Button label "திரும்பப் பெறு" for withdraw a draft; same verb as revoke.
+admin.rules.retireCount	A	Says how many retire decisions exist and that two different doctors are needed. A count read wrongly could make a person think a rule is already retired.
+admin.rules.youRetired	B	Check it says the doctor has recorded their own decision only.
+admin.rules.youWrote	B	Says the author cannot approve or reject; check "வேறொரு மருத்துவர்தான்" (only a different doctor) is not read as a request.
+admin.rules.statuses.withdrawn	A	A status word. "திரும்பப் பெறப்பட்டது" (withdrawn) must not be read as "retired" (நிறுத்தப்பட்டது), since the two mean different things for whether a rule is in force.
+admin.rules.decisionWords.retire	B	"நிறுத்தினார்" (he/she stopped it) as the decision word in a table of who decided; the honorific form is neutral, check it matches "ஒப்புக்கொண்டார்" and "நிராகரித்தார்".
+admin.rules.result.retired	A	Tells a doctor a rule version is now retired. Must be unambiguous that it is out of use.
+admin.rules.result.withdrawn	A	Tells a doctor a draft is closed and not in force; also shown when a repeat request reaches an already withdrawn version.
+admin.rules.result.not_approved	A	Says nothing was recorded because the version is not approved; a reader must not take it as retired.
+staff.activate.confirmBody	B	"நிர்வாகி உட்பட" (an administrator included) states that nobody else can activate the account; check it reads as a fact, not a threat.
+staff.activate.body	B	Long sentence; check the invited-staff wording and that "அங்கீகார குறியீடு" is the word staff use for the authenticator code.
+staff.activate.notDone	C	Plain state line.
+staff.activate.refused	C	Plain state line.
+staff.activate.button	C	Button label.
+staff.activate.title	C	Heading.
+staff.activate.confirmTitle	C	Dialog title.
+staff.activate.done	C	Plain state line.

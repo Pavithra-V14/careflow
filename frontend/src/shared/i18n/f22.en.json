@@ -1,0 +1,20 @@
+{
+  "staff": {
+    "activate": {
+      "title": "Activate your account",
+      "body": "If you were invited to the staff console and have not activated your account yet, you can do it here. It needs the authenticator code you signed in with.",
+      "button": "Activate my account",
+      "confirmTitle": "Activate your account?",
+      "confirmBody": "This activates your own account. Nobody else, an administrator included, can do it for you.",
+      "done": "Your account is activated.",
+      "notDone": "Your account was not activated. Contact your administrator.",
+      "refused": "This account cannot be activated here. Contact your administrator."
+    }
+  },
+  "portal": {
+    "consent": {
+      "withdrawnDone": "Your consent was withdrawn. You can grant it again at any time.",
+      "regrant": "Grant again"
+    }
+  }
+}

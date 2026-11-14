@@ -80,7 +80,7 @@ export async function installPortalMock(page: Page, scenario: PortalScenario = {
       return reply(route, 201, { result: exists ? 'exists' : 'registered' });
     }
     if (method === 'GET' && path === '/v1/portal/consents') {
-      return reply(route, 200, { notices: [{ body: 'Notice line one.\nNotice line two <b>not markup</b>.', decision: granted ? true : null, notice_id: '11111111-1111-4111-8111-111111111111', label: 'Placeholder label', purpose: 'care_delivery', version: 3 }] });
+      return reply(route, 200, { notices: [{ body: 'Notice line one.\nNotice line two <b>not markup</b>.', decision: granted ? true : null, notice_id: '11111111-1111-4111-8111-111111111111', label: 'Placeholder label', purpose: 'care_delivery', version: 3 }, { body: 'Voice notice text (mock).', decision: null, notice_id: '55555555-5555-4555-8555-555555555555', label: 'Voice notice (mock)', purpose: 'voice_session', version: 1 }] });
     }
     if (method === 'POST' && path === '/v1/portal/consents') {
       const b = body as { action?: string };

@@ -2107,8 +2107,8 @@ export interface paths {
         };
         /**
          * Draft Offer
-         * @description The ranked candidates for a freed slot and a DRAFT offer for the first, computed now and stored nowhere (`status`: ok, empty, or unavailable with `not_configured:` and the names of the
-         *     missing clinician-owned settings). 404 for a clinic you cannot see, 403 unless you are front desk there.
+         * @description The ranked candidates for a freed slot and a DRAFT offer for the first, computed now and stored nowhere (`status`: ok, empty, or unavailable; `reason` is a closed word, `not_configured` or `no_ranked_candidates`, and
+         *     `missing_settings` names the clinician-owned settings that are unset). 404 for a clinic you cannot see, 403 unless you are front desk there.
          */
         get: operations["draft_offer_v1_staff_scheduling_offers_draft_get"];
         put?: never;
@@ -2153,7 +2153,7 @@ export interface paths {
          * Record Patient Reply Route
          * @description Record a reply the patient gave to the front desk (by phone or in person): it is stored encrypted as a patient message in the patient's appointments thread, and the deterministic red-flag rules screen it
          *     in the same transaction, before anything else (the reply and interpret routes then take its message id). A red flag or an unreadable reply raises the nurse task. 404 for a clinic you cannot see or a
-         *     patient who is not at it, 403 unless you are front desk there, 409 if the key was used for a different reply, 422 for a blank or over-long text, 503 if the encryption keys are not configured.
+         *     patient who is not at it, 403 unless you are front desk there, 409 if the key was used for a different reply, 422 for a blank or over-long text, 429 over your per-minute message limit (a required setting; unset means no limit), 503 if the encryption keys are not configured.
          */
         post: operations["record_patient_reply_route_v1_staff_scheduling_offers_replies_post"];
         delete?: never;
@@ -2174,7 +2174,7 @@ export interface paths {
         /**
          * Send Offer Route
          * @description Press send: hold the slot for the chosen ranked candidate and record the offer message. 404 for a clinic you cannot see, 403 unless you are front desk there, 409 if the slot is not open, the
-         *     candidate is not among the ranked ones, or the key was used for a different offer, 503 if the clinician-owned settings or the encryption keys are not configured.
+         *     candidate is not among the ranked ones, or the key was used for a different offer, 429 over your per-minute message limit (a required setting; unset means no limit), 503 if the clinician-owned settings or the encryption keys are not configured.
          */
         post: operations["send_offer_route_v1_staff_scheduling_offers_send_post"];
         delete?: never;
@@ -3547,23 +3547,6 @@ export interface components {
              */
             status: "pending" | "resolved";
         };
-        /**
-         * Envelope
-         * @description The result of every tool. `data` holds ids, numbers and closed words only; a degraded or unavailable result says so in `status` and `reason` (a fixed word).
-         */
-        Envelope: {
-            /** Data */
-            data?: {
-                [key: string]: unknown;
-            } | unknown[] | null;
-            /** Reason */
-            reason?: string | null;
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "ok" | "empty" | "degraded" | "unavailable";
-        };
         /** EpisodeIn */
         EpisodeIn: {
             /**
@@ -4440,6 +4423,77 @@ export interface components {
             purpose: string;
             /** Version */
             version: number;
+        };
+        /** OfferCandidateOut */
+        OfferCandidateOut: {
+            /**
+             * Joined At
+             * Format: date-time
+             */
+            joined_at: string;
+            /**
+             * Patient Id
+             * Format: uuid
+             */
+            patient_id: string;
+            /** Priority Code */
+            priority_code: string;
+            /** Rank */
+            rank: number;
+            /**
+             * Waitlist Id
+             * Format: uuid
+             */
+            waitlist_id: string;
+        };
+        /**
+         * OfferDraftBodyOut
+         * @description The DRAFT offer for the first ranked candidate: the clinician-approved template verbatim, the two clinician-owned times, and the only ordering rule used.
+         */
+        OfferDraftBodyOut: {
+            /**
+             * Candidate Patient Id
+             * Format: uuid
+             */
+            candidate_patient_id: string;
+            /** Hold Lifetime Seconds */
+            hold_lifetime_seconds: number;
+            /** Offer Expiry Seconds */
+            offer_expiry_seconds: number;
+            /**
+             * Rule
+             * @constant
+             */
+            rule: "rank_then_joined_at";
+            /** Template */
+            template: string;
+            /**
+             * Waitlist Id
+             * Format: uuid
+             */
+            waitlist_id: string;
+        };
+        /** OfferDraftDataOut */
+        OfferDraftDataOut: {
+            /** Candidates */
+            candidates: components["schemas"]["OfferCandidateOut"][];
+            draft: components["schemas"]["OfferDraftBodyOut"];
+        };
+        /**
+         * OfferDraftOut
+         * @description Typed (frontend request 6): a closed reason word, the names of any missing clinician-owned settings in their own field, and typed data. `ok` carries `data`; `empty` and `unavailable` carry a reason.
+         */
+        OfferDraftOut: {
+            data: components["schemas"]["OfferDraftDataOut"] | null;
+            /** Missing Settings */
+            missing_settings: string[] | null;
+            /** Reason */
+            reason: ("not_configured" | "no_ranked_candidates") | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "empty" | "unavailable" | "degraded";
         };
         /** OfferRowList */
         OfferRowList: {
@@ -13032,7 +13086,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope"];
+                    "application/json": components["schemas"]["OfferDraftOut"];
                 };
             };
             /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
@@ -13224,6 +13278,15 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationErrorBody"];
                 };
             };
+            /** @description Too many requests: the per-user limit was reached; wait and try again. Fixed body. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             /** @description Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body. */
             503: {
                 headers: {
@@ -13303,6 +13366,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+            /** @description Too many requests: the per-user limit was reached; wait and try again. Fixed body. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             /** @description Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body. */
