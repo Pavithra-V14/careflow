@@ -25,7 +25,7 @@ Test runs for this pass (from the uppercase `E:\` path): unit suite 1278 tests i
 |---|---|---|---|
 | 3.1 | Policy against what the app loads | pass | `default-src 'none'`; scripts, styles, fonts and images from the site itself (`data:` images only for the authenticator QR code); `connect-src` is the site, the Supabase project and the API only; `object-src 'none'`; `base-uri` and `form-action` the site. `e2e/csp.spec.ts` runs every built page with the policy enforced and fails on any violation; the polish and portal specs also fail on a violation on every screen. |
 | 3.2 | Inline styles | fixed | Two new screens used a React `style` prop. That works under the policy (React sets styles through the style object, which the policy allows), but it is the one place a policy change would have broken silently. Both now use a CSS class (`.pre-wrap`), and a test fails if an inline style is added again. |
-| 3.3 | `frame-ancestors`, `report-uri` | listed | A `<meta>` policy cannot carry them. `dist/csp-policy.txt` is the same policy for a host that sends it as a header; the host should send it with `frame-ancestors 'none'` (clickjacking). A deployment step, not frontend code. |
+| 3.3 | `frame-ancestors`, `report-uri` | listed (pre-launch row 5) | A `<meta>` policy cannot carry them. `dist/csp-policy.txt` is the same policy for a host that sends it as a header; the host should send it with `frame-ancestors 'none'` (clickjacking). A deployment step, not frontend code. |
 | 3.4 | Voice | listed | No audio connection exists. Opening one needs new `connect-src` and microphone permissions and the owner's approval (a data-processing agreement); the policy is deliberately not widened in advance. |
 
 ## 4. Unsafe code patterns (`tests/security-patterns.test.ts`)
@@ -64,9 +64,9 @@ Test runs for this pass (from the uppercase `E:\` path): unit suite 1278 tests i
 | # | Check | Result | Detail |
 |---|---|---|---|
 | 7.1 | What the spec says | listed | Sections 18 to 21 require a mandatory second factor for staff, step-up before sensitive actions and a device and session list for patients. They give NO idle duration for staff or patients. |
-| 7.2 | Idle sign-out mechanism | fixed (built, OFF) | There was none. It is built for both audiences: after the configured minutes with no pointer, key, touch or scroll activity (checked by clock, so a hidden tab is handled when it returns) the session ends like any other sign-out and the sign-in screen says so ("Please sign in again" for staff; a plain note for patients). The duration is a privacy and safety decision, so none is chosen: `IDLE_SIGN_OUT_MINUTES` in `src/shared/idle.ts` is `null` for both, and a test pins that. Backend request 34 asks the owner for the numbers. |
+| 7.2 | Idle sign-out mechanism | fixed (built, on by build setting) | There was none. It is built for both audiences, driven by two build-time settings with NO default (`CAREFLOW_IDLE_MINUTES_STAFF`, `CAREFLOW_IDLE_MINUTES_PATIENT`; unset or invalid = off). After the set minutes with no pointer, key, touch or scroll activity the session ends like any other sign-out (checked by clock, so a hidden tab is handled when it returns) and the sign-in screen says so. The demo and browser-test builds fill in LABELLED PLACEHOLDERS (15 staff, 10 patients; `idle-settings.txt` beside the build says so); the real values are the privacy owner's (pre-launch row 4). Request 34 is closed as decided. |
 | 7.3 | Step-up and second factor | pass | Built earlier: a mandatory authenticator code, enrolment at first sign-in, and a step-up prompt that shares one dialog among concurrent requests. |
-| 7.4 | Warning before an idle sign-out | listed | Not built: whether a person gets a "still there?" prompt, and how long it lasts, belongs with the duration the owner chooses. |
+| 7.4 | Warning before an idle sign-out | fixed | A "still there?" dialog shows for the last minute: one button, "Stay signed in", which starts the whole period again. Escape and stray clicks or keys do not dismiss it, so staying is a deliberate act. Axe-checked at 320, 768 and 1280 px in both languages. |
 
 ## 8. Other
 

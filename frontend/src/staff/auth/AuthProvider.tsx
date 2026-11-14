@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { createApi, type Api } from '../../shared/api/client';
-import { IDLE_SIGN_OUT_MINUTES, useIdleSignOut } from '../../shared/idle';
+import { IdleWarning } from '../../shared/IdleWarning';
+import { idleMinutes, useIdleSignOut } from '../../shared/idle';
 import { StepUpDialog } from '../components/StepUpDialog';
 import { SEND_ACTIVE_ROLE_HEADER, devSkipStaffMfa } from '../featureFlags';
 import { storeGrant } from '../activeRole';
@@ -98,8 +99,9 @@ export function AuthProvider({ port, apiBaseUrl, children }: { port: AuthPort; a
     [queryClient],
   );
 
-  // Off until the owner supplies an approved number of minutes (src/shared/idle.ts). When on, an idle session ends like any other.
-  useIdleSignOut(IDLE_SIGN_OUT_MINUTES.staff, phase !== 'signed-out' && phase !== 'loading', () => {
+  // Off unless the build set CAREFLOW_IDLE_MINUTES_STAFF (no default). When on, a "still there?" warning shows for the last minute, then an
+  // idle session ends like any other.
+  const idle = useIdleSignOut(idleMinutes('staff'), phase !== 'signed-out' && phase !== 'loading', () => {
     void port.signOut().then(() => endSession(true));
   });
 
@@ -173,6 +175,7 @@ export function AuthProvider({ port, apiBaseUrl, children }: { port: AuthPort; a
   return (
     <AuthContext.Provider value={value}>
       {children}
+      <IdleWarning secondsLeft={idle.secondsLeft} onStay={idle.stay} />
       {stepUp && (
         <StepUpDialog
           onSubmit={(code) => port.verifyTotp(stepUp.factorId, code)}

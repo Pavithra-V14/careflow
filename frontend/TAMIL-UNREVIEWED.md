@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-1732 of 1732 strings are unreviewed.
+1775 of 1775 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -913,6 +913,9 @@ Terms standardised: proposal, resolve / resolved.
 | `identity.unmergeConflict` | That could not be done. Refresh and try again. | அதைச் செய்ய முடியவில்லை. புதுப்பித்து மீண்டும் முயற்சிக்கவும். | ok |
 | `identity.unmergeTitle` | Unmerge these records? | இந்தப் பதிவுகளின் இணைப்பை நீக்கவா? | minor drift |
 | `identity.unmerged` | The link was broken. | இணைப்பு உடைக்கப்பட்டது. | minor drift |
+| `idle.body` | You will be signed out in {{n}} seconds because the page has not been used. Anything on the screen will be cleared. | பக்கம் பயன்படுத்தப்படாததால் {{n}} வினாடிகளில் நீங்கள் வெளியேற்றப்படுவீர்கள். திரையில் உள்ளவை அழிக்கப்படும். | ok |
+| `idle.stay` | Stay signed in | உள்நுழைந்தே இருங்கள் | ok |
+| `idle.title` | Are you still there? | நீங்கள் இன்னும் இருக்கிறீர்களா? | ok |
 | `landing.about.heading` | About the hospital | மருத்துவமனை பற்றி | ok |
 | `landing.account` | Account | கணக்கு | ok |
 | `landing.departments.heading` | Departments and doctors | துறைகள் மற்றும் மருத்துவர்கள் | ok |
@@ -1000,6 +1003,7 @@ Terms standardised: proposal, resolve / resolved.
 | `nav.label` | Sections | பிரிவுகள் | ok |
 | `nav.none` | No sections are available to your role. | உங்கள் பங்கிற்குக் கிடைக்கும் பிரிவுகள் எதுவும் இல்லை. | ok |
 | `nav.notes` | Notes | குறிப்புகள் | ok |
+| `nav.patientRequests` | Patient requests | நோயாளி கோரிக்கைகள் | ok |
 | `nav.patients` | Patients | நோயாளர்கள் | ok |
 | `nav.readiness` | Visit readiness | வருகைத் தயார்நிலை | ok |
 | `nav.referrals` | Referrals | பரிந்துரைகள் | ok |
@@ -1267,6 +1271,10 @@ Terms standardised: proposal, resolve / resolved.
 | `portal.notifications.title` | Your notices | உங்கள் அறிவிப்புகள் | ok |
 | `portal.notifications.unread` | Unread: {{n}} | படிக்காதவை: {{n}} | ok |
 | `portal.profile.choose` | Choose | தேர்ந்தெடுக்கவும் | ok |
+| `portal.profile.clear` | Clear | அழி | ok |
+| `portal.profile.clearBody` | This removes the saved value from your details. You can choose a new one at any time. | இது உங்கள் விவரங்களில் சேமிக்கப்பட்ட மதிப்பை நீக்கும். எப்போது வேண்டுமானாலும் புதியதைத் தேர்ந்தெடுக்கலாம். | ok |
+| `portal.profile.clearTitle` | Clear this detail? | இந்த விவரத்தை அழிக்கவா? | ok |
+| `portal.profile.cleared` | The detail was cleared. | விவரம் அழிக்கப்பட்டது. | ok |
 | `portal.profile.invalid` | That choice is not on the hospital's list. Nothing was saved. | அந்தத் தேர்வு மருத்துவமனையின் பட்டியலில் இல்லை. எதுவும் சேமிக்கப்படவில்லை. | ok |
 | `portal.profile.language` | Preferred language | விருப்பமான மொழி | ok |
 | `portal.profile.name` | Name on your record | உங்கள் பதிவில் உள்ள பெயர் | ok |
@@ -1358,6 +1366,41 @@ Terms standardised: proposal, resolve / resolved.
 | `portal.voice.workflow.readiness_item` | Answering an item on a visit checklist | வருகைக்கான தயார்நிலைப் பட்டியலில் ஒரு உருப்படிக்குப் பதில் சொல்ல | ok |
 | `portal.voice.workflow.slot_offer` | Replying to an appointment offer | சந்திப்பு வாய்ப்புக்குப் பதில் சொல்ல | ok |
 | `portal.voice.workflowLegend` | What is this session for? | இந்த அமர்வு எதற்காக? | ok |
+| `preq.action.acknowledged` | Mark as seen | பார்த்ததாகக் குறி | ok |
+| `preq.action.declined` | Decline | நிராகரி | ok |
+| `preq.action.resolved` | Resolve | தீர் | ok |
+| `preq.col.action` | Action | செயல் | ok |
+| `preq.col.erasure` | Erasure request | அழித்தல் கோரிக்கை | ok |
+| `preq.col.field` | Detail | விவரம் | ok |
+| `preq.col.kind` | Kind | வகை | ok |
+| `preq.col.patient` | Patient | நோயாளி | ok |
+| `preq.col.received` | Received | பெறப்பட்டது | ok |
+| `preq.col.request` | Request | கோரிக்கை | ok |
+| `preq.col.status` | Status | நிலை | ok |
+| `preq.confirmBody` | The patient is told with an in-app notice. It is recorded under your name. Nothing about the record is changed by this step. | நோயாளிக்குச் செயலிக்குள் அறிவிப்பு செல்லும். இது உங்கள் பெயரில் பதிவாகும். இந்தப் படியால் பதிவில் எதுவும் மாறாது. | ok |
+| `preq.confirmTitle.acknowledged` | Mark this request as seen? | இந்தக் கோரிக்கையைப் பார்த்ததாகக் குறிக்கவா? | ok |
+| `preq.confirmTitle.declined` | Decline this request? | இந்தக் கோரிக்கையை நிராகரிக்கவா? | ok |
+| `preq.confirmTitle.resolved` | Resolve this request? | இந்தக் கோரிக்கையைத் தீர்க்கவா? | ok |
+| `preq.empty` | There are no patient requests. | நோயாளி கோரிக்கைகள் எதுவும் இல்லை. | ok |
+| `preq.fields.date_of_birth` | Date of birth | பிறந்த தேதி | ok |
+| `preq.fields.name` | Name | பெயர் | ok |
+| `preq.fields.phone` | Phone number | தொலைபேசி எண் | ok |
+| `preq.gone` | This request was not found. Nothing was recorded. | இந்தக் கோரிக்கை கிடைக்கவில்லை. எதுவும் பதிவு செய்யப்படவில்லை. | ok |
+| `preq.invalid` | That change is not allowed from the current status. Nothing was recorded. | தற்போதைய நிலையிலிருந்து அந்த மாற்றம் அனுமதிக்கப்படவில்லை. எதுவும் பதிவு செய்யப்படவில்லை. | ok |
+| `preq.kinds.correction` | Correction | திருத்தம் | ok |
+| `preq.kinds.erasure` | Erasure | அழித்தல் | ok |
+| `preq.kinds.nominee` | Nominee | நியமனதாரர் | ok |
+| `preq.link` | Link an erasure request you started for this patient | இந்த நோயாளிக்கு நீங்கள் தொடங்கிய அழித்தல் கோரிக்கையை இணைக்கவும் | ok |
+| `preq.noLink` | Do not link one | எதையும் இணைக்க வேண்டாம் | ok |
+| `preq.note` | Requests patients made about their own record: erasure, a correction (the detail's name only, never a value) and a nominee. There is no text in a request. Changing a status tells the patient with an in-app notice and is recorded under your name. | நோயாளிகள் தங்கள் சொந்தப் பதிவைப் பற்றிச் செய்த கோரிக்கைகள்: அழித்தல், திருத்தம் (விவரத்தின் பெயர் மட்டும், மதிப்பு அல்ல) மற்றும் நியமனதாரர். கோரிக்கையில் உரை எதுவும் இல்லை. நிலையை மாற்றினால் நோயாளிக்குச் செயலிக்குள் அறிவிப்பு செல்லும்; அது உங்கள் பெயரில் பதிவாகும். | ok |
+| `preq.result.invalid_transition` | That change is not allowed from the current status. Nothing was recorded. | தற்போதைய நிலையிலிருந்து அந்த மாற்றம் அனுமதிக்கப்படவில்லை. எதுவும் பதிவு செய்யப்படவில்லை. | ok |
+| `preq.result.recorded` | Recorded. The patient has been told. | பதிவு செய்யப்பட்டது. நோயாளிக்குத் தெரிவிக்கப்பட்டது. | ok |
+| `preq.result.replay` | This was already recorded. | இது ஏற்கெனவே பதிவு செய்யப்பட்டது. | ok |
+| `preq.status.acknowledged` | Seen | பார்க்கப்பட்டது | ok |
+| `preq.status.declined` | Declined | ஏற்கப்படவில்லை | ok |
+| `preq.status.open` | Open | திறந்துள்ளது | ok |
+| `preq.status.resolved` | Resolved | தீர்க்கப்பட்டது | ok |
+| `preq.title` | Patient requests | நோயாளி கோரிக்கைகள் | ok |
 | `problem.conflict` | That conflicts with the current state. Refresh and try again. | இது தற்போதைய நிலையுடன் முரண்படுகிறது. புதுப்பித்து மீண்டும் முயற்சிக்கவும். | ok |
 | `problem.forbidden` | This is not available to your role. | இது உங்கள் பங்கிற்குக் கிடைக்காது. | ok |
 | `problem.invalid` | Check what you entered and try again. | நீங்கள் உள்ளிட்டதைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும். | ok |

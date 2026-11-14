@@ -9,6 +9,13 @@ interface PublicConfig {
   apiBaseUrl: string;
   /** False when a required value is missing; screens show an explicit "not configured" state. */
   configured: boolean;
+  /** Idle sign-out minutes per audience; null (off) unless a positive number was set at build time. There is no default. */
+  idleMinutes: { staff: number | null; patient: number | null };
+}
+
+function minutes(value: string): number | null {
+  const n = Number(value.trim());
+  return value.trim() !== '' && Number.isFinite(n) && n > 0 ? n : null;
 }
 
 export function readConfig(raw: ExposedEnv = __CAREFLOW_PUBLIC_CONFIG__, dev: boolean = import.meta.env.DEV): PublicConfig {
@@ -19,6 +26,7 @@ export function readConfig(raw: ExposedEnv = __CAREFLOW_PUBLIC_CONFIG__, dev: bo
     supabaseUrl,
     supabasePublishableKey,
     apiBaseUrl,
+    idleMinutes: { staff: minutes(raw.CAREFLOW_IDLE_MINUTES_STAFF), patient: minutes(raw.CAREFLOW_IDLE_MINUTES_PATIENT) },
     configured: Boolean(supabaseUrl && supabasePublishableKey && (dev || raw.CAREFLOW_API_BASE_URL)),
   };
 }

@@ -40,6 +40,7 @@ const SCREENS: Screen[] = [
   { name: 'identity duplicates', role: 'front_desk', hash: '/identity/duplicates', path: '/v1/staff/identity/possible-duplicates', empty: items },
   { name: 'alerts', role: 'nurse', hash: '/alerts', path: '/v1/staff/console/alerts', empty: items },
   { name: 'portal claims', role: 'front_desk', hash: '/claims', path: '/v1/staff/portal-claims', empty: () => json({ claims: [] }) },
+  { name: 'patient requests', role: 'front_desk', hash: '/requests', path: '/v1/staff/patient-requests', empty: () => json({ requests: [] }) },
   { name: 'care plans', role: 'doctor', hash: '/care/plans', path: '/v1/staff/care-plans', empty: () => json({ plans: [] }) },
   { name: 'accounts', role: 'admin', hash: '/admin/accounts', path: '/v1/staff/accounts', empty: items },
   { name: 'autonomy proposals', role: 'doctor', hash: '/admin/autonomy', path: '/v1/staff/console/autonomy/proposals', empty: () => json({ proposals: [] }), also: AUTONOMY_OTHERS('history') },

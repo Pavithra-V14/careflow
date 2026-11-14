@@ -82,6 +82,18 @@ function ProfileForm({ api, profile }: { api: Api; profile: Profile }) {
   );
   // Choosing "Choose" again is not a change: clearing a value is not offered, because the route does not say what null does (backend request 32).
   const changed = (sex !== (profile.sex ?? '') && sex !== '') || (language !== (profile.preferred_language ?? '') && language !== '');
+  // Clearing a saved value is its own action with its own confirmation: an explicit null removes it (backend request 32, answered).
+  const [clearing, setClearing] = useState<'sex' | 'preferred_language' | null>(null);
+  const clear = useIdempotentWrite(
+    (field: 'sex' | 'preferred_language', key) => unwrap(api.putProfile({ [field]: null }, { idempotencyKey: key })),
+    () => {
+      if (clearing === 'sex') setSex('');
+      else setLanguage('');
+      setClearing(null);
+      setNote(t('portal.profile.cleared'));
+      void queryClient.invalidateQueries({ queryKey: ['portal-profile'] });
+    },
+  );
   const touch = (set: (v: string) => void) => (v: string) => {
     set(v);
     setNote(null);
@@ -116,6 +128,11 @@ function ProfileForm({ api, profile }: { api: Api; profile: Profile }) {
           {profile.sex !== null && !profile.sex_words.includes(profile.sex) && <option value={profile.sex}>{profile.sex.replaceAll('_', ' ')}</option>}
         </select>
       )}
+      {profile.sex !== null && (
+        <button type="button" className="button button-secondary" aria-label={`${t('portal.profile.clear')}: ${t('portal.profile.sex')}`} onClick={() => setClearing('sex')}>
+          {t('portal.profile.clear')}
+        </button>
+      )}
       <label htmlFor="profile-language">{t('portal.profile.language')}</label>
       <select id="profile-language" value={language} onChange={(e) => touch(setLanguage)(e.target.value)}>
         <option value="">{t('portal.profile.choose')}</option>
@@ -125,6 +142,11 @@ function ProfileForm({ api, profile }: { api: Api; profile: Profile }) {
           </option>
         ))}
       </select>
+      {profile.preferred_language !== null && (
+        <button type="button" className="button button-secondary" aria-label={`${t('portal.profile.clear')}: ${t('portal.profile.language')}`} onClick={() => setClearing('preferred_language')}>
+          {t('portal.profile.clear')}
+        </button>
+      )}
       {note && <p role="status">{note}</p>}
       {save.error && (
         <WriteProblem problem={save.error} forbidden={t('portal.notAvailable')} calm={{ invalid: t('portal.profile.invalid'), unavailable: t('portal.profile.unavailable') }} />
@@ -132,6 +154,22 @@ function ProfileForm({ api, profile }: { api: Api; profile: Profile }) {
       <button type="submit" className="button button-primary" disabled={!changed || save.isPending}>
         {save.isPending ? t('common.working') : t('portal.profile.save')}
       </button>
+      {clearing && (
+        <ConfirmDialog
+          title={t('portal.profile.clearTitle')}
+          confirmLabel={t('portal.profile.clear')}
+          busy={clear.isPending}
+          onConfirm={() => clear.mutate(clearing)}
+          onCancel={() => {
+            clear.reset();
+            setClearing(null);
+          }}
+          status={<WriteProblem problem={clear.error} forbidden={t('portal.notAvailable')} calm={{ invalid: t('portal.profile.invalid'), unavailable: t('portal.profile.unavailable') }} />}
+        >
+          <p>{clearing === 'sex' ? t('portal.profile.sex') : t('portal.profile.language')}</p>
+          <p>{t('portal.profile.clearBody')}</p>
+        </ConfirmDialog>
+      )}
     </form>
   );
 }

@@ -50,6 +50,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "build": "vite build",
+    "build:demo": "vite build --mode demo",
     "gen:api": "node scripts/gen-api.mjs",
     "check:api": "node scripts/gen-api.mjs --check",
     "check:bundle": "node scripts/check-bundle-secrets.mjs dist",

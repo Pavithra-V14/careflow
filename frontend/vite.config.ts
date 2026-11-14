@@ -10,6 +10,14 @@ export default defineConfig(({ mode, command }) => {
   // Do not turn this into envPrefix: a broad prefix would expose every matching name.
   const exposed = pickExposedEnv(loadEnv(mode, process.cwd(), ''));
   assertNoSecretShapedValues(exposed);
+  // Idle sign-out minutes have NO default. Only the demo and the browser-test builds fill in LABELLED PLACEHOLDERS (15 staff, 10 patients);
+  // the real values are the privacy owner's (docs/frontend-live-checklist.md, pre-launch steps). A real build leaves them empty = off.
+  const placeholders = mode === 'demo' || mode === 'e2e';
+  const idlePlaceholder = placeholders && (exposed.CAREFLOW_IDLE_MINUTES_STAFF === '' || exposed.CAREFLOW_IDLE_MINUTES_PATIENT === '');
+  if (placeholders) {
+    exposed.CAREFLOW_IDLE_MINUTES_STAFF ||= '15';
+    exposed.CAREFLOW_IDLE_MINUTES_PATIENT ||= '10';
+  }
   const apiTarget = exposed.CAREFLOW_API_BASE_URL;
   const csp = buildCsp({ supabaseUrl: exposed.SUPABASE_URL, apiBaseUrl: exposed.CAREFLOW_API_BASE_URL });
   return {
@@ -23,6 +31,14 @@ export default defineConfig(({ mode, command }) => {
         transformIndexHtml: { order: 'post', handler: (html: string) => injectCspMeta(html, csp) },
         generateBundle() {
           this.emitFile({ type: 'asset', fileName: 'csp-policy.txt', source: csp + '\n' });
+          // A build with placeholder idle minutes says so in a file next to the policy, so nobody mistakes it for a real configuration.
+          if (idlePlaceholder) {
+            this.emitFile({
+              type: 'asset',
+              fileName: 'idle-settings.txt',
+              source: `PLACEHOLDER (${mode} build): idle sign-out is ${exposed.CAREFLOW_IDLE_MINUTES_STAFF} minutes for staff and ${exposed.CAREFLOW_IDLE_MINUTES_PATIENT} for patients. These are not the privacy owner's values. A real build sets CAREFLOW_IDLE_MINUTES_STAFF and CAREFLOW_IDLE_MINUTES_PATIENT.\n`,
+            });
+          }
         },
       },
     ],

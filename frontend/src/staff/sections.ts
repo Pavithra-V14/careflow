@@ -6,7 +6,7 @@
 // backend disagree, the backend wins and this list is the thing to fix. Roles below follow the route docstrings in
 // openapi.snapshot.json and docs/design/review-task-routes.md.
 
-type SectionId = 'referrals' | 'tasks' | 'patients' | 'identity' | 'scheduling' | 'alerts' | 'dashboard' | 'care' | 'admin' | 'readiness' | 'claims' | 'access' | 'notes' | 'audit' | 'erasure';
+type SectionId = 'referrals' | 'tasks' | 'patients' | 'identity' | 'scheduling' | 'alerts' | 'dashboard' | 'care' | 'admin' | 'readiness' | 'claims' | 'requests' | 'access' | 'notes' | 'audit' | 'erasure';
 
 export interface Section {
   id: SectionId;
@@ -28,6 +28,7 @@ const SECTIONS: readonly Section[] = [
   { id: 'readiness', path: '/readiness', labelKey: 'nav.readiness', roles: ['nurse', 'doctor'] },
   { id: 'notes', path: '/notes', labelKey: 'nav.notes', roles: ['nurse', 'doctor'] },
   { id: 'claims', path: '/claims', labelKey: 'nav.claims', roles: ['front_desk'] },
+  { id: 'requests', path: '/requests', labelKey: 'nav.patientRequests', roles: ['front_desk'] },
   { id: 'access', path: '/access', labelKey: 'nav.access', roles: ['front_desk', 'nurse', 'doctor', 'admin'] },
   { id: 'erasure', path: '/erasure', labelKey: 'nav.erasure', roles: ['front_desk'] },
   { id: 'audit', path: '/audit', labelKey: 'nav.audit', roles: ['auditor'] },

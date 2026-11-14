@@ -24,6 +24,7 @@ import { CarePage } from '../pages/CarePage';
 import { AdminPage } from '../pages/AdminPage';
 import { ReadinessPage } from '../pages/ReadinessPage';
 import { ClaimsPage } from '../pages/ClaimsPage';
+import { PatientRequestsPage } from '../pages/PatientRequestsPage';
 import { AccessPage } from '../pages/AccessPage';
 import { NotesPage } from '../pages/NotesPage';
 import { AuditPage } from '../pages/AuditPage';
@@ -110,6 +111,7 @@ export function Shell() {
           <Route path="/readiness" element={<ReadinessPage />} />
           <Route path="/notes" element={<NotesPage />} />
           <Route path="/claims" element={<ClaimsPage />} />
+          <Route path="/requests" element={<PatientRequestsPage />} />
           <Route path="/access" element={<AccessPage />} />
           <Route path="/erasure" element={<ErasurePage />} />
           <Route path="/audit" element={<AuditPage />} />
