@@ -8,8 +8,11 @@ Endpoint and shape (CONFIRMED only by the opt-in live check, `scripts/provider_l
 Usage is counted in CHARACTERS (the provider bills per character), carried in `Usage.input_tokens`; the row's price is therefore per 1,000 characters.
 
 Its daily spend ceiling is the same in-memory `RoleDailyCeilings` the gateway uses (role `translation`): reaching it raises `SpendCeilingReached`, which the caller turns into "original text + flag".
+When it is given a durable `SpendLedger` and the request names its clinic, every successful call is ALSO recorded there (role `translation`, migration 0086), so it counts toward the clinic's daily total. A call whose
+spend cannot be recorded is a FAILED call (a visible `TransientError`): a paid call is never left uncounted.
 """
 
+import uuid
 from decimal import Decimal
 from typing import Final
 
@@ -20,11 +23,17 @@ from careflow.adapters.provider_http import (
     post_json,
     refuse_redirecting_client,
 )
-from careflow.gateway import RoleDailyCeilings, SpendCeilingReached
+from careflow.gateway import (
+    RoleDailyCeilings,
+    SpendCeilingReached,
+    SpendEntry,
+    SpendLedger,
+)
 from careflow.ports import (
     AdapterResult,
     DataClass,
     PermanentError,
+    TransientError,
     TranslationRequest,
     TranslationResult,
     Usage,
@@ -40,7 +49,7 @@ LANGUAGE_CODES: Final = {"en": "en-IN", "ta": "ta-IN", "hi": "hi-IN"}  # the cod
 class SarvamTranslation:
     def __init__(
         self, api_key: str, *, timeout_seconds: float, price_per_1k_chars_usd: Decimal, ceilings: RoleDailyCeilings,
-        model_id: str = MODEL, http: httpx.AsyncClient | None = None,
+        model_id: str = MODEL, http: httpx.AsyncClient | None = None, ledger: SpendLedger | None = None, origin: str = "test",
     ) -> None:
         if not api_key or not api_key.strip():
             raise ValueError("a Sarvam API key is required")
@@ -52,6 +61,7 @@ class SarvamTranslation:
             refuse_redirecting_client(http)
         self._key, self._seconds, self._model, self._price, self._ceilings = api_key.strip(), timeout_seconds, model_id, price_per_1k_chars_usd, ceilings
         self._http = http or new_client(timeout_seconds)
+        self._ledger, self._origin = ledger, origin
 
     def accepts(self, request: TranslationRequest) -> bool:
         return request.data_class is DataClass.SYNTHETIC  # a third party: never patient text
@@ -75,4 +85,9 @@ class SarvamTranslation:
         if not isinstance(translated, str) or not translated.strip():
             raise PermanentError("the provider returned no translation")
         self._ceilings.add("translation", estimate)
+        if self._ledger is not None and request.clinic_id is not None:
+            try:
+                await self._ledger.record(SpendEntry(request.clinic_id, "translation", "sarvam", self._model, "ordinary", estimate, estimate, self._origin, f"sarvam-{uuid.uuid4()}"))
+            except Exception:  # noqa: BLE001 - whatever the ledger raised, a paid call that cannot be counted is a failed call, in fixed words
+                raise TransientError("the translation spend could not be recorded") from None
         return AdapterResult(TranslationResult(translated, request.source, request.target), Usage(len(request.text), len(translated)))

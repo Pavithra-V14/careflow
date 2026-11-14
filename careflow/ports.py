@@ -199,6 +199,7 @@ class TranslationRequest:
     target: str
     # REQUIRED, no default (like DecisionRequest): a request that does not say what it carries is not assumed to be synthetic. A hosted adapter refuses PHI itself.
     data_class: DataClass
+    clinic_id: uuid.UUID | None = None  # the clinic the spend belongs to; with it (and a ledger) the call is recorded in the durable spend ledger
 
 
 @dataclass(frozen=True)

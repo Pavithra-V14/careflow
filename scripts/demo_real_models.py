@@ -227,9 +227,8 @@ async def run(env: dict[str, str], clinic: uuid.UUID, *, kind: str, flagged: boo
             say("no proposal: the rules fired and the nurse task was raised, as designed")
         else:
             say(f"no proposal; the run ended as {status} (a hold or an alert for a person; see the review console)")
-        suggestion = await demo_real_models.suggest_translation(providers.translation)
-        cfg = provider_setup.load_provider_config()
-        say(line("4 draft", "real" if providers.translation is not None else "fake", suggestion.status, None, f"~${float(cfg.translation.price_per_1k_chars_usd) * suggestion.characters / 1000:.6f} (placeholder price)", f"{suggestion.characters} characters in; a suggestion, not stored, not sent"))
+        suggestion = await demo_real_models.suggest_translation(providers.translation, clinic_id=clinic)
+        say(line("4 draft", "real" if providers.translation is not None else "fake", suggestion.status, None, f"${ledger.cost('translation')[0]:.6f} recorded in the durable ledger (placeholder price)", f"{suggestion.characters} characters in; a suggestion, not stored, not sent"))
         for provider, why in providers.unavailable.items():
             say(f"{provider}: stayed fake: {why}")
         return 1 if not order_is_safe(events) else 0

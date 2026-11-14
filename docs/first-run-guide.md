@@ -110,6 +110,14 @@ Each prints `done: account <ID> holds <role> ...`. **The id printed for the `que
 
 Add `--dry-run` to any command to see what it would do without doing it.
 
+**The front desk supervisor** is a second role that ADDS to front desk (migration 0073). Give it to an account that ALREADY exists and already holds front desk in that clinic (no password is asked for an existing account; a new account, or one without front desk there, is refused):
+
+```powershell
+.\.venv\Scripts\python.exe scripts\seed_dev_staff.py --email <THE-FRONT-DESK-EMAIL> --role front_desk_supervisor --clinic-id <CLINIC-ID> --dry-run
+```
+
+The dry run prints the plan (`existing account <id> will hold ['front_desk', 'front_desk_supervisor']`). Run it again without `--dry-run` to grant it.
+
 ## 6. Seed the demo data, the consent text and the break-glass reasons (window A)
 
 ```powershell

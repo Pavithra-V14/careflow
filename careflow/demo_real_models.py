@@ -14,8 +14,8 @@ WHAT IT DOES, IN ORDER (the order is the safety design; CLAUDE.md rule 2):
   4. PROPOSAL. A clear letter reaches `DecisionRankedRetriever`: the fictional demo cards are the options and the DECISION model (Jev via OpenRouter, through the gateway) is asked which one fits the MASKED letter.
      Its answer only reorders the fictional card ids in a triage proposal that WAITS FOR A PERSON (the demo mode is shadow: nothing is applied, no training label is made from it). If the model cannot answer (no route, a spend
      ceiling, an error), the proposal keeps the fake order and a person still decides: an unknown answer is not a value.
-  5. DRAFT. `suggest_translation` turns the invented, labelled DEMO DRAFT sentence into Tamil with Sarvam as a suggestion. Nothing is stored or sent. (Sarvam sits behind the per-role daily ceiling, which is in memory, not
-     the durable ledger: the ledger's `role` check has no `translation` value, so that needs a migration and the owner's decision.)
+  5. DRAFT. `suggest_translation` turns the invented, labelled DEMO DRAFT sentence into Tamil with Sarvam as a suggestion. Nothing is stored or sent. Sarvam sits behind the per-role daily ceiling (in memory) AND, when it is
+     given the clinic, its spend is recorded in the durable ledger (role `translation`, migration 0086).
 
 HONEST LIMITS. "Synthetic" is a declared label, not an inspection (docs/design/hosted-providers.md). Jev's downstream model is not pinned, and its output is never evidence (`careflow.adapters.decision.NOT_EVIDENCE_ENGINES`). A
 document the demo seed wrote has NO stored file: with this switch on, running one ends in a visible failure (a dead-letter task), not in a made-up letter (only a canary's fabricated letter is still made up). The cards are
@@ -242,12 +242,12 @@ class TranslationSuggestion:
     label: str = DEMO_LABEL  # a SUGGESTION: nothing is stored or sent to a patient
 
 
-async def suggest_translation(translation: Any, *, text: str = DRAFT_EN, target: str = "ta") -> TranslationSuggestion:
+async def suggest_translation(translation: Any, *, text: str = DRAFT_EN, target: str = "ta", clinic_id: uuid.UUID | None = None) -> TranslationSuggestion:
     """Translate a draft with Sarvam as a SUGGESTION. `translation` is the built adapter or None. A missing adapter, a spend ceiling or a failure is a named status, never a crash and never invented text."""
     if translation is None:
         return TranslationSuggestion("unavailable", target)
     try:
-        answer = await translation.translate(TranslationRequest(text, "en", target, DataClass.SYNTHETIC))
+        answer = await translation.translate(TranslationRequest(text, "en", target, DataClass.SYNTHETIC, clinic_id))
     except SpendCeilingReached:
         return TranslationSuggestion("refused", target)
     except (TransientError, PermanentError):

@@ -25,6 +25,7 @@ from careflow.retrieval import retrieval_text
 
 _REFUSED: Final = "42501"
 _CONFLICT: Final = "23505"
+_OUT_OF_SEQUENCE: Final = "23514"  # migration 0087: a version more than one above the highest indexed
 
 
 class KnowledgeError(Exception):
@@ -80,8 +81,8 @@ class PgVectorStore:
             state = sqlstate(exc)
             if state == _REFUSED:
                 raise Refused("indexing is not permitted here") from None
-            if state == _CONFLICT:
-                raise VersionConflict("this card version already holds different content") from None
+            if state in (_CONFLICT, _OUT_OF_SEQUENCE):
+                raise VersionConflict("this card version holds different content, or is not the next version") from None
             raise
         return bool(row.o_created)
 

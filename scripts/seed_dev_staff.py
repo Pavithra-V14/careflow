@@ -6,7 +6,9 @@ Rules it enforces (owner decision 2026-10-28; docs/runbooks/staff-accounts.md):
   * it REFUSES to run unless the env file says CAREFLOW_ENV=dev AND CAREFLOW_PROFILE=demo (never ci, never clinical, never an unset profile);
   * it PROMPTS for the password (getpass, twice, at least 12 characters). The password is never an argument, never in the environment, never printed, never written to a file, and
     never logged; it goes only into the HTTPS request that creates the Auth user, and the variable is cleared afterwards;
-  * it creates only the roles a dev staff account needs: front_desk, nurse, doctor, admin, auditor, business_owner, or queue_worker;
+  * it creates only the roles a dev staff account needs: front_desk, front_desk_supervisor, nurse, doctor, admin, auditor, business_owner, or queue_worker;
+  * `front_desk_supervisor` (migration 0073) ADDS to front desk: it is granted only to an EXISTING account that already holds front_desk in THAT clinic (never to a new account, never alone), exactly as the database's own grant
+    function requires; no password is asked for an existing account;
   * ONE role per run, and a `queue_worker` account never gets another role (and no other account gets queue_worker): checked here before any write, and by the database trigger of
     migration 0024 as the last line of defence;
   * the account is tagged origin='test' (dev data is synthetic) unless --origin says otherwise;
@@ -26,7 +28,7 @@ import asyncpg
 import httpx
 from dotenv import dotenv_values
 
-ROLES = ("front_desk", "nurse", "doctor", "admin", "auditor", "business_owner", "queue_worker")
+ROLES = ("front_desk", "front_desk_supervisor", "nurse", "doctor", "admin", "auditor", "business_owner", "queue_worker")
 MIN_PASSWORD_CHARS = 12
 
 
@@ -41,10 +43,12 @@ def refuse_unless_dev_demo(env: dict) -> None:
         raise Refused(f"refusing: CAREFLOW_PROFILE is {env.get('CAREFLOW_PROFILE')!r}, this script runs in the demo profile only")
 
 
-def roles_after(existing: set[str], new: str) -> set[str]:
-    """The account's active roles after the grant, or Refused. queue_worker never coexists with any other role."""
+def roles_after(existing: set[str], new: str, at_clinic: set[str] | None = None) -> set[str]:
+    """The account's active roles after the grant, or Refused. queue_worker never coexists with any other role; front_desk_supervisor needs front_desk already held IN THIS CLINIC (`at_clinic`, the roles held there; defaults to `existing`)."""
     if new not in ROLES:
         raise Refused(f"refusing: {new!r} is not a role a dev staff account needs ({', '.join(ROLES)})")
+    if new == "front_desk_supervisor" and "front_desk" not in (existing if at_clinic is None else at_clinic):
+        raise Refused("refusing: front_desk_supervisor is granted only to an existing account that already holds front_desk in this clinic")
     if new == "queue_worker" and existing - {"queue_worker"}:
         raise Refused("refusing: this account already holds another role, and a queue_worker account holds no other role")
     if new != "queue_worker" and "queue_worker" in existing:
@@ -94,7 +98,8 @@ async def main() -> int:
                 "select a.id from iam.accounts a where a.id in (select id from auth.users where lower(email) = lower($1))", args.email
             )
             existing = set(await conn.fetchval("select coalesce(array_agg(role), '{}') from iam.staff_roles where account_id = $1 and revoked_at is null", account) or []) if account else set()
-            after = roles_after(existing, args.role)
+            here = set(await conn.fetchval("select coalesce(array_agg(role), '{}') from iam.staff_roles where account_id = $1 and clinic_id = $2 and revoked_at is null", account, args.clinic_id) or []) if account else set()
+            after = roles_after(existing, args.role, here)
             print(f"plan: {'existing account ' + str(account) if account else 'a new account'} will hold {sorted(after)} (clinic {args.clinic_id}, origin {args.origin})")
             if args.dry_run:
                 return 0

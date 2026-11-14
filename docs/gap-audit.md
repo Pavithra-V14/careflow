@@ -12,7 +12,7 @@ The full requirement-by-requirement review is `docs/spec-compliance.md`. Everyth
 | Voice channel (§23) | FAKE | Mic gating, scoped prompts, live-transcript monitor, tables and session route exist; no engine, so the route answers 503 and the interrupt gap is unmeasured |
 | `clinical` profile capability gaps (§2 table) | DECISION | Each row is closed by an approved route or accepted off for a demo-only launch; the sign-off sheet is blank (`phase10-pre-launch.md`) |
 | FHIR R4-shaped JSONB validated by a FHIR library (§3, §17.1) | NOT BUILT | `clinical.results` holds plain numbers, not FHIR resources, and no FHIR library is used. Vitals, medications, notes and resource history are not stored |
-| Vectors, per-clinic access control (§3, Appendix B) | BUILT (mechanism) / DEVIATION | pgvector in Postgres (migration 0085; append-only, forced RLS, definer functions filter by clinic, origin, model, current version and role) instead of Qdrant, by the owner's decision; live tests in CI; reviewer pass pending (the subagent hit the usage limit) |
+| Vectors, per-clinic access control (§3, Appendix B) | BUILT (mechanism) / DEVIATION | pgvector in Postgres (migration 0085; append-only, forced RLS, definer functions filter by clinic, origin, model, current version and role) instead of Qdrant, by the owner's decision; live tests in CI; reviewer pass done 2026-11-14, findings fixed forward in 0087 |
 | Two MCP servers (§3, §8) | FAKE | `scheduling` write tools and a read-only `clinical` server exist in process; the clinical server has no chart data to read |
 
 ## 5 and 6. Models, decision tier, gateway, caching

@@ -240,3 +240,61 @@ async def test_the_python_store_and_the_search_work_end_to_end_over_the_placehol
     nork = await search.search(db, w["a"], "test", "how is a nork ledger line corrected with the green pen")
     assert nork.retrieval.candidates[0].card_id == "demo-card-nork"
     assert content_hash("x") != content_hash("y")
+
+
+# ---- migration 0087: the reviewer's findings on 0085 ------------------------------------------------------------------------------------------------
+
+
+async def test_a_version_may_be_at_most_one_above_the_highest_indexed_and_is_capped(db):
+    w = await world(db)
+    assert await index(db, w, "worker", "card-a", 2, 0) == "23514"  # a first index is version 1
+    assert (await index(db, w, "worker", "card-a", 1, 0))[0][1] is True
+    assert await index(db, w, "worker", "card-a", 3, 1, sha="b" * 64) == "23514"  # a jump would retire version 1 for good
+    assert await index(db, w, "worker", "card-a", 2147483647, 1, sha="b" * 64) == "23514"
+    assert (await index(db, w, "worker", "card-a", 2, 1, sha="b" * 64))[0][1] is True
+    assert await owner(db, "insert into kb.card_embeddings (clinic_id, origin, card_id, card_version, model_id, audience, embedding, content_sha256, indexed_by, idempotency_key) "
+                           "values (:c, 'test', 'cap', 100001, 'm', array['nurse'], cast(:e as extensions.vector), :h, :p, 'cap-key')", c=w["a"], e=one_hot(1), h=SHA, p=w["worker"]) == "23514"  # the CHECK, even for the owner
+
+
+async def test_a_newer_version_under_one_model_retires_the_older_under_every_model(db):
+    w = await world(db)
+    await index(db, w, "worker", "card-a", 1, 3, model="model-a")
+    await index(db, w, "worker", "card-a", 1, 3, model="model-b")
+    assert [r[0] for r in await as_app(db, w["nurse"], SEARCH, c=w["a"], o="test", m="model-b", q=one_hot(3), n=5)] == ["card-a"]
+    await index(db, w, "worker", "card-a", 2, 4, model="model-a", sha="b" * 64)
+    assert await as_app(db, w["nurse"], SEARCH, c=w["a"], o="test", m="model-b", q=one_hot(3), n=5) == []  # version 1 under model B is retired by version 2 under model A
+    assert await as_app(db, w["nurse"], VERSIONS, c=w["a"], o="test", m="model-b", ids=["card-a"]) == []
+
+
+async def test_a_replay_with_a_different_audience_or_vector_is_a_conflict_and_the_audience_is_stored_normalised(db):
+    w = await world(db)
+    created = await index(db, w, "worker", "card-a", 1, 5, audience=("nurse", "doctor", "doctor"), key="k1")
+    assert created[0][1] is True
+    assert (await index(db, w, "worker", "card-a", 1, 5, audience=("doctor", "nurse"), key="k1"))[0][1] is False  # the same set in another order is the same
+    assert await index(db, w, "worker", "card-a", 1, 5, audience=("doctor",), key="k1") == "23505"  # a narrower audience is not silently ignored
+    assert await index(db, w, "worker", "card-a", 1, 5, audience=("doctor",), key="k2") == "23505"  # nor under another key
+    assert await index(db, w, "worker", "card-a", 1, 6, key="k3") == "23505"  # nor a different vector for the same version
+    assert await owner(db, "select audience from kb.card_embeddings where clinic_id = :c", c=w["a"]) == [(["doctor", "nurse"],)]
+
+
+async def test_a_zero_vector_and_oversized_arguments_are_refused_with_the_one_answer(db):
+    w = await world(db)
+    zero = vector_literal([0.0] * DIMENSIONS)
+    assert await as_app(db, w["worker"], INDEX, c=w["a"], o="test", id="zero", v=1, m=MODEL, a=["nurse"], e=zero, h=SHA, k="kz") == "42501"
+    await index(db, w, "worker", "card-a", 1, 0)
+    assert await as_app(db, w["nurse"], SEARCH, c=w["a"], o="test", m=MODEL, q=zero, n=5) == "42501"  # cosine against zero is NaN: never answered
+    assert await as_app(db, w["nurse"], SEARCH, c=w["a"], o="test", m=MODEL, q="[" + "0," * 20000 + "1]", n=5) == "42501"  # over the length cap, refused before it is parsed
+    assert await as_app(db, w["worker"], INDEX, c=w["a"], o="test", id="x" * 101, v=1, m=MODEL, a=["nurse"], e=one_hot(0), h=SHA, k="kl") == "42501"
+    assert await as_app(db, w["worker"], INDEX, c=w["a"], o="test", id="many", v=1, m=MODEL, a=["nurse"] * 6, e=one_hot(0), h=SHA, k="km") == "42501"
+    assert await as_app(db, w["doctor"], VERSIONS, c=w["a"], o="test", m=MODEL, ids=["x" * 101]) == "42501"
+
+
+async def test_the_functions_are_revoked_from_the_supabase_roles_and_the_owner_bypasses_row_level_security(db):
+    assert await owner(db, "select rolsuper or rolbypassrls from pg_roles where rolname = current_user") == [(True,)]  # the definer functions rely on it (0087 asserts it)
+    for role in ("anon", "authenticated", "service_role"):
+        if await owner(db, "select 1 from pg_roles where rolname = :r", r=role):
+            for fn in ("kb.index_card_embedding(uuid, text, text, integer, text, text[], text, text, text)", "kb.search_card_embeddings(uuid, text, text, text, integer)", "kb.current_card_versions(uuid, text, text, text[])"):
+                assert await owner(db, "select has_function_privilege(:r, :f, 'execute')", r=role, f=fn) == [(False,)], (role, fn)
+            assert await owner(db, "select has_table_privilege(:r, 'kb.card_embeddings', 'select')", r=role) == [(False,)]
+    assert await owner(db, "select has_table_privilege('careflow_app', 'kb.card_embeddings', 'select, insert, update, delete')") == [(False,)]
+    assert await owner(db, "select has_function_privilege('careflow_app', 'kb.search_card_embeddings(uuid, text, text, text, integer)', 'execute')") == [(True,)]
