@@ -1,0 +1,27 @@
+{
+  "scheduling": {
+    "offerReason": {
+      "not_configured": "Offers are not set up for this visit type yet.",
+      "no_ranked_candidates": "Nobody on the waitlist is ranked for this visit type."
+    },
+    "draft": {
+      "title": "Draft offer",
+      "notice": "This is a draft only. A person decides what happens next. Nothing is sent to anyone from this screen.",
+      "missing": "These settings are still to be provided by the clinic:",
+      "noCandidates": "There are no candidates.",
+      "col": {
+        "rank": "Rank",
+        "patient": "Patient",
+        "priority": "Priority",
+        "joined": "Joined the waitlist"
+      },
+      "text": "Draft text",
+      "forCandidate": "For the first ranked candidate:",
+      "holdLifetime": "Hold lasts",
+      "offerExpiry": "Offer expires after",
+      "seconds": "{{n}} seconds",
+      "rule": "Ordering rule",
+      "ruleRank": "By rank, then by the time they joined the waitlist"
+    }
+  }
+}

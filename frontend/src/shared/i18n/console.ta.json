@@ -251,8 +251,7 @@
       "degraded": "ஓரளவு கிடைக்கிறது",
       "unavailable": "இன்னும் அமைக்கப்படவில்லை"
     },
-    "offerCandidates": "பொருத்தமானவற்றின் விவரங்கள்",
-    "sendOffer": "வாய்ப்பை அனுப்பு"
+    "offerCandidates": "பொருத்தமானவற்றின் விவரங்கள்"
   },
   "placeholder": {
     "taskClose": "PLACEHOLDER - clinician to define how this kind of task is closed. It cannot be closed here.",

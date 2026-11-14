@@ -1,6 +1,6 @@
 # Tamil review pack (AI-prepared, NOT reviewed by a native speaker)
 
-Prepared 2026-11-14. Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 1614 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
+Prepared 2026-11-14. Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 1630 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
 
 **Regenerated 2026-11-14** by `npm run i18n:pack` from the strings as they are now, so it covers every current string, including the newest screens (patient voice setting, consent withdrawal and history, activating a staff account, withdrawing and retiring a red-flag rule). Each is written and second-passed in the same way and is just as unreviewed.
 
@@ -12,11 +12,11 @@ Meaning errors, register for patients, medical or safety terms, unsafe ambiguity
 - **B** wrong or odd meaning, wrong register, or an inconsistent term. Needs a native speaker.
 - **C** minor wording, or an administrator-only technical label.
 
-How it was done, honestly: all 1614 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and the strings that carry meaning (sentences of four words or more, and short strings that differ from their English) were read by an AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
+How it was done, honestly: all 1630 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and the strings that carry meaning (sentences of four words or more, and short strings that differ from their English) were read by an AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
 
-Automatic checks: 1614 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
+Automatic checks: 1630 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
 
-Notes: 64 grade A, 94 grade B, 47 grade C (205 rows with a note; some notes cover a group of similar strings, named in the note).
+Notes: 65 grade A, 100 grade B, 51 grade C (216 rows with a note; some notes cover a group of similar strings, named in the note).
 
 ## Part 1. Strings that most need a native speaker (safety first)
 
@@ -113,6 +113,7 @@ Notes: 64 grade A, 94 grade B, 47 grade C (205 rows with a note; some notes cove
 | Key | English | Tamil (AI-prepared) | Why a native speaker is needed |
 |---|---|---|---|
 | `alerts.already` | This alert was already acknowledged. The list will refresh. | இந்த எச்சரிக்கை ஏற்கனவே ஏற்கப்பட்டது. பட்டியல் புதுப்பிக்கப்படும். | Same verb issue as alerts.acknowledged. |
+| `scheduling.draft.notice` | This is a draft only. A person decides what happens next. Nothing is sent to anyone from this screen. | இது வரைவு மட்டுமே. அடுத்து என்ன நடக்கும் என்பதை ஒரு நபர் முடிவு செய்வார். இந்தத் திரையிலிருந்து யாருக்கும் எதுவும் அனுப்பப்படாது. | Says the draft sends nothing and a person decides. "ஒரு நபர் முடிவு செய்வார்" must read as a person decides, not that the system will decide later. A wrong reading could make staff think an offer went out. |
 
 ## Part 2. Meaning, register and term problems (grade B)
 
@@ -212,6 +213,12 @@ Notes: 64 grade A, 94 grade B, 47 grade C (205 rows with a note; some notes cove
 | `admin.rules.decisionWords.retire` | Retired it | நிறுத்தினார் | "நிறுத்தினார்" (he/she stopped it) as the decision word in a table of who decided; the honorific form is neutral, check it matches "ஒப்புக்கொண்டார்" and "நிராகரித்தார்". |
 | `staff.activate.confirmBody` | This activates your own account. Nobody else, an administrator included, can do it for you. | இது உங்கள் சொந்தக் கணக்கைச் செயல்படுத்தும். வேறு யாரும், நிர்வாகி உட்பட, உங்களுக்காக இதைச் செய்ய முடியாது. | "நிர்வாகி உட்பட" (an administrator included) states that nobody else can activate the account; check it reads as a fact, not a threat. |
 | `staff.activate.body` | If you were invited to the staff console and have not activated your account yet, you can do it here. It needs the authenticator code you signed in with. | பணியாளர் கன்சோலுக்கு உங்களுக்கு அழைப்பு வந்து, இன்னும் கணக்கைச் செயல்படுத்தவில்லை என்றால், இங்கே செய்யலாம். நீங்கள் உள்நுழைந்த அங்கீகார குறியீடு இதற்குத் தேவை. | Long sentence; check the invited-staff wording and that "அங்கீகார குறியீடு" is the word staff use for the authenticator code. |
+| `scheduling.draft.missing` | These settings are still to be provided by the clinic: | இந்த அமைப்புகளை மருத்துவமனை இன்னும் வழங்க வேண்டும்: | Introduces names of clinic settings still to be supplied; check "வழங்க வேண்டும்" reads as the clinic supplying them. |
+| `scheduling.offerReason.not_configured` | Offers are not set up for this visit type yet. | இந்தச் சந்திப்பு வகைக்கு வாய்ப்புகள் இன்னும் அமைக்கப்படவில்லை. | Check it reads as "not set up yet" and not as a fault. |
+| `scheduling.offerReason.no_ranked_candidates` | Nobody on the waitlist is ranked for this visit type. | இந்தச் சந்திப்பு வகைக்குக் காத்திருப்புப் பட்டியலில் தரவரிசைப்படுத்தப்பட்டவர் யாருமில்லை. | "தரவரிசைப்படுத்தப்பட்டவர்" (ranked person) is a long coined form; check how clinics say a waitlist ranking. |
+| `scheduling.draft.ruleRank` | By rank, then by the time they joined the waitlist | தரவரிசைப்படி, பிறகு பட்டியலில் சேர்ந்த நேரப்படி | States the only ordering rule: by rank, then by join time. Check the order of the two parts is clear. |
+| `scheduling.draft.holdLifetime` | Hold lasts | ஒதுக்கீடு நீடிக்கும் நேரம் | Label for how long a held slot is kept; "ஒதுக்கீடு" for hold may differ from the word used elsewhere. |
+| `scheduling.draft.offerExpiry` | Offer expires after | வாய்ப்பு காலாவதியாகும் நேரம் | Label for how long until an offer lapses. |
 
 ## Part 3. Minor wording and technical labels (grade C)
 
@@ -264,6 +271,10 @@ Notes: 64 grade A, 94 grade B, 47 grade C (205 rows with a note; some notes cove
 | `staff.activate.title` | Activate your account | உங்கள் கணக்கைச் செயல்படுத்துங்கள் | Heading. |
 | `staff.activate.confirmTitle` | Activate your account? | உங்கள் கணக்கைச் செயல்படுத்தவா? | Dialog title. |
 | `staff.activate.done` | Your account is activated. | உங்கள் கணக்கு செயல்படுத்தப்பட்டது. | Plain state line. |
+| `scheduling.draft.forCandidate` | For the first ranked candidate: | முதல் தரவரிசை பெற்றவருக்கு: | Short lead-in before a patient id. |
+| `scheduling.draft.seconds` | {{n}} seconds | {{n}} வினாடிகள் | Number plus the unit word. |
+| `scheduling.draft.title` | Draft offer | வரைவு வாய்ப்பு | Heading. |
+| `scheduling.draft.text` | Draft text | வரைவு உரை | Heading. |
 
 ## Part 4. Terms used inconsistently
 
@@ -272,16 +283,16 @@ Notes: 64 grade A, 94 grade B, 47 grade C (205 rows with a note; some notes cove
 | approve | ஒப்புக்கொள் (verb), ஒப்புதல் (noun) (62) | The verb also means "admit/agree"; some places use ஒப்புதல் அளி. |
 | acknowledge | ஏற்றுக்கொள் ("accept") (15) | Same verb as approve; the action only records that you have seen something. |
 | record / log / transcript / register | பதிவு everywhere (132) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
-| result / decision / end | முடிவு everywhere (66) | One word for a clinical result, a person's decision and an end time. |
+| result / decision / end | முடிவு everywhere (67) | One word for a clinical result, a person's decision and an end time. |
 | role | பங்கு (14) | Also means "share"; பணி is used for "task". |
 | merge / link / connect / attach | இணை / இணைப்பு (51) | Merging two patient records, linking a portal account, attaching a note: one word. |
 | red flag | சிவப்புக் கொடி (literal) (21) | Check the wording clinicians use. |
-| hold (a slot or a referral) | நிறுத்து / நிறுத்தம் (stop) and ஒதுக்கீடு (allocation) (52) | Two or three words for one idea. |
+| hold (a slot or a referral) | நிறுத்து / நிறுத்தம் (stop) and ஒதுக்கீடு (allocation) (53) | Two or three words for one idea. |
 | retire (a rule version) and withdraw (a draft) | நிறுத்து (retire) and திரும்பப் பெறு (withdraw) (63) | The rule screens need two different words; "withdraw" shares its Tamil with "revoke" and "cannot be undone". |
 | task / job | பணி (67) | A review task and a queued job share the word. |
 | approved (a status) and approve (a button) | அங்கீகரிக்கப்பட்டது (status) and ஒப்புக்கொள் (button) (14) | Two word families for one idea in the red-flag rule screens. |
-| patient | நோயாளி and நோயாளர் (74) | Two spellings. |
-| clinic / hospital | மருத்துவமனை (most strings), கிளினிக் (1) (55) | Check which is meant where. |
+| patient | நோயாளி and நோயாளர் (75) | Two spellings. |
+| clinic / hospital | மருத்துவமனை (most strings), கிளினிக் (1) (56) | Check which is meant where. |
 | front desk | வரவேற்பு மேசை and முன்பணியாளர் (8) | Two renderings. |
 | confidence | நம்பிக்கை (2) | Means belief or hope; the strings mean how sure the system is. |
 | sample (a sampled decision) | மாதிரி (5) | Reads as a laboratory specimen. |
@@ -332,7 +343,7 @@ These are the same in English and Tamil by design, and a Tamil-speaking patient 
 - `tasks.kind.screening_unassessable`
 - `tasks.kind.triage_proposal`
 
-## Part 7. All 1614 strings
+## Part 7. All 1630 strings
 
 Fill in the last column. Write **OK**, or write the full corrected Tamil (keep every {{placeholder}} exactly as it is). Leave a row empty if you have not looked at it.
 
@@ -1741,6 +1752,21 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `scheduling.createConflict` | That overlaps another slot of the same provider, or was already used for a different request. | இது அதே வழங்குநரின் மற்றொரு நேர இடத்துடன் மேலோங்குகிறது, அல்லது வேறொரு கோரிக்கைக்கு ஏற்கனவே பயன்படுத்தப்பட்டது. | B: "overlaps another slot" is rendered மேலோங்குகிறது, which means "prevails / rises above", not "overlaps". Meaning error in a scheduling message. | |
 | `scheduling.createInvalid` | Check what you entered. The times must be a real range. | நீங்கள் உள்ளிட்டதைச் சரிபார்க்கவும். நேரங்கள் சரியான வரம்பாக இருக்க வேண்டும். | no issue found | |
 | `scheduling.created` | Created. | உருவாக்கப்பட்டது. | no issue found | |
+| `scheduling.draft.col.joined` | Joined the waitlist | பட்டியலில் சேர்ந்த நேரம் | no issue found | |
+| `scheduling.draft.col.patient` | Patient | நோயாளி | no issue found | |
+| `scheduling.draft.col.priority` | Priority | முன்னுரிமை | no issue found | |
+| `scheduling.draft.col.rank` | Rank | தரவரிசை | no issue found | |
+| `scheduling.draft.forCandidate` | For the first ranked candidate: | முதல் தரவரிசை பெற்றவருக்கு: | C: Short lead-in before a patient id. | |
+| `scheduling.draft.holdLifetime` | Hold lasts | ஒதுக்கீடு நீடிக்கும் நேரம் | B: Label for how long a held slot is kept; "ஒதுக்கீடு" for hold may differ from the word used elsewhere. | |
+| `scheduling.draft.missing` | These settings are still to be provided by the clinic: | இந்த அமைப்புகளை மருத்துவமனை இன்னும் வழங்க வேண்டும்: | B: Introduces names of clinic settings still to be supplied; check "வழங்க வேண்டும்" reads as the clinic supplying them. | |
+| `scheduling.draft.noCandidates` | There are no candidates. | யாரும் இல்லை. | no issue found | |
+| `scheduling.draft.notice` | This is a draft only. A person decides what happens next. Nothing is sent to anyone from this screen. | இது வரைவு மட்டுமே. அடுத்து என்ன நடக்கும் என்பதை ஒரு நபர் முடிவு செய்வார். இந்தத் திரையிலிருந்து யாருக்கும் எதுவும் அனுப்பப்படாது. | A: Says the draft sends nothing and a person decides. "ஒரு நபர் முடிவு செய்வார்" must read as a person decides, not that the system will decide later. A wrong reading could make staff think an offer went out. | |
+| `scheduling.draft.offerExpiry` | Offer expires after | வாய்ப்பு காலாவதியாகும் நேரம் | B: Label for how long until an offer lapses. | |
+| `scheduling.draft.rule` | Ordering rule | வரிசைப்படுத்தும் விதி | no issue found | |
+| `scheduling.draft.ruleRank` | By rank, then by the time they joined the waitlist | தரவரிசைப்படி, பிறகு பட்டியலில் சேர்ந்த நேரப்படி | B: States the only ordering rule: by rank, then by join time. Check the order of the two parts is clear. | |
+| `scheduling.draft.seconds` | {{n}} seconds | {{n}} வினாடிகள் | C: Number plus the unit word. | |
+| `scheduling.draft.text` | Draft text | வரைவு உரை | C: Heading. | |
+| `scheduling.draft.title` | Draft offer | வரைவு வாய்ப்பு | C: Heading. | |
 | `scheduling.draftTitle` | Offer draft | வாய்ப்பு வரைவு | no issue found | |
 | `scheduling.durationMinutes` | Length in minutes | நீளம் (நிமிடங்களில்) | no issue found | |
 | `scheduling.empty` | Nothing to show. | காட்டுவதற்கு எதுவும் இல்லை. | no issue found | |
@@ -1784,6 +1810,8 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `scheduling.noWaitlist` | Nobody is waiting. | யாரும் காத்திருக்கவில்லை. | no issue found | |
 | `scheduling.offerCandidates` | Candidate details | பொருத்தமானவற்றின் விவரங்கள் | no issue found; earlier AI pass: corrected (meaning problem) | |
 | `scheduling.offerFilter` | Filter offers by state | நிலை வாரியாக வாய்ப்புகளை வடிகட்டு | no issue found | |
+| `scheduling.offerReason.no_ranked_candidates` | Nobody on the waitlist is ranked for this visit type. | இந்தச் சந்திப்பு வகைக்குக் காத்திருப்புப் பட்டியலில் தரவரிசைப்படுத்தப்பட்டவர் யாருமில்லை. | B: "தரவரிசைப்படுத்தப்பட்டவர்" (ranked person) is a long coined form; check how clinics say a waitlist ranking. | |
+| `scheduling.offerReason.not_configured` | Offers are not set up for this visit type yet. | இந்தச் சந்திப்பு வகைக்கு வாய்ப்புகள் இன்னும் அமைக்கப்படவில்லை. | B: Check it reads as "not set up yet" and not as a fault. | |
 | `scheduling.offerState.awaiting_delivery` | Awaiting delivery | வழங்கக் காத்திருக்கிறது | no issue found | |
 | `scheduling.offerState.booked` | Booked | முன்பதிவானது | no issue found | |
 | `scheduling.offerState.delivered` | Delivered | வழங்கப்பட்டது | no issue found | |
@@ -1795,7 +1823,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `scheduling.offerStatus.unavailable` | Not set up yet | இன்னும் அமைக்கப்படவில்லை | no issue found | |
 | `scheduling.offers` | Offers | வாய்ப்புகள் | no issue found; earlier AI pass flag (ambiguous): Means opportunities rather than offers. | |
 | `scheduling.offersListTitle` | Offers | வாய்ப்புகள் | no issue found | |
-| `scheduling.offersNote` | A read-only view of the draft offer. It is computed when you ask and stored nowhere. | வரைவு வாய்ப்பின் படிக்க-மட்டும் பார்வை. நீங்கள் கேட்கும்போது கணக்கிடப்படுகிறது, எங்கும் சேமிக்கப்படுவதில்லை. | no issue found | |
+| `scheduling.offersNote` | A read-only view of the draft offer. It is computed when you ask and stored nowhere. Nothing is sent. | வரைவு வாய்ப்பின் படிக்க-மட்டும் பார்வை. நீங்கள் கேட்கும்போது கணக்கிடப்படுகிறது, எங்கும் சேமிக்கப்படுவதில்லை. | no issue found | |
 | `scheduling.patientChosen` | Patient chosen | நோயாளி தேர்ந்தெடுக்கப்பட்டார் | no issue found | |
 | `scheduling.patientDob` | Date of birth | பிறந்த தேதி | no issue found | |
 | `scheduling.patientFind` | Find | தேடு | no issue found | |
@@ -1810,7 +1838,6 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `scheduling.releaseBody` | The slot is given back now. | நேரம் இப்போதே திருப்பி வழங்கப்படும். | no issue found | |
 | `scheduling.releaseConflict` | This hold was already booked or has expired. The list will refresh. | இந்த ஒதுக்கீடு ஏற்கனவே முன்பதிவாகிவிட்டது அல்லது காலாவதியானது. பட்டியல் புதுப்பிக்கப்படும். | no issue found | |
 | `scheduling.releaseTitle` | Release this hold? | இந்த ஒதுக்கீட்டை விடுவிக்கவா? | no issue found | |
-| `scheduling.sendOffer` | Send offer | வாய்ப்பை அனுப்பு | no issue found | |
 | `scheduling.showDraft` | Show draft | வரைவைக் காட்டு | no issue found | |
 | `scheduling.showInactive` | Show inactive | செயலற்றவற்றையும் காட்டு | no issue found | |
 | `scheduling.slotStatus.booked` | Booked | முன்பதிவானது | no issue found | |

@@ -161,30 +161,68 @@ describe('offers (read-only)', () => {
     expect(calls.some((c) => c.path.includes('/offers/draft'))).toBe(false);
   });
 
-  it.each([
-    ['ok', 'A draft is ready'],
-    ['empty', 'No candidates'],
-    ['degraded', 'Partly available'],
-    ['unavailable', 'Not set up yet'],
-  ])('shows status %s as "%s" and never the reason or the data', async (status, label) => {
+  const CAND = '33333333-3333-4333-8333-333333333333';
+  const body = (over: Record<string, unknown> = {}) => ({
+    status: 'ok',
+    reason: null,
+    missing_settings: null,
+    data: {
+      candidates: [
+        { joined_at: '2026-10-01T05:00:00Z', patient_id: CAND, priority_code: 'P1', rank: 1, waitlist_id: ID.hold },
+        { joined_at: '2026-10-02T05:00:00Z', patient_id: ID.patient, priority_code: 'P2', rank: 2, waitlist_id: ID.slot },
+      ],
+      draft: { candidate_patient_id: CAND, hold_lifetime_seconds: 900, offer_expiry_seconds: 86400, rule: 'rank_then_joined_at', template: 'Line one of the template.\nLine two: {slot}', waitlist_id: ID.hold },
+    },
+    ...over,
+  });
+  async function showDraft(response: Record<string, unknown>) {
     const user = userEvent.setup();
-    const draft: Routes[number] = ['get', '/v1/staff/scheduling/offers/draft', () => json({ status, reason: `not_configured: ${LEAK}`, data: [{ secret: LEAK }] })];
+    const draft: Routes[number] = ['get', '/v1/staff/scheduling/offers/draft', () => json(response)];
     const { calls } = await openConsole({ hash: '/scheduling/offers', routes: [types, draft] });
     await user.selectOptions(await screen.findByLabelText('Visit type'), ID.visitType);
     await user.click(screen.getByRole('button', { name: 'Show draft' }));
-    expect(await screen.findByText(label)).toBeInTheDocument();
-    expect(document.body.textContent).not.toContain(LEAK);
+    return calls;
+  }
+
+  it('shows the ranked candidates and the draft text exactly as sent, labelled a draft that sends nothing', async () => {
+    const calls = await showDraft(body());
+    expect(await screen.findByText('A draft is ready')).toBeInTheDocument();
+    expect(screen.getByText(/This is a draft only. A person decides/)).toBeInTheDocument();
+    const rows = within(screen.getByRole('table', { name: 'Candidate details' })).getAllByRole('row');
+    expect(rows).toHaveLength(3);
+    expect(within(rows[1]!).getByText('P1')).toBeInTheDocument();
+    expect(within(rows[2]!).getByText('P2')).toBeInTheDocument();
+    const quote = document.querySelector('blockquote') as HTMLElement;
+    expect(quote.textContent).toBe('Line one of the template.\nLine two: {slot}');
+    expect(screen.getByText('900 seconds')).toBeInTheDocument();
+    expect(screen.getByText('86,400 seconds')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Send offer' })).toBeNull();
+    expect(screen.queryByText('Coming soon')).toBeNull();
     const sent = calls.find((c) => c.path === '/v1/staff/scheduling/offers/draft');
     expect(sent?.query.get('clinic_id')).toBe(CLINIC_A);
     expect(sent?.query.get('visit_type_id')).toBe(ID.visitType);
     expect(writes(calls)).toHaveLength(0);
   });
 
-  it('marks candidate details and sending as Coming soon, with the send button disabled', async () => {
-    await openConsole({ hash: '/scheduling/offers', routes: [types] });
-    await screen.findByLabelText('Visit type');
-    expect(screen.getByRole('button', { name: 'Send offer' })).toBeDisabled();
-    expect(screen.getAllByText('Coming soon').length).toBeGreaterThanOrEqual(1);
+  it.each([
+    ['empty', 'No candidates', 'no_ranked_candidates', 'Nobody on the waitlist is ranked for this visit type.'],
+    ['unavailable', 'Not set up yet', 'not_configured', 'Offers are not set up for this visit type yet.'],
+  ])('shows status %s with its closed reason in fixed words', async (status, label, reason, words) => {
+    await showDraft({ status, reason, missing_settings: null, data: null });
+    expect(await screen.findByText(label)).toBeInTheDocument();
+    expect(screen.getByText(words)).toBeInTheDocument();
+    expect(screen.queryByRole('table')).toBeNull();
+  });
+
+  it('lists missing clinic settings by name, and shows a degraded draft', async () => {
+    await showDraft(body({ status: 'degraded', missing_settings: ['hold_lifetime_seconds'] }));
+    expect(await screen.findByText('Partly available')).toBeInTheDocument();
+    expect(screen.getByText('hold_lifetime_seconds')).toBeInTheDocument();
+  });
+
+  it('shows an empty candidate list without a table', async () => {
+    await showDraft(body({ data: { candidates: [], draft: body().data.draft } }));
+    expect(await screen.findByText('There are no candidates.')).toBeInTheDocument();
   });
 
   it('shows "not available to your role" for a 403 on the draft', async () => {

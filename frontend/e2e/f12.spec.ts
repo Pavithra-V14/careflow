@@ -17,6 +17,18 @@ for (const lang of LANGS) {
     await sweep(page, 'f12-backfill', lang);
   });
 
+  test(`the read-only offer draft [${lang}]: accessible at three widths, keyboard only`, async ({ page }) => {
+    await openConsole(page, 'front_desk', lang);
+    await go(page, '#/scheduling/offers', /S/);
+    await page.locator('#offer-visit-type').selectOption({ index: 1 });
+    await page.locator('#offer-visit-type').focus();
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#offer-draft-h')).toBeVisible();
+    await expect(page.locator('blockquote')).toContainText('PLACEHOLDER template line one.');
+    await sweep(page, 'f23-offer-draft', lang);
+  });
+
   test(`the offer run on an open slot, and its decision dialog [${lang}]`, async ({ page }) => {
     await openConsole(page, 'front_desk', lang);
     await go(page, '#/scheduling/slots', /\S/);

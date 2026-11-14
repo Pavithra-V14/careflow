@@ -62,13 +62,21 @@
   "upload": {
     "title": "Upload a document",
     "kind": "Kind of document",
-    "kinds": { "referral": "Referral", "report": "Report", "other": "Other" },
+    "kinds": {
+      "referral": "Referral",
+      "report": "Report",
+      "other": "Other"
+    },
     "file": "File",
     "fileHint": "PDF, JPEG or PNG.",
     "submit": "Upload",
     "done": "Uploaded",
     "scanStatus": "Scan status",
-    "scan": { "clean": "Clean", "not_scanned": "Not scanned yet", "not_checked": "Not checked" },
+    "scan": {
+      "clean": "Clean",
+      "not_scanned": "Not scanned yet",
+      "not_checked": "Not checked"
+    },
     "notScannedNote": "This file has not been scanned yet.",
     "notCheckedNote": "This file was not checked.",
     "another": "Upload another",
@@ -80,13 +88,24 @@
       "type": "Only PDF, JPEG or PNG files can be uploaded.",
       "empty": "That file is empty."
     },
-    "phase": { "preparing": "Preparing the upload…", "sending": "Sending the file…", "checking": "Checking the file…" }
+    "phase": {
+      "preparing": "Preparing the upload…",
+      "sending": "Sending the file…",
+      "checking": "Checking the file…"
+    }
   },
   "tasks": {
     "title": "Tasks",
     "filter": "Show tasks that are",
-    "status": { "open": "Open", "acknowledged": "Acknowledged", "resolved": "Resolved" },
-    "priority": { "immediate": "Immediate", "standard": "Standard" },
+    "status": {
+      "open": "Open",
+      "acknowledged": "Acknowledged",
+      "resolved": "Resolved"
+    },
+    "priority": {
+      "immediate": "Immediate",
+      "standard": "Standard"
+    },
     "kind": {
       "red_flag": "Red flag",
       "screening_unassessable": "Unassessable",
@@ -100,7 +119,14 @@
     "open": "Open task",
     "urgent": "Urgent",
     "urgentNote": "Shown first because of its kind or priority.",
-    "col": { "task": "Task", "kind": "Kind", "priority": "Priority", "status": "Status", "assigned": "Assigned to", "created": "Created" },
+    "col": {
+      "task": "Task",
+      "kind": "Kind",
+      "priority": "Priority",
+      "status": "Status",
+      "assigned": "Assigned to",
+      "created": "Created"
+    },
     "detail": "Task",
     "back": "Back to tasks",
     "acknowledgedBy": "Acknowledged by",
@@ -137,11 +163,23 @@
     "labelsWithheld": "Labels are withheld for these results.",
     "withheld": "Withheld",
     "truncated": "More matches exist than are shown.",
-    "col": { "record": "Record", "label": "Label", "verified": "Verified", "via": "Registered via", "matched": "Matched on" },
+    "col": {
+      "record": "Record",
+      "label": "Label",
+      "verified": "Verified",
+      "via": "Registered via",
+      "matched": "Matched on"
+    },
     "verified": "Verified",
     "notVerified": "Not verified",
-    "via": { "front_desk": "Front desk", "referral_worker": "Referral worker" },
-    "matchedKind": { "name_dob": "Name and date of birth", "phone": "Phone" },
+    "via": {
+      "front_desk": "Front desk",
+      "referral_worker": "Referral worker"
+    },
+    "matchedKind": {
+      "name_dob": "Name and date of birth",
+      "phone": "Phone"
+    },
     "rateLimited": "Too many searches. Wait a moment and try again.",
     "unavailable": "Search is not available right now. Try again later.",
     "invalidInput": "Check the date of birth and phone number.",
@@ -153,7 +191,10 @@
     "back": "Back to patients",
     "latestEvent": "Latest identity event",
     "noEvent": "None",
-    "event": { "confirm": "Confirmed", "revoke": "Confirmation revoked" },
+    "event": {
+      "confirm": "Confirmed",
+      "revoke": "Confirmation revoked"
+    },
     "mergedInto": "This record was merged into another.",
     "openMerged": "Open that record",
     "confirm": "Confirm identity",
@@ -190,18 +231,27 @@
       "visitType": "Visit type"
     },
     "holdFilter": "Show holds that are",
-    "holdStatus": { "active": "Active", "released": "Released", "expired": "Expired", "converted": "Booked" },
+    "holdStatus": {
+      "active": "Active",
+      "released": "Released",
+      "expired": "Expired",
+      "converted": "Booked"
+    },
     "noHolds": "There are no holds to show.",
     "release": "Release",
     "releaseTitle": "Release this hold?",
     "releaseBody": "The slot is given back now.",
     "releaseConflict": "This hold was already booked or has expired. The list will refresh.",
-    "offersNote": "A read-only view of the draft offer. It is computed when you ask and stored nowhere.",
+    "offersNote": "A read-only view of the draft offer. It is computed when you ask and stored nowhere. Nothing is sent.",
     "choose": "Choose a visit type",
     "showDraft": "Show draft",
-    "offerStatus": { "ok": "A draft is ready", "empty": "No candidates", "degraded": "Partly available", "unavailable": "Not set up yet" },
-    "offerCandidates": "Candidate details",
-    "sendOffer": "Send offer"
+    "offerStatus": {
+      "ok": "A draft is ready",
+      "empty": "No candidates",
+      "degraded": "Partly available",
+      "unavailable": "Not set up yet"
+    },
+    "offerCandidates": "Candidate details"
   },
   "placeholder": {
     "taskClose": "PLACEHOLDER - clinician to define how this kind of task is closed. It cannot be closed here.",
