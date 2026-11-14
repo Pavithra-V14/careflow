@@ -229,3 +229,9 @@ The doctor walk read what the reviewer view shows on four referrals (file `front
 3. The reviewer-view observation is now part of the walk, so "shown exactly as sent" can be read from a real answer.
 
 No defect was found in the screens themselves: 0 schema mismatches in 397 calls across the six walks, and every refusal was a role the walk visits directly or a database-level second-factor check.
+
+## Nurse walk 3 (14 Nov 2026): medications exercised
+
+Run at the user's request. Nurse (pavithra.v2022ece@sece.ac.in), password only, read-only, 83 calls, 0 schema mismatches. The walk now opened the first patient record it had seen on a referral: the medications panel was shown (no merged-away notice) and `GET /v1/staff/medications` answered **200 with 0 schema issues**. Medications: **pass** (read only; recording, correcting and stopping were not exercised, they are writes). This also confirms the earlier "not exercised" cause: the record opened from a merge was a merged-away one, which hides the panel.
+
+Still open: re-run the doctor referral review walk once the backend's decision stage makes demo proposals carry an engine, confidence, rule and probabilities (the user will say when). The front desk supervisor walk waits for the role to be granted. Patient request status buttons stay as they are (no `allowed_next` from the backend).
