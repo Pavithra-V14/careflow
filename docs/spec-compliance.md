@@ -136,7 +136,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 | 11.3 | PII masking, pattern recognizers only; minimisation after identity extraction | BUILT (heuristic) | Presidio itself is a new dependency; not wired to a real retriever | `careflow/text_guard.py` |
 | 11.4 | Scope enforcement: clinical questions go to a human; the agent never answers | BUILT (rule routes) | The model classifier is a port | `careflow/reply_interpretation.py`, `voice.py` |
 | 11.5 | Upload size and type allowlists; malware scan before real use | BUILT / FAKE | Allowlists built; ClamAV client and rescan worker built, no daemon installed or wired; real uploads refused outside demo | `careflow/documents.py`, `malware.py`, `scanner_worker.py` |
-| 11.5b | Per-account message rate limit | NOT BUILT | No patient messaging routes exist yet to limit | `docs/frontend-backend-requests.md` item 29 |
+| 11.5b | Per-account message rate limit | BUILT (staff-written messages) | A required setting `CAREFLOW_MESSAGE_MAX_PER_MINUTE` (no default: unset means no limit, stated in the code) limits the two routes that write a patient-facing message (offer send, recorded reply) with a fixed 429; patient-sent messages wait on the patient messaging routes (frontend request 29) | `careflow/app.py` (`message_limiter`), `tests/test_message_limit.py` |
 | 11.6 | Voice: the same rules on the live transcript, in parallel; interrupt to the fixed safety response; nurse task | BUILT (mechanism) | The interrupt gap is unmeasured (no engine) | `careflow/voice.py` (`StreamEvaluator` in `rules.py`) |
 
 ## 12. Human approval (spec 12)
@@ -169,7 +169,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 | 14.2 | pytest gates; DeepEval; Langfuse experiments | BUILT (pytest) / NOT BUILT | DeepEval and Langfuse are new external dependencies | `careflow/evalmetrics.py` |
 | 14.3 | Hard gates including red-flag recall 100% | BUILT (runner) / DECISION | The runner scores the real rule engine and writes evidence; bars, cases and rules are clinician-owned | `careflow/eval_runner.py`, `scripts/gold_run.py`, `gates.py` |
 | 14.3b | Threshold gates with a variance band (mean minus 2 SD over 3 runs) | BUILT | Bars are required settings | `careflow/evalmetrics.py` |
-| 14.4 | Metric source discipline; grounding rate; latency in three parts; two reason codes for escalation accuracy | BUILT (partial) | Grounding-rate function added; three-part latency and the two reason codes need measured data | `careflow/spend_policy.py`, `metrics_catalog.py` |
+| 14.4 | Metric source discipline; grounding rate; latency in three parts; two reason codes for escalation accuracy | BUILT (partial) | Grounding-rate and three-part latency functions built; the two escalation reason codes need a data design (a new column on reviewed tasks) and measured data | `careflow/spend_policy.py`, `metrics_catalog.py` |
 | 14.5 | Business KPIs | NOT BUILT | Needs a baseline and owner-set targets | `docs/gap-audit.md` |
 | 14.6 | Pre-deployment go/no-go and scorecard | UNMEASURED | The checker is built; every evidence cell is empty, so the answer is NO-GO | `careflow/predeploy.py`, `gates.py`, `drills.py` |
 | 14.7 | Automatic demotion; promotion evidence | BUILT (demotion) / UNMEASURED | Promotion needs months of data | `careflow/autonomy.py`, `reviewer_stats.py` |
@@ -179,7 +179,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 | Req | Requirement | Status | Reason | Where |
 |---|---|---|---|---|
 | 15.1 | Cost canvas from real metrics, actual and shadow columns | BUILT | F and the total are owner-null; fewer than 7 days reads insufficient data | `careflow/cost_canvas.py` |
-| 15.2 | Job cap, clinic daily cap, soft threshold at 80% shedding decorative features in order, safety never limited | BUILT | The plan function is built; the gateway applies the caps; the shedding is not yet wired to a live feature switch | `careflow/spend_policy.py`, `gateway.py`, `budget.py` |
+| 15.2 | Job cap, clinic daily cap, soft threshold at 80% shedding decorative features in order, safety never limited | BUILT | The gateway applies the caps and reports the plan (`Gateway.feature_plan`); the features it names (shortlist ensemble, reranker, judge sampling) have no live callers yet because retrieval and judging are fakes | `careflow/spend_policy.py`, `gateway.py`, `budget.py` |
 | 15.2b | Durable spend ledger | BUILT | Worker ledger (0016) and the session ledger (0075) | `careflow/spend.py`, `session_spend.py` |
 | 15.3 | Cheap-then-expensive cascade, billed per failed page | BUILT (decision tier) / NOT BUILT | Only the gateway cascade for `decision` | `careflow/gateway.py` |
 | 15.4 | Attribution tags, failure multiplier, weekly tail review to the admin | BUILT (functions) / NOT BUILT (delivery) | Multiplier and tail selection built; the weekly Slack summary needs the chat sender | `careflow/spend_policy.py`, `cost_canvas.py` |
@@ -341,6 +341,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 ## Built in this review
 
 - `careflow/spend_policy.py`: the 80% soft-threshold plan with the spec's order and the never-limited safety path (15.2), the failure multiplier and the weekly tail selection (15.4), the grounding rate (14.4), the model-deprecation comparison that never reads an unreadable listing as "vanished" (5.3), and request-scoped memoisation of tool reads (6.2). Tests: `tests/test_spend_policy.py`.
+- The per-account message rate limit on the two staff routes that write a patient-facing message (11.5), the three-part latency function (14.4) and the gateway's feature plan (15.2).
 - The typed offer-draft response (`OfferDraftOut`: a closed reason word, the missing settings in their own field, typed data) for the frontend request about typed envelopes (8.3).
 
 ## What remains and why (the short list)
