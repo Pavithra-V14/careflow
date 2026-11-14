@@ -102,5 +102,33 @@ Actors considered: a curious or malicious staff member; a staff member of anothe
 | Expired voice words stay in the database | The worker tick deletes expired chunks through a worker-only definer function (one audit row per run that deleted something) | the purge needs the retention setting; other agent working state has no scheduled purge yet |
 | A note is edited | Append-only, an addendum is a new row; the guard allows only erase and re-encryption | none |
 
+## 11. Red-flag rules: authoring, approval, withdrawal, retirement (0072, 0076, 0077, 0078)
+| Threat | Control | Residual |
+|---|---|---|
+| A draft or unreviewed rule screens real patients (or its absence is read as safe) | `kb.active_red_flag_rules` admits drafts only to the demo profile; an unknown profile is `clinical`; a profile with no usable rule is `unassessable`, never `clear`; a rule that cannot compile blocks a clear | the demo profile counts drafts (synthetic data only) |
+| One person approves or retires a rule | Approval needs two different doctors who are not the author (ledger rows, a guard that refuses `approved` without them for the owner too); retirement needs two different doctors; every step needs a second factor re-checked in the database; one reject closes a draft | one human with TWO doctor accounts (checklist 58a); the owner or a migrator with direct database access can still INSERT an already-approved row (the insert is not guarded; update, delete and truncate are) |
+| A rule's content is edited after review | Content (phrases, token sets, patterns, metadata, code, version) is immutable for everyone; the reviewed content is hashed into the ledger | none known |
+| A slow or hostile pattern stalls screening | Authoring writes only literal phrases and token sets (no regular expression, bounded counts and lengths, no invisible or unusual space characters); old `patterns` rows come only from the migrator | a migrator-loaded pattern still has no timeout |
+| A newer draft or withdrawn version switches off an approved rule | Drafts and `withdrawn` rows never shadow an approved version (SQL and Python agree); only a RETIRED newest version switches a rule off, and that takes two doctors | a retired newest version intentionally withdraws the whole rule code |
+| The app runs against an older database | The app refuses to start unless the catalog holds the objects its code needs (`careflow/schema_check.py`) | the check names objects, not every migration |
+
+## 12. The front-desk supervisor role and the revoke alert (0073)
+| Threat | Control | Residual |
+|---|---|---|
+| The new role widens access | It only ADDS to front desk: grantable to someone who already holds front desk, revoked with it, never at invitation, and it sees one kind of task assigned to it | none beyond front desk's own |
+| An alert is forged | The insert policy binds an alert to a real revoke event written by the same person (count one, admin audience) | a front-desk person can raise an alert only for their own revoke |
+| The staff role functions lose a check on re-issue | The migration copies them with the second-factor check that 0065 patched in and asserts it | none |
+
+## 13. Medications (0074) and the session spend ledger (0075)
+| Threat | Control | Residual |
+|---|---|---|
+| A medication list survives erasure | The audited two-person erasure deletes a patient's rows (the guard allows a delete only for an erased patient) | the privacy owner's written confirmation (checklist 79) |
+| A medication row is rewritten | Append-only for everyone (ENABLE ALWAYS guards); a correction or stop is a new superseding row; restrictive second-factor policies on read and write | none |
+| A session call's spend is under-recorded or starves a clinic's ceiling | A definer function with an owner-set per-call cap and forced role and class; the ledger is append-only | a person with a direct session could under-record or fill the day (stated residual of 0016) |
+| An unknown cap is read as no cap | No limit row means every session spend is refused | none |
+
+## 14. Dependencies
+`pip-audit` (the pinned CI job) was re-run on 2026-11-13: one advisory, `opentelemetry-api` 1.45.1 (GHSA-mf5v-w3w3-f6cg, fixed in 1.45.2); the lock was raised to 1.45.2. The job is still report-only (checklist 69).
+
 ## What this note does NOT claim
 That the system is secure against a compromised API process, a stolen database password or a hostile operator. Those depend on hosting, secrets management and monitoring that do not exist yet (items 26 to 28). The review of all migrations (`rls-security-reviewer`) and the spec review are separate passes; their findings are recorded where they are reported, not here.

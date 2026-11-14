@@ -205,6 +205,8 @@ def select_active_versions(rows: list[Mapping[str, Any]], profile: Profile) -> t
     allowed = USABLE_STATUSES[profile]
     by_key: dict[tuple[Any, str], list[Mapping[str, Any]]] = {}
     for row in rows:
+        if row["status"] == "withdrawn":  # a withdrawn DRAFT (0077) is out of the way: it neither counts nor withdraws an older approved version
+            continue
         by_key.setdefault((row["clinic_id"], row["rule_code"]), []).append(row)
     chosen, drafts_passed = [], 0
     for versions in by_key.values():

@@ -148,7 +148,7 @@ async def _conn():
     await tx.start()
     try:
         n = await conn.fetchval(
-            "select count(*) from kb.red_flag_rules where origin = 'test' and status = 'approved' and (cardinality(phrases) > 0 or cardinality(patterns) > 0)"
+            "select count(*) from kb.red_flag_rules where origin = 'test' and status = 'approved' and (cardinality(phrases) > 0 or cardinality(patterns) > 0 or jsonb_array_length(token_sets) > 0)"
         )
         if n:  # read-only precondition; nothing is deleted
             pytest.fail(f"This suite assumes the database holds NO committed approved origin='test' red-flag rule with criteria (it inserts its own inside a rolled-back transaction); found {n}. Such a rule changes what screenings and rule-set hashes the tests expect. Nothing was deleted: an engineer with the migrator credential must retire or remove those rules deliberately, then re-run.", pytrace=False)
@@ -1053,10 +1053,10 @@ async def test_the_sql_rule_selector_and_hash_match_the_python_ones(db, profile)
     await add_rule(db, w, "empty_rule")                                              # in force, no criteria
     await add_rule(db, w, "broken", patterns=["("])                                  # in force, the engine cannot compile it
     rows_ = [dict(r) for r in await db.fetch(
-        "select id, clinic_id, rule_code, version_id, status, phrases, patterns from kb.red_flag_rules where origin = 'test' and (clinic_id = $1 or clinic_id is null)", w.a)]
+        "select id, clinic_id, rule_code, version_id, status, phrases, patterns, token_sets from kb.red_flag_rules where origin = 'test' and (clinic_id = $1 or clinic_id is null)", w.a)]
     chosen, _ = rules.select_active_versions(rows_, profile)
     expected_hash = rules.rule_set_hash(chosen)
-    expected_count = sum(1 for r in chosen if r["phrases"] or r["patterns"])
+    expected_count = sum(1 for r in chosen if r["phrases"] or r["patterns"] or json.loads(r["token_sets"]))
     msg = w.messages["care"]
     await record(db, w, "nurse_a", msg, profile=profile)
     (s,) = await screenings(db, msg)

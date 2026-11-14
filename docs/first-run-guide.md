@@ -40,6 +40,8 @@ It prints how many migrations are pending and their file names, in order (for ex
 
 You should see `N migration(s) applied` and the same names. **About a gap you may have seen (0036, then 0038):** migration `0037_front_desk_scheduling_checkpoints.sql` is in the repository (it was added together with 0038). The runner applies pending files strictly in number order and refuses to run if a lower number is still pending after a higher one was applied, so a correct list never skips a number. If your list ever shows 0036 and 0038 but not 0037, paste me the whole list.
 
+**Migrate BEFORE you start the app.** The app checks at startup that the database has the migrations its code needs (through 0078 today) and **refuses to start** with a plain message naming the missing migration if it does not (`the database has not applied migration 0076 ... run the migrations (python -m careflow.migrate) before starting the app`). Run the migrations, then start the app; never the other way round.
+
 If you see an error mentioning *out of order*, *edited after it was applied* or *missing*, **stop** and paste me the whole message (it contains no secret).
 
 ## 3. The `.env` file (names only)

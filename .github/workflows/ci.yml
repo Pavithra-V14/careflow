@@ -69,7 +69,7 @@ jobs:
 
       - name: Scan git history for secrets
         # Exact false positives are listed by fingerprint in .gitleaksignore; anything else fails the build.
-        run: ./gitleaks git --redact --no-banner --exit-code 1 .
+        run: ./gitleaks git --redact -v --no-banner --exit-code 1 .  # -v prints the finding (rule, file, line, fingerprint) with the secret itself redacted
 
   # The fast gate: lint, the OpenAPI snapshot and every test that needs no database or credentials. It gets NO repository secrets, so a
   # test that quietly depends on one fails here. Zero skips, like the live job.
@@ -257,6 +257,7 @@ jobs:
               tests/test_medications_db_live.py
               tests/test_session_spend_db_live.py
               tests/test_rule_authoring_db_live.py
+              tests/test_e2e_demo_flow_live.py
           - shard: 8  # PART 3 of 3 of the header dimension, plus the Phase 11 database files (migrations 0047 to 0050)
             matrix_part: "3/4"
             files: >-

@@ -3274,6 +3274,7 @@ def rule_decision_cases(ids) -> list[tuple]:
     cases = [_case(ids, f"{p} cannot decide a rule version that does not exist", p, 404, path(), json={"decision": "approve"}, body=_fixed(404)) for p in ids.people]
     cases += [
         _case(ids, "an unknown decision is rejected", "doctor_a", 422, path(), json={"decision": "maybe"}, body=_fixed(422)),
+        _case(ids, "no doctor can retire a version that does not exist", "doctor_a", 404, path(), json={"decision": "retire"}, body=_fixed(404)),
         _case(ids, "an extra field is rejected", "doctor_a", 422, path(), json={"decision": "approve", "extra": 1}, body=_fixed(422)),
         _case(ids, "missing X-Idempotency-Key is rejected", "doctor_a", 422, path(), json={"decision": "approve"}, key=None, body=_fixed(422)),
     ]
@@ -3331,7 +3332,7 @@ def rule_author_cases(ids) -> list[tuple]:
     cases += [
         _case(ids, "the same key with a different draft is a conflict", "doctor_a", 409, RULES, json=body(phrases=["zzother"]), key=key, body=lambda b: b == {"detail": "this idempotency key was already used by a different request"}),
         _case(ids, "an unknown clinic is not found", "doctor_a", 404, RULES, json=body(clinic_id=str(uuid.uuid4())), body=_fixed(404)),
-        _case(ids, "a rule with no criterion is rejected", "doctor_a", 422, RULES, json=body(phrases=[], token_sets=[]), body=_fixed(422)),
+        _case(ids, "a rule with no criterion is rejected", "doctor_a", 422, RULES, json=body(phrases=[], token_sets=[]), body=_rejected),
         _case(ids, "a regular expression has no place in the language (an extra field)", "doctor_a", 422, RULES, json=body(patterns=["a.*b"]), body=_fixed(422)),
         _case(ids, "a bad rule code is rejected", "doctor_a", 422, RULES, json=body(rule_code="Bad Code"), body=_fixed(422)),
         _case(ids, "a phrase over the limit is rejected", "doctor_a", 422, RULES, json=body(phrases=["x" * 201]), body=_fixed(422)),
@@ -3342,6 +3343,18 @@ def rule_author_cases(ids) -> list[tuple]:
         _case(ids, "missing X-Idempotency-Key is rejected", "doctor_a", 422, RULES, json=body(), key=None, body=_fixed(422)),
     ]
     return cases + _unauthenticated(ids, RULES, body())
+
+RULE_WITHDRAW = RULES + "/{rule_id}/withdraw"
+
+
+def rule_withdraw_cases(ids) -> list[tuple]:
+    path = lambda: RULE_WITHDRAW.format(rule_id=uuid.uuid4())
+    cases = [_case(ids, f"{p} cannot withdraw a rule version that does not exist", p, 404, path(), key=_new_key(), body=_fixed(404)) for p in ids.people]
+    cases += [
+        _case(ids, "missing X-Idempotency-Key is rejected", "doctor_a", 422, path(), key=None, body=_fixed(422)),
+        _case(ids, "a rule id that is not a uuid is rejected", "doctor_a", 422, RULES + "/nope/withdraw", key=_new_key(), body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)
 
 # ---- break-glass access (migration 0058; BUILD-SPEC.md 18.4) ------------------------------------------------------------------------------------------------------------------------------------------------
 # Front desk, nurse and doctor open a time-limited grant for one patient (a reason code from the clinic's owner-kept list); the holder reads that patient's messages (this world has no encryption keys, so the
@@ -3772,6 +3785,7 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", RULES): rules_list_cases,
     ("POST", RULES): rule_author_cases,
     ("POST", RULE_DECISION): rule_decision_cases,
+    ("POST", RULE_WITHDRAW): rule_withdraw_cases,
     ("POST", MEDICATIONS): medication_record_cases,
     ("GET", MEDICATIONS): medication_list_cases,
     ("GET", AUTONOMY): autonomy_get_cases,
@@ -4530,6 +4544,18 @@ def test_with_the_vocabulary_set_a_medication_is_recorded_replayed_superseded_an
         client.app.dependency_overrides.pop(app_module.medication_codes, None)
     audits = _run(_fetch("select details from audit.log where action = 'medication.record' and resource_id = $1", first))
     assert len(audits) == 1 and set(without_scope(audits[0]["details"])) == {"verified", "supersedes"}  # ids and flags only
+
+def test_the_rules_list_says_authored_by_you_only_to_the_author_and_shows_no_author_id(client, ids):
+    doctor, admin = ids.people["doctor_a"][0], ids.people["admin_a"][0]
+    made = client.post(RULES, headers={**bearer(mint(doctor)), "X-Idempotency-Key": _new_key()}, json={"clinic_id": str(ids.clinic_a), "rule_code": "zz_flag", "phrases": ["zzflag"]})  # a meaningless marker
+    assert made.status_code == 201
+    rule_id = made.json()["rule_id"]
+    for who, expected in ((doctor, True), (admin, False)):
+        listed = client.get(RULES + f"?clinic_id={ids.clinic_a}", headers=bearer(mint(who)))
+        assert listed.status_code == 200
+        (mine,) = [r for r in listed.json()["rules"] if r["rule_id"] == rule_id]
+        assert mine["authored_by_you"] is expected and "authored_by" not in mine and str(doctor) not in listed.text
+        assert mine["status"] == "draft_unreviewed" and set(mine) >= {"rule_id", "rule_code", "version_id", "status", "phrases", "token_sets", "authored_by_you", "decisions"}
 
 def test_with_the_task_settings_unset_the_revoke_is_recorded_and_says_no_task_was_raised(client, ids):
     patient = new_confirmed_patient(ids)

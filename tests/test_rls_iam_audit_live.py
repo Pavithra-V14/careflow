@@ -118,9 +118,9 @@ async def test_all_eleven_schemas_exist_and_nine_have_no_tables(db):
     assert found == {
         "mpi": {"patients", "identity_tokens", "match_candidates", "merges", "identity_confirmations", "erasure_requests", "claim_attempts", "claim_requests"},  # claim_*: 0049;  # identity_confirmations: migration 0023; erasure_requests: 0032
         "sched": {"locations", "providers", "visit_types", "slots", "priority_levels", "holds", "bookings", "waitlist", "offer_deliveries"},  # offer_deliveries: 0031
-        "ops": {"queue", "outbox", "key_rotation_batches", "plan_rotation_batches", "spend_ledger", "alerts", "care_recurrence_rules", "care_episodes", "care_episode_rules", "care_barriers", "care_review_samples", "autonomy_changes", "care_plans", "care_plan_steps", "care_plan_waits", "autonomy_proposals", "visit_facts", "visit_readiness_answers", "visit_briefs"},  # care_plan*: 0050; spend_ledger: 0016; care_*: 0044; autonomy_changes: 0048
-        "clinical": {"results", "notes", "note_rotation_batches"},  # migrations 0050, 0061
-        "kb": {"red_flag_rules"},
+        "ops": {"queue", "outbox", "key_rotation_batches", "plan_rotation_batches", "spend_ledger", "alerts", "care_recurrence_rules", "care_episodes", "care_episode_rules", "care_barriers", "care_review_samples", "autonomy_changes", "care_plans", "care_plan_steps", "care_plan_waits", "autonomy_proposals", "visit_facts", "visit_readiness_answers", "visit_briefs", "spend_limits"},  # spend_limits: 0075 (owner-managed, no application grant); care_plan*: 0050; spend_ledger: 0016; care_*: 0044; autonomy_changes: 0048
+        "clinical": {"results", "notes", "note_rotation_batches", "medications"},  # migrations 0050, 0061, 0074
+        "kb": {"red_flag_rules", "red_flag_rule_decisions"},  # the decision ledger: 0072
         "agents": {"review_tasks", "triage_proposals", "review_decisions", "graph_checkpoints", "graph_checkpoint_blobs", "graph_checkpoint_writes"},  # 0018, 0021
         "ai": {"model_registry"},  # migration 0015
         "docs": {"documents", "canary_settings"},  # migrations 0017 and 0047

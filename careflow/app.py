@@ -91,6 +91,7 @@ from careflow import (
     review_tasks,
     rights_sql,
     rule_approval_sql,
+    schema_check,
     visit_readiness_content,
     visit_readiness_sql,
     voice_sql,
@@ -3844,11 +3845,11 @@ async def autonomy_history(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str,
 
 RULE_VIEWERS = ("doctor", "admin")
 RULE_DECIDERS = ("doctor",)
-RuleDecisionWord = Literal["recorded", "approved", "rejected", "already_decided", "not_draft", "origin_mismatch", "author_cannot_decide", "empty_rule", "rejected_earlier", "platform_rule"]
+RuleDecisionWord = Literal["recorded", "approved", "rejected", "retired", "withdrawn", "already_decided", "not_draft", "not_approved", "origin_mismatch", "author_cannot_decide", "empty_rule", "rejected_earlier", "platform_rule"]
 
 
 class RuleDecisionIn(_Body):
-    decision: Literal["approve", "reject"]
+    decision: Literal["approve", "reject", "retire"]
 
 
 class RuleDecisionOut(_Out):
@@ -3856,7 +3857,7 @@ class RuleDecisionOut(_Out):
 
 
 class RuleDecisionRowOut(_Out):
-    decision: Literal["approve", "reject"]
+    decision: Literal["approve", "reject", "retire"]
     decided_by: uuid.UUID
     decided_at: datetime
 
@@ -3865,11 +3866,12 @@ class RuleVersionOut(_Out):
     rule_id: uuid.UUID
     rule_code: str
     version_id: int
-    status: Literal["draft_unreviewed", "approved", "retired"]
+    status: Literal["draft_unreviewed", "approved", "retired", "withdrawn"]
     origin: Literal["live", "test", "eval", "canary"]
     phrases: list[str]
     patterns: list[str]
     token_sets: list[list[str]]
+    authored_by_you: bool  # true when YOUR account wrote this draft; the author's account id is never shown
     has_vitals_criteria: bool
     approved_at: datetime | None
     decisions: list[RuleDecisionRowOut]
@@ -3883,11 +3885,11 @@ class RuleVersionList(_Out):
 async def list_red_flag_rules(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Limit = 200) -> RuleVersionList:
     """The clinic's own red-flag rule versions with the decisions made on each, so an approver sees exactly what they are approving. 404 if the clinic is not visible to you, 403 unless you are a doctor or admin there. Read-only."""
     await _console_clinic(conn, clinic_id, RULE_VIEWERS)
-    versions = await rule_approval_sql.list_versions(conn, clinic_id, limit=limit)
+    versions = await rule_approval_sql.list_versions(conn, clinic_id, limit=limit, viewer=uuid.UUID(claims["sub"]))
     return RuleVersionList(
         rules=[
             RuleVersionOut(
-                rule_id=v.rule_id, rule_code=v.rule_code, version_id=v.version_id, status=v.status, origin=v.origin, phrases=v.phrases, patterns=v.patterns, token_sets=v.token_sets, has_vitals_criteria=v.has_vitals_criteria,
+                rule_id=v.rule_id, rule_code=v.rule_code, version_id=v.version_id, status=v.status, origin=v.origin, phrases=v.phrases, patterns=v.patterns, token_sets=v.token_sets, authored_by_you=v.authored_by_you, has_vitals_criteria=v.has_vitals_criteria,
                 approved_at=v.approved_at, decisions=[RuleDecisionRowOut(**d) for d in v.decisions],
             )
             for v in versions
@@ -3930,10 +3932,29 @@ async def author_red_flag_rule(body: RuleDraftIn, idempotency_key: IdempotencyKe
     return RuleDraftOut(rule_id=rule_id, status="draft_unreviewed")
 
 
+class RuleWithdrawOut(_Out):
+    result: Literal["withdrawn", "not_draft"]
+
+
+@staff_console.post("/red-flag-rules/{rule_id}/withdraw", response_model=RuleWithdrawOut)
+async def withdraw_red_flag_draft(rule_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> RuleWithdrawOut:
+    """Withdraw a DRAFT red-flag rule version as a doctor of its clinic with a verified second factor (checked again by the database). Only a draft: an approved version is never touched here (answer `not_draft`), and a withdrawn draft can never be approved. Audited by the database; a replay by the same doctor returns `withdrawn`. 404 if you cannot see the version, 403 unless you are a doctor of its clinic."""
+    visible, clinic_id = await rule_approval_sql.rule_clinic(conn, rule_id)
+    if not visible or clinic_id is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if not await _clinic_role_held(conn, clinic_id, RULE_DECIDERS):
+        raise HTTPException(status_code=403, detail="your role may not do this")
+    try:
+        result = await rule_approval_sql.withdraw_draft(conn, rule_id=rule_id, idempotency_key=idempotency_key)
+    except rule_approval_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    return RuleWithdrawOut(result=result)  # type: ignore[arg-type]
+
+
 @staff_console.post("/red-flag-rules/{rule_id}/decision", response_model=RuleDecisionOut)
 async def decide_red_flag_rule(rule_id: uuid.UUID, body: RuleDecisionIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> RuleDecisionOut:
-    """Approve or reject a DRAFT red-flag rule version as a doctor of its clinic with a verified second factor (checked again by the database). The version becomes approved only when a SECOND, different doctor approves it (never its author);
-    one reject closes it. Idempotent on the key; audited by the database. 404 if you cannot see the version, 403 unless you are a doctor of its clinic. Nothing is approved by default."""
+    """Approve or reject a DRAFT red-flag rule version, or RETIRE an APPROVED one, as a doctor of its clinic with a verified second factor (checked again by the database). A draft becomes approved only when a SECOND, different doctor approves it (never its author);
+    one reject closes it. An approved version is retired only when TWO different doctors (any two, the author and approvers included) each record `retire`; a retired version never comes back (a new version is the way back), and a retired NEWEST version switches off the whole rule code. Idempotent on the key; audited by the database. 404 if you cannot see the version, 403 unless you are a doctor of its clinic. Nothing is approved by default."""
     visible, clinic_id = await rule_approval_sql.rule_clinic(conn, rule_id)
     if not visible:
         raise HTTPException(status_code=404, detail="not found")
@@ -5460,6 +5481,8 @@ def create_app(
         app.state.issuer = cfg.issuer
         app.state.jwks = jwks or JWKSClient(cfg.jwks_url)
         app.state.engine = engine or make_app_engine(cfg.database_url_app, pool_size=5, max_overflow=5, pool_pre_ping=True)
+        if engine is None:  # a real engine built from the settings (tests inject their own): refuse to start on a database that has not applied the migrations this code needs
+            await schema_check.check(app.state.engine)
         app.state.vault = vault if vault is not None else _load_vault()
         app.state.active_key_version = cfg.active_key_version
         app.state.step_up_max_age_seconds = cfg.step_up_max_age_seconds

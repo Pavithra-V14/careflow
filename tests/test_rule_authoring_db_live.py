@@ -101,7 +101,7 @@ async def author(db, w, who="doc1", code="zz_draft", ph=("zzmarker",), ts=(("zza
 
 
 async def active(db, w, profile):
-    return [tuple(r) for r in await owner(db, "select rule_code, version_id, has_criteria from kb.active_red_flag_rules(:c, 'test', :p) order by 1, 2", c=w["clinic"], p=profile)]
+    return [tuple(r) for r in await owner(db, "select rule_code, version_id, has_criteria from kb.active_red_flag_rules(:c, 'test', :p) where rule_code <> 'unauthored_stub' order by 1, 2", c=w["clinic"], p=profile)]
 
 
 async def test_a_doctor_writes_a_draft_that_is_never_active_in_the_clinical_profile(db):
@@ -179,3 +179,57 @@ async def test_the_same_key_with_a_different_draft_is_a_conflict_not_a_silent_re
     assert len(await author(db, w, key="c1")) == 1
     assert await author(db, w, key="c1", ph=("zzother",)) == "23505"
     assert await author(db, w, key="c1", code="zz_other") == "23505"
+
+
+async def test_a_replay_after_the_draft_was_withdrawn_or_retired_says_so_not_recorded(db):
+    w = await world(db)
+    rid = (await author(db, w, key="rp1"))[0][0]
+    assert await as_app(db, w["doc2"], DECIDE, r=rid, d="approve", k="rp-a") == [("recorded",)]
+    assert await as_app(db, w["doc3"], "select kb.withdraw_red_flag_draft(:r, :k)", r=rid, k="rp-w") == [("withdrawn",)]
+    assert await as_app(db, w["doc2"], DECIDE, r=rid, d="approve", k="rp-a") == [("withdrawn",)]  # the draft was withdrawn: not "waiting for a second approver"
+    other = (await author(db, w, code="zz_rp2", key="rp2"))[0][0]
+    await as_app(db, w["doc2"], DECIDE, r=other, d="approve", k="rp-b")
+    await as_app(db, w["doc3"], DECIDE, r=other, d="approve", k="rp-c")
+    await as_app(db, w["doc1"], DECIDE, r=other, d="retire", k="rp-r1")
+    await as_app(db, w["doc2"], DECIDE, r=other, d="retire", k="rp-r2")
+    assert await as_app(db, w["doc3"], DECIDE, r=other, d="approve", k="rp-c") == [("retired",)]  # an approve replayed on a version that was later retired
+
+
+WITHDRAW = "select kb.withdraw_red_flag_draft(:r, :k)"
+
+
+async def test_a_doctor_withdraws_a_draft_and_it_can_never_be_approved_and_an_approved_version_is_never_touched(db):
+    w = await world(db)
+    draft_id = (await author(db, w, key="w1"))[0][0]
+    assert await as_app(db, w["doc2"], WITHDRAW, r=draft_id, k="w-a") == [("withdrawn",)]
+    row = (await db.execute(text("select status, withdrawn_by, withdrawn_at is not null as stamped from kb.red_flag_rules where id = :i"), {"i": draft_id})).one()
+    assert (row.status, row.withdrawn_by, row.stamped) == ("withdrawn", w["doc2"], True)
+    assert await as_app(db, w["doc2"], WITHDRAW, r=draft_id, k="w-a") == [("withdrawn",)]  # a replay by the same doctor
+    assert await as_app(db, w["doc3"], WITHDRAW, r=draft_id, k="w-b") == [("not_draft",)]
+    assert await as_app(db, w["doc3"], DECIDE, r=draft_id, d="approve", k="d1") == [("not_draft",)]  # never approvable
+    assert await active(db, w, "demo") == [] and await active(db, w, "clinical") == []
+    audits = [r[0] for r in await owner(db, "select action from audit.log where resource_id = :r order by id", r=str(draft_id))]
+    assert audits == ["red_flag_rule.draft_create", "red_flag_rule.draft_withdraw"]
+    # an approved version is not touched, and a withdrawn newer draft does not switch it off (a RETIRED one would)
+    v1 = (await author(db, w, code="zz_keep", key="k1"))[0][0]
+    await as_app(db, w["doc2"], DECIDE, r=v1, d="approve", k="k-a")
+    await as_app(db, w["doc3"], DECIDE, r=v1, d="approve", k="k-b")
+    assert await as_app(db, w["doc2"], WITHDRAW, r=v1, k="k-w") == [("not_draft",)]
+    v2 = (await author(db, w, code="zz_keep", ph=("zznew",), key="k2"))[0][0]
+    assert await active(db, w, "demo") == [("zz_keep", 2, True)]
+    assert await as_app(db, w["doc2"], WITHDRAW, r=v2, k="k-w2") == [("withdrawn",)]
+    assert await active(db, w, "clinical") == [("zz_keep", 1, True)] and await active(db, w, "demo") == [("zz_keep", 1, True)]
+
+
+async def test_only_a_doctor_of_the_clinic_with_a_second_factor_withdraws_and_the_guard_allows_nothing_else(db):
+    w = await world(db)
+    rid = (await author(db, w, key="g1"))[0][0]
+    for who in ("nurse", "admin", "outsider_doc"):
+        assert await as_app(db, w[who], WITHDRAW, r=rid, k=f"g-{who}") == "42501", who
+    assert await as_app(db, w["doc2"], WITHDRAW, aal2=False, r=rid, k="g-noaal") == "42501"
+    assert await as_app(db, w["doc2"], WITHDRAW, r=uuid.uuid4(), k="g-missing") == "42501"
+    assert (await db.execute(text("select status from kb.red_flag_rules where id = :i"), {"i": rid})).scalar() == "draft_unreviewed"
+    stamp = "update kb.red_flag_rules set {} where id = :r"
+    for change in ("status = 'withdrawn'", "withdrawn_by = authored_by", "status = 'retired', withdrawn_at = now()"):
+        assert await owner(db, stamp.format(change), r=rid) in ("23001", "23514"), change  # not without a named person and time; not on any other change
+    assert await as_app(db, w["doc1"], "update kb.red_flag_rules set status = 'withdrawn' where id = :r", r=rid) == "42501"  # no direct write

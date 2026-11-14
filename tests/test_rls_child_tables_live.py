@@ -36,7 +36,11 @@ APP_SCHEMAS = ["iam", "mpi", "sched", "clinical", "docs", "msg", "kb", "agents",
 # access and write tests are tests/test_rls_ai_registry_live.py and tests/test_rls_spend_and_approval_live.py.
 NO_CLINIC_COLUMN = {"iam.clinics", "iam.accounts", "ai.model_registry", "msg.voice_preferences", "iam.consent_notices", "iam.consent_events"}  # voice_preferences is keyed by the patient ACCOUNT (owner-only policy); its isolation cases are in tests/test_voice_db_live.py
 # (child table, parent table): a foreign key between two clinic-scoped tables that does not carry clinic_id on both sides. Empty since 0014.
-KNOWN_GAPS: set[tuple[str, str]] = set()  # (0047 pinned care_review_samples to its decision's clinic)
+KNOWN_GAPS: set[tuple[str, str]] = {
+    # 0072: the decision ledger points at the rule version by id only. `kb.red_flag_rules.clinic_id` is nullable (a platform-wide rule has none), so a composite key cannot pin it; the ledger's clinic_id is copied from the
+    # rule row INSIDE the one definer function that writes it (the application role has no insert grant), and the function refuses a platform-wide rule. Reviewed 2026-11-13.
+    ("kb.red_flag_rule_decisions", "kb.red_flag_rules"),
+}  # (0047 pinned care_review_samples to its decision's clinic)
 
 
 def _u() -> uuid.UUID:
