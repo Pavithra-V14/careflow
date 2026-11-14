@@ -5,10 +5,11 @@ THE GATES, all of which must hold for a provider to be built; anything missing i
   * `CAREFLOW_PROFILE=demo` AND `CAREFLOW_DATA_POLICY=synthetic_only` (the same gate as the other demo-only features);
   * the provider's API key is present in its own environment name;
   * `CAREFLOW_<PROVIDER>_VERIFIED` holds a date that is not in the future: the day the owner ran `scripts/provider_live_check.py` and saw the real service behave as the adapter assumes (Appendix B);
-  * the provider's role has a REQUIRED daily spend ceiling in USD in `CAREFLOW_SPEND_CEILING_<ROLE>_USD`: NO default (a missing, non-numeric, negative or infinite value means "not configured").
+  * the provider's role has a REQUIRED daily spend ceiling in USD in `CAREFLOW_SPEND_CEILING_<ROLE>_USD`: NO default (a missing, non-numeric, negative or infinite value means "not configured");
+  * a REQUIRED per-run spend cap in USD in `CAREFLOW_SPEND_CAP_PER_RUN_USD` (the most one job run may spend through the gateway): NO default, same rule for a bad value; the gateway refuses a call that would pass it.
 Every registry row must say `synthetic_only` (spec 16.5 still forbids a hosted row from ever being `phi_approved` without a new decision): a file that says otherwise is refused whole.
 
-The ledger is the in-memory one, as decided; a restart resets the day's totals. A spend stop surfaces as `SpendCeilingReached`, which callers already turn into a visible hold or a manual task; the safety
+The clinic's daily total is kept in the DURABLE ledger (`ops.spend_ledger`, written by the queue worker's identity) when `build_providers` is given one and in memory otherwise; the per-ROLE daily ceilings are still in memory. A restart then resets only the role ceilings. A spend stop surfaces as `SpendCeilingReached`, which callers already turn into a visible hold or a manual task; the safety
 class is never budget-limited (careflow.gateway). Nothing here makes a network call: the clients are constructed with their keys and used by whatever feature routes a request to the gateway.
 """
 
@@ -35,6 +36,7 @@ from careflow.gateway import (
     InMemorySpendLedger,
     ModelRow,
     RoleDailyCeilings,
+    SpendLedger,
     SpendLimits,
 )
 from careflow.ports import DataClass
@@ -45,6 +47,7 @@ CONFIG_FILE: Final = Path(__file__).resolve().parent.parent / "config" / "demo-p
 LABEL: Final = "DEMO ONLY - SYNTHETIC DATA, PRICES TO BE CONFIRMED (Appendix B)"
 KEY_VARIABLES: Final = {"gemini": "GEMINI_API_KEY", "jev": "OPENROUTER_API_KEY", "sarvam": "SARVAM_API_KEY"}
 VERIFIED_VARIABLES: Final = {"gemini": "CAREFLOW_GEMINI_VERIFIED", "jev": "CAREFLOW_OPENROUTER_VERIFIED", "sarvam": "CAREFLOW_SARVAM_VERIFIED"}
+RUN_CAP_VARIABLE: Final = "CAREFLOW_SPEND_CAP_PER_RUN_USD"
 CEILING_VARIABLES: Final = {"vlm": "CAREFLOW_SPEND_CEILING_VLM_USD", "decision": "CAREFLOW_SPEND_CEILING_DECISION_USD", "translation": "CAREFLOW_SPEND_CEILING_TRANSLATION_USD"}
 _ROW_KEYS: Final = {
     "role", "provider", "model_id", "data_policy", "priority", "timeout_seconds", "free_tier", "price_in_per_1k", "price_out_per_1k", "shadow_in_per_1k", "shadow_out_per_1k", "label",
@@ -132,6 +135,18 @@ def read_ceiling(environ: Mapping[str, str], role: str) -> Decimal | None:
     return d if d.is_finite() and d >= 0 else None
 
 
+def read_run_cap(environ: Mapping[str, str]) -> Decimal | None:
+    """The required per-run spend cap in USD, or None when it is missing or not a finite number above zero. NO default."""
+    raw = (environ.get(RUN_CAP_VARIABLE) or "").strip()
+    if not raw:
+        return None
+    try:
+        d = Decimal(raw)
+    except InvalidOperation:
+        return None
+    return d if d.is_finite() and d > 0 else None
+
+
 def _verified(environ: Mapping[str, str], provider: str) -> bool:
     try:
         return date.fromisoformat((environ.get(VERIFIED_VARIABLES[provider]) or "").strip()) <= datetime.now(UTC).date()
@@ -147,7 +162,9 @@ class ProviderSet:
     unavailable: dict[str, str] = field(default_factory=dict)  # provider -> a fixed reason (never a value)
 
 
-def build_providers(environ: Mapping[str, str] | None = None, *, profile: str, config: ProviderConfig | None = None, http: Any = None) -> ProviderSet:  # `http`: an httpx.AsyncClient (contract tests pass a MockTransport one)
+def build_providers(
+    environ: Mapping[str, str] | None = None, *, profile: str, config: ProviderConfig | None = None, http: Any = None, ledger: SpendLedger | None = None
+) -> ProviderSet:  # `http`: an httpx.AsyncClient (contract tests pass a MockTransport one)
     """The providers that pass every gate; the others are named in `unavailable`. `http` is for contract tests (a MockTransport client): the real run builds each adapter's own client."""
     environ = os.environ if environ is None else environ
     out = ProviderSet()
@@ -160,6 +177,7 @@ def build_providers(environ: Mapping[str, str] | None = None, *, profile: str, c
     cfg = config or load_provider_config()
     ceilings = {role: c for role in CEILING_VARIABLES if (c := read_ceiling(environ, role)) is not None}
     role_ceilings = RoleDailyCeilings(ceilings)
+    run_cap = read_run_cap(environ)
     rows: list[ModelRow] = []
     adapters: dict[tuple[str, str], Any] = {}
 
@@ -170,6 +188,8 @@ def build_providers(environ: Mapping[str, str] | None = None, *, profile: str, c
             return f"{VERIFIED_VARIABLES[provider]} is not a date in the past: the live check has not been recorded"
         if role not in ceilings:
             return f"{CEILING_VARIABLES[role]} is not set to a number (no default)"
+        if run_cap is None:
+            return f"{RUN_CAP_VARIABLE} is not set to a number above zero (no default)"
         return None
 
     for row in cfg.rows:
@@ -189,7 +209,8 @@ def build_providers(environ: Mapping[str, str] | None = None, *, profile: str, c
         rows.append(row)
     if rows:
         total = sum((ceilings[r] for r in {row.role for row in rows}), Decimal(0))
-        out.gateway = Gateway(rows, adapters, InMemorySpendLedger(), SpendLimits(clinic_daily_usd=total), role_ceilings=role_ceilings, origin="test")
+        assert run_cap is not None  # (every row was built through `usable`, which requires it)
+        out.gateway = Gateway(rows, adapters, ledger or InMemorySpendLedger(), SpendLimits(clinic_daily_usd=total, per_request_usd=run_cap), role_ceilings=role_ceilings, origin="test")
         if any(r.role == "vlm" for r in rows):
             out.vision = GatewayVision(out.gateway, data_class=DataClass.SYNTHETIC)
     why = usable("sarvam", "translation")

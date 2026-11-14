@@ -46,6 +46,7 @@ from careflow.ports import (
 from careflow.provider_setup import (
     CEILING_VARIABLES,
     KEY_VARIABLES,
+    RUN_CAP_VARIABLE,
     VERIFIED_VARIABLES,
     ProviderConfigRefused,
     build_providers,
@@ -332,7 +333,7 @@ def good_env(**extra):
     env = {
         "CAREFLOW_PROFILE": "demo", "CAREFLOW_DATA_POLICY": "synthetic_only",
         **{v: KEY for v in KEY_VARIABLES.values()}, **dict.fromkeys(VERIFIED_VARIABLES.values(), TODAY),
-        **dict.fromkeys(CEILING_VARIABLES.values(), "1.00"),
+        **dict.fromkeys(CEILING_VARIABLES.values(), "1.00"), RUN_CAP_VARIABLE: "0.50",
     }
     env.update(extra)
     return {k: v for k, v in env.items() if v is not None}
@@ -370,7 +371,7 @@ def test_every_gate_closes_with_a_reason_that_carries_no_value():
         got = build_providers(env, profile=env.get("CAREFLOW_PROFILE", "demo"))
         assert got.gateway is None and got.vision is None and got.translation is None and got.unavailable, name
         assert all(KEY not in reason for reason in got.unavailable.values())
-    for variable in (*KEY_VARIABLES.values(), *VERIFIED_VARIABLES.values(), *CEILING_VARIABLES.values()):
+    for variable in (*KEY_VARIABLES.values(), *VERIFIED_VARIABLES.values(), *CEILING_VARIABLES.values(), RUN_CAP_VARIABLE):
         got = build_providers(good_env(**{variable: None}), profile="demo")
         assert got.unavailable, variable
     for bad_date in ("", "not-a-date", (datetime.now(UTC).date() + timedelta(days=1)).isoformat()):
@@ -536,3 +537,23 @@ def test_jev_is_refused_outside_the_demo_profile_and_its_output_is_never_evidenc
     assert "jev" in NOT_EVIDENCE_ENGINES
     jev = DecisionResult("a", {"a": 0.9, "b": 0.1}, 0.9, "jev")
     assert counts_as_evidence(jev) is False and counts_as_evidence(DecisionResult("a", {"a": 0.9, "b": 0.1}, 0.9, "laya")) is True
+
+
+def test_the_per_run_cap_is_required_with_no_default_and_becomes_the_gateways_per_job_hard_stop():
+    from careflow.provider_setup import read_run_cap
+
+    for bad in ("", "abc", "-1", "0", "NaN", "Infinity"):
+        assert read_run_cap({RUN_CAP_VARIABLE: bad}) is None, bad
+        got = build_providers(good_env(**{RUN_CAP_VARIABLE: bad}), profile="demo")
+        assert got.gateway is None and got.vision is None and got.translation is None and any("PER_RUN" in r for r in got.unavailable.values()), bad
+    assert read_run_cap({}) is None and read_run_cap(good_env()) == Decimal("0.50")
+    built = build_providers(good_env(), profile="demo")
+    assert built.gateway is not None and built.gateway.limits.per_request_usd == Decimal("0.50")  # the owner's number, not the 1.00 the class would default to
+
+
+def test_a_durable_ledger_passed_in_is_the_one_the_gateway_uses():
+    from careflow.gateway import InMemorySpendLedger
+
+    mine = InMemorySpendLedger()
+    built = build_providers(good_env(), profile="demo", ledger=mine)
+    assert built.gateway is not None and built.gateway.ledger is mine
