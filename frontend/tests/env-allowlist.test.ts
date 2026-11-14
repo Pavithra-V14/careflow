@@ -3,8 +3,8 @@ import { resolveConfig } from 'vite';
 import { EXPOSED_ENV_NAMES, assertNoSecretShapedValues, pickExposedEnv, CONFIG_GLOBAL, FLAGS_GLOBAL } from '../env-allowlist';
 
 describe('env allowlist', () => {
-  it('exposes exactly the three agreed names', () => {
-    expect([...EXPOSED_ENV_NAMES]).toEqual(['SUPABASE_URL', 'SUPABASE_PUBLISHABLE_KEY', 'CAREFLOW_API_BASE_URL']);
+  it('exposes exactly the agreed names: three connection settings and the two idle minutes', () => {
+    expect([...EXPOSED_ENV_NAMES]).toEqual(['SUPABASE_URL', 'SUPABASE_PUBLISHABLE_KEY', 'CAREFLOW_API_BASE_URL', 'CAREFLOW_IDLE_MINUTES_STAFF', 'CAREFLOW_IDLE_MINUTES_PATIENT']);
   });
 
   it('drops every other name, including secrets that share a prefix', () => {
@@ -22,7 +22,7 @@ describe('env allowlist', () => {
   });
 
   it('yields empty strings, never undefined, for missing names', () => {
-    expect(pickExposedEnv({})).toEqual({ SUPABASE_URL: '', SUPABASE_PUBLISHABLE_KEY: '', CAREFLOW_API_BASE_URL: '' });
+    expect(pickExposedEnv({})).toEqual({ SUPABASE_URL: '', SUPABASE_PUBLISHABLE_KEY: '', CAREFLOW_API_BASE_URL: '', CAREFLOW_IDLE_MINUTES_STAFF: '', CAREFLOW_IDLE_MINUTES_PATIENT: '' });
   });
 });
 
@@ -48,7 +48,7 @@ describe('vite config', () => {
 });
 
 describe('secret-shaped values', () => {
-  const ok = { SUPABASE_URL: 'https://x.invalid', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_abc', CAREFLOW_API_BASE_URL: 'https://api.invalid' };
+  const ok = { SUPABASE_URL: 'https://x.invalid', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_abc', CAREFLOW_API_BASE_URL: 'https://api.invalid', CAREFLOW_IDLE_MINUTES_STAFF: '', CAREFLOW_IDLE_MINUTES_PATIENT: '' };
   it('lets a publishable key through', () => {
     expect(() => assertNoSecretShapedValues(ok)).not.toThrow();
   });

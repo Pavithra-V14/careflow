@@ -31,6 +31,7 @@ export type ProfileIn = components['schemas']['ProfileIn'];
 export type PatientRequestIn = components['schemas']['PatientRequestIn'];
 export type PublicGrievanceIn = components['schemas']['PublicGrievanceIn'];
 export type PatientMessageIn = components['schemas']['PatientMessageIn'];
+type PatientRequestStatus = components['schemas']['PatientRequestStatusIn']['status'];
 export type NoteIn = components['schemas']['NoteIn'];
 export type BreakGlassOpenIn = components['schemas']['BreakGlassOpenIn'];
 export type BreakGlassOutcome = components['schemas']['BreakGlassReviewIn']['outcome'];
@@ -187,6 +188,8 @@ export const OPERATIONS = {
   startReadiness: { method: 'post', path: '/v1/staff/visits/{visit_id}/readiness/start' },
   replyReadiness: { method: 'post', path: '/v1/staff/visits/{visit_id}/readiness/reply' },
   listPortalClaims: { method: 'get', path: '/v1/staff/portal-claims' },
+  listPatientRequests: { method: 'get', path: '/v1/staff/patient-requests' },
+  setPatientRequestStatus: { method: 'post', path: '/v1/staff/patient-requests/{request_id}/status' },
   resolvePortalClaim: { method: 'post', path: '/v1/staff/portal-claims/{request_id}/resolve' },
   listBreakGlass: { method: 'get', path: '/v1/staff/break-glass' },
   openBreakGlass: { method: 'post', path: '/v1/staff/break-glass' },
@@ -530,6 +533,9 @@ export function createApi(options: ApiOptions) {
       client.POST('/v1/staff/visits/{visit_id}/readiness/start', { params: { path: { visit_id: visitId }, header: { 'X-Idempotency-Key': key(o) } } }),
     replyReadiness: (visitId: string, body: ReadinessReplyIn, o?: WriteOptions) =>
       client.POST('/v1/staff/visits/{visit_id}/readiness/reply', { params: { path: { visit_id: visitId }, header: { 'X-Idempotency-Key': key(o) } }, body }),
+    listPatientRequests: (clinicId: string) => client.GET('/v1/staff/patient-requests', { params: { query: { clinic_id: clinicId } } }),
+    setPatientRequestStatus: (requestId: string, status: PatientRequestStatus, erasureRequestId: string | null, o?: WriteOptions) =>
+      client.POST('/v1/staff/patient-requests/{request_id}/status', { params: { path: { request_id: requestId }, header: { 'X-Idempotency-Key': key(o) } }, body: { status, erasure_request_id: erasureRequestId } }),
     listPortalClaims: (clinicId: string) => client.GET('/v1/staff/portal-claims', { params: { query: { clinic_id: clinicId } } }),
     resolvePortalClaim: (requestId: string, decision: ClaimDecision, patientId: string | null, o?: WriteOptions) =>
       client.POST('/v1/staff/portal-claims/{request_id}/resolve', { params: { path: { request_id: requestId }, header: { 'X-Idempotency-Key': key(o) } }, body: { decision, patient_id: patientId } }),

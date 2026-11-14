@@ -161,6 +161,8 @@ const INVOCATIONS: Record<keyof typeof OPERATIONS, (api: Api, o?: WriteOptions) 
   readNotification: (api, o) => api.readNotification(ID, o),
   listMyRequests: (api) => api.listMyRequests(),
   filePatientRequest: (api, o) => api.filePatientRequest(body<PatientRequestIn>('PatientRequestIn'), o),
+  listPatientRequests: (api) => api.listPatientRequests(ID),
+  setPatientRequestStatus: (api, o) => api.setPatientRequestStatus(ID, 'acknowledged', null, o),
   listMyBookings: (api) => api.listMyBookings(),
   cancelMyBooking: (api, o) => api.cancelMyBooking(ID, o),
   listOpenSlots: (api) => api.listOpenSlots(ID),

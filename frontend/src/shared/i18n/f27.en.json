@@ -1,0 +1,56 @@
+{
+  "nav": {
+    "patientRequests": "Patient requests"
+  },
+  "preq": {
+    "title": "Patient requests",
+    "note": "Requests patients made about their own record: erasure, a correction (the detail's name only, never a value) and a nominee. There is no text in a request. Changing a status tells the patient with an in-app notice and is recorded under your name.",
+    "empty": "There are no patient requests.",
+    "col": {
+      "request": "Request",
+      "patient": "Patient",
+      "kind": "Kind",
+      "field": "Detail",
+      "status": "Status",
+      "received": "Received",
+      "erasure": "Erasure request",
+      "action": "Action"
+    },
+    "kinds": {
+      "erasure": "Erasure",
+      "correction": "Correction",
+      "nominee": "Nominee"
+    },
+    "fields": {
+      "name": "Name",
+      "date_of_birth": "Date of birth",
+      "phone": "Phone number"
+    },
+    "status": {
+      "open": "Open",
+      "acknowledged": "Seen",
+      "resolved": "Resolved",
+      "declined": "Declined"
+    },
+    "action": {
+      "acknowledged": "Mark as seen",
+      "resolved": "Resolve",
+      "declined": "Decline"
+    },
+    "confirmTitle": {
+      "acknowledged": "Mark this request as seen?",
+      "resolved": "Resolve this request?",
+      "declined": "Decline this request?"
+    },
+    "confirmBody": "The patient is told with an in-app notice. It is recorded under your name. Nothing about the record is changed by this step.",
+    "link": "Link an erasure request you started for this patient",
+    "noLink": "Do not link one",
+    "invalid": "That change is not allowed from the current status. Nothing was recorded.",
+    "gone": "This request was not found. Nothing was recorded.",
+    "result": {
+      "recorded": "Recorded. The patient has been told.",
+      "replay": "This was already recorded.",
+      "invalid_transition": "That change is not allowed from the current status. Nothing was recorded."
+    }
+  }
+}

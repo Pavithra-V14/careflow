@@ -1,6 +1,6 @@
 # Tamil review pack (AI-prepared, NOT reviewed by a native speaker)
 
-Prepared 2026-11-14. Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 1732 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
+Prepared 2026-11-14. Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 1775 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
 
 **Regenerated 2026-11-14** by `npm run i18n:pack` from the strings as they are now, so it covers every current string, including the newest screens (patient voice setting, consent withdrawal and history, activating a staff account, withdrawing and retiring a red-flag rule). Each is written and second-passed in the same way and is just as unreviewed.
 
@@ -12,9 +12,9 @@ Meaning errors, register for patients, medical or safety terms, unsafe ambiguity
 - **B** wrong or odd meaning, wrong register, or an inconsistent term. Needs a native speaker.
 - **C** minor wording, or an administrator-only technical label.
 
-How it was done, honestly: all 1732 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and the strings that carry meaning (sentences of four words or more, and short strings that differ from their English) were read by an AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
+How it was done, honestly: all 1775 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and the strings that carry meaning (sentences of four words or more, and short strings that differ from their English) were read by an AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
 
-Automatic checks: 1732 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
+Automatic checks: 1775 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
 
 Notes: 71 grade A, 125 grade B, 58 grade C (254 rows with a note; some notes cover a group of similar strings, named in the note).
 
@@ -320,23 +320,23 @@ Notes: 71 grade A, 125 grade B, 58 grade C (254 rows with a note; some notes cov
 |---|---|---|
 | approve | ஒப்புக்கொள் (verb), ஒப்புதல் (noun) (62) | The verb also means "admit/agree"; some places use ஒப்புதல் அளி. |
 | acknowledge | ஏற்றுக்கொள் ("accept") (15) | Same verb as approve; the action only records that you have seen something. |
-| record / log / transcript / register | பதிவு everywhere (146) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
+| record / log / transcript / register | பதிவு everywhere (151) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
 | result / decision / end | முடிவு everywhere (67) | One word for a clinical result, a person's decision and an end time. |
 | role | பங்கு (14) | Also means "share"; பணி is used for "task". |
-| merge / link / connect / attach | இணை / இணைப்பு (54) | Merging two patient records, linking a portal account, attaching a note: one word. |
+| merge / link / connect / attach | இணை / இணைப்பு (56) | Merging two patient records, linking a portal account, attaching a note: one word. |
 | red flag | சிவப்புக் கொடி (literal) (21) | Check the wording clinicians use. |
 | hold (a slot or a referral) | நிறுத்து / நிறுத்தம் (stop) and ஒதுக்கீடு (allocation) (53) | Two or three words for one idea. |
 | retire (a rule version) and withdraw (a draft) | நிறுத்து (retire) and திரும்பப் பெறு (withdraw) (63) | The rule screens need two different words; "withdraw" shares its Tamil with "revoke" and "cannot be undone". |
 | task / job | பணி (68) | A review task and a queued job share the word. |
 | approved (a status) and approve (a button) | அங்கீகரிக்கப்பட்டது (status) and ஒப்புக்கொள் (button) (14) | Two word families for one idea in the red-flag rule screens. |
-| patient | நோயாளி and நோயாளர் (76) | Two spellings. |
+| patient | நோயாளி and நோயாளர் (84) | Two spellings. |
 | clinic / hospital | மருத்துவமனை (most strings), கிளினிக் (1) (76) | Check which is meant where. |
 | front desk | வரவேற்பு மேசை and முன்பணியாளர் (8) | Two renderings. |
 | confidence | நம்பிக்கை (2) | Means belief or hope; the strings mean how sure the system is. |
 | sample (a sampled decision) | மாதிரி (5) | Reads as a laboratory specimen. |
 | revoke / take back, and "cannot be undone" | திரும்பப் பெறு for both (21) | The same verb for "revoke" and "cannot be reversed". |
 | grant / withdraw (a consent) | வழங்கு (grant) and திரும்பப் பெறு (withdraw) (23) | Consent withdrawal is one click in the portal, so the word must be unmistakable. |
-| fresh (code) | புதிய ("new") (31) | Means a recently entered code, not a new one. |
+| fresh (code) | புதிய ("new") (32) | Means a recently entered code, not a new one. |
 | screen (the rules read text) | பரிசோதனை (6) | The word for a medical examination or test. |
 | escalate | உயர்நிலைக்கு அனுப்பு ("send to a higher level") (5) | Loses the sense of raising urgency. |
 | authenticator | அங்கீகார செயலி (app) / அங்கீகார குறியீடு (code) (16) | Consistent; check it is the word staff use. |
@@ -381,7 +381,7 @@ These are the same in English and Tamil by design, and a Tamil-speaking patient 
 - `tasks.kind.screening_unassessable`
 - `tasks.kind.triage_proposal`
 
-## Part 7. All 1732 strings
+## Part 7. All 1775 strings
 
 Fill in the last column. Write **OK**, or write the full corrected Tamil (keep every {{placeholder}} exactly as it is). Leave a row empty if you have not looked at it.
 
@@ -1240,6 +1240,9 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `identity.unmergeConflict` | That could not be done. Refresh and try again. | அதைச் செய்ய முடியவில்லை. புதுப்பித்து மீண்டும் முயற்சிக்கவும். | no issue found | |
 | `identity.unmergeTitle` | Unmerge these records? | இந்தப் பதிவுகளின் இணைப்பை நீக்கவா? | no issue found | |
 | `identity.unmerged` | The link was broken. | இணைப்பு உடைக்கப்பட்டது. | no issue found | |
+| `idle.body` | You will be signed out in {{n}} seconds because the page has not been used. Anything on the screen will be cleared. | பக்கம் பயன்படுத்தப்படாததால் {{n}} வினாடிகளில் நீங்கள் வெளியேற்றப்படுவீர்கள். திரையில் உள்ளவை அழிக்கப்படும். | no issue found | |
+| `idle.stay` | Stay signed in | உள்நுழைந்தே இருங்கள் | no issue found | |
+| `idle.title` | Are you still there? | நீங்கள் இன்னும் இருக்கிறீர்களா? | no issue found | |
 | `landing.about.heading` | About the hospital | மருத்துவமனை பற்றி | no issue found | |
 | `landing.account` | Account | கணக்கு | no issue found | |
 | `landing.departments.heading` | Departments and doctors | துறைகள் மற்றும் மருத்துவர்கள் | no issue found | |
@@ -1327,6 +1330,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `nav.label` | Sections | பிரிவுகள் | no issue found | |
 | `nav.none` | No sections are available to your role. | உங்கள் பங்கிற்குக் கிடைக்கும் பிரிவுகள் எதுவும் இல்லை. | no issue found | |
 | `nav.notes` | Notes | குறிப்புகள் | no issue found | |
+| `nav.patientRequests` | Patient requests | நோயாளி கோரிக்கைகள் | no issue found | |
 | `nav.patients` | Patients | நோயாளர்கள் | C: Spelling: நோயாளர்கள் / நோயாளர் here and in many titles, நோயாளி elsewhere. Choose one. | |
 | `nav.readiness` | Visit readiness | வருகைத் தயார்நிலை | no issue found | |
 | `nav.referrals` | Referrals | பரிந்துரைகள் | no issue found | |
@@ -1594,6 +1598,10 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `portal.notifications.title` | Your notices | உங்கள் அறிவிப்புகள் | no issue found | |
 | `portal.notifications.unread` | Unread: {{n}} | படிக்காதவை: {{n}} | C: A count after a label. | |
 | `portal.profile.choose` | Choose | தேர்ந்தெடுக்கவும் | no issue found | |
+| `portal.profile.clear` | Clear | அழி | no issue found | |
+| `portal.profile.clearBody` | This removes the saved value from your details. You can choose a new one at any time. | இது உங்கள் விவரங்களில் சேமிக்கப்பட்ட மதிப்பை நீக்கும். எப்போது வேண்டுமானாலும் புதியதைத் தேர்ந்தெடுக்கலாம். | no issue found | |
+| `portal.profile.clearTitle` | Clear this detail? | இந்த விவரத்தை அழிக்கவா? | no issue found | |
+| `portal.profile.cleared` | The detail was cleared. | விவரம் அழிக்கப்பட்டது. | no issue found | |
 | `portal.profile.invalid` | That choice is not on the hospital's list. Nothing was saved. | அந்தத் தேர்வு மருத்துவமனையின் பட்டியலில் இல்லை. எதுவும் சேமிக்கப்படவில்லை. | B: Says a choice is not on the hospital's list and nothing was saved. | |
 | `portal.profile.language` | Preferred language | விருப்பமான மொழி | no issue found | |
 | `portal.profile.name` | Name on your record | உங்கள் பதிவில் உள்ள பெயர் | B: "உங்கள் பதிவில் உள்ள பெயர்" (the name on your record); the person cannot change it here. | |
@@ -1685,6 +1693,41 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `portal.voice.workflow.readiness_item` | Answering an item on a visit checklist | வருகைக்கான தயார்நிலைப் பட்டியலில் ஒரு உருப்படிக்குப் பதில் சொல்ல | B: "தயார்நிலைப் பட்டியல்" (readiness list) is a coined term; check what clinics call a pre-visit checklist. | |
 | `portal.voice.workflow.slot_offer` | Replying to an appointment offer | சந்திப்பு வாய்ப்புக்குப் பதில் சொல்ல | B: "சந்திப்பு வாய்ப்பு" for an appointment offer; the console uses another word for appointment in places. | |
 | `portal.voice.workflowLegend` | What is this session for? | இந்த அமர்வு எதற்காக? | no issue found | |
+| `preq.action.acknowledged` | Mark as seen | பார்த்ததாகக் குறி | no issue found | |
+| `preq.action.declined` | Decline | நிராகரி | no issue found | |
+| `preq.action.resolved` | Resolve | தீர் | no issue found | |
+| `preq.col.action` | Action | செயல் | no issue found | |
+| `preq.col.erasure` | Erasure request | அழித்தல் கோரிக்கை | no issue found | |
+| `preq.col.field` | Detail | விவரம் | no issue found | |
+| `preq.col.kind` | Kind | வகை | no issue found | |
+| `preq.col.patient` | Patient | நோயாளி | no issue found | |
+| `preq.col.received` | Received | பெறப்பட்டது | no issue found | |
+| `preq.col.request` | Request | கோரிக்கை | no issue found | |
+| `preq.col.status` | Status | நிலை | no issue found | |
+| `preq.confirmBody` | The patient is told with an in-app notice. It is recorded under your name. Nothing about the record is changed by this step. | நோயாளிக்குச் செயலிக்குள் அறிவிப்பு செல்லும். இது உங்கள் பெயரில் பதிவாகும். இந்தப் படியால் பதிவில் எதுவும் மாறாது. | no issue found | |
+| `preq.confirmTitle.acknowledged` | Mark this request as seen? | இந்தக் கோரிக்கையைப் பார்த்ததாகக் குறிக்கவா? | no issue found | |
+| `preq.confirmTitle.declined` | Decline this request? | இந்தக் கோரிக்கையை நிராகரிக்கவா? | no issue found | |
+| `preq.confirmTitle.resolved` | Resolve this request? | இந்தக் கோரிக்கையைத் தீர்க்கவா? | no issue found | |
+| `preq.empty` | There are no patient requests. | நோயாளி கோரிக்கைகள் எதுவும் இல்லை. | no issue found | |
+| `preq.fields.date_of_birth` | Date of birth | பிறந்த தேதி | no issue found | |
+| `preq.fields.name` | Name | பெயர் | no issue found | |
+| `preq.fields.phone` | Phone number | தொலைபேசி எண் | no issue found | |
+| `preq.gone` | This request was not found. Nothing was recorded. | இந்தக் கோரிக்கை கிடைக்கவில்லை. எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
+| `preq.invalid` | That change is not allowed from the current status. Nothing was recorded. | தற்போதைய நிலையிலிருந்து அந்த மாற்றம் அனுமதிக்கப்படவில்லை. எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
+| `preq.kinds.correction` | Correction | திருத்தம் | no issue found | |
+| `preq.kinds.erasure` | Erasure | அழித்தல் | no issue found | |
+| `preq.kinds.nominee` | Nominee | நியமனதாரர் | no issue found | |
+| `preq.link` | Link an erasure request you started for this patient | இந்த நோயாளிக்கு நீங்கள் தொடங்கிய அழித்தல் கோரிக்கையை இணைக்கவும் | no issue found | |
+| `preq.noLink` | Do not link one | எதையும் இணைக்க வேண்டாம் | no issue found | |
+| `preq.note` | Requests patients made about their own record: erasure, a correction (the detail's name only, never a value) and a nominee. There is no text in a request. Changing a status tells the patient with an in-app notice and is recorded under your name. | நோயாளிகள் தங்கள் சொந்தப் பதிவைப் பற்றிச் செய்த கோரிக்கைகள்: அழித்தல், திருத்தம் (விவரத்தின் பெயர் மட்டும், மதிப்பு அல்ல) மற்றும் நியமனதாரர். கோரிக்கையில் உரை எதுவும் இல்லை. நிலையை மாற்றினால் நோயாளிக்குச் செயலிக்குள் அறிவிப்பு செல்லும்; அது உங்கள் பெயரில் பதிவாகும். | no issue found | |
+| `preq.result.invalid_transition` | That change is not allowed from the current status. Nothing was recorded. | தற்போதைய நிலையிலிருந்து அந்த மாற்றம் அனுமதிக்கப்படவில்லை. எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
+| `preq.result.recorded` | Recorded. The patient has been told. | பதிவு செய்யப்பட்டது. நோயாளிக்குத் தெரிவிக்கப்பட்டது. | no issue found | |
+| `preq.result.replay` | This was already recorded. | இது ஏற்கெனவே பதிவு செய்யப்பட்டது. | no issue found | |
+| `preq.status.acknowledged` | Seen | பார்க்கப்பட்டது | no issue found | |
+| `preq.status.declined` | Declined | ஏற்கப்படவில்லை | no issue found | |
+| `preq.status.open` | Open | திறந்துள்ளது | no issue found | |
+| `preq.status.resolved` | Resolved | தீர்க்கப்பட்டது | no issue found | |
+| `preq.title` | Patient requests | நோயாளி கோரிக்கைகள் | no issue found | |
 | `problem.conflict` | That conflicts with the current state. Refresh and try again. | இது தற்போதைய நிலையுடன் முரண்படுகிறது. புதுப்பித்து மீண்டும் முயற்சிக்கவும். | no issue found | |
 | `problem.forbidden` | This is not available to your role. | இது உங்கள் பங்கிற்குக் கிடைக்காது. | no issue found | |
 | `problem.invalid` | Check what you entered and try again. | நீங்கள் உள்ளிட்டதைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும். | no issue found | |

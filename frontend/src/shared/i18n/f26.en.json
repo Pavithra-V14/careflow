@@ -4,6 +4,17 @@
     "publicGrievance": {
       "notSetUp": "Complaints without signing in are not set up at this hospital yet. Nothing can be sent.",
       "noCategories": "There are no categories to choose from yet. Nothing can be sent."
+    },
+    "profile": {
+      "clear": "Clear",
+      "clearTitle": "Clear this detail?",
+      "clearBody": "This removes the saved value from your details. You can choose a new one at any time.",
+      "cleared": "The detail was cleared."
     }
+  },
+  "idle": {
+    "title": "Are you still there?",
+    "body": "You will be signed out in {{n}} seconds because the page has not been used. Anything on the screen will be cleared.",
+    "stay": "Stay signed in"
   }
 }

@@ -3,7 +3,8 @@ import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/reac
 import { usePortalQuery } from './portalQuery';
 import { useTranslation } from 'react-i18next';
 import { createApi } from '../../shared/api/client';
-import { IDLE_SIGN_OUT_MINUTES, useIdleSignOut } from '../../shared/idle';
+import { IdleWarning } from '../../shared/IdleWarning';
+import { idleMinutes, useIdleSignOut } from '../../shared/idle';
 import { ApiProblem, toProblem, unwrap } from '../../staff/apiState';
 import { ProblemText } from '../../staff/ui/states';
 import { PATHS } from '../paths';
@@ -47,8 +48,9 @@ export function PortalApp({ auth, apiBaseUrl }: { auth: PortalAuth | null; apiBa
     setPhase('signed-out');
   }, [auth, queryClient]);
 
-  // Off until the owner supplies an approved number of minutes (src/shared/idle.ts). When on, the person is signed out and told so.
-  useIdleSignOut(IDLE_SIGN_OUT_MINUTES.patient, phase === 'signed-in', () => {
+  // Off unless the build set CAREFLOW_IDLE_MINUTES_PATIENT (no default). When on, a "still there?" warning shows for the last minute, then the
+  // person is signed out and told so.
+  const idle = useIdleSignOut(idleMinutes('patient'), phase === 'signed-in', () => {
     setIdleEnded(true);
     void signOut();
   });
@@ -92,6 +94,7 @@ export function PortalApp({ auth, apiBaseUrl }: { auth: PortalAuth | null; apiBa
           <Account auth={auth} apiBaseUrl={apiBaseUrl} onSignedOut={() => void signOut()} />
         </QueryClientProvider>
       )}
+      <IdleWarning secondsLeft={idle.secondsLeft} onStay={idle.stay} />
       <p>
         <a href={PATHS.home}>{t('pages.backHome')}</a>
       </p>

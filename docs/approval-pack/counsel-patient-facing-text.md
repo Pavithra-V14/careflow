@@ -50,14 +50,14 @@ What the patient sees:
 - `portal.profile.invalid`: "That choice is not on the hospital's list. Nothing was saved."
 - `portal.profile.unavailable`: "This is not set up yet. Nothing was saved."
 
-The words the patient chooses from for sex are NOT in the frontend: they come from the clinic's own list, shown as sent (underscores shown as spaces). The patient can set a value but cannot clear it (see backend request 32).
+The words the patient chooses from for sex are NOT in the frontend: they come from the clinic's own list, shown as sent (underscores shown as spaces). The patient can set a value and can clear it again ("Clear", with a confirmation: "Clear this detail?" / "This removes the saved value from your details. You can choose a new one at any time.").
 
 Questions for counsel and the privacy owner:
 
 1. May the portal collect and store a "sex" value at all, and for what stated purpose? Does the label "Sex" match the wording of the clinic's list and the law's term for it?
 2. Does the person need a purpose statement or a consent entry next to this field?
 3. Who may see the value once saved, and should the screen say so?
-4. Should the patient be able to remove a value they set? (The backend has not said what clearing does.)
+4. A patient can remove a value they set (clearing needs no word from the clinic's list). Is that right, and does the clinic have to keep a record of the earlier value?
 
 ## 3. Consent notices as shown
 

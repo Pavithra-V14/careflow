@@ -332,7 +332,7 @@ The voice consent text must come only from the API. The frontend currently looks
 
 **31 (voice notice), answered 2026-11-14:** `voice_session` is now a closed value of the consent notice `purpose` (the schema enum on `NoticeOut` and `ConsentIn`), served by the existing `GET /v1/portal/consents` like the other purposes; the demo pack carries a labelled DEMO ONLY placeholder notice and label for it; outside the demo the text is the owner's `CAREFLOW_CONSENT_NOTICES` entry (counsel's wording); with no notice published the list has no `voice_session` item. It can be granted or withdrawn like the others (an ordinary consent event on the current notice), so the console may offer or hide those buttons as it chooses. The separate route and setting added earlier in this pass (`/voice/consent-notice`) were removed.
 
-### 32. What does null mean in the profile write? (requested 2026-11-14)
+### 32. What does null mean in the profile write? DONE (answered 2026-11-14; the profile now has a Clear action with a confirmation)
 `PUT /v1/portal/profile` takes `sex` and `preferred_language`, each a value or null. The description says it "sets values", but not whether null leaves a field alone or clears it. The portal sends ONLY the fields the person changed, never null, and offers no way to clear a value. Please say in the route description what null does and whether a person may clear a field; if clearing is allowed, say how the clinic's list (or none) applies. Until then clearing stays unbuilt.
 
 **32 (null in the profile write), answered 2026-11-14:** a field you leave out of `PUT /v1/portal/profile` is left as it is; a field you send as an explicit `null` is cleared, and a person may clear either one. Clearing needs no word from the clinic's list (a cleared sex is no value, not a word), so it works whether or not `CAREFLOW_SEX_WORDS` is set; a non-null sex word is still checked against the list (422 if not on it, 503 if the list is not configured). The route description says so.
@@ -341,8 +341,8 @@ The voice consent text must come only from the API. The frontend currently looks
 
 **32 again, in plain words:** for each profile field, `sex` and `preferred_language`: leave it out of the request and the stored value stays; send `null` and it is cleared; send a value and it is set (a sex word must be on the clinic's list). The route description says so and `tests/test_profile_null_semantics.py` checks it.
 
-### 34. Idle sign-out durations (requested 2026-11-14, owner decision)
-BUILD-SPEC 18 to 21 give no idle duration for staff or patients. The frontend has the mechanism, OFF: after the configured minutes with no activity the session ends like any other sign-out. Please give the approved number of minutes for staff and for patients, and say whether a "still there?" warning should come first and for how long. They are set in `frontend/src/shared/idle.ts` as a reviewed edit; until then both are null and nobody is signed out for being idle. (This is a frontend-side setting; it is listed here so the owner's answer has a home.)
+### 34. Idle sign-out durations: DECIDED (2026-11-14)
+Decided by the user: idle sign-out is on, driven by two build-time settings with no default (`CAREFLOW_IDLE_MINUTES_STAFF`, `CAREFLOW_IDLE_MINUTES_PATIENT`), with a "still there?" warning one minute before sign-out. The demo and browser-test builds supply labelled placeholders (15 minutes for staff, 10 for patients); the real values are the privacy owner's and are a pre-launch checklist row (docs/frontend-live-checklist.md). Nothing is needed from the backend.
 
 ## Decisions recorded here for later readers
 

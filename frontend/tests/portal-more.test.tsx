@@ -100,6 +100,32 @@ describe('your details', () => {
     expect(posts(calls, '/v1/portal/profile')[0]?.body).toEqual({ preferred_language: 'ta' });
   });
 
+  it('clears a saved value only after a confirmation, sending an explicit null for that field alone, with a key', async () => {
+    const user = userEvent.setup();
+    const calls = stubApi(backend({ profile: json(profileBody({ sex: 'male', preferred_language: 'en' })) }));
+    await mount();
+    await user.click(await screen.findByRole('button', { name: 'Clear: Sex' }));
+    expect(posts(calls, '/v1/portal/profile')).toHaveLength(0);
+    const dialog = screen.getByRole('dialog', { name: 'Clear this detail?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Clear' }));
+    expect(await screen.findByText('The detail was cleared.')).toBeInTheDocument();
+    const put = posts(calls, '/v1/portal/profile');
+    expect(put).toHaveLength(1);
+    expect(put[0]?.body).toEqual({ sex: null });
+    expect(put[0]?.key).toBeTruthy();
+  });
+
+  it('offers no clear for a value that is not set, and cancelling writes nothing', async () => {
+    const user = userEvent.setup();
+    const calls = stubApi(backend({ profile: json(profileBody({ sex: null, preferred_language: 'ta' })) }));
+    await mount();
+    await screen.findByLabelText('Sex');
+    expect(screen.queryByRole('button', { name: 'Clear: Sex' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Clear: Preferred language' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+    expect(posts(calls, '/v1/portal/profile')).toHaveLength(0);
+  });
+
   it('says so when the hospital has no list of choices yet', async () => {
     stubApi(backend({ profile: json(profileBody({ sex_words: [] })) }));
     await mount();

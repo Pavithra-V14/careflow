@@ -7,6 +7,8 @@ export default defineConfig({
       SUPABASE_URL: 'https://example.invalid',
       SUPABASE_PUBLISHABLE_KEY: 'test-publishable-key',
       CAREFLOW_API_BASE_URL: 'http://localhost:8000',
+      CAREFLOW_IDLE_MINUTES_STAFF: '',
+      CAREFLOW_IDLE_MINUTES_PATIENT: '',
     }),
   },
   test: {
