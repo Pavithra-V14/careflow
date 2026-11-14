@@ -212,6 +212,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 | 17.5 | Messaging topics (care, appointments, safety, readiness) | BUILT | | migrations 0011, 0050 |
 | 17.5b | Account states enforced server-side per feature | BUILT (partial) | States derived by the database; the data export and patient messaging (17.5c) are gated; the other patient features are not built | `careflow/portal_sql.py`, migration 0062 |
 | 17.5c | A patient sends and reads messages; care only after activation; server-enforced | BUILT (mechanism, off by default) | `POST /v1/portal/messages` (care at stage active, appointments; never safety), `GET /v1/portal/messages/threads`, `GET .../threads/{id}`; needs `CAREFLOW_PATIENT_MESSAGING=on`, the keys and the per-minute limit; the red-flag rules screen the text in the same transaction before it can commit (the database refuses an unscreened patient message); no model, no reply wording, the answer never says what was found; another's or a hidden thread is one 404 | `careflow/portal_messages_sql.py`, `careflow/app.py`, migration 0082, `tests/test_patient_messaging_db_live.py` |
+| 17.5d | A patient books and cancels (future only; server-enforced) | BUILT (mechanism, off by default) | `GET /v1/portal/booking/slots`, `POST .../slots/{id}/book`, `GET .../bookings`, `POST .../bookings/{id}/cancel`; needs `CAREFLOW_PATIENT_BOOKING=on` and the owner's list of bookable visit types (`sched.patient_bookable_visit_types`, with a per-patient cap); a slot held for someone else is never bookable; a past slot or booking is refused | `careflow/portal_booking_sql.py`, `careflow/app.py`, migration 0083, `tests/test_patient_booking_db_live.py` |
 | 17.6 | The data-flow register as a literal table | BUILT | Checked by a test | `data-flow-register.yaml`, `tests/test_data_flow_register.py` |
 | 17.7 | Local versus hosted split | FAKE | No local model is installed; every hosted service is a port | `careflow/ports.py` |
 
@@ -348,7 +349,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 
 ## Patient-facing routes still not built (owner decision 2026-11-14 to build them as mechanism)
 
-Family members and guardians (request 21), the protocol-card and message-template editor (27), patient booking (28) and patient visit readiness (30) are NOT built yet (patient messaging, 29, is built as mechanism, off by default). Each needs its own design before code: patient booking needs patient-scoped policies or definer functions over the scheduling and message tables, the screening of a patient-sent message by the red-flag rules from a patient session, and the account-stage rules; the editor needs a card and template schema and a two-person publish like the rules; family needs the proxy trail. They are the next batch, not forgotten.
+Not built yet: family members and guardians (request 21), the protocol-card and message-template editor (27) and patient visit readiness (30). Patient booking (28) and messaging (29) are built as mechanism, off by default. The editor needs a card and template schema and a two-person publish like the rules; family needs the proxy trail and counsel's under-18 rules; readiness has no patient-facing channel by owner decision (a nurse or doctor relays replies).
 
 ## What remains and why (the short list)
 

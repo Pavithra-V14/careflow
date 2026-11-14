@@ -20,6 +20,7 @@ REQUIRED: Final = (
     ("0078", "kb.red_flag_rule_decisions_one_per_person_kind", "rel"),
     ("0080", "iam.file_public_grievance(text,bytea,smallint,uuid,text)", "proc"),
     ("0082", "msg.patient_post_message(uuid,uuid,bytea,smallint,text)", "proc"),
+    ("0083", "sched.patient_book_slot(uuid,text)", "proc"),
 )
 
 
