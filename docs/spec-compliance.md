@@ -221,7 +221,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 | 18.1 | JWT verified per request by `kid`, claims set with `set_config(..., true)`; the transaction-mode pooler with no driver-side prepared statements | BUILT | | `careflow/auth.py`, `db.py`, `scripts/verify_app_role.py` |
 | 18.1b | Staff invitation-only, mandatory second factor, step-up for sensitive actions | BUILT (API and database) / DECISION | TOTP enforced in the API and in the database for tables since 0047; older tables are an accepted residual; passkeys excluded by the owner; invitation needs the unwired Auth admin call | `careflow/auth.py`, `auth_admin.py`, migration 0047, 0065 |
 | 18.1c | Staff recovery through two admins | BUILT, port unverified | The factor reset goes through the Auth admin port (a fake) | `careflow/recovery_sql.py`, migration 0060 |
-| 18.1d | Patient OTP, device list, rate limits, CAPTCHA, guardian accounts | DECISION | Hosted Auth project settings; guardian consent is counsel's | `docs/frontend-backend-requests.md` items 21, 23 |
+| 18.1d | Patient OTP, device list, rate limits, CAPTCHA, guardian accounts | DECISION | Hosted Auth project settings; devices need the Auth admin API (unwired, owner decision); guardian consent is counsel's (family members NOT built yet) | `docs/frontend-backend-requests.md` items 21, 23 |
 | 18.2 | SMS port; DLT registration; mitigations; sandbox sink in demo | FAKE / DECISION | Send guard and an empty template registry built; nothing registered, no provider | `careflow/sms.py`, `config/sms-templates.yaml` |
 | 18.3 | Email port with two adapters; free fallback default; failure alert | FAKE | Port only | `careflow/ports.py` |
 | 18.4 | RBAC at three layers; deny by default | BUILT | API, RLS, tool-server scopes | `careflow/active_role.py`, migrations |
@@ -235,14 +235,14 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 |---|---|---|---|---|
 | 19.1 to 19.4 | Design system, landing page, profile indicator, sign-up fields | OUT OF SCOPE HERE | The frontend is a separate workstream | `frontend/` |
 | 19.3b | Clinic name, LIVE / TEST badge, operating profile, clinic time zone from the server | BUILT | `GET /v1/iam/me` | `careflow/app.py` (`Me`) |
-| 19.4b | Patient sex, preferred language, name; staff name, mobile, council number; optional email | DECISION | New personal data fields: the privacy owner's field list and counsel first | `docs/frontend-backend-requests.md` items 20, 22, 25 |
+| 19.4b | Patient sex, preferred language, name; staff name, mobile, council number; optional email | BUILT (patient profile) / DECISION (rest) | `GET`/`PUT /v1/portal/profile`: the name is read from the patient's own record, sex is a closed word from the required setting `CAREFLOW_SEX_WORDS` (no default), language is en or ta; in-app notices exist, e-mail and SMS do not; staff name, mobile and council number and the optional e-mail are new personal data awaiting the privacy owner | `careflow/portal_extras_sql.py`, migration 0080 |
 
 ## 20. Consent, DPDP, clinical content governance (spec 20)
 
 | Req | Requirement | Status | Reason | Where |
 |---|---|---|---|---|
 | 20.1 | Independent, withdrawable consent purposes; versioned notices kept permanently; withdrawal in one click | BUILT (mechanism) | Notice texts are counsel's | `careflow/consent_settings.py`, migration 0049 |
-| 20.1b | Rights through the grievance channel with tracking; download my data; erasure | BUILT (partial) | Grievances, export and erasure built; correction and nominee are not separate types (counsel); a public grievance route is undecided | `careflow/rights_sql.py`, migration 0059 |
+| 20.1b | Rights through the grievance channel with tracking; download my data; erasure | BUILT | Grievances, export, erasure; patient erasure, correction and nominee REQUESTS (a closed kind, the field name for a correction, no free text) worked by front desk and linked to the existing two-person erasure; a rate-limited PUBLIC grievance route (owner-set hourly cap, per-address limit, unguessable key); the wording and the erasure of the new tables are counsel's and the privacy owner's (checklist 84 to 86) | `careflow/rights_sql.py`, `portal_extras_sql.py`, migrations 0059, 0080 |
 | 20.1c | Under-18: guardian consent and a proxy trail | DECISION | Counsel confirms the specifics first | `docs/drafts/` |
 | 20.1d | Training labels only from de-identified, clinician-confirmed labels with consent | BUILT (mechanism) | | `careflow/learning_labels.py` |
 | 20.2 | Seeded cards, rules, templates are `draft_unreviewed` and unusable in `clinical` until two-person approval; no invented clinical content | BUILT | Rule authoring (drafts only), approval, withdrawal and retirement; cards and templates have no tables | migrations 0007, 0072, 0076 to 0079 |
@@ -277,7 +277,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 | 23.1 | Gemini Live over a browser WebSocket | FAKE | No engine by owner decision; the session route answers 503 | `careflow/voice.py` |
 | 23.2 | Narrow scope per workflow; mid-session instruction updates | BUILT (scoped prompts) / UNMEASURED | Whether Gemini Live accepts mid-session updates is unverified (Appendix B) | `careflow/voice.py` |
 | 23.3 | Safety per 11.6 | BUILT (mechanism) | | `careflow/voice.py` |
-| 23.4 | Spoken and on-screen consent per session | NOT BUILT / DECISION | Counsel's wording; a consent event type per session | `docs/drafts/consent-notices-draft.md` |
+| 23.4 | Spoken and on-screen consent per session | BUILT (the notice endpoint, labelled placeholder) / DECISION | `GET /v1/portal/voice/consent-notice` returns the configured notice (`CAREFLOW_VOICE_CONSENT_NOTICE`; the demo pack carries a labelled DEMO ONLY placeholder); the wording and a per-session consent event type are counsel's | `careflow/app.py`, `config/demo-phase4.yaml` |
 | 23.5 | Degradation and cost rows | BUILT / UNMEASURED | The mic button hides when the engine is off; the audio shadow price is unmeasured | `careflow/voice.py`, `cost_canvas.py` |
 
 ## 24. Care gap review (spec 24)
@@ -344,6 +344,10 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 - The patient-scoped note-vector wrapper with a verified erase (10.2, 16.6): `careflow/note_search.py`, `tests/test_note_search.py`.
 - The per-account message rate limit on the two staff routes that write a patient-facing message (11.5), the three-part latency function (14.4) and the gateway's feature plan (15.2).
 - The typed offer-draft response (`OfferDraftOut`: a closed reason word, the missing settings in their own field, typed data) for the frontend request about typed envelopes (8.3).
+
+## Patient-facing routes still not built (owner decision 2026-11-14 to build them as mechanism)
+
+Family members and guardians (request 21), the protocol-card and message-template editor (27), patient booking (28), patient messaging (29) and patient visit readiness (30) are NOT built yet. Each needs its own design before code: patient booking and messaging need patient-scoped policies or definer functions over the scheduling and message tables, the screening of a patient-sent message by the red-flag rules from a patient session, and the account-stage rules; the editor needs a card and template schema and a two-person publish like the rules; family needs the proxy trail. They are the next batch, not forgotten.
 
 ## What remains and why (the short list)
 
