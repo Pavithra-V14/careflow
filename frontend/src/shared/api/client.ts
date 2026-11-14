@@ -203,6 +203,7 @@ export const OPERATIONS = {
   listRedFlagRules: { method: 'get', path: '/v1/staff/console/red-flag-rules' },
   authorRedFlagRule: { method: 'post', path: '/v1/staff/console/red-flag-rules' },
   decideRedFlagRule: { method: 'post', path: '/v1/staff/console/red-flag-rules/{rule_id}/decision' },
+  withdrawRedFlagDraft: { method: 'post', path: '/v1/staff/console/red-flag-rules/{rule_id}/withdraw' },
   reviewerStats: { method: 'get', path: '/v1/staff/console/reviewer-stats' },
   costCanvas: { method: 'get', path: '/v1/staff/console/cost-canvas' },
   listVoiceSessions: { method: 'get', path: '/v1/staff/voice/sessions' },
@@ -546,6 +547,7 @@ export function createApi(options: ApiOptions) {
     authorRedFlagRule: (body: RuleDraftIn, o?: WriteOptions) => client.POST('/v1/staff/console/red-flag-rules', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
     decideRedFlagRule: (ruleId: string, decision: RuleDecision, o?: WriteOptions) =>
       client.POST('/v1/staff/console/red-flag-rules/{rule_id}/decision', { params: { path: { rule_id: ruleId }, header: { 'X-Idempotency-Key': key(o) } }, body: { decision } }),
+    withdrawRedFlagDraft: (ruleId: string, o?: WriteOptions) => client.POST('/v1/staff/console/red-flag-rules/{rule_id}/withdraw', { params: { path: { rule_id: ruleId }, header: { 'X-Idempotency-Key': key(o) } } }),
     reviewerStats: (clinicId: string, days?: number) => client.GET('/v1/staff/console/reviewer-stats', { params: { query: { clinic_id: clinicId, ...(days ? { days } : {}) } } }),
     costCanvas: (clinicId: string, days?: number) => client.GET('/v1/staff/console/cost-canvas', { params: { query: { clinic_id: clinicId, ...(days ? { days } : {}) } } }),
     listVoiceSessions: (clinicId: string) => client.GET('/v1/staff/voice/sessions', { params: { query: { clinic_id: clinicId } } }),

@@ -76,6 +76,7 @@ const INVOCATIONS: Record<keyof typeof OPERATIONS, (api: Api, o?: WriteOptions) 
   recordMedication: (api, o) => api.recordMedication(body<MedicationIn>('MedicationIn'), o),
   authorRedFlagRule: (api, o) => api.authorRedFlagRule(body<RuleDraftIn>('RuleDraftIn'), o),
   decideRedFlagRule: (api, o) => api.decideRedFlagRule(ID, 'approve', o),
+  withdrawRedFlagDraft: (api, o) => api.withdrawRedFlagDraft(ID, o),
   proposeMerge: (api, o) => api.proposeMerge(body<ProposeMergeIn>('ProposeMergeIn'), o),
   approveMerge: (api, o) => api.approveMerge(ID, o),
   unmerge: (api, o) => api.unmerge(ID, o),

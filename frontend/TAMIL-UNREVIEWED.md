@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-1591 of 1591 strings are unreviewed.
+1605 of 1605 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -332,6 +332,7 @@ Terms standardised: proposal, resolve / resolved.
 | `admin.rules.col.decision` | Decision | முடிவு | ok |
 | `admin.rules.decisionWords.approve` | Approved | ஒப்புக்கொண்டார் | ok |
 | `admin.rules.decisionWords.reject` | Rejected | நிராகரித்தார் | ok |
+| `admin.rules.decisionWords.retire` | Retired it | நிறுத்தினார் | ok |
 | `admin.rules.decisions` | Decisions so far | இதுவரை எடுத்த முடிவுகள் | ok |
 | `admin.rules.draftNote` | This is a draft. It is never active. It becomes approved only when two different doctors approve it, and its author cannot be one of them. | இது ஒரு வரைவு. இது ஒருபோதும் செயலில் இருக்காது. இரண்டு வெவ்வேறு மருத்துவர்கள் ஒப்புக்கொண்டால் மட்டுமே இது அங்கீகரிக்கப்படும்; அதை எழுதியவர் அவர்களில் ஒருவராக இருக்க முடியாது. | ok |
 | `admin.rules.empty` | There are no red-flag rule versions to show. | காட்ட சிவப்புக் கொடி விதிப் பதிப்புகள் இல்லை. | ok |
@@ -354,23 +355,36 @@ Terms standardised: proposal, resolve / resolved.
 | `admin.rules.result.approved` | Your approval was recorded and this version is now approved. | உங்கள் ஒப்புதல் பதிவு செய்யப்பட்டது; இந்தப் பதிப்பு இப்போது அங்கீகரிக்கப்பட்டுள்ளது. | ok |
 | `admin.rules.result.author_cannot_decide` | You wrote this version, so you cannot decide it. A different doctor must. | இந்தப் பதிப்பை நீங்கள் எழுதினீர்கள், எனவே இதில் முடிவெடுக்க முடியாது. வேறொரு மருத்துவர் முடிவெடுக்க வேண்டும். | ok |
 | `admin.rules.result.empty_rule` | This version has no phrases, patterns or vital-sign criteria, so it cannot be approved. | இந்தப் பதிப்பில் சொற்றொடர்கள், வடிவங்கள் அல்லது உடல்நிலை அளவீட்டு நிபந்தனைகள் எதுவும் இல்லை, எனவே இதை ஒப்புக்கொள்ள முடியாது. | ok |
+| `admin.rules.result.not_approved` | This version is not approved, so it cannot be retired. Nothing was recorded. | இந்தப் பதிப்பு ஒப்புக்கொள்ளப்படவில்லை, எனவே நிறுத்த முடியாது. எதுவும் பதிவு செய்யப்படவில்லை. | ok |
 | `admin.rules.result.not_draft` | This version is not a draft any more, so nothing was recorded. | இந்தப் பதிப்பு இப்போது வரைவு அல்ல, எனவே எதுவும் பதிவு செய்யப்படவில்லை. | ok |
 | `admin.rules.result.origin_mismatch` | This version belongs to a different environment than this clinic, so nothing was recorded. | இந்தப் பதிப்பு இந்த மருத்துவமனையின் சூழலைச் சேர்ந்தது அல்ல, எனவே எதுவும் பதிவு செய்யப்படவில்லை. | ok |
 | `admin.rules.result.platform_rule` | This rule applies to every clinic. Who may approve it has not been decided, so nothing was approved here. | இந்த விதி எல்லா மருத்துவமனைகளுக்கும் பொருந்தும். இதை யார் ஒப்புக்கொள்ளலாம் என்பது இன்னும் முடிவு செய்யப்படவில்லை, எனவே இங்கே எதுவும் அங்கீகரிக்கப்படவில்லை. | ok |
 | `admin.rules.result.recorded` | Your approval was recorded. The version is not approved yet: a second, different doctor must approve it. | உங்கள் ஒப்புதல் பதிவு செய்யப்பட்டது. இந்தப் பதிப்பு இன்னும் அங்கீகரிக்கப்படவில்லை: இரண்டாவது, வேறொரு மருத்துவர் ஒப்புக்கொள்ள வேண்டும். | ok |
 | `admin.rules.result.rejected` | Your rejection was recorded. This version is closed. | உங்கள் நிராகரிப்பு பதிவு செய்யப்பட்டது. இந்தப் பதிப்பு மூடப்பட்டது. | ok |
 | `admin.rules.result.rejected_earlier` | A doctor already rejected this version, so it cannot be approved. | ஒரு மருத்துவர் ஏற்கெனவே இந்தப் பதிப்பை நிராகரித்துவிட்டார், எனவே இதை ஒப்புக்கொள்ள முடியாது. | ok |
+| `admin.rules.result.retired` | Your retire decision was recorded and this version is now retired. | உங்கள் நிறுத்த முடிவு பதிவானது; இந்தப் பதிப்பு இப்போது நிறுத்தப்பட்டது. | ok |
 | `admin.rules.result.unknown` | The system answered with a result this screen does not know. Nothing is shown as approved. Reload the page to see the current state. | இந்தத் திரைக்குத் தெரியாத ஒரு முடிவை அமைப்பு தெரிவித்தது. எதுவும் அங்கீகரிக்கப்பட்டதாகக் காட்டப்படவில்லை. தற்போதைய நிலையைப் பார்க்க பக்கத்தை மீண்டும் ஏற்றவும். | ok |
+| `admin.rules.result.withdrawn` | This draft is withdrawn. It is closed for good and is not in force. | இந்த வரைவு திரும்பப் பெறப்பட்டது. அது முற்றிலும் மூடப்பட்டது; நடைமுறையில் இல்லை. | ok |
+| `admin.rules.retire` | Retire this version | இந்தப் பதிப்பை நிறுத்து | ok |
+| `admin.rules.retireBody` | Your retire decision is recorded now, and nothing is retired until a second, different doctor also records one. A retired version never comes back: a new version is the way back. If this is the newest version of its rule code, the whole rule code stops being in force. | உங்கள் நிறுத்த முடிவு இப்போது பதிவாகும்; வேறொரு மருத்துவரும் பதிவு செய்யும் வரை எதுவும் நிறுத்தப்படாது. நிறுத்தப்பட்ட பதிப்பு மீண்டும் வராது; புதிய பதிப்பே திரும்ப வழி. இது இந்த விதிக் குறியீட்டின் புதிய பதிப்பாக இருந்தால், முழு விதிக் குறியீடும் நடைமுறையில் இருக்காது. | ok |
+| `admin.rules.retireCount` | Retire decisions recorded so far: {{count}}. Two different doctors are needed. | இதுவரை பதிவான நிறுத்த முடிவுகள்: {{count}}. இரண்டு வெவ்வேறு மருத்துவர்கள் தேவை. | ok |
+| `admin.rules.retireTitle` | Retire this approved red-flag rule version? | ஒப்புக்கொள்ளப்பட்ட இந்தச் சிவப்புக் கொடி விதிப் பதிப்பை நிறுத்தவா? | ok |
 | `admin.rules.status` | Status | நிலை | ok |
 | `admin.rules.statuses.approved` | Approved | அங்கீகரிக்கப்பட்டது | ok |
 | `admin.rules.statuses.draft_unreviewed` | Draft, not approved | வரைவு, அங்கீகரிக்கப்படவில்லை | ok |
 | `admin.rules.statuses.retired` | Retired | நிறுத்தப்பட்டது | ok |
+| `admin.rules.statuses.withdrawn` | Withdrawn | திரும்பப் பெறப்பட்டது | ok |
 | `admin.rules.tokenSets` | Token sets | சொல் தொகுப்புகள் | ok |
 | `admin.rules.twoDoctors` | A draft version becomes approved only when two different doctors approve it, each with a fresh authenticator code. One rejection closes the version. Nothing is approved by default. | வரைவுப் பதிப்பு, இரண்டு வெவ்வேறு மருத்துவர்கள் ஒவ்வொருவரும் புதிய அங்கீகார குறியீட்டுடன் ஒப்புக்கொண்டால் மட்டுமே அங்கீகரிக்கப்படும். ஒரு நிராகரிப்பு அந்தப் பதிப்பை மூடிவிடும். இயல்பாக எதுவும் அங்கீகரிக்கப்படுவதில்லை. | ok |
 | `admin.rules.vitals` | Vital-sign criteria | உடல்நிலை அளவீட்டு நிபந்தனைகள் | ok |
 | `admin.rules.vitalsNo` | This version has no vital-sign criteria. | இந்தப் பதிப்பில் உடல்நிலை அளவீட்டு நிபந்தனைகள் இல்லை. | ok |
 | `admin.rules.vitalsYes` | This version has vital-sign criteria. | இந்தப் பதிப்பில் உடல்நிலை அளவீட்டு நிபந்தனைகள் உள்ளன. | ok |
+| `admin.rules.withdraw` | Withdraw this draft | இந்த வரைவைத் திரும்பப் பெறு | ok |
+| `admin.rules.withdrawBody` | A withdrawn draft is closed for good. It can never be approved and it is never in force. A withdrawn version is not the same as a retired one. Only a draft can be withdrawn. To change a rule, write a new version. | திரும்பப் பெறப்பட்ட வரைவு முற்றிலும் மூடப்படும். அதை ஒருபோதும் ஒப்புக்கொள்ள முடியாது; அது ஒருபோதும் நடைமுறையில் இருக்காது. திரும்பப் பெறுதல் என்பது நிறுத்துதலிலிருந்து வேறுபட்டது. வரைவை மட்டுமே திரும்பப் பெற முடியும். ஒரு விதியை மாற்ற, புதிய பதிப்பை எழுதுங்கள். | ok |
+| `admin.rules.withdrawTitle` | Withdraw this draft red-flag rule version? | இந்தச் சிவப்புக் கொடி விதி வரைவுப் பதிப்பைத் திரும்பப் பெறவா? | ok |
 | `admin.rules.youDecided` | You have already decided on this version. | இந்தப் பதிப்பில் நீங்கள் ஏற்கெனவே முடிவெடுத்துவிட்டீர்கள். | ok |
+| `admin.rules.youRetired` | You have recorded your retire decision on this version. | இந்தப் பதிப்பில் உங்கள் நிறுத்த முடிவைப் பதிவு செய்துவிட்டீர்கள். | ok |
+| `admin.rules.youWrote` | You wrote this version. A different doctor has to approve or reject it. | இந்தப் பதிப்பை நீங்கள் எழுதினீர்கள். வேறொரு மருத்துவர்தான் இதை ஒப்புக்கொள்ளவோ நிராகரிக்கவோ வேண்டும். | ok |
 | `admin.stepUp` | This needs a fresh authenticator code. You will be asked for it. | இதற்குப் புதிய அங்கீகார குறியீடு தேவை. அது உங்களிடம் கேட்கப்படும். | ok |
 | `admin.tab.accounts` | Staff accounts | பணியாளர் கணக்குகள் | ok |
 | `admin.tab.autonomy` | Autonomy | தன்னாட்சி | ok |

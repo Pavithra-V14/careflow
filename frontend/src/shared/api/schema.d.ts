@@ -930,10 +930,30 @@ export interface paths {
         put?: never;
         /**
          * Decide Red Flag Rule
-         * @description Approve or reject a DRAFT red-flag rule version as a doctor of its clinic with a verified second factor (checked again by the database). The version becomes approved only when a SECOND, different doctor approves it (never its author);
-         *     one reject closes it. Idempotent on the key; audited by the database. 404 if you cannot see the version, 403 unless you are a doctor of its clinic. Nothing is approved by default.
+         * @description Approve or reject a DRAFT red-flag rule version, or RETIRE an APPROVED one, as a doctor of its clinic with a verified second factor (checked again by the database). A draft becomes approved only when a SECOND, different doctor approves it (never its author);
+         *     one reject closes it. An approved version is retired only when TWO different doctors (any two, the author and approvers included) each record `retire`; a retired version never comes back (a new version is the way back), and a retired NEWEST version switches off the whole rule code. Idempotent on the key; audited by the database. 404 if you cannot see the version, 403 unless you are a doctor of its clinic. Nothing is approved by default.
          */
         post: operations["decide_red_flag_rule_v1_staff_console_red_flag_rules__rule_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/console/red-flag-rules/{rule_id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Withdraw Red Flag Draft
+         * @description Withdraw a DRAFT red-flag rule version as a doctor of its clinic with a verified second factor (checked again by the database). Only a draft: an approved version is never touched here (answer `not_draft`), and a withdrawn draft can never be approved. Audited by the database; a replay by the same doctor returns `withdrawn`. 404 if you cannot see the version, 403 unless you are a doctor of its clinic.
+         */
+        post: operations["withdraw_red_flag_draft_v1_staff_console_red_flag_rules__rule_id__withdraw_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5438,7 +5458,7 @@ export interface components {
              * Decision
              * @enum {string}
              */
-            decision: "approve" | "reject";
+            decision: "approve" | "reject" | "retire";
         };
         /** RuleDecisionOut */
         RuleDecisionOut: {
@@ -5446,7 +5466,7 @@ export interface components {
              * Result
              * @enum {string}
              */
-            result: "recorded" | "approved" | "rejected" | "already_decided" | "not_draft" | "origin_mismatch" | "author_cannot_decide" | "empty_rule" | "rejected_earlier" | "platform_rule";
+            result: "recorded" | "approved" | "rejected" | "retired" | "withdrawn" | "already_decided" | "not_draft" | "not_approved" | "origin_mismatch" | "author_cannot_decide" | "empty_rule" | "rejected_earlier" | "platform_rule";
         };
         /** RuleDecisionRowOut */
         RuleDecisionRowOut: {
@@ -5464,7 +5484,7 @@ export interface components {
              * Decision
              * @enum {string}
              */
-            decision: "approve" | "reject";
+            decision: "approve" | "reject" | "retire";
         };
         /** RuleDoneIn */
         RuleDoneIn: {
@@ -5523,6 +5543,8 @@ export interface components {
         RuleVersionOut: {
             /** Approved At */
             approved_at: string | null;
+            /** Authored By You */
+            authored_by_you: boolean;
             /** Decisions */
             decisions: components["schemas"]["RuleDecisionRowOut"][];
             /** Has Vitals Criteria */
@@ -5547,11 +5569,19 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "draft_unreviewed" | "approved" | "retired";
+            status: "draft_unreviewed" | "approved" | "retired" | "withdrawn";
             /** Token Sets */
             token_sets: string[][];
             /** Version Id */
             version_id: number;
+        };
+        /** RuleWithdrawOut */
+        RuleWithdrawOut: {
+            /**
+             * Result
+             * @enum {string}
+             */
+            result: "withdrawn" | "not_draft";
         };
         /** RunOut */
         RunOut: {
@@ -9164,6 +9194,67 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RuleDecisionOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+        };
+    };
+    withdraw_red_flag_draft_v1_staff_console_red_flag_rules__rule_id__withdraw_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleWithdrawOut"];
                 };
             };
             /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
