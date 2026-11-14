@@ -298,3 +298,25 @@ async def test_the_functions_are_revoked_from_the_supabase_roles_and_the_owner_b
             assert await owner(db, "select has_table_privilege(:r, 'kb.card_embeddings', 'select')", r=role) == [(False,)]
     assert await owner(db, "select has_table_privilege('careflow_app', 'kb.card_embeddings', 'select, insert, update, delete')") == [(False,)]
     assert await owner(db, "select has_function_privilege('careflow_app', 'kb.search_card_embeddings(uuid, text, text, text, integer)', 'execute')") == [(True,)]
+
+
+async def test_a_replay_tolerates_float_noise_but_not_a_different_vector_and_an_old_version_replays_after_a_newer_one_exists(db):
+    w = await world(db)
+    base = [0.0] * DIMENSIONS
+    base[9] = 1.0
+    noisy = list(base)
+    noisy[10] = 1e-6  # the same text embedded again by a hosted model: a hair of difference
+    first = await as_app(db, w["worker"], INDEX, c=w["a"], o="test", id="card-a", v=1, m=MODEL, a=["nurse"], e=vector_literal(base), h=SHA, k="k1")
+    again = await as_app(db, w["worker"], INDEX, c=w["a"], o="test", id="card-a", v=1, m=MODEL, a=["nurse"], e=vector_literal(noisy), h=SHA, k="k1")
+    assert first[0][1] is True and again[0] == (first[0][0], False)  # a replay, not a conflict
+    assert await index(db, w, "worker", "card-a", 1, 11, audience=("nurse",), key="k1") == "23505"  # a genuinely different vector still is
+    assert (await index(db, w, "worker", "card-a", 2, 12, sha="b" * 64, audience=("nurse",)))[0][1] is True
+    replay = await as_app(db, w["worker"], INDEX, c=w["a"], o="test", id="card-a", v=1, m=MODEL, a=["nurse"], e=vector_literal(base), h=SHA, k="k1")
+    assert replay[0] == (first[0][0], False)  # version 1 again after version 2 exists: still a replay, never an out-of-sequence refusal
+    assert await owner(db, "select count(*) from kb.card_embeddings where clinic_id = :c", c=w["a"]) == [(2,)]
+
+
+async def test_the_function_owner_and_the_table_owner_bypass_row_level_security(db):
+    for sig in ("kb.index_card_embedding(uuid, text, text, integer, text, text[], text, text, text)", "kb.search_card_embeddings(uuid, text, text, text, integer)", "kb.current_card_versions(uuid, text, text, text[])"):
+        assert await owner(db, "select r.rolsuper or r.rolbypassrls from pg_proc p join pg_roles r on r.oid = p.proowner where p.oid = to_regprocedure(:s)", s=sig) == [(True,)], sig
+    assert await owner(db, "select r.rolsuper or r.rolbypassrls from pg_class c join pg_roles r on r.oid = c.relowner where c.oid = 'kb.card_embeddings'::regclass") == [(True,)]
