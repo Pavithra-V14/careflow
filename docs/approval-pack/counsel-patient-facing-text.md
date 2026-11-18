@@ -153,3 +153,33 @@ Questions for counsel:
 1. Is the emergency wording shown on every patient page (a placeholder owned elsewhere) enough next to the messages and complaint forms, or should the forms carry their own?
 2. Is a single plain-language register acceptable, or does counsel need a different register for any of these texts?
 3. Who approves a change to any of this wording after counsel signs it off, and how is a change recorded?
+
+## 7. Family links (patient section and front-desk screen)
+
+What the patient sees (exactly as in the portal; the section is not there while the owner switch is off):
+
+- "Family links" / "You can ask to be linked as the guardian of a child or as the carer of an adult at a hospital. A member of the hospital staff checks the request afterwards."
+- "A verified link does not give you access to the other person's record or let you act for them. It is only recorded."
+- Confirmation: "This sends a request to the hospital. A staff member checks it. It does not give you access to anything."
+- Types: "Guardian of a child", "Carer of an adult".
+- While the clinic's rules are empty: "Family links are not set up at this hospital yet: the hospital has not entered its rules. Nothing was sent."
+
+The front desk sees: "Verify" (choose the dependant's record and say whether the linked person's consent was obtained) and "Reject" (one reason word). The server checks the age from the stored date of birth; the screen never sends an age.
+
+Questions for counsel:
+
+1. Are "Guardian of a child" and "Carer of an adult" the right link types in this hospital's law and practice, and are the patient-facing words right?
+2. Is it acceptable to say that a verified link "grants nothing" today? What may a verified link allow later, and who decides?
+3. The age limits for a minor and an adult, and whether the linked person's consent is required, are the clinic's rule values in a table that ships EMPTY. Who enters them, and who approves a change?
+4. Should a request show the patient what documents or proof the staff member will ask for?
+5. Is a withdrawal by the person who asked (one click with a confirmation) enough, and does the hospital have to keep a record of withdrawn links?
+
+## 8. Visit preparation (patient and staff view)
+
+The patient sees the clinic's own checklist for the visit type, word for word, with "Mark done" and "Mark not done" (and "Not marked yet" until they choose). The console holds no checklist text of its own. Fixed words: "What to prepare", "Nothing to prepare for this visit.", "Visit preparation is not turned on at this hospital yet."
+
+Questions for counsel and the clinic:
+
+1. Does the checklist wording, which the clinic writes, need approval before the patient sees it, and by whom?
+2. Should the patient be told that a nurse or doctor can see what they marked? (The staff view is read-only and needs a recent second factor.)
+3. Is a mark a clinical record, and how long must it be kept?

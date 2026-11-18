@@ -11,6 +11,7 @@ import { PATHS } from '../paths';
 import { normalisePhone, type PortalAuth } from './auth';
 import { VoiceSection } from './VoiceSection';
 import { BookingSection, MessagesSection } from './PortalVisits';
+import { FamilySection } from './PortalFamily';
 import { NotificationsSection, ProfileSection, PublicGrievanceSection, RequestsSection } from './PortalMore';
 import { ClaimSection, ConsentSection, GrievanceSection, MyDataSection } from './PortalSections';
 
@@ -269,6 +270,7 @@ function Account({ auth, apiBaseUrl, onSignedOut }: { auth: PortalAuth; apiBaseU
           <RequestsSection api={api} />
           <BookingSection api={api} />
           <MessagesSection api={api} />
+          <FamilySection api={api} />
           <GrievanceSection api={api} />
           <VoiceSection api={api} />
           <MyDataSection api={api} />

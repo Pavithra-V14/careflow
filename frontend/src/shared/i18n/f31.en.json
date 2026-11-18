@@ -1,0 +1,222 @@
+{
+  "nav": {
+    "family": "Family links",
+    "knowledge": "Cards and templates"
+  },
+  "portal": {
+    "prep": {
+      "title": "What to prepare",
+      "toggle": "What to prepare",
+      "off": "Visit preparation is not turned on at this hospital yet.",
+      "gone": "This visit was not found, or it has already started.",
+      "nothing": "Nothing to prepare for this visit.",
+      "markedDone": "You marked this done",
+      "markedNotDone": "You marked this not done",
+      "notMarked": "Not marked yet",
+      "markDone": "Mark done",
+      "markNotDone": "Mark not done",
+      "markGone": "This item could not be marked: the visit has started, was cancelled, or the item is no longer on its list. Nothing was changed.",
+      "markConflict": "That mark conflicts with an earlier request. Refresh and try again. Nothing was changed."
+    },
+    "family": {
+      "title": "Family links",
+      "body": "You can ask to be linked as the guardian of a child or as the carer of an adult at a hospital. A member of the hospital staff checks the request afterwards.",
+      "grantsNothing": "A verified link does not give you access to the other person's record or let you act for them. It is only recorded.",
+      "type": "What kind of link?",
+      "chooseType": "Choose",
+      "types": {
+        "guardian_of_minor": "Guardian of a child",
+        "carer_of_adult": "Carer of an adult"
+      },
+      "ask": "Ask for this link",
+      "mine": "Your requests and links",
+      "none": "You have no requests or links.",
+      "status": {
+        "requested": "Waiting for a check",
+        "verified": "Verified",
+        "rejected": "Not accepted",
+        "revoked": "Withdrawn"
+      },
+      "revoke": "Withdraw",
+      "revokeTitle": "Withdraw this?",
+      "revokeBody": "This withdraws your request or link. Nothing about the other person is changed.",
+      "confirmTitle": "Ask for this link?",
+      "confirmBody": "This sends a request to the hospital. A staff member checks it. It does not give you access to anything.",
+      "result": {
+        "recorded": "Your request was sent.",
+        "replay": "This request was already sent.",
+        "already_requested": "You already have an open request of this kind."
+      },
+      "revokeResult": {
+        "recorded": "It was withdrawn.",
+        "replay": "It was already withdrawn.",
+        "invalid_state": "It cannot be withdrawn now. Nothing was changed."
+      },
+      "noRules": "Family links are not set up at this hospital yet: the hospital has not entered its rules. Nothing was sent.",
+      "refused": "This cannot be done for this account: it must be active and linked to a record at that hospital. Nothing was sent.",
+      "off": "Family links are not turned on at this hospital yet. Nothing was sent.",
+      "invalid": "That request was not accepted. Check your choices. Nothing was sent.",
+      "gone": "This was not found. Nothing was changed."
+    }
+  },
+  "visitPrep": {
+    "title": "Visit preparation (what the patient marked)",
+    "note": "The hospital's own checklist for this visit type, and what the patient has marked. Read-only. It needs a recent second factor.",
+    "show": "Show what the patient marked",
+    "hide": "Hide",
+    "off": "Visit preparation is not turned on yet.",
+    "refused": "You may not read this, or it needs a recent second factor. Nothing was shown.",
+    "gone": "This visit was not found. Nothing was shown.",
+    "nothing": "Nothing to prepare for this visit.",
+    "visit": "Visit",
+    "visitType": "Visit type",
+    "starts": "Starts",
+    "col": {
+      "item": "Item",
+      "state": "Marked",
+      "when": "When"
+    },
+    "done": "Done",
+    "notDone": "Not done",
+    "notMarked": "Not marked"
+  },
+  "familyStaff": {
+    "title": "Family link requests",
+    "note": "Requests by patients to be linked as the guardian of a child or the carer of an adult. The list shows ids, a type and a status, never a name. A verified link grants nothing yet; it is only recorded. Recording a decision needs a recent second factor.",
+    "noRules": "Family links are not set up for this clinic: the clinic has not entered its rules. Nothing can be recorded.",
+    "off": "Family links are not turned on yet.",
+    "empty": "There are no family link requests.",
+    "col": {
+      "link": "Link",
+      "type": "Type",
+      "status": "Status",
+      "requester": "Requester",
+      "dependant": "Dependant",
+      "received": "Received",
+      "action": "Action"
+    },
+    "types": {
+      "guardian_of_minor": "Guardian of a child",
+      "carer_of_adult": "Carer of an adult"
+    },
+    "status": {
+      "requested": "Waiting for a check",
+      "verified": "Verified",
+      "rejected": "Rejected",
+      "revoked": "Withdrawn"
+    },
+    "verify": "Verify",
+    "reject": "Reject",
+    "verifyTitle": "Verify this link?",
+    "rejectTitle": "Reject this link?",
+    "verifyBody": "Choose the dependant's record and say whether the linked person's consent was obtained. The server checks the clinic's rule, using the age from the stored date of birth. The decision is recorded under your name.",
+    "rejectBody": "Rejects the request and records one reason word. The decision is recorded under your name.",
+    "consent": "Was the linked person's consent obtained?",
+    "reason": "Reason word",
+    "reasonHint": "One word from the hospital's list: lowercase letters, digits and underscores, starting with a letter.",
+    "result": {
+      "recorded": "The decision was recorded.",
+      "replay": "This was already recorded.",
+      "invalid_state": "This request is not waiting for a decision. Nothing was recorded.",
+      "age_not_allowed": "The clinic's rule does not allow this link for the dependant's age. Nothing was recorded.",
+      "consent_required": "The clinic's rule needs the linked person's consent. Nothing was recorded."
+    },
+    "refused": "You may not decide this, or it needs a recent second factor, or the record is not in this clinic. Nothing was recorded.",
+    "gone": "This request was not found. Nothing was recorded.",
+    "invalid": "That decision was not accepted. Check what you entered. Nothing was recorded.",
+    "consentChoice": {
+      "yes": "Yes, it was obtained",
+      "no": "No, it was not obtained"
+    }
+  },
+  "knowledge": {
+    "title": "Cards and templates",
+    "note": "Everything here is typed by a nurse or a doctor. Nothing is supplied by the system. A draft is written by a nurse or a doctor, submitted by its author, and approved or rejected by a doctor who is not the author. Every change needs a recent second factor.",
+    "off": "The cards and templates editor is not turned on yet.",
+    "new": "Write a new draft",
+    "drafts": "Drafts",
+    "draftsEmpty": "There are no drafts. Nothing is supplied by the system: every card and template is typed by staff.",
+    "approved": "Approved versions",
+    "itemsEmpty": "There are no approved cards or templates.",
+    "col": {
+      "kind": "Kind",
+      "code": "Code",
+      "titleCol": "Title",
+      "status": "Status",
+      "author": "Author",
+      "decider": "Decided by",
+      "updated": "Updated",
+      "action": "Action",
+      "version": "Version",
+      "audience": "May be read by",
+      "approver": "Approved by",
+      "approvedAt": "Approved"
+    },
+    "kinds": {
+      "card": "Card",
+      "template": "Template"
+    },
+    "status": {
+      "draft": "Draft",
+      "submitted": "Waiting for a doctor",
+      "approved": "Approved",
+      "rejected": "Rejected"
+    },
+    "roles": {
+      "front_desk": "Front desk",
+      "nurse": "Nurse",
+      "doctor": "Doctor",
+      "admin": "Admin",
+      "queue_worker": "Background worker"
+    },
+    "you": "you",
+    "close": "Close",
+    "look": "Look",
+    "edit": "Edit",
+    "submit": "Submit",
+    "approve": "Approve",
+    "reject": "Reject",
+    "youWrote": "You wrote this draft. A different doctor must decide.",
+    "synonyms": "Synonyms",
+    "phrases": "Phrases patients use",
+    "audience": "May be read by",
+    "newTitle": "Write a new draft",
+    "editTitle": "Edit your draft",
+    "formBody": "Type the content yourself. Nothing is filled in for you. It is saved as a draft only; it is never in use until a doctor approves it.",
+    "kind": "Kind",
+    "chooseKind": "Choose",
+    "code": "Code",
+    "codeHint": "Lowercase letters, digits, dots, dashes and underscores, starting with a letter or digit (at most 100 characters). One open draft per code.",
+    "titleLabel": "Title",
+    "bodyLabel": "Text",
+    "synonymsLabel": "Synonyms (one per line, at most 20)",
+    "phrasesLabel": "Phrases patients use (one per line, at most 20)",
+    "linesHint": "Each line at most 200 characters. Empty lines are ignored.",
+    "audienceLabel": "Who may read it",
+    "cardNeedsAudience": "A card needs at least one role.",
+    "save": "Save the draft",
+    "saveTitle": "Save this draft?",
+    "saveBody": "This saves exactly what you typed as a draft. A draft is never in use. It is recorded under your name.",
+    "refused": "You may not do this, or it needs a recent second factor. Nothing was saved.",
+    "conflict": "A draft for this code is already open, or this request conflicts with an earlier one. Nothing was saved.",
+    "invalid": "That was not accepted. Check what you typed. Nothing was recorded.",
+    "gone": "This draft was not found. Nothing was recorded.",
+    "created": "The draft was saved.",
+    "edited": "The draft was changed.",
+    "result": {
+      "recorded": "It was recorded.",
+      "replay": "This was already recorded.",
+      "invalid_state": "This draft can no longer be changed or decided in this way. Nothing was recorded."
+    },
+    "submitTitle": "Submit this draft for approval?",
+    "submitBody": "This freezes the draft and sends it to a doctor. You cannot edit it afterwards.",
+    "approveTitle": "Approve this draft?",
+    "rejectTitle": "Reject this draft?",
+    "approveBody": "Approving makes this the next version. It is recorded under your name. You are approving exactly the text shown above.",
+    "rejectBody": "Rejecting closes this draft. It is recorded under your name, with one reason word.",
+    "reason": "Reason word",
+    "reasonHint": "One word: lowercase letters, digits and underscores, starting with a letter (at most 60 characters).",
+    "decideRefused": "You may not decide this: only a doctor who did not write the draft may, and it needs a recent second factor. Nothing was recorded.",
+    "approvedAs": "Approved as version {{version}}."
+  }
+}
