@@ -1,6 +1,6 @@
 # Tamil review pack (AI-prepared, NOT reviewed by a native speaker)
 
-Prepared 2026-11-18. Machine-checked on 2026-11-14; NOT human-reviewed; the Tamil reader must still approve (Part 0). Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 2016 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
+Prepared 2026-11-18. Machine-checked on 2026-11-18; NOT human-reviewed; the Tamil reader must still approve (Part 0). Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 2016 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
 
 **Regenerated 2026-11-18** by `npm run i18n:pack` from the strings as they are now, so it covers every current string, including the newest screens (patient voice setting, consent withdrawal and history, activating a staff account, withdrawing and retiring a red-flag rule). Each is written and second-passed in the same way and is just as unreviewed.
 
@@ -20,24 +20,25 @@ Notes: 71 grade A, 125 grade B, 58 grade C (254 rows with a note; some notes cov
 
 ## Part 0. Machine first pass (back-translation)
 
-**Machine-checked on 2026-11-14; NOT human-reviewed; the Tamil reader must still approve.** This is a first pass by an AI model, not a native speaker, and not a substitute for the human reviewer. No string was marked reviewed.
+**Machine-checked on 2026-11-18; NOT human-reviewed; the Tamil reader must still approve.** This is a first pass by an AI model, not a native speaker, and not a substitute for the human reviewer. No string was marked reviewed.
 
-How it was done: every Tamil string was back-translated to English on its own, without the English original in view, and only then compared with the original. Strings that are identical in English and Tamil on purpose (Part 6) were not translated, so they were not back-translated. A script also checked every string for lost or reordered {{placeholders}}, changed numbers, a lost negation, informal pronouns and a different number of sentences.
+How it was done: every Tamil string was back-translated to English on its own, without the English original in view, and only then compared with the original. Strings that are identical in English and Tamil on purpose (Part 6) were not translated, so they were not back-translated. It was done in 2 pass(es): 2026-11-14: 1778 strings (1 fixed, 35 flagged); 2026-11-18: 239 strings (1 fixed, 8 flagged). The second pass covered only the strings added or changed since the first. A script also checked every string for lost or reordered {{placeholders}}, changed numbers, a lost negation, informal pronouns and a different number of sentences.
 
 | Count | Strings |
 |---|---|
-| Checked | 1778 (1747 back-translated, 31 left in English by design) |
-| Fixed (a clear defect) | 1 |
-| Flagged for the human reviewer | 35 (grade A: 4, B: 14, C: 17) |
-| Strings added since this check, not covered | 238 |
+| Checked | 2016 (1985 back-translated, 31 left in English by design) |
+| Fixed (a clear defect) | 2 |
+| Flagged for the human reviewer | 43 (grade A: 5, B: 15, C: 23) |
+| Strings added since this check, not covered | 0 |
 
-Automatic findings: 0 placeholder mismatches, 0 changed numbers, 0 lost negations, 0 informal pronouns, 1 string with a different number of sentences (fixed). 199 strings whose back-translation overlapped little with the English, or that the script flagged, were read side by side; the rest agreed. Most of the low-overlap ones were synonyms ("Expires" and "Expiry", "Phone" and "Telephone") and are not listed.
+Automatic findings: 0 placeholder mismatches, 0 changed numbers, 0 lost negations, 0 informal pronouns, 1 string with a different number of sentences (fixed). 222 strings whose back-translation overlapped little with the English, or that the script flagged, were read side by side; the rest agreed. Most of the low-overlap ones were synonyms ("Expires" and "Expiry", "Phone" and "Telephone") and are not listed.
 
 ### Fixed
 
 | Key | English | Tamil before | Tamil now | What was wrong |
 |---|---|---|---|---|
 | `scheduling.offersNote` | A read-only view of the draft offer. It is computed when you ask and stored nowhere. Nothing is sent. | வரைவு வாய்ப்பின் படிக்க-மட்டும் பார்வை. நீங்கள் கேட்கும்போது கணக்கிடப்படுகிறது, எங்கும் சேமிக்கப்படுவதில்லை. | வரைவு வாய்ப்பின் படிக்க-மட்டும் பார்வை. நீங்கள் கேட்கும்போது கணக்கிடப்படுகிறது, எங்கும் சேமிக்கப்படுவதில்லை. எதுவும் அனுப்பப்படாது. | The English ends with "Nothing is sent." and the Tamil had no such sentence (the English was extended on 2026-11-14 and the Tamil was not). A lost "nothing is sent" on the offer draft screen is a safety-relevant omission. |
+| `portal.prep.markedDone` | You marked this done | இதைச் செய்தாகக் குறித்தீர்கள் | இதைச் செய்ததாகக் குறித்தீர்கள் | A spelling error: "செய்தாகக்" is not a valid form (it must be "செய்ததாகக்", "that you did it"). It is the line a patient reads under a checklist item they marked done. |
 
 ### Flagged (left as they are, for the human reviewer)
 
@@ -80,6 +81,14 @@ Grade A: a safety, privacy or patient-rights meaning could be misread. B: a wron
 | `portal.signIn.title` | C | Sign in or create an account | உள்நுழைக அல்லது கணக்கை உருவாக்குக | Register: "உள்நுழைக அல்லது கணக்கை உருவாக்குக" mixes the archaic -க forms on the first patient page. Part 5. | உள்நுழையுங்கள் அல்லது கணக்கை உருவாக்குங்கள். |
 | `portal.signIn.change` | C | Use a different number | வேறு எண்ணைப் பயன்படுத்து | Register: "வேறு எண்ணைப் பயன்படுத்து" is a bare imperative on a patient sign-in button; the sentences nearby use -ங்கள். Part 5. | வேறு எண்ணைப் பயன்படுத்துங்கள். |
 | `portal.signIn.send` | C | Send me a code | எனக்குக் குறியீட்டை அனுப்பு | Register: "எனக்குக் குறியீட்டை அனுப்பு" is a bare imperative on a patient button. Part 5. | எனக்குக் குறியீட்டை அனுப்புங்கள். |
+| `knowledge.approve` | A | Approve | ஒப்புக்கொள் | "Approve" a card or template is ஒப்புக்கொள் (agree, admit). This button puts staff-written clinical wording into use once a second person has agreed; the Tamil does not clearly say "authorise". The same problem as the red-flag rule approval (the first pass). | Use the same clear word for approve/authorise as the red-flag rule approval (for example அங்கீகரி), on the button, the dialog and the "Approved by" column. |
+| `familyStaff.col.dependant` | B | Dependant | சார்ந்தவர் | "Dependant" (the person the link is for) is சார்ந்தவர், which can also mean "someone who belongs to or is associated with"; it does not clearly say which side of a guardian link this is. The age-rule message uses the same word. | சார்ந்திருப்பவர் (the one who depends), or a word the reviewer chooses. |
+| `portal.family.revoke` | C | Withdraw | திரும்பப் பெறு | Patient "Withdraw" (a family link request) is திரும்பப் பெறு, the same verb as consent withdrawal and revoke (Part 4). | A word chosen by the reviewer; keep it clear that only the request is withdrawn, not any consent. |
+| `messages.topics.care` | C | Care | சிகிச்சை | Message topic "Care" is சிகிச்சை (treatment), narrower than care. | பராமரிப்பு, or a word the reviewer chooses. |
+| `portal.prep.markDone` | C | Mark done | செய்தேன் எனக் குறி | Register: "Mark done" is "செய்தேன் எனக் குறி" (a bare imperative and first person "I did it") on a patient button. Part 5. | செய்தேன் எனக் குறியுங்கள், or a form the reviewer chooses. |
+| `portal.prep.markNotDone` | C | Mark not done | செய்யவில்லை எனக் குறி | Register: "Mark not done" is "செய்யவில்லை எனக் குறி" (a bare imperative) on a patient button. Part 5. | செய்யவில்லை எனக் குறியுங்கள். |
+| `messages.screen.reply.pending_clinician_template` | C | No reply is sent: the patient-facing wording has not been written by a clinician yet. | எந்தப் பதிலும் அனுப்பப்படவில்லை: நோயாளிக்கான சொற்களை மருத்துவர் இன்னும் எழுதவில்லை. | The note that no reply is sent because a clinician has not written the wording is in the past tense ("was not sent"); the English says no reply is sent at all for now. | A present-tense form, chosen by the reviewer. |
+| `knowledge.roles.queue_worker` | C | Background worker | பின்னணிப் பணியாளர் | The role "queue_worker" is shown to staff as "Background worker" (பின்னணிப் பணியாளர்); a nurse or doctor may not know what it is. | The reviewer and the clinic decide whether this role should be named in Tamil at all. |
 
 ## Part 1. Strings that most need a native speaker (safety first)
 
@@ -1255,7 +1264,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `errorBoundary.reload` | Reload the page | பக்கத்தை மீண்டும் ஏற்று | no issue found | |
 | `errorBoundary.title` | This screen could not be shown | இந்தத் திரையைக் காட்ட முடியவில்லை | no issue found | |
 | `familyStaff.col.action` | Action | செயல் | no issue found | |
-| `familyStaff.col.dependant` | Dependant | சார்ந்தவர் | no issue found | |
+| `familyStaff.col.dependant` | Dependant | சார்ந்தவர் | no issue found; machine back-translation check: flagged B (Part 0) | |
 | `familyStaff.col.link` | Link | இணைப்பு | no issue found | |
 | `familyStaff.col.received` | Received | பெறப்பட்டது | no issue found | |
 | `familyStaff.col.requester` | Requester | கோரியவர் | no issue found | |
@@ -1343,7 +1352,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `idle.body` | You will be signed out in {{n}} seconds because the page has not been used. Anything on the screen will be cleared. | பக்கம் பயன்படுத்தப்படாததால் {{n}} வினாடிகளில் நீங்கள் வெளியேற்றப்படுவீர்கள். திரையில் உள்ளவை அழிக்கப்படும். | no issue found | |
 | `idle.stay` | Stay signed in | உள்நுழைந்தே இருங்கள் | no issue found | |
 | `idle.title` | Are you still there? | நீங்கள் இன்னும் இருக்கிறீர்களா? | no issue found | |
-| `knowledge.approve` | Approve | ஒப்புக்கொள் | no issue found | |
+| `knowledge.approve` | Approve | ஒப்புக்கொள் | no issue found; machine back-translation check: flagged A (Part 0) | |
 | `knowledge.approveBody` | Approving makes this the next version. It is recorded under your name. You are approving exactly the text shown above. | ஒப்புக்கொண்டால் இது அடுத்த பதிப்பாகும். இது உங்கள் பெயரில் பதிவாகும். மேலே காட்டப்பட்ட உரையையே நீங்கள் ஒப்புக்கொள்கிறீர்கள். | no issue found | |
 | `knowledge.approveTitle` | Approve this draft? | இந்த வரைவை ஒப்புக்கொள்ளவா? | no issue found | |
 | `knowledge.approved` | Approved versions | ஒப்புக்கொள்ளப்பட்ட பதிப்புகள் | no issue found | |
@@ -1404,7 +1413,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `knowledge.roles.doctor` | Doctor | மருத்துவர் | no issue found | |
 | `knowledge.roles.front_desk` | Front desk | வரவேற்பு மேசை | no issue found | |
 | `knowledge.roles.nurse` | Nurse | செவிலியர் | no issue found | |
-| `knowledge.roles.queue_worker` | Background worker | பின்னணிப் பணியாளர் | no issue found | |
+| `knowledge.roles.queue_worker` | Background worker | பின்னணிப் பணியாளர் | no issue found; machine back-translation check: flagged C (Part 0) | |
 | `knowledge.save` | Save the draft | வரைவைச் சேமி | no issue found | |
 | `knowledge.saveBody` | This saves exactly what you typed as a draft. A draft is never in use. It is recorded under your name. | நீங்கள் தட்டச்சு செய்ததையே இது வரைவாகச் சேமிக்கிறது. வரைவு ஒருபோதும் பயன்பாட்டில் இருக்காது. இது உங்கள் பெயரில் பதிவாகும். | no issue found | |
 | `knowledge.saveTitle` | Save this draft? | இந்த வரைவைச் சேமிக்கவா? | no issue found | |
@@ -1538,7 +1547,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `messages.screen.outcome.unassessable` | The rules could not assess this message. A nurse task was raised. | விதிகளால் இந்தச் செய்தியை மதிப்பிட முடியவில்லை. செவிலியர் பணி எழுப்பப்பட்டது. | no issue found | |
 | `messages.screen.replayed` | This was already screened. | இது ஏற்கெனவே பரிசோதிக்கப்பட்டது. | no issue found | |
 | `messages.screen.reply.not_required` | No reply to the patient is needed. | நோயாளிக்குப் பதில் தேவையில்லை. | no issue found | |
-| `messages.screen.reply.pending_clinician_template` | No reply is sent: the patient-facing wording has not been written by a clinician yet. | எந்தப் பதிலும் அனுப்பப்படவில்லை: நோயாளிக்கான சொற்களை மருத்துவர் இன்னும் எழுதவில்லை. | no issue found | |
+| `messages.screen.reply.pending_clinician_template` | No reply is sent: the patient-facing wording has not been written by a clinician yet. | எந்தப் பதிலும் அனுப்பப்படவில்லை: நோயாளிக்கான சொற்களை மருத்துவர் இன்னும் எழுதவில்லை. | no issue found; machine back-translation check: flagged C (Part 0) | |
 | `messages.screenBody` | The red-flag rules read this stored message and the result is recorded. A red flag, or a message the rules cannot assess, raises a nurse task. Nothing is sent to the patient from here. | சிவப்புக் கொடி விதிகள் சேமிக்கப்பட்ட இந்தச் செய்தியைப் படித்து, முடிவைப் பதிவு செய்யும். சிவப்புக் கொடி அல்லது விதிகளால் மதிப்பிட முடியாத செய்தி செவிலியர் பணியை எழுப்பும். இங்கிருந்து நோயாளிக்கு எதுவும் அனுப்பப்படாது. | no issue found | |
 | `messages.screenButton` | Screen for red flags | சிவப்புக் கொடிக்குப் பரிசோதி | no issue found | |
 | `messages.screenErased` | The text of this message was erased, so it cannot be screened. Nothing was recorded. | இந்தச் செய்தியின் உரை அழிக்கப்பட்டது, எனவே பரிசோதிக்க முடியாது. எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
@@ -1554,7 +1563,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `messages.title` | Messages | செய்திகள் | no issue found | |
 | `messages.topic` | Topic | தலைப்பு | no issue found | |
 | `messages.topics.appointments` | Appointments | சந்திப்புகள் | no issue found | |
-| `messages.topics.care` | Care | சிகிச்சை | no issue found | |
+| `messages.topics.care` | Care | சிகிச்சை | no issue found; machine back-translation check: flagged C (Part 0) | |
 | `messages.topics.safety` | Safety | பாதுகாப்பு | no issue found | |
 | `nav.access` | Break-glass | அவசரகால அணுகல் | no issue found; machine back-translation check: flagged C (Part 0) | |
 | `nav.admin` | Admin | நிர்வாகம் | no issue found | |
@@ -1781,7 +1790,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `portal.family.result.already_requested` | You already have an open request of this kind. | இந்த வகையில் உங்களுக்கு ஏற்கெனவே ஒரு திறந்த கோரிக்கை உள்ளது. | no issue found | |
 | `portal.family.result.recorded` | Your request was sent. | உங்கள் கோரிக்கை அனுப்பப்பட்டது. | no issue found | |
 | `portal.family.result.replay` | This request was already sent. | இந்தக் கோரிக்கை ஏற்கெனவே அனுப்பப்பட்டது. | no issue found | |
-| `portal.family.revoke` | Withdraw | திரும்பப் பெறு | no issue found | |
+| `portal.family.revoke` | Withdraw | திரும்பப் பெறு | no issue found; machine back-translation check: flagged C (Part 0) | |
 | `portal.family.revokeBody` | This withdraws your request or link. Nothing about the other person is changed. | இது உங்கள் கோரிக்கையை அல்லது இணைப்பைத் திரும்பப் பெறும். மற்றவரைப் பற்றி எதுவும் மாறாது. | no issue found | |
 | `portal.family.revokeResult.invalid_state` | It cannot be withdrawn now. Nothing was changed. | இப்போது அதைத் திரும்பப் பெற முடியாது. எதுவும் மாற்றப்படவில்லை. | no issue found | |
 | `portal.family.revokeResult.recorded` | It was withdrawn. | அது திரும்பப் பெறப்பட்டது. | no issue found | |
@@ -1871,10 +1880,10 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `portal.notifications.unread` | Unread: {{n}} | படிக்காதவை: {{n}} | C: A count after a label. | |
 | `portal.prep.gone` | This visit was not found, or it has already started. | இந்த வருகை கிடைக்கவில்லை, அல்லது ஏற்கெனவே தொடங்கிவிட்டது. | no issue found | |
 | `portal.prep.markConflict` | That mark conflicts with an earlier request. Refresh and try again. Nothing was changed. | அந்தக் குறியீடு முந்தைய கோரிக்கையுடன் முரண்படுகிறது. புதுப்பித்து மீண்டும் முயலுங்கள். எதுவும் மாற்றப்படவில்லை. | no issue found | |
-| `portal.prep.markDone` | Mark done | செய்தேன் எனக் குறி | no issue found | |
+| `portal.prep.markDone` | Mark done | செய்தேன் எனக் குறி | no issue found; machine back-translation check: flagged C (Part 0) | |
 | `portal.prep.markGone` | This item could not be marked: the visit has started, was cancelled, or the item is no longer on its list. Nothing was changed. | இந்த உருப்படியைக் குறிக்க முடியவில்லை: வருகை தொடங்கிவிட்டது, ரத்தானது, அல்லது உருப்படி இனி பட்டியலில் இல்லை. எதுவும் மாற்றப்படவில்லை. | no issue found | |
-| `portal.prep.markNotDone` | Mark not done | செய்யவில்லை எனக் குறி | no issue found | |
-| `portal.prep.markedDone` | You marked this done | இதைச் செய்தாகக் குறித்தீர்கள் | no issue found | |
+| `portal.prep.markNotDone` | Mark not done | செய்யவில்லை எனக் குறி | no issue found; machine back-translation check: flagged C (Part 0) | |
+| `portal.prep.markedDone` | You marked this done | இதைச் செய்ததாகக் குறித்தீர்கள் | no issue found | |
 | `portal.prep.markedNotDone` | You marked this not done | இதைச் செய்யவில்லை எனக் குறித்தீர்கள் | no issue found | |
 | `portal.prep.notMarked` | Not marked yet | இன்னும் குறிக்கவில்லை | no issue found | |
 | `portal.prep.nothing` | Nothing to prepare for this visit. | இந்த வருகைக்குத் தயாராக வேண்டியவை எதுவும் இல்லை. | no issue found | |

@@ -1484,7 +1484,7 @@ Terms standardised: proposal, resolve / resolved.
 | `portal.prep.markDone` | Mark done | செய்தேன் எனக் குறி | ok |
 | `portal.prep.markGone` | This item could not be marked: the visit has started, was cancelled, or the item is no longer on its list. Nothing was changed. | இந்த உருப்படியைக் குறிக்க முடியவில்லை: வருகை தொடங்கிவிட்டது, ரத்தானது, அல்லது உருப்படி இனி பட்டியலில் இல்லை. எதுவும் மாற்றப்படவில்லை. | ok |
 | `portal.prep.markNotDone` | Mark not done | செய்யவில்லை எனக் குறி | ok |
-| `portal.prep.markedDone` | You marked this done | இதைச் செய்தாகக் குறித்தீர்கள் | ok |
+| `portal.prep.markedDone` | You marked this done | இதைச் செய்ததாகக் குறித்தீர்கள் | ok |
 | `portal.prep.markedNotDone` | You marked this not done | இதைச் செய்யவில்லை எனக் குறித்தீர்கள் | ok |
 | `portal.prep.notMarked` | Not marked yet | இன்னும் குறிக்கவில்லை | ok |
 | `portal.prep.nothing` | Nothing to prepare for this visit. | இந்த வருகைக்குத் தயாராக வேண்டியவை எதுவும் இல்லை. | ok |
