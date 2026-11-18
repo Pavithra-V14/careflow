@@ -17,6 +17,7 @@ import { inClinic } from '../ui/clinic';
 import { BackfillPanel } from './BackfillPanel';
 import { clinicLocalToIso } from '../../shared/clinicTime';
 import { ZoneNote } from '../components/ZoneNote';
+import { usePatientLabels } from '../components/PatientLabels';
 
 type Slot = components['schemas']['SlotOut'];
 
@@ -498,6 +499,7 @@ export function AddReference({ kind }: { kind: 'provider' | 'location' | 'visitT
 
 export function BookingsList() {
   const { t } = useTranslation();
+  const labels = usePatientLabels();
   const { api } = useAuth();
   const { active, hasRole } = useSession();
   const queryClient = useQueryClient();
@@ -550,6 +552,7 @@ export function BookingsList() {
       <QueryView query={query} isEmpty={(d) => d.items.length === 0} empty={t('scheduling.noBookings')}>
         {(d) => (
           <>
+            {labels.panel(d.items.map((b) => b.patient_id))}
             <Table
               caption={t('scheduling.bookings')}
               head={[t('scheduling.col.starts'), t('scheduling.col.ends'), t('scheduling.col.patient'), t('scheduling.col.provider'), t('scheduling.col.location'), t('scheduling.col.visitType'), t('scheduling.col.action')]}
@@ -563,7 +566,7 @@ export function BookingsList() {
                     <Time value={b.ends_at} />
                   </td>
                   <td>
-                    <ShortId id={b.patient_id} />
+                    {labels.cell(b.patient_id)}
                   </td>
                   <td>{nameOf(refs.providers, b.provider_id, (p) => p.provider_id, (p) => p.display_name)}</td>
                   <td>{nameOf(refs.locations, b.location_id, (l) => l.location_id, (l) => l.name)}</td>
@@ -615,6 +618,7 @@ export function BookingsList() {
 
 export function WaitlistList() {
   const { t } = useTranslation();
+  const labels = usePatientLabels();
   const { api } = useAuth();
   const { active, hasRole } = useSession();
   const queryClient = useQueryClient();
@@ -655,12 +659,13 @@ export function WaitlistList() {
       <QueryView query={query} isEmpty={(d) => d.items.length === 0} empty={t('scheduling.noWaitlist')}>
         {(d) => (
           <>
+            {labels.panel(d.items.map((w) => w.patient_id))}
             <Table caption={t('scheduling.waitlist')} head={[t('scheduling.col.rank'), t('scheduling.col.patient'), t('scheduling.col.visitType'), t('scheduling.col.priority'), t('scheduling.col.joined')]}>
               {d.items.map((w) => (
                 <tr key={w.waitlist_id}>
                   <th scope="row">{formatNumber(w.rank, lang)}</th>
                   <td>
-                    <ShortId id={w.patient_id} />
+                    {labels.cell(w.patient_id)}
                   </td>
                   <td>{nameOf(refs.visitTypes, w.visit_type_id, (v) => v.visit_type_id, (v) => v.name)}</td>
                   <td>
@@ -778,6 +783,7 @@ async function fetchOfferText(api: ReturnType<typeof useAuth>['api'], offer: Off
 
 export function OffersList() {
   const { t } = useTranslation();
+  const labels = usePatientLabels();
   const { api } = useAuth();
   const { active, hasRole } = useSession();
   const queryClient = useQueryClient();
@@ -853,6 +859,7 @@ export function OffersList() {
       <QueryView query={query} isEmpty={(d) => d.items.length === 0} empty={t('scheduling.noOffers')}>
         {(d) => (
           <>
+            {labels.panel(d.items.flatMap((o) => (o.patient_id ? [o.patient_id] : [])))}
             <Table
               caption={t('scheduling.offersListTitle')}
               head={[t('scheduling.col.offer'), t('scheduling.col.patient'), t('scheduling.col.state'), t('scheduling.col.heldUntil'), t('scheduling.col.delivered'), t('scheduling.col.channel'), t('scheduling.col.action')]}
@@ -862,7 +869,7 @@ export function OffersList() {
                   <th scope="row">
                     <ShortId id={o.hold_id} />
                   </th>
-                  <td>{o.patient_id ? <ShortId id={o.patient_id} /> : '–'}</td>
+                  <td>{o.patient_id ? labels.cell(o.patient_id) : '–'}</td>
                   <td>
                     <Badge tone={o.state === 'awaiting_delivery' ? 'warn' : o.state === 'delivered' ? 'ok' : 'neutral'}>{word('scheduling.offerState', o.state)}</Badge>
                   </td>

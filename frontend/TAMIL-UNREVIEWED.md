@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-1778 of 1778 strings are unreviewed.
+1840 of 1840 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -916,6 +916,18 @@ Terms standardised: proposal, resolve / resolved.
 | `idle.body` | You will be signed out in {{n}} seconds because the page has not been used. Anything on the screen will be cleared. | பக்கம் பயன்படுத்தப்படாததால் {{n}} வினாடிகளில் நீங்கள் வெளியேற்றப்படுவீர்கள். திரையில் உள்ளவை அழிக்கப்படும். | ok |
 | `idle.stay` | Stay signed in | உள்நுழைந்தே இருங்கள் | ok |
 | `idle.title` | Are you still there? | நீங்கள் இன்னும் இருக்கிறீர்களா? | ok |
+| `labels.born` | born {{year}} | பிறந்த ஆண்டு {{year}} | ok |
+| `labels.confirmBody` | Shows the name, year of birth and last four digits of the phone for {{n}} patients on this list. The reading is recorded as one audit entry that holds only the count. | இந்தப் பட்டியலில் உள்ள {{n}} நோயாளிகளின் பெயர், பிறந்த ஆண்டு, தொலைபேசியின் கடைசி நான்கு இலக்கங்களைக் காட்டுகிறது. இந்தப் படிப்பு எண்ணிக்கை மட்டும் கொண்ட ஒரு தணிக்கைப் பதிவாகப் பதிவாகும். | ok |
+| `labels.confirmTitle` | Show names for these patients? | இந்த நோயாளிகளின் பெயர்களைக் காட்டவா? | ok |
+| `labels.firstOnly` | Only the first {{max}} on the list are shown at a time. | ஒரு நேரத்தில் பட்டியலில் முதல் {{max}} பேர் மட்டுமே காட்டப்படுவார்கள். | ok |
+| `labels.gone` | This clinic was not found. Nothing was shown. | இந்த மருத்துவமனை கிடைக்கவில்லை. எதுவும் காட்டப்படவில்லை. | ok |
+| `labels.noPhone` | no phone recorded | தொலைபேசி பதிவில் இல்லை | ok |
+| `labels.phone` | phone ends {{last4}} | தொலைபேசி முடிவு {{last4}} | ok |
+| `labels.refused` | You may not see names here. Nothing was shown. | இங்கே பெயர்களைப் பார்க்க உங்களுக்கு அனுமதி இல்லை. எதுவும் காட்டப்படவில்லை. | ok |
+| `labels.show` | Show names | பெயர்களைக் காட்டு | ok |
+| `labels.shown` | Names shown for {{n}} patients. They go when you leave this screen. | {{n}} நோயாளிகளின் பெயர்கள் காட்டப்பட்டன. இந்தத் திரையை விட்டுச் சென்றதும் அவை போய்விடும். | ok |
+| `labels.tooMany` | Too many patients at once. Nothing was shown. | ஒரே நேரத்தில் மிக அதிக நோயாளிகள். எதுவும் காட்டப்படவில்லை. | ok |
+| `labels.unavailable` | Names cannot be shown in this environment. Nothing was shown. | இந்தச் சூழலில் பெயர்களைக் காட்ட முடியாது. எதுவும் காட்டப்படவில்லை. | ok |
 | `landing.about.heading` | About the hospital | மருத்துவமனை பற்றி | ok |
 | `landing.account` | Account | கணக்கு | ok |
 | `landing.departments.heading` | Departments and doctors | துறைகள் மற்றும் மருத்துவர்கள் | ok |
@@ -990,6 +1002,55 @@ Terms standardised: proposal, resolve / resolved.
 | `medications.validTo` | To (leave empty if no end is recorded) | முடிவு (முடிவு நேரம் பதிவு செய்யப்படாவிட்டால் காலியாக விடவும்) | ok |
 | `medications.validToHint` | An empty end is saved as "no end recorded". It is not read as "still taking". | காலியான முடிவு "முடிவு பதிவு செய்யப்படவில்லை" என்று சேமிக்கப்படும். அது "இன்னும் எடுத்துக்கொள்ளப்படுகிறது" என்று கருதப்படாது. | ok |
 | `medications.verified` | Verified | சரிபார்க்கப்பட்டது | ok |
+| `messages.allTopics` | All topics | எல்லாத் தலைப்புகளும் | ok |
+| `messages.bodyTitle` | The message | செய்தி | ok |
+| `messages.col.action` | Action | செயல் | ok |
+| `messages.col.count` | Messages | செய்திகள் | ok |
+| `messages.col.last` | Last message | கடைசிச் செய்தி | ok |
+| `messages.col.message` | Message | செய்தி | ok |
+| `messages.col.patient` | Patient | நோயாளி | ok |
+| `messages.col.sender` | From | அனுப்பியவர் | ok |
+| `messages.col.status` | Status | நிலை | ok |
+| `messages.col.thread` | Conversation | உரையாடல் | ok |
+| `messages.col.time` | Time | நேரம் | ok |
+| `messages.col.topic` | Topic | தலைப்பு | ok |
+| `messages.empty` | There are no conversations. | உரையாடல்கள் எதுவும் இல்லை. | ok |
+| `messages.erased` | Erased | அழிக்கப்பட்டது | ok |
+| `messages.hide` | Close | மூடு | ok |
+| `messages.hideBody` | Hide the text | உரையை மறை | ok |
+| `messages.noMessages` | There are no messages in this conversation. | இந்த உரையாடலில் செய்திகள் எதுவும் இல்லை. | ok |
+| `messages.note` | The conversations of this clinic. The lists show ids, a closed topic, who sent each message and when, and never the text. A message is read one at a time, after a confirmation, and every reading is recorded. | இந்த மருத்துவமனையின் உரையாடல்கள். பட்டியல்களில் அடையாளங்கள், ஒரு நிலையான தலைப்பு, ஒவ்வொரு செய்தியையும் யார் எப்போது அனுப்பினார் என்பது மட்டுமே இருக்கும்; உரை ஒருபோதும் இருக்காது. ஒரு செய்தி உறுதிப்படுத்தலுக்குப் பிறகு ஒன்று ஒன்றாகப் படிக்கப்படும்; ஒவ்வொரு படிப்பும் பதிவாகும். | ok |
+| `messages.open` | Open | திற | ok |
+| `messages.patientFilter` | Patient id (optional) | நோயாளி அடையாளம் (விருப்பம்) | ok |
+| `messages.patientInvalid` | That is not a patient id. The list is not filtered by it. | அது நோயாளி அடையாளம் அல்ல. பட்டியல் அதனால் வடிகட்டப்படவில்லை. | ok |
+| `messages.read` | Read | படி | ok |
+| `messages.readBody` | The text is shown here only while you keep it open. This reading is recorded under your name. | நீங்கள் திறந்து வைத்திருக்கும் வரை மட்டுமே உரை இங்கே காட்டப்படும். இந்தப் படிப்பு உங்கள் பெயரில் பதிவாகும். | ok |
+| `messages.readGone` | This message was not found, or its text was erased. Nothing was shown. | இந்தச் செய்தி கிடைக்கவில்லை, அல்லது அதன் உரை அழிக்கப்பட்டது. எதுவும் காட்டப்படவில்லை. | ok |
+| `messages.readRefused` | You may not read this message. Nothing was shown. | இந்தச் செய்தியைப் படிக்க உங்களுக்கு அனுமதி இல்லை. எதுவும் காட்டப்படவில்லை. | ok |
+| `messages.readTitle` | Read this message? | இந்தச் செய்தியைப் படிக்கவா? | ok |
+| `messages.screen.outcome.clear` | The rules found no red flag. | விதிகள் சிவப்புக் கொடி எதையும் காணவில்லை. | ok |
+| `messages.screen.outcome.red_flag` | The rules found a red flag. A nurse task was raised. | விதிகள் சிவப்புக் கொடியைக் கண்டன. செவிலியர் பணி எழுப்பப்பட்டது. | ok |
+| `messages.screen.outcome.unassessable` | The rules could not assess this message. A nurse task was raised. | விதிகளால் இந்தச் செய்தியை மதிப்பிட முடியவில்லை. செவிலியர் பணி எழுப்பப்பட்டது. | ok |
+| `messages.screen.replayed` | This was already screened. | இது ஏற்கெனவே பரிசோதிக்கப்பட்டது. | ok |
+| `messages.screen.reply.not_required` | No reply to the patient is needed. | நோயாளிக்குப் பதில் தேவையில்லை. | ok |
+| `messages.screen.reply.pending_clinician_template` | No reply is sent: the patient-facing wording has not been written by a clinician yet. | எந்தப் பதிலும் அனுப்பப்படவில்லை: நோயாளிக்கான சொற்களை மருத்துவர் இன்னும் எழுதவில்லை. | ok |
+| `messages.screenBody` | The red-flag rules read this stored message and the result is recorded. A red flag, or a message the rules cannot assess, raises a nurse task. Nothing is sent to the patient from here. | சிவப்புக் கொடி விதிகள் சேமிக்கப்பட்ட இந்தச் செய்தியைப் படித்து, முடிவைப் பதிவு செய்யும். சிவப்புக் கொடி அல்லது விதிகளால் மதிப்பிட முடியாத செய்தி செவிலியர் பணியை எழுப்பும். இங்கிருந்து நோயாளிக்கு எதுவும் அனுப்பப்படாது. | ok |
+| `messages.screenButton` | Screen for red flags | சிவப்புக் கொடிக்குப் பரிசோதி | ok |
+| `messages.screenErased` | The text of this message was erased, so it cannot be screened. Nothing was recorded. | இந்தச் செய்தியின் உரை அழிக்கப்பட்டது, எனவே பரிசோதிக்க முடியாது. எதுவும் பதிவு செய்யப்படவில்லை. | ok |
+| `messages.screenRefused` | You may not screen this message. Nothing was recorded. | இந்தச் செய்தியைப் பரிசோதிக்க உங்களுக்கு அனுமதி இல்லை. எதுவும் பதிவு செய்யப்படவில்லை. | ok |
+| `messages.screenTitle` | Screen this message for red flags? | இந்தச் செய்தியைச் சிவப்புக் கொடிக்குப் பரிசோதிக்கவா? | ok |
+| `messages.screenUnavailable` | Screening is not available now (encryption is not set up). Nothing was recorded. | பரிசோதனை இப்போது கிடைக்கவில்லை (குறியாக்கம் அமைக்கப்படவில்லை). எதுவும் பதிவு செய்யப்படவில்லை. | ok |
+| `messages.sender.patient` | Patient | நோயாளி | ok |
+| `messages.sender.staff` | Staff | பணியாளர் | ok |
+| `messages.sender.system` | System | அமைப்பு | ok |
+| `messages.threadStatus.closed` | Closed | மூடப்பட்டது | ok |
+| `messages.threadStatus.open` | Open | திறந்துள்ளது | ok |
+| `messages.threadTitle` | Messages in this conversation (newest first) | இந்த உரையாடலில் உள்ள செய்திகள் (புதியவை முதலில்) | ok |
+| `messages.title` | Messages | செய்திகள் | ok |
+| `messages.topic` | Topic | தலைப்பு | ok |
+| `messages.topics.appointments` | Appointments | சந்திப்புகள் | ok |
+| `messages.topics.care` | Care | சிகிச்சை | ok |
+| `messages.topics.safety` | Safety | பாதுகாப்பு | ok |
 | `nav.access` | Break-glass | அவசரகால அணுகல் | ok |
 | `nav.admin` | Admin | நிர்வாகம் | ok |
 | `nav.alerts` | Alerts | எச்சரிக்கைகள் | ok |
@@ -1001,6 +1062,7 @@ Terms standardised: proposal, resolve / resolved.
 | `nav.home` | Home | முகப்பு | ok |
 | `nav.identity` | Identity | அடையாளம் | ok |
 | `nav.label` | Sections | பிரிவுகள் | ok |
+| `nav.messages` | Messages | செய்திகள் | ok |
 | `nav.none` | No sections are available to your role. | உங்கள் பங்கிற்குக் கிடைக்கும் பிரிவுகள் எதுவும் இல்லை. | ok |
 | `nav.notes` | Notes | குறிப்புகள் | ok |
 | `nav.patientRequests` | Patient requests | நோயாளி கோரிக்கைகள் | ok |

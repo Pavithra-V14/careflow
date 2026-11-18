@@ -50,7 +50,7 @@ test('focus order of the signed-in page: skip link, language, session controls, 
   await page.reload();
   await expect(page.locator('.session-bar')).toBeVisible();
   const order: string[] = [];
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < 10; i++) {
     await page.keyboard.press('Tab');
     order.push(await page.evaluate(() => {
       const el = document.activeElement as HTMLElement | null;
@@ -60,7 +60,7 @@ test('focus order of the signed-in page: skip link, language, session controls, 
   // The language picker reads as its option list (a select has no text of its own), then the session bar, then the sections in order.
   expect(order[0]).toBe('Skip to main content');
   expect(order[1]).toContain('English');
-  expect(order.slice(2)).toEqual(['Sign out', 'Home', 'Referrals', 'Tasks', 'Patients', 'Identity', 'Scheduling']);
+  expect(order.slice(2)).toEqual(['Sign out', 'Home', 'Referrals', 'Tasks', 'Patients', 'Messages', 'Identity', 'Scheduling']);
 });
 
 for (const lang of LANGS) {

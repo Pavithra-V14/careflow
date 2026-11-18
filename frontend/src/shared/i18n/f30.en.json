@@ -1,0 +1,84 @@
+{
+  "nav": {
+    "messages": "Messages"
+  },
+  "messages": {
+    "title": "Messages",
+    "note": "The conversations of this clinic. The lists show ids, a closed topic, who sent each message and when, and never the text. A message is read one at a time, after a confirmation, and every reading is recorded.",
+    "topic": "Topic",
+    "allTopics": "All topics",
+    "topics": {
+      "care": "Care",
+      "appointments": "Appointments",
+      "safety": "Safety"
+    },
+    "patientFilter": "Patient id (optional)",
+    "patientInvalid": "That is not a patient id. The list is not filtered by it.",
+    "empty": "There are no conversations.",
+    "col": {
+      "thread": "Conversation",
+      "patient": "Patient",
+      "topic": "Topic",
+      "status": "Status",
+      "count": "Messages",
+      "last": "Last message",
+      "action": "Action",
+      "message": "Message",
+      "sender": "From",
+      "time": "Time"
+    },
+    "threadStatus": {
+      "open": "Open",
+      "closed": "Closed"
+    },
+    "open": "Open",
+    "hide": "Close",
+    "threadTitle": "Messages in this conversation (newest first)",
+    "noMessages": "There are no messages in this conversation.",
+    "sender": {
+      "patient": "Patient",
+      "staff": "Staff",
+      "system": "System"
+    },
+    "erased": "Erased",
+    "read": "Read",
+    "hideBody": "Hide the text",
+    "readTitle": "Read this message?",
+    "readBody": "The text is shown here only while you keep it open. This reading is recorded under your name.",
+    "readRefused": "You may not read this message. Nothing was shown.",
+    "readGone": "This message was not found, or its text was erased. Nothing was shown.",
+    "bodyTitle": "The message",
+    "screenButton": "Screen for red flags",
+    "screenTitle": "Screen this message for red flags?",
+    "screenBody": "The red-flag rules read this stored message and the result is recorded. A red flag, or a message the rules cannot assess, raises a nurse task. Nothing is sent to the patient from here.",
+    "screenRefused": "You may not screen this message. Nothing was recorded.",
+    "screenErased": "The text of this message was erased, so it cannot be screened. Nothing was recorded.",
+    "screenUnavailable": "Screening is not available now (encryption is not set up). Nothing was recorded.",
+    "screen": {
+      "outcome": {
+        "clear": "The rules found no red flag.",
+        "red_flag": "The rules found a red flag. A nurse task was raised.",
+        "unassessable": "The rules could not assess this message. A nurse task was raised."
+      },
+      "replayed": "This was already screened.",
+      "reply": {
+        "not_required": "No reply to the patient is needed.",
+        "pending_clinician_template": "No reply is sent: the patient-facing wording has not been written by a clinician yet."
+      }
+    }
+  },
+  "labels": {
+    "show": "Show names",
+    "confirmTitle": "Show names for these patients?",
+    "confirmBody": "Shows the name, year of birth and last four digits of the phone for {{n}} patients on this list. The reading is recorded as one audit entry that holds only the count.",
+    "firstOnly": "Only the first {{max}} on the list are shown at a time.",
+    "shown": "Names shown for {{n}} patients. They go when you leave this screen.",
+    "born": "born {{year}}",
+    "phone": "phone ends {{last4}}",
+    "noPhone": "no phone recorded",
+    "refused": "You may not see names here. Nothing was shown.",
+    "gone": "This clinic was not found. Nothing was shown.",
+    "unavailable": "Names cannot be shown in this environment. Nothing was shown.",
+    "tooMany": "Too many patients at once. Nothing was shown."
+  }
+}

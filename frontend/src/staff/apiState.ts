@@ -21,7 +21,7 @@ export class ApiProblem extends Error {
 function problemFromStatus(status: number): ProblemKind {
   if (status === 401) return 'unauthorized';
   if (status === 403) return 'forbidden';
-  if (status === 404) return 'not_found';
+  if (status === 404 || status === 410) return 'not_found'; // 410: the resource is gone (a message whose body was erased)
   if (status === 409) return 'conflict';
   if (status === 422) return 'invalid';
   if (status === 429) return 'rate_limited';

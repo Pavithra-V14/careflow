@@ -110,3 +110,7 @@ Status words:
 
 Everything marked "not built, can be built" is built: the patient voice setting and session gate, and the consent history. No other item
 could be built on routes already in the snapshot: the rest are blocked on a route (requests 20 to 30), a decision, or an outside service.
+
+## Update 2026-11-14 (F18)
+
+Built: the staff message screen (`/messages`) and the patient labels ("Show names"), both from routes now in the snapshot. Not built by decision: any send button (offers stay delivered by hand). Paging of the conversation list by `before` is not built (the list says more exist).
