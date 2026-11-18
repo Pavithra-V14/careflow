@@ -122,3 +122,7 @@ async def decide(
         conn, "select o_result from iam.family_link_decide(:c, :l, :d, :p, :a, :s, :r, :k)",
         {"c": clinic_id, "l": link_id, "d": decision, "p": dependant_patient_id, "a": age, "s": consent, "r": reason, "k": idempotency_key},
     ))[0].o_result
+
+
+async def staff_revoke(conn: AsyncConnection, *, clinic_id: uuid.UUID, link_id: uuid.UUID, reason: str, idempotency_key: str) -> str:
+    return (await _rows(conn, "select o_result from iam.family_link_staff_revoke(:c, :l, :r, :k)", {"c": clinic_id, "l": link_id, "r": reason, "k": idempotency_key}))[0].o_result

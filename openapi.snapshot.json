@@ -3066,7 +3066,9 @@
               "replay",
               "invalid_state",
               "age_not_allowed",
-              "consent_required"
+              "consent_required",
+              "requester_not_active",
+              "already_linked"
             ],
             "title": "Result",
             "type": "string"
@@ -3151,6 +3153,27 @@
           "result"
         ],
         "title": "FamilyLinkRevokeOut",
+        "type": "object"
+      },
+      "FamilyLinkStaffRevokeIn": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "reason": {
+            "pattern": "^[a-z][a-z0-9_]{0,59}$",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "reason"
+        ],
+        "title": "FamilyLinkStaffRevokeIn",
         "type": "object"
       },
       "GrievanceCategoriesOut": {
@@ -17562,7 +17585,7 @@
     },
     "/v1/staff/family-links/{link_id}/decision": {
       "post": {
-        "description": "Verify or reject a link request. A verify names the dependant's record, records whether the linked person's consent was obtained, and is checked against the clinic's rule (the age comes from the stored date of birth, never from you).\n404 if the clinic is not visible to you, 403 unless you are front desk there (with a recent second factor) or the record is not in this clinic, 503 unless family links are switched on or while the clinic's rules are not entered\n(`family links are not set up: the clinic has not entered its rules`). `age_not_allowed` or `consent_required` when the rule is not met; `invalid_state` if it is not waiting for a decision. Idempotent on the key.",
+        "description": "Verify or reject a link request. A verify names the dependant's record, records whether the linked person's consent was obtained, and is checked against the clinic's rule (the age comes from the stored date of birth, never from you).\n404 if the clinic is not visible to you, 403 unless you are front desk there (with a recent second factor) or the record is not in this clinic, 503 unless family links are switched on or while the clinic's rules are not entered\n(`family links are not set up: the clinic has not entered its rules`). `age_not_allowed` or `consent_required` when the rule is not met; `requester_not_active` if the requester's record was erased or their account closed since the request; `invalid_state` if it is not waiting for a decision. Idempotent on the key (tied to you: another person's key is not a replay).",
         "operationId": "decide_family_link_v1_staff_family_links__link_id__decision_post",
         "parameters": [
           {
@@ -17668,6 +17691,119 @@
           }
         ],
         "summary": "Decide Family Link",
+        "tags": [
+          "staff family links"
+        ]
+      }
+    },
+    "/v1/staff/family-links/{link_id}/revoke": {
+      "post": {
+        "description": "Revoke a family link or a pending request as front desk (a consent withdrawn, a safeguarding reason): a reason WORD is required, audited. 404 if the clinic is not visible to you, 403 unless you are front desk there (with a recent\nsecond factor) or the link is not in this clinic, 503 unless family links are switched on, 422 for a reason that is not a word. `invalid_state` if it is already closed. Idempotent on the key (tied to you).",
+        "operationId": "staff_revoke_family_link_v1_staff_family_links__link_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "link_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Link Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 173,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FamilyLinkStaffRevokeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FamilyLinkRevokeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Staff Revoke Family Link",
         "tags": [
           "staff family links"
         ]

@@ -107,6 +107,41 @@ Sign out. In window B look at the last lines: *you should see* no repeating `ERR
 
 ---
 
+## 13. Optional extras: visit preparation, family links and the card editor (synthetic data only)
+These three features are OFF until you switch them on. Add the lines below to `E:\Claude\careflow-run\.env` yourself (never paste the file anywhere), run the migrations, restart the backend (step 1) and the website, and sign in with the accounts of step 3.
+
+**The settings** (exactly `on`; each is off when missing):
+```
+CAREFLOW_PATIENT_VISIT_PREP=on
+CAREFLOW_FAMILY_LINKS=on
+CAREFLOW_KNOWLEDGE_EDITOR=on
+CAREFLOW_DEMO_PHASE4=1
+```
+`CAREFLOW_DEMO_PHASE4=1` supplies the labelled demo placeholder checklist for visit preparation (`CAREFLOW_VISIT_READINESS_CONTENT`); without it, or without your own value, a patient sees "Nothing to prepare for this visit." Keep `CAREFLOW_KNOWLEDGE_SEARCH=on` and `CAREFLOW_DEMO_REAL_MODELS=on` from step 0 if you want approved cards to be indexed (the card editor works without them; a card is then approved but not searchable).
+
+**Update and migrate** (window A; the migrations are 0089 to 0093):
+```powershell
+cd E:\Claude\careflow-run
+git fetch origin
+git checkout --detach origin/main
+.\.venv\Scripts\python.exe -m careflow.migrate --check
+.\.venv\Scripts\python.exe -m careflow.migrate
+```
+
+**Family links need rules first.** The rule table ships EMPTY, because the real age limits are counsel's; until it has a row every request is refused with "family links are not set up: the clinic has not entered its rules". For a demo walk only, enter the labelled placeholders (rehearse with `--dry-run` first; it asks you to type the project host; it refuses outside dev + demo + synthetic and never touches a real rule):
+```powershell
+.\.venv\Scripts\python.exe scripts\seed_demo_family_rules.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2 --dry-run
+.\.venv\Scripts\python.exe scripts\seed_demo_family_rules.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
+```
+The rows are labelled "DEMO PLACEHOLDER, not counsel's values" (a guardian link for a dependant aged 0 to 9, a carer link for 30 to 130, consent required). Take them out again with `--remove`. **Say out loud when showing it that these numbers are not counsel's.**
+
+**What to show, and what you should see**
+- **Visit preparation.** A patient (signed in, with a confirmed future booking) opens the visit: the checklist the clinic configured, each item markable done or not done; a nurse or doctor sees the same marks read-only (`GET /v1/staff/visits/{id}/prep`). With no checklist configured: "Nothing to prepare for this visit." *If you get "visit preparation is not set up":* the switch is not on, or the backend was not restarted. *If the visit is "not found":* it is not that patient's confirmed future visit.
+- **Family links.** The patient asks to be linked (guardian or carer); front desk lists the request, picks the dependant's record (found with the patient search), says whether the linked person's consent was obtained, and verifies; the age is checked by the server against the placeholder rule (try a dependant of 15 as a guardian: `age_not_allowed`). The patient can revoke; front desk can revoke with a reason word. A verified link **grants nothing yet**. *If it says "family links are not set up: the clinic has not entered its rules":* run the seed above.
+- **Card editor.** A nurse or doctor drafts a card or a message template (they type every word; nothing is seeded), edits it, submits it; a DOCTOR WHO IS NOT THE AUTHOR approves or rejects it; an approval is version 1, 2, 3 and so on. With the real-model settings on, the worker indexes an approved card within a tick and knowledge search can then find it (a card for doctors only is never shown to a nurse). *If the approval is refused:* the approver is the author, or not a doctor, or needs a fresh authenticator code.
+
+---
+
 ## If something goes wrong: the fixed causes
 1. **Window B not running or stopped:** every page fails; start step 1.
 2. **Database behind the code:** the backend refuses to start; run the migrations (step 0.1).

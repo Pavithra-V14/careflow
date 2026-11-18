@@ -156,3 +156,40 @@ async def test_the_guards_hold_even_for_the_owner_and_nothing_is_reachable_direc
     for role in ("anon", "authenticated", "service_role"):
         if await owner(db, "select 1 from pg_roles where rolname = :r", r=role):
             assert await owner(db, "select has_function_privilege(:r, 'iam.family_link_decide(uuid, uuid, text, uuid, integer, boolean, text, text)', 'execute')", r=role) == [(False,)], role
+
+
+# ---- migration 0093 -----------------------------------------------------------------------------------------------------------------------------------
+
+STAFF_REVOKE = "select o_result from iam.family_link_staff_revoke(:c, :l, :r, :k)"
+
+
+async def test_verification_re_checks_the_requester_and_the_front_desk_can_revoke_with_a_reason(db):
+    w = await fam_world(db)
+    link = (await ask(db, w))[0][1]
+    await owner(db, "update mpi.patients set erased_at = clock_timestamp(), name_ct = null, dob_ct = null, phone_ct = null, name_key_version = null, dob_key_version = null, phone_key_version = null where id = :p", p=w["rec1"])
+    assert await verify(db, w, link) == [("requester_not_active",)]  # the requester's record was erased since the request
+    assert await as_app(db, w["fd"], DECIDE, c=w["clinic"], l=link, d="reject", p=None, a=None, s=None, r="zz_erased", k="rj") == [("recorded",)]  # a reject is still possible
+    w2 = await fam_world(db)
+    first = (await ask(db, w2))[0][1]
+    assert await verify(db, w2, first) == [("recorded",)]
+    for who in ("nurse", "pa1", "fd_b"):
+        assert await as_app(db, w2[who], STAFF_REVOKE, c=w2["clinic"], l=first, r="zz_consent_withdrawn", k="x") == "42501", who
+    assert await as_app(db, w2["fd"], STAFF_REVOKE, aal2=False, c=w2["clinic"], l=first, r="zz_consent_withdrawn", k="x") == "42501"
+    assert await as_app(db, w2["fd"], STAFF_REVOKE, c=w2["clinic"], l=first, r="Not A Word", k="x") == "42501"
+    assert await as_app(db, w2["fd"], STAFF_REVOKE, c=w2["clinic"], l=uuid.uuid4(), r="zz_consent_withdrawn", k="x") == "42501"
+    assert await as_app(db, w2["fd"], STAFF_REVOKE, c=w2["clinic"], l=first, r="zz_consent_withdrawn", k="k1") == [("recorded",)]
+    assert await as_app(db, w2["fd"], STAFF_REVOKE, c=w2["clinic"], l=first, r="zz_consent_withdrawn", k="k1") == [("replay",)]
+    assert await as_app(db, w2["fd"], STAFF_REVOKE, c=w2["clinic"], l=first, r="zz_consent_withdrawn", k="k2") == [("invalid_state",)]
+    assert await as_app(db, w2["pa1"], MINE) == [(first, "guardian_of_minor", "revoked")]
+    assert await owner(db, "select revoke_reason, revoked_by is not null from iam.family_links where id = :l", l=first) == [("zz_consent_withdrawn", True)]
+    actions = await owner(db, "select action from audit.log where resource_id = :l and action like 'iam.family_link.%' order by id", l=str(first))
+    assert [a[0] for a in actions] == ["iam.family_link.requested", "iam.family_link.verified", "iam.family_link.staff_revoked"]  # past tense
+
+
+async def test_a_second_verification_for_the_same_dependant_is_a_result_not_an_error(db):
+    w = await fam_world(db)
+    first = (await ask(db, w))[0][1]
+    assert await verify(db, w, first) == [("recorded",)]
+    second = (await ask(db, w))[0][1]
+    assert second != first
+    assert await verify(db, w, second) == [("already_linked",)]  # not a unique-index error (a 500)

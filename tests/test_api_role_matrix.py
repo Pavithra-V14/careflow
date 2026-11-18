@@ -3742,6 +3742,20 @@ def staff_family_decision_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(), verify())
 
 
+def staff_family_revoke_cases(ids) -> list[tuple]:
+    path = lambda: f"{STAFF_FAMILY}/{uuid.uuid4()}/revoke"
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "reason": "zz_consent_withdrawn", **o}
+    cases = _family_staff_roles(ids, path(), json=body())
+    cases += [
+        _case(ids, "a reason that is not a word is rejected", "front_desk_a", 422, path(), json=body(reason="Not A Word"), body=_fixed(422)),
+        _case(ids, "a reason is required", "front_desk_a", 422, path(), json={"clinic_id": str(ids.clinic_a)}, body=_fixed(422)),
+        _case(ids, "an extra field is rejected", "front_desk_a", 422, path(), json=body(status="verified"), body=_fixed(422)),
+        _case(ids, "a link id that is not a uuid is rejected", "front_desk_a", 422, f"{STAFF_FAMILY}/nope/revoke", json=body(), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "front_desk_a", 422, path(), json=body(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), body())
+
+
 def staff_patient_request_list_cases(ids) -> list[tuple]:
     path = lambda **o: STAFF_PATIENT_REQUESTS + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
     visible = ("nurse_a", "doctor_a", "admin_a", "business_owner_a", "auditor_a", "multi")
@@ -4222,6 +4236,7 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", FAMILY + "/{link_id}/revoke"): portal_family_revoke_cases,
     ("GET", STAFF_FAMILY): staff_family_list_cases,
     ("POST", STAFF_FAMILY + "/{link_id}/decision"): staff_family_decision_cases,
+    ("POST", STAFF_FAMILY + "/{link_id}/revoke"): staff_family_revoke_cases,
     ("POST", KE + "/drafts"): ke_draft_create_cases,
     ("PUT", KE + "/drafts/{draft_id}"): ke_draft_edit_cases,
     ("POST", KE + "/drafts/{draft_id}/submit"): ke_draft_submit_cases,
