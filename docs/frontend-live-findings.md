@@ -276,3 +276,17 @@ The proposal the user named (id `1939f256-c052-5e1c-8abe-de1bd35eeb9c`; the scre
 The other six referrals of the clinic (details 2 and 4 to 7) showed Engine, Model, Decision rule, Confidence and both probabilities as **"Not recorded"** (their proposals predate the new decision stage), so the null case also behaves live: no zero, no blank. Referral detail 3 was read before its reviewer view had loaded, so its observation is empty (a walk timing gap, not a screen result); it is not counted.
 
 Verdict: **pass**. The screen shows engine, model id, confidence, decision rule and each alternative's probability exactly as the API sent them, and "Not recorded" for null. Nothing was written.
+
+# Not tested live (18 Nov 2026)
+
+These screens were built after the second live pass and have only been tested against the console's own fake API (unit tests, and the browser tests with axe at 320, 768 and 1280 px in English and Tamil). They are listed as **not tested live** until the owner says the demo is ready. No walk was run for them, and none will be run until then.
+
+| Screen | Why not live yet |
+|---|---|
+| Patient visit preparation (patient "What to prepare", staff read-only view) | Off by default on the backend (`CAREFLOW_PATIENT_VISIT_PREP`); every route answers 503 until switched on. The staff view also needs a recent second factor. Waiting for the backend's demo switches. |
+| Family links (patient section, front-desk screen) | Off by default (`CAREFLOW_FAMILY_LINKS`) and deny by default: even with the switch on, every route answers 503 "the clinic has not entered its rules" until counsel's rule values are entered (the table ships empty). The staff routes also need a recent second factor. Waiting for the backend's demo switches and the demo family-rule script. |
+| Cards and templates editor (`/knowledge`) | Off by default (`CAREFLOW_KNOWLEDGE_EDITOR`); every route answers 503 until switched on, and every write needs a recent second factor. Waiting for the backend's demo switches. |
+| Staff message screen (`/messages`) and patient labels ("Show names") | Built after the second live pass. Reading a message and screening it write audit rows, and labels need the demo profile with synthetic data. Not walked yet. |
+| Patient portal: appointments, messages, family links, requests, profile, notices | The patient sign-in is not set up for live walks (phone sign-in); the screens were tested against the fake API only. |
+
+When the owner says the switches and the demo family-rule script are ready, the walks to run (read-only, the user types the password) are: nurse (visit preparation staff view, cards and templates as a reader), doctor (cards and templates, including a second person approving), front desk (family links), and the same four screens' 503 states with the switches still off.

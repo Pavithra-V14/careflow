@@ -248,3 +248,14 @@ test('keyboard only: cancel an appointment, book an open time and send a message
   expect(writes(/\/book$/)).toBe(1);
   expect(writes(/\/v1\/portal\/messages$/)).toBe(1);
 });
+
+test('visit preparation and family links in the portal: the checklist as sent, marking it, and the family section', async ({ page }) => {
+  const mock = await open(page, 'en', { start: 'active', granted: true });
+  await signIn(page);
+  await expect(page.locator('#portal-family')).toBeVisible();
+  await page.getByRole('button', { name: /What to prepare: Placeholder Visit/ }).click();
+  await expect(page.getByText('PLACEHOLDER checklist item one')).toBeVisible();
+  await sweep(page, 'portal-prep', 'en');
+  await page.getByRole('button', { name: 'Mark done' }).first().click();
+  await expect.poll(() => mock.calls.filter((c) => /\/prep\/[^/]+\/done$/.test(c.path)).length).toBe(1);
+});

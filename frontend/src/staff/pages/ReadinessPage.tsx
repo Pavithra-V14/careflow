@@ -11,6 +11,7 @@ import { NotAvailableToRole, ProblemText, QueryView } from '../ui/states';
 import { inClinic } from '../ui/clinic';
 import { useSession } from '../session/SessionContext';
 import { WriteProblem } from '../ui/WriteProblem';
+import { VisitPrepView } from './VisitPrepView';
 
 type View = components['schemas']['ReadinessViewOut'];
 
@@ -88,6 +89,7 @@ export function ReadinessPage() {
       </form>
       )}
       {visitId && <Run key={visitId} visitId={visitId} />}
+      {visitId && <VisitPrepView key={`prep-${visitId}`} visitId={visitId} />}
     </section>
   );
 }

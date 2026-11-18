@@ -11,10 +11,13 @@ export class ApiProblem extends Error {
    * and say it in its own plain words. It is never rendered as it came: an unknown phrase is shown as the fixed message for the kind.
    */
   readonly detail: string | null;
-  constructor(kind: ProblemKind, detail: string | null = null) {
+  /** The HTTP status when there was an answer (null for a network problem). Only used to tell 503, a switch that is off, from 502 and 504, a failing gateway. */
+  readonly status: number | null;
+  constructor(kind: ProblemKind, detail: string | null = null, status: number | null = null) {
     super(kind); // the kind word only; never a status line or a body
     this.kind = kind;
     this.detail = detail;
+    this.status = status;
   }
 }
 
@@ -50,7 +53,7 @@ export async function unwrap<T>(pending: Promise<Result<T>>): Promise<T> {
   // A step-up challenge that was cancelled or not satisfied is not a sign-out: nothing was changed and a fresh code is needed.
   if (isStepUpChallenge(result.response)) throw new ApiProblem('step_up');
   const detail = (result.error as { detail?: unknown } | undefined)?.detail;
-  throw new ApiProblem(result.response.ok ? 'unknown' : problemFromStatus(result.response.status), typeof detail === 'string' ? detail : null);
+  throw new ApiProblem(result.response.ok ? 'unknown' : problemFromStatus(result.response.status), typeof detail === 'string' ? detail : null, result.response.status);
 }
 
 /** Answers that will not change on a retry: the idempotency key is dropped, so the next attempt is a new intent. */

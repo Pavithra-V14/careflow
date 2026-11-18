@@ -138,7 +138,7 @@ const mcSection = `## Part 0. Machine first pass (back-translation)
 
 **Machine-checked on ${mcMeta.date}; NOT human-reviewed; the Tamil reader must still approve.** This is a first pass by an AI model, not a native speaker, and not a substitute for the human reviewer. No string was marked reviewed.
 
-How it was done: every Tamil string was back-translated to English on its own, without the English original in view, and only then compared with the original. Strings that are identical in English and Tamil on purpose (Part 6) were not translated, so they were not back-translated. A script also checked every string for lost or reordered {{placeholders}}, changed numbers, a lost negation, informal pronouns and a different number of sentences.
+How it was done: every Tamil string was back-translated to English on its own, without the English original in view, and only then compared with the original. Strings that are identical in English and Tamil on purpose (Part 6) were not translated, so they were not back-translated. It was done in ${mcMeta.passes?.length ?? 1} pass(es): ${(mcMeta.passes ?? []).map((p) => `${p.date}: ${p.checked} strings (${p.fixed} fixed, ${p.flagged} flagged)`).join('; ')}. The second pass covered only the strings added or changed since the first. A script also checked every string for lost or reordered {{placeholders}}, changed numbers, a lost negation, informal pronouns and a different number of sentences.
 
 | Count | Strings |
 |---|---|
