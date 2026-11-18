@@ -4811,8 +4811,13 @@ class FamilyLinkDecisionIn(_Body):
         return self
 
 
+class FamilyLinkStaffRevokeIn(_Body):
+    clinic_id: uuid.UUID
+    reason: str = Field(pattern=r"^[a-z][a-z0-9_]{0,59}$")
+
+
 class FamilyLinkDecisionOut(_Out):
-    result: Literal["recorded", "replay", "invalid_state", "age_not_allowed", "consent_required"]
+    result: Literal["recorded", "replay", "invalid_state", "age_not_allowed", "consent_required", "requester_not_active", "already_linked"]
 
 
 def _family_links_on() -> None:
@@ -4879,7 +4884,7 @@ async def list_staff_family_links(clinic_id: uuid.UUID, conn: TxConn, claims: di
 async def decide_family_link(link_id: uuid.UUID, body: FamilyLinkDecisionIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> FamilyLinkDecisionOut:
     """Verify or reject a link request. A verify names the dependant's record, records whether the linked person's consent was obtained, and is checked against the clinic's rule (the age comes from the stored date of birth, never from you).
     404 if the clinic is not visible to you, 403 unless you are front desk there (with a recent second factor) or the record is not in this clinic, 503 unless family links are switched on or while the clinic's rules are not entered
-    (`family links are not set up: the clinic has not entered its rules`). `age_not_allowed` or `consent_required` when the rule is not met; `invalid_state` if it is not waiting for a decision. Idempotent on the key."""
+    (`family links are not set up: the clinic has not entered its rules`). `age_not_allowed` or `consent_required` when the rule is not met; `requester_not_active` if the requester's record was erased or their account closed since the request; `invalid_state` if it is not waiting for a decision. Idempotent on the key (tied to you: another person's key is not a replay)."""
     await _console_clinic(conn, body.clinic_id, FAMILY_VERIFIERS)
     _family_links_on()
     age: int | None = None
@@ -4897,6 +4902,16 @@ async def decide_family_link(link_id: uuid.UUID, body: FamilyLinkDecisionIn, ide
     if result == "not_configured":
         raise HTTPException(status_code=503, detail=family_links_sql.NOT_CONFIGURED)
     return FamilyLinkDecisionOut(result=result)  # type: ignore[arg-type]
+
+
+@staff_family.post("/{link_id}/revoke", response_model=FamilyLinkRevokeOut)
+async def staff_revoke_family_link(link_id: uuid.UUID, body: FamilyLinkStaffRevokeIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> FamilyLinkRevokeOut:
+    """Revoke a family link or a pending request as front desk (a consent withdrawn, a safeguarding reason): a reason WORD is required, audited. 404 if the clinic is not visible to you, 403 unless you are front desk there (with a recent
+    second factor) or the link is not in this clinic, 503 unless family links are switched on, 422 for a reason that is not a word. `invalid_state` if it is already closed. Idempotent on the key (tied to you)."""
+    await _console_clinic(conn, body.clinic_id, FAMILY_VERIFIERS)
+    _family_links_on()
+    result = await _family_call(family_links_sql.staff_revoke(conn, clinic_id=body.clinic_id, link_id=link_id, reason=body.reason, idempotency_key=idempotency_key))
+    return FamilyLinkRevokeOut(result=result)  # type: ignore[arg-type]
 
 
 # ---- Knowledge search (migration 0085; BUILD-SPEC.md 10): MECHANISM over SYNTHETIC placeholder cards ------------------------------------------------------------------------------------------------------------

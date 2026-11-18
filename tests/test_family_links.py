@@ -74,3 +74,16 @@ def test_the_new_live_file_is_in_exactly_one_ci_shard_and_the_schema_check_knows
     ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     assert ci.count("tests/test_family_links_db_live.py") == 1
     assert "0091" in (ROOT / "careflow" / "schema_check.py").read_text(encoding="utf-8")
+
+
+def test_migration_0093_rechecks_the_requester_adds_the_staff_revoke_ties_keys_to_the_actor_and_uses_past_tense_audit_names():
+    sql = (ROOT / "db" / "migrations" / "0093_family_and_knowledge_hardening.sql").read_text(encoding="utf-8")
+    code = "\n".join(line for line in sql.splitlines() if not line.lstrip().startswith("--"))
+    assert "'requester_not_active'" in code and "pt.erased_at is null" in code[code.index("requester_not_active") - 900 : code.index("requester_not_active")]
+    assert "iam.family_link.verified" in code and "iam.family_link.rejected" in code and "'iam.family_link.' ||" not in code
+    for prefix in ("'knowledge-edit:' || auth.uid()::text", "'knowledge-submit:' || auth.uid()::text", "'knowledge-decide:' || auth.uid()::text", "'family-decide:' || auth.uid()::text", "'family-staff-revoke:' || auth.uid()::text"):
+        assert prefix in code, prefix  # every replay key is tied to the acting account
+    block = code[code.index("create function iam.family_link_staff_revoke") :]
+    block = block[: block.index("\n$$;")]
+    assert "security definer set search_path = ''" in block and "iam.aal2_session()" in block and "array['front_desk']" in block and "42501" in block and "p_reason !~" in block
+    assert "grant execute on function iam.family_link_staff_revoke" in code

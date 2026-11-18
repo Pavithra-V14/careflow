@@ -221,3 +221,17 @@ async def test_a_rejection_is_audited_as_rejected_a_replay_survives_padding_and_
     assert [a[0] for a in actions] == ["kb.knowledge_draft.created", "kb.knowledge_draft.edited", "kb.knowledge_draft.submitted", "kb.knowledge_draft.rejected"]
     roles = await owner(db, "select distinct actor_role from audit.log where resource_id = :d order by 1", d=str(did))
     assert roles == [("doctor",), ("nurse",)]  # the acting role is recorded on every row
+
+
+async def test_replay_keys_are_tied_to_the_acting_account_and_a_reject_is_not_a_replay_of_an_approve(db):
+    w = await world(db)
+    did = await submitted(db, w, "nurse")
+    assert await as_app(db, w["doctor"], DECIDE, c=w["a"], d=did, dec="approve", r=None, key="shared") == [("recorded", 1)]
+    assert await as_app(db, w["doctor"], DECIDE, c=w["a"], d=did, dec="approve", r=None, key="shared") == [("replay", 1)]
+    assert await as_app(db, w["doctor2"], DECIDE, c=w["a"], d=did, dec="approve", r=None, key="shared") == [("invalid_state", None)]  # another doctor's use of the key is not a replay
+    assert await as_app(db, w["doctor"], DECIDE, c=w["a"], d=did, dec="reject", r="zz_reason", key="shared") == [("invalid_state", None)]  # nor is a reject carrying an approve's key
+    other = (await draft(db, w, "nurse", code="zz-edit-card"))[0][0]
+    assert await as_app(db, w["nurse"], EDIT, c=w["a"], d=other, t="ZZ one", b="ZZ b", s=[], p=[], a=["nurse"], key="ek") == [("recorded",)]
+    assert await as_app(db, w["nurse2"], EDIT, c=w["a"], d=other, t="ZZ two", b="ZZ b", s=[], p=[], a=["nurse"], key="ek") == "42501"  # not the author
+    assert await as_app(db, w["nurse"], SUBMIT, c=w["a"], d=other, key="sk") == [("recorded",)]
+    assert await as_app(db, w["nurse"], SUBMIT, c=w["a"], d=other, key="sk") == [("replay",)]
