@@ -279,3 +279,21 @@ async def test_a_patient_account_a_revoked_grant_and_a_suspended_account_get_not
         assert await as_app(db, who, "select 1 from agents.triage_proposals", fetch=True) == [], who
     assert await as_app(db, p["doctor_a"], decision_sql(w.a, pid, p["doctor_a"])) == "INSERT 0 1"
     assert len(await as_app(db, p["doctor_a"], "select 1 from agents.triage_proposals", fetch=True)) == 1
+
+
+async def test_the_escalation_assessment_is_a_closed_optional_word_written_with_the_decision_and_never_edited(db):
+    """Migration 0094 (spec 14.4): null = not recorded; two words only; the same policy, grant and append-only guard as the rest of the row."""
+    w = await world(db)
+    nurse = w.people["nurse_a"]
+    with_word = lambda pid, word, key: decision_sql(w.a, pid, nurse, key=key).replace("idempotency_key)", "idempotency_key, escalation_assessment)").replace(f"'{key}')", f"'{key}', {word})")
+    first, second, third, fourth = (await seed_proposal(db, w, doc=d) for d in (w.doc_a, w.doc_a2, w.doc_a3, w.doc_a4))
+    assert str(await as_app(db, nurse, with_word(first, "'missed_by_system'", "ea1"))).startswith("INSERT")  # the restricted role may write the new column with the decision
+    assert str(await as_app(db, nurse, with_word(second, "'unnecessary_escalation'", "ea2"))).startswith("INSERT")
+    assert await as_app(db, nurse, with_word(third, "'accurate'", "ea3")) == "23514"  # outside the closed pair
+    assert await as_app(db, w.people["front_desk_a"], with_word(third, "'missed_by_system'", "ea5")) == "42501"  # the same policy as the rest of the row: nurse or doctor only
+    assert await outcome(db, with_word(third, "'missed_by_system'", "ea6")) is None
+    assert await outcome(db, decision_sql(w.a, fourth, nurse, key="ea4")) is None  # no word: stored as null, which means not recorded
+    got = {r["idempotency_key"]: r["escalation_assessment"] for r in await db.fetch("select idempotency_key, escalation_assessment from agents.review_decisions where idempotency_key in ('ea4', 'ea6')")}
+    assert got == {"ea4": None, "ea6": "missed_by_system"}
+    assert await outcome(db, "update agents.review_decisions set escalation_assessment = 'unnecessary_escalation' where idempotency_key = 'ea4'") == "23001"  # append-only
+    assert await as_app(db, nurse, "update agents.review_decisions set escalation_assessment = 'unnecessary_escalation'") == "42501"  # no update grant

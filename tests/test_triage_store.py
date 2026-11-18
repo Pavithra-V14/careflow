@@ -237,3 +237,22 @@ async def test_the_hold_priority_has_no_default_roles_are_limited_and_a_replay_f
     refused.error_state = "42501"
     with pytest.raises(NotPermitted):
         await writer.raise_hold(refused, document_id=DOC, clinic_id=CLINIC, origin="test", assigned_role="nurse", status="s", reasons=[], idempotency_key="k")
+
+
+async def test_an_unknown_escalation_assessment_is_refused_before_the_database_is_touched():
+    conn = Conn()
+    for bad in ("accurate", "", "MISSED_BY_SYSTEM"):
+        with pytest.raises(TriageStoreError):
+            await SqlReviewRecorder().record(conn, proposal_id=proposal_id_for(CLINIC, KEY), clinic_id=CLINIC, decision="approve", reviewer_id=REVIEWER, idempotency_key="k", escalation_assessment=bad)
+    await SqlReviewRecorder().record(conn, proposal_id=proposal_id_for(CLINIC, KEY), clinic_id=CLINIC, decision="approve", reviewer_id=REVIEWER, idempotency_key="k2", escalation_assessment="unnecessary_escalation")
+
+
+def test_migration_0094_adds_one_closed_nullable_column_with_an_insert_only_grant():
+    from pathlib import Path
+
+    sql = (Path(__file__).resolve().parent.parent / "db" / "migrations" / "0094_review_escalation_assessment.sql").read_text(encoding="utf-8")
+    code = "\n".join(line for line in sql.splitlines() if not line.lstrip().startswith("--"))
+    assert "add column escalation_assessment text check (escalation_assessment is null or escalation_assessment in ('unnecessary_escalation', 'missed_by_system'))" in code
+    assert "grant insert (escalation_assessment) on agents.review_decisions to careflow_app" in code
+    assert "not null" not in code.split("add column")[1].split("grant")[0] and " default " not in code.split("add column")[1].split("grant")[0]  # null means not recorded: never a default
+    assert "update (" not in code and "grant update" not in code and "create table" not in code and "create function" not in code

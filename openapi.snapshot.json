@@ -8183,6 +8183,21 @@
             "title": "Decision",
             "type": "string"
           },
+          "escalation_assessment": {
+            "anyOf": [
+              {
+                "enum": [
+                  "unnecessary_escalation",
+                  "missed_by_system"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Escalation Assessment"
+          },
           "reason_code": {
             "anyOf": [
               {

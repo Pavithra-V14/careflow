@@ -100,9 +100,10 @@ class Holds(Effects):
 
 
 class Recorder(Effects):
-    async def record(self, conn, *, proposal_id, clinic_id, decision, reviewer_id, idempotency_key):
+    async def record(self, conn, *, proposal_id, clinic_id, decision, reviewer_id, idempotency_key, reason_code=None, escalation_assessment=None):
         self._do(idempotency_key)
         self.decision = decision
+        self.escalation_assessment = escalation_assessment
 
 
 def world(outcome="clear", *, answer=GOOD, abstain=False, engine_fail=None, extract_raises=None):
@@ -163,6 +164,26 @@ async def test_resuming_with_a_decision_records_it_once_and_finishes():
     final = await graph.ainvoke(Command(resume={"decision": "approve", "reviewer_id": REVIEWER}), CONFIG)
     assert final["status"] == "reviewed" and (await graph.aget_state(CONFIG)).next == ()
     assert list(recorder.performed) == [f"review:{DOC}"] and recorder.decision == "approve"
+
+
+async def test_an_escalation_assessment_is_optional_closed_and_reaches_the_recorder_only_when_given():
+    graph, *_, recorder = world()
+    await graph.ainvoke(START, CONFIG)
+    await graph.ainvoke(Command(resume={"decision": "approve", "reviewer_id": REVIEWER}), CONFIG)
+    assert recorder.escalation_assessment is None  # not recorded stays not recorded; it is never filled in
+    graph, *_, recorder = world()
+    await graph.ainvoke(START, CONFIG)
+    await graph.ainvoke(Command(resume={"decision": "reject", "reviewer_id": REVIEWER, "escalation_assessment": "missed_by_system"}), CONFIG)
+    assert recorder.decision == "reject" and recorder.escalation_assessment == "missed_by_system"
+
+
+async def test_an_escalation_assessment_outside_the_two_words_is_refused_before_anything_is_recorded():
+    for bad in ("accurate", "", "Missed_By_System", 1, ["missed_by_system"]):
+        graph, *_, recorder = world()
+        await graph.ainvoke(START, CONFIG)
+        with pytest.raises(FrontDoorError):
+            await graph.ainvoke(Command(resume={"decision": "approve", "reviewer_id": REVIEWER, "escalation_assessment": bad}), CONFIG)
+        assert recorder.performed == {}
 
 
 async def test_a_card_abstention_still_goes_to_a_human_as_a_proposal_that_says_so():

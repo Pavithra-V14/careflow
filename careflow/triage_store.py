@@ -107,8 +107,11 @@ class SqlTriageProposer:
 
 class SqlReviewRecorder:
     async def record(
-        self, conn: AsyncConnection, *, proposal_id: uuid.UUID, clinic_id: uuid.UUID, decision: str, reviewer_id: uuid.UUID, idempotency_key: str, reason_code: str | None = None
+        self, conn: AsyncConnection, *, proposal_id: uuid.UUID, clinic_id: uuid.UUID, decision: str, reviewer_id: uuid.UUID, idempotency_key: str, reason_code: str | None = None,
+        escalation_assessment: str | None = None,
     ) -> None:
+        if escalation_assessment not in (None, "unnecessary_escalation", "missed_by_system"):
+            raise TriageStoreError("unknown escalation assessment")
         if decision not in ("approve", "edit", "reject"):
             raise TriageStoreError("unknown decision")
         origin_row = (
@@ -121,10 +124,10 @@ class SqlReviewRecorder:
                 inserted = (
                     await conn.execute(
                         text(
-                            "insert into agents.review_decisions (clinic_id, origin, proposal_id, decision, decided_by, idempotency_key, reason_code) "
-                            "values (:c, :o, :p, :d, :u, :k, :rc) on conflict (clinic_id, idempotency_key) do nothing returning id"
+                            "insert into agents.review_decisions (clinic_id, origin, proposal_id, decision, decided_by, idempotency_key, reason_code, escalation_assessment) "
+                            "values (:c, :o, :p, :d, :u, :k, :rc, :ea) on conflict (clinic_id, idempotency_key) do nothing returning id"
                         ),
-                        {"c": clinic_id, "o": origin_row.origin, "p": proposal_id, "d": decision, "u": reviewer_id, "k": idempotency_key, "rc": reason_code},
+                        {"c": clinic_id, "o": origin_row.origin, "p": proposal_id, "d": decision, "u": reviewer_id, "k": idempotency_key, "rc": reason_code, "ea": escalation_assessment},
                     )
                 ).first()
         except DBAPIError as exc:

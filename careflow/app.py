@@ -2088,6 +2088,7 @@ class RunOut(_Out):
 class ReviewIn(_Body):
     decision: Literal["approve", "edit", "reject"]
     reason_code: str | None = Field(default=None, min_length=1, max_length=60, pattern=r"^[a-z][a-z0-9_]*$")  # a word from the clinic's picklist (12.2); required for reject and edit once the list is configured
+    escalation_assessment: Literal["unnecessary_escalation", "missed_by_system"] | None = None  # optional (spec 14.4); omitted means not recorded; the first decision recorded keeps its value
 
 
 class ReviewOut(_Out):
@@ -2163,7 +2164,7 @@ async def review_referral(
             return ReviewOut(document_id=document_id, decision=body.decision, replayed=True)
         raise HTTPException(status_code=409, detail="this referral is not waiting for a decision")
     try:
-        await graph.ainvoke(Command(resume={"decision": body.decision, "reviewer_id": reviewer, **({"reason_code": reason} if reason else {})}), config)
+        await graph.ainvoke(Command(resume={"decision": body.decision, "reviewer_id": reviewer, **({"reason_code": reason} if reason else {}), **({"escalation_assessment": body.escalation_assessment} if body.escalation_assessment else {})}), config)
     except DecisionConflict:
         raise HTTPException(status_code=409, detail="this referral is not waiting for a decision") from None
     except TriageNotPermitted:

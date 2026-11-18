@@ -72,6 +72,7 @@ from careflow.text_guard import mask_pii, scan_text
 RECURSION_LIMIT: Final = 40  # §7.3: 40 steps per run
 REVIEW_DECISIONS: Final = ("approve", "edit", "reject")
 TRACING_VARIABLES: Final = ("LANGSMITH_TRACING", "LANGCHAIN_TRACING_V2", "LANGCHAIN_TRACING", "LANGSMITH_TRACING_V2")
+ESCALATION_ASSESSMENTS: Final = ("unnecessary_escalation", "missed_by_system")  # spec 14.4: the two closed words; NULL in the database means not recorded
 _TRUE: Final = {"1", "true", "yes", "on"}
 
 
@@ -159,7 +160,8 @@ class HoldTaskWriter(Protocol):
 
 class ReviewRecorder(Protocol):
     async def record(
-        self, conn: AsyncConnection, *, proposal_id: uuid.UUID, clinic_id: uuid.UUID, decision: str, reviewer_id: uuid.UUID, idempotency_key: str, reason_code: str | None = None
+        self, conn: AsyncConnection, *, proposal_id: uuid.UUID, clinic_id: uuid.UUID, decision: str, reviewer_id: uuid.UUID, idempotency_key: str, reason_code: str | None = None,
+        escalation_assessment: str | None = None,
     ) -> None: ...
 
 
@@ -358,6 +360,11 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
             if not isinstance(reason, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,59}", reason):
                 raise FrontDoorError("a review needs a decision and a reviewer")
             decision["reason_code"] = reason  # a picklist word (12.2), checked against the clinic's list by the route before the run resumes
+        assessment = answer.get("escalation_assessment")
+        if assessment is not None:
+            if assessment not in ESCALATION_ASSESSMENTS:
+                raise FrontDoorError("a review needs a decision and a reviewer")
+            decision["escalation_assessment"] = assessment  # optional, closed (spec 14.4); absent means not recorded
         return {"decision": decision}
 
     async def apply_review(state: FrontDoorState) -> FrontDoorState:
@@ -365,6 +372,8 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
         document_id, clinic_id = _ids(state)
         async with deps.session() as conn:
             extra = {"reason_code": state["decision"]["reason_code"]} if state["decision"].get("reason_code") else {}
+            if state["decision"].get("escalation_assessment"):
+                extra["escalation_assessment"] = state["decision"]["escalation_assessment"]
             await deps.recorder.record(
                 conn, proposal_id=uuid.UUID(state["proposal_id"]), clinic_id=clinic_id, decision=state["decision"]["decision"],
                 reviewer_id=uuid.UUID(state["decision"]["reviewer_id"]), idempotency_key=f"review:{document_id}", **extra,
