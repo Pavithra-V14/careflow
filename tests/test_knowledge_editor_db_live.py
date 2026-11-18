@@ -199,3 +199,25 @@ async def test_the_workers_sweep_indexes_approved_cards_once_and_the_search_then
     await as_person(w["doctor"])
     seen = await search.search(db, w["a"], "test", "how to polish a flimmer marker with the grizzle cloth")
     assert not seen.retrieval.abstained and seen.retrieval.candidates[0].card_id == "zz-doctors"
+
+
+# ---- migration 0092: the reviewer's findings on 0090 and 0091 ---------------------------------------------------------------------------------------
+
+
+async def test_a_rejection_is_audited_as_rejected_a_replay_survives_padding_and_edits_and_bad_content_is_one_refusal(db):
+    w = await world(db)
+    did = (await draft(db, w, key="same", title="  ZZ padded title  ", body="  ZZ body  "))[0][0]
+    assert (await draft(db, w, key="same", title="  ZZ padded title  ", body="  ZZ body  "))[0] == (did, False)  # padding no longer breaks the replay
+    assert await as_app(db, w["nurse"], EDIT, c=w["a"], d=did, t="ZZ edited", b="ZZ edited body", s=[], p=[], a=["nurse"], key="e1") == [("recorded",)]
+    assert (await draft(db, w, key="same", title="  ZZ padded title  ", body="  ZZ body  "))[0] == (did, False)  # nor an edit made since
+    assert await draft(db, w, key="same", code="zz-other-code") == "23505"  # the key with another code is still a different request
+    for bad in ({"title": "   "}, {"body": "  "}, {"audience": []}, {"audience": ["janitor"]}, {"s": ["x" * 200] * 20}, {"title": "x" * 201}):
+        assert await draft(db, w, code=f"zz-bad-{uuid.uuid4().hex[:6]}", **bad) == "42501", bad  # never a table CHECK, always the one refusal
+    assert await as_app(db, w["nurse"], EDIT, c=w["a"], d=did, t="ZZ t", b="ZZ b", s=[], p=[], a=[], key="e2") == "42501"  # a card edited to no audience
+    assert await as_app(db, w["nurse"], EDIT, c=w["a"], d=did, t="   ", b="ZZ b", s=[], p=[], a=["nurse"], key="e3") == "42501"
+    assert await as_app(db, w["nurse"], SUBMIT, c=w["a"], d=did, key="s1") == [("recorded",)]
+    assert await as_app(db, w["doctor"], DECIDE, c=w["a"], d=did, dec="reject", r="zz_not_ready", key="r1") == [("recorded", None)]
+    actions = await owner(db, "select action from audit.log where resource_id = :d and action like 'kb.knowledge_draft.%' order by id", d=str(did))
+    assert [a[0] for a in actions] == ["kb.knowledge_draft.created", "kb.knowledge_draft.edited", "kb.knowledge_draft.submitted", "kb.knowledge_draft.rejected"]
+    roles = await owner(db, "select distinct actor_role from audit.log where resource_id = :d order by 1", d=str(did))
+    assert roles == [("doctor",), ("nurse",)]  # the acting role is recorded on every row

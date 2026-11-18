@@ -73,3 +73,15 @@ def test_the_new_live_file_is_in_exactly_one_ci_shard_and_the_schema_check_knows
     ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     assert ci.count("tests/test_knowledge_editor_db_live.py") == 1
     assert "0090" in (ROOT / "careflow" / "schema_check.py").read_text(encoding="utf-8")
+
+
+def test_migration_0092_fixes_the_audit_name_the_replay_the_content_validation_and_the_rule_bound_without_touching_0090():
+    sql = (ROOT / "db" / "migrations" / "0092_knowledge_editor_fixes.sql").read_text(encoding="utf-8")
+    code = "\n".join(line for line in sql.splitlines() if not line.lstrip().startswith("--"))
+    assert code.count("create or replace function") == 3 and "'kb.knowledge_draft.rejected'" in code and "'kb.knowledge_draft.' ||" not in code  # no more `rejectd`
+    assert "kb.knowledge_content_ok(" in code[code.index("create or replace function kb.knowledge_draft_create") :] and "kb.knowledge_content_ok(v_d.kind" in code  # one validator for create and edit, against the draft's own kind
+    assert "v_prior.title" not in code and "v_prior.body" not in code  # a replay is recognised by the key's kind and code, not by re-comparing text that edits change
+    assert "family_link_rules_a_bound" in code
+    assert "iam.acting_role_name" not in code
+    original = (ROOT / "db" / "migrations" / "0090_knowledge_editor.sql").read_text(encoding="utf-8")
+    assert "'kb.knowledge_draft.' || p_decision || 'd'" in original  # (0090 is as merged: the fix is a new migration)

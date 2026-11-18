@@ -4966,6 +4966,14 @@ class KnowledgeContent(_Body):
     patient_phrases: list[Annotated[str, Field(min_length=1, max_length=200)]] = Field(default_factory=list, max_length=20)
     audience: list[KnowledgeAudience] = Field(default_factory=list, max_length=5)
 
+    @model_validator(mode="after")
+    def _the_content_fits_the_database(self) -> "KnowledgeContent":
+        if not self.title.strip() or not self.body.strip():
+            raise ValueError("a title and a body must not be blank")
+        if len(" ".join(self.synonyms)) > 4000 or len(" ".join(self.patient_phrases)) > 4000 or any(not x.strip() for x in (*self.synonyms, *self.patient_phrases)):
+            raise ValueError("the synonyms and phrases are blank or too long together")
+        return self
+
 
 class KnowledgeDraftIn(KnowledgeContent):
     clinic_id: uuid.UUID
