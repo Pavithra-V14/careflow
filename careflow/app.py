@@ -64,6 +64,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StrictBool,
     ValidationError,
     model_validator,
 )
@@ -4692,7 +4693,7 @@ class PatientPrepOut(_Out):
 
 
 class PrepMarkIn(_Body):
-    done: bool
+    done: StrictBool  # an exact true or false: "yes", 1 and "on" are refused, so a patient's mark is never a guess
 
 
 class PrepMarkOut(_Out):
