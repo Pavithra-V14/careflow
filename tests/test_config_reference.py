@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DOC = (ROOT / "docs" / "config-reference.md").read_text(encoding="utf-8")
-NAME = re.compile(r"(?:CAREFLOW_|FEATURE_|DATABASE_URL_|SUPABASE_|GEMINI_API_KEY|OPENROUTER_API_KEY|SARVAM_API_KEY|CORS_ALLOWED_ORIGINS)[A-Z0-9_]*")
+NAME = re.compile(r"(?:CAREFLOW_|FEATURE_|DATABASE_URL_|SUPABASE_|(?:GEMINI|OPENROUTER|SARVAM)_API_KEY|CORS_ALLOWED_ORIGINS)[A-Z0-9_]*")
 SOURCES = [*sorted((ROOT / "careflow").rglob("*.py")), *sorted((ROOT / "scripts").glob("*.py"))]
 
 

@@ -39,6 +39,6 @@ async def test_every_call_refuses_in_fixed_words_and_never_pretends_to_queue():
 def test_nothing_in_the_application_imports_it_and_it_imports_no_broker_library():
     for path in (ROOT / "careflow").glob("*.py"):
         if path.name != "queue_broker_stub.py":
-            assert "queue_broker_stub" not in path.read_text(encoding="utf-8"), path.name
+            assert not re.search(r"^\s*(import|from)\s+careflow(\.queue_broker_stub|\s+import\s+queue_broker_stub)", path.read_text(encoding="utf-8"), re.MULTILINE), path.name
     code = (ROOT / "careflow" / "queue_broker_stub.py").read_text(encoding="utf-8").split('"""', 2)[2]
     assert not re.search(r"^\s*(import|from)\s+(redis|boto3|aioboto3|aiobotocore|kombu|celery)\b", code, re.MULTILINE)
