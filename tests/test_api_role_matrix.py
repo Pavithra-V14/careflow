@@ -3582,6 +3582,95 @@ def staff_visit_prep_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path, None)[:4]
 
 
+# ---- the knowledge editor (migration 0090, deferred item 27). OFF unless the owner sets CAREFLOW_KNOWLEDGE_EDITOR=on: the matrix app answers the visible 503 AFTER the clinic and role checks. Authors are nurse or doctor; the DECISION is a
+# doctor's only (nurse and multi, a nurse here, see the clinic and are refused 403). The flows with the setting on (author-only edit, the freeze on submit, a doctor who is not the author approves, versions, indexing) are in tests/test_knowledge_editor_db_live.py.
+
+KE = "/v1/staff/knowledge"
+KE_OFF = lambda b: b == {"detail": "the knowledge editor is not set up"}
+KE_VISIBLE_REFUSED = ("front_desk_a", "admin_a", "business_owner_a", "auditor_a")
+
+
+def _ke_roles(ids, path, *, allowed, json=None, key="new", method_visible=KE_VISIBLE_REFUSED):
+    cases = [_case(ids, f"{p} is told the knowledge editor is not set up", p, 503, path, json=json, key=key, body=KE_OFF) for p in allowed]
+    refused = [p for p in (*method_visible, *[x for x in ("nurse_a", "doctor_a", "multi") if x not in allowed])]
+    cases += [_case(ids, f"{p} sees the clinic but is refused", p, 403, path, json=json, key=key, body=NOT_YOUR_ROLE) for p in refused]
+    others = [p for p in ids.people if p not in (*allowed, *refused)]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused with the one not-found", p, 404, path, json=json, key=key, body=_fixed(404)) for p in others]
+    return cases
+
+
+def ke_draft_create_cases(ids) -> list[tuple]:
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "kind": "card", "code": "zz-marker-card", "title": "ZZ marker title", "body": "ZZ marker body", "audience": ["nurse"], **o}
+    cases = _ke_roles(ids, KE + "/drafts", allowed=("nurse_a", "doctor_a", "multi"), json=body())
+    cases += [
+        _case(ids, "an unknown clinic is not found", "nurse_a", 404, KE + "/drafts", json=body(clinic_id=str(uuid.uuid4())), body=_fixed(404)),
+        _case(ids, "a card with no audience is rejected", "nurse_a", 422, KE + "/drafts", json=body(audience=[]), body=_fixed(422)),
+        _case(ids, "a template may have no audience (still the 503)", "nurse_a", 503, KE + "/drafts", json=body(kind="template", audience=[]), body=KE_OFF),
+        _case(ids, "a code with capitals or spaces is rejected", "nurse_a", 422, KE + "/drafts", json=body(code="Bad Code"), body=_fixed(422)),
+        _case(ids, "a role that does not exist in the audience is rejected", "nurse_a", 422, KE + "/drafts", json=body(audience=["janitor"]), body=_fixed(422)),
+        _case(ids, "an empty title is rejected", "nurse_a", 422, KE + "/drafts", json=body(title=""), body=_fixed(422)),
+        _case(ids, "a body over 4000 characters is rejected", "nurse_a", 422, KE + "/drafts", json=body(body="x" * 4001), body=_fixed(422)),
+        _case(ids, "an extra field (a status, an author) is rejected", "nurse_a", 422, KE + "/drafts", json=body(status="approved"), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "nurse_a", 422, KE + "/drafts", json=body(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, KE + "/drafts", body())
+
+
+def ke_draft_edit_cases(ids) -> list[tuple]:
+    path = lambda: f"{KE}/drafts/{uuid.uuid4()}"
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "title": "ZZ marker title", "body": "ZZ marker body", "audience": ["nurse"], **o}
+    cases = _ke_roles(ids, path(), allowed=("nurse_a", "doctor_a", "multi"), json=body())
+    cases += [
+        _case(ids, "a draft id that is not a uuid is rejected", "nurse_a", 422, f"{KE}/drafts/nope", json=body(), body=_fixed(422)),
+        _case(ids, "the kind and the code cannot be changed by an edit (an extra field)", "nurse_a", 422, path(), json=body(code="zz-other"), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "nurse_a", 422, path(), json=body(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), body())
+
+
+def ke_draft_submit_cases(ids) -> list[tuple]:
+    path = lambda: f"{KE}/drafts/{uuid.uuid4()}/submit"
+    body = {"clinic_id": str(ids.clinic_a)}
+    cases = _ke_roles(ids, path(), allowed=("nurse_a", "doctor_a", "multi"), json=body)
+    cases += [
+        _case(ids, "a draft id that is not a uuid is rejected", "nurse_a", 422, f"{KE}/drafts/nope/submit", json=body, body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "nurse_a", 422, path(), json=body, key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), body)
+
+
+def ke_draft_decision_cases(ids) -> list[tuple]:
+    path = lambda: f"{KE}/drafts/{uuid.uuid4()}/decision"
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "decision": "approve", **o}
+    cases = _ke_roles(ids, path(), allowed=("doctor_a",), json=body())  # a doctor's only: nurse_a and multi (a nurse here) see the clinic and are refused
+    cases += [
+        _case(ids, "a reject without a reason word is rejected", "doctor_a", 422, path(), json=body(decision="reject"), body=_fixed(422)),
+        _case(ids, "an approve with a reason word is rejected", "doctor_a", 422, path(), json=body(reason="x_reason"), body=_fixed(422)),
+        _case(ids, "a reason that is not a word is rejected", "doctor_a", 422, path(), json=body(decision="reject", reason="Not A Word"), body=_fixed(422)),
+        _case(ids, "a decision that is not approve or reject is rejected", "doctor_a", 422, path(), json=body(decision="maybe"), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "doctor_a", 422, path(), json=body(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), body())
+
+
+def ke_draft_list_cases(ids) -> list[tuple]:
+    path = lambda **o: KE + "/drafts?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
+    cases = _ke_roles(ids, path(), allowed=("nurse_a", "doctor_a", "multi"), key=None)
+    cases += [
+        _case(ids, "an unknown clinic is not found", "nurse_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404)),
+        _case(ids, "limit=0 is rejected", "nurse_a", 422, path(limit=0), key=None, body=_fixed(422)),
+        _case(ids, "limit=201 is rejected", "nurse_a", 422, path(limit=201), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
+def ke_items_list_cases(ids) -> list[tuple]:
+    path = lambda **o: KE + "/items?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
+    cases = _ke_roles(ids, path(), allowed=("nurse_a", "doctor_a", "multi"), key=None)
+    cases += [_case(ids, "limit=0 is rejected", "nurse_a", 422, path(limit=0), key=None, body=_fixed(422))]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
 def staff_patient_request_list_cases(ids) -> list[tuple]:
     path = lambda **o: STAFF_PATIENT_REQUESTS + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
     visible = ("nurse_a", "doctor_a", "admin_a", "business_owner_a", "auditor_a", "multi")
@@ -4057,6 +4146,12 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", MEDICATIONS): medication_record_cases,
     ("GET", MEDICATIONS): medication_list_cases,
     ("POST", KNOWLEDGE): knowledge_search_cases,
+    ("POST", KE + "/drafts"): ke_draft_create_cases,
+    ("PUT", KE + "/drafts/{draft_id}"): ke_draft_edit_cases,
+    ("POST", KE + "/drafts/{draft_id}/submit"): ke_draft_submit_cases,
+    ("POST", KE + "/drafts/{draft_id}/decision"): ke_draft_decision_cases,
+    ("GET", KE + "/drafts"): ke_draft_list_cases,
+    ("GET", KE + "/items"): ke_items_list_cases,
     ("GET", AUTONOMY): autonomy_get_cases,
     ("POST", AUTONOMY): autonomy_set_cases,
     ("GET", DASHBOARD): dashboard_cases,

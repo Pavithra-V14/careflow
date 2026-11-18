@@ -59,7 +59,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from langgraph.types import Command
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, SQLAlchemyError
@@ -79,6 +86,7 @@ from careflow import (
     demo_real_models,
     identity,
     knowledge,
+    knowledge_editor_sql,
     knowledge_sql,
     learning_labels,
     medications_sql,
@@ -4786,6 +4794,178 @@ async def knowledge_search_route(body: KnowledgeSearchIn, conn: TxConn, request:
     )
 
 
+# ---- the knowledge editor (migration 0090; deferred item 27) -----------------------------------------------------------------------------------------------------------------------------
+# MECHANISM, OFF BY DEFAULT: every route answers 503 (after the clinic and role checks) unless the owner sets CAREFLOW_KNOWLEDGE_EDITOR=on. NOTHING IS SEEDED and the software authors no word: a nurse or doctor types a card or a message template,
+# the author edits it while it is a draft and submits it, and a DOCTOR WHO IS NOT THE AUTHOR approves or rejects it (the database enforces the two people). An approval writes the next immutable version. The queue worker indexes approved
+# cards afterwards (the approver's session never calls the index function); with no embedding route an approved card is stored and not searchable. Every write needs a recent second factor, checked again by the database.
+
+KNOWLEDGE_AUTHORS = ("nurse", "doctor")
+KNOWLEDGE_APPROVERS = ("doctor",)
+KnowledgeAudience = Literal["front_desk", "nurse", "doctor", "admin", "queue_worker"]
+_KNOWLEDGE_WORD = r"^[a-z0-9][a-z0-9._-]{0,99}$"
+
+
+class KnowledgeContent(_Body):
+    title: str = Field(min_length=1, max_length=200)
+    body: str = Field(min_length=1, max_length=4000)
+    synonyms: list[Annotated[str, Field(min_length=1, max_length=200)]] = Field(default_factory=list, max_length=20)
+    patient_phrases: list[Annotated[str, Field(min_length=1, max_length=200)]] = Field(default_factory=list, max_length=20)
+    audience: list[KnowledgeAudience] = Field(default_factory=list, max_length=5)
+
+
+class KnowledgeDraftIn(KnowledgeContent):
+    clinic_id: uuid.UUID
+    kind: Literal["card", "template"]
+    code: str = Field(pattern=_KNOWLEDGE_WORD)
+
+    @model_validator(mode="after")
+    def _a_card_names_who_may_read_it(self) -> "KnowledgeDraftIn":
+        if self.kind == "card" and not self.audience:
+            raise ValueError("a card needs an audience")
+        return self
+
+
+class KnowledgeDraftEditIn(KnowledgeContent):
+    clinic_id: uuid.UUID
+
+
+class KnowledgeClinicIn(_Body):
+    clinic_id: uuid.UUID
+
+
+class KnowledgeDecisionIn(_Body):
+    clinic_id: uuid.UUID
+    decision: Literal["approve", "reject"]
+    reason: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]{0,59}$")
+
+    @model_validator(mode="after")
+    def _a_reject_names_its_reason(self) -> "KnowledgeDecisionIn":
+        if (self.decision == "reject") != (self.reason is not None):
+            raise ValueError("a reject needs a reason word and an approve takes none")
+        return self
+
+
+class KnowledgeDraftCreatedOut(_Out):
+    draft_id: uuid.UUID
+    created: bool
+
+
+class KnowledgeResultOut(_Out):
+    result: Literal["recorded", "replay", "invalid_state"]
+
+
+class KnowledgeDecisionOut(_Out):
+    result: Literal["recorded", "replay", "invalid_state"]
+    version: int | None
+
+
+class KnowledgeDraftOut(_Out):
+    draft_id: uuid.UUID
+    kind: Literal["card", "template"]
+    code: str
+    title: str
+    body: str
+    synonyms: list[str]
+    patient_phrases: list[str]
+    audience: list[str]
+    status: Literal["draft", "submitted", "approved", "rejected"]
+    author: uuid.UUID
+    decided_by: uuid.UUID | None
+    reject_reason: str | None
+    updated_at: datetime
+
+
+class KnowledgeDraftList(_Out):
+    drafts: list[KnowledgeDraftOut]
+
+
+class KnowledgeVersionOut(_Out):
+    kind: Literal["card", "template"]
+    code: str
+    version: int
+    title: str
+    audience: list[str]
+    author: uuid.UUID
+    approved_by: uuid.UUID
+    approved_at: datetime
+
+
+class KnowledgeVersionList(_Out):
+    items: list[KnowledgeVersionOut]
+
+
+def _knowledge_editor_on() -> None:
+    if not knowledge_editor_sql.enabled():
+        raise HTTPException(status_code=503, detail="the knowledge editor is not set up")
+
+
+async def _editor_call(coro):
+    try:
+        return await coro
+    except knowledge_editor_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    except knowledge_editor_sql.Conflict:
+        raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request, or a draft for this code is already open") from None
+
+
+@staff_knowledge.post("/drafts", response_model=KnowledgeDraftCreatedOut, status_code=201)
+async def create_knowledge_draft(body: KnowledgeDraftIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> KnowledgeDraftCreatedOut:
+    """Start a draft card or message template (typed by you; nothing is suggested or seeded). 404 if the clinic is not visible to you, 403 unless you are a nurse or doctor there (with a recent second factor), 503 unless the knowledge editor
+    is switched on, 409 if the key was used for a different request or a draft for this code is already open, 422 for a malformed field (a card needs an audience). Idempotent on the key."""
+    await _console_clinic(conn, body.clinic_id, KNOWLEDGE_AUTHORS)
+    _knowledge_editor_on()
+    draft_id, created = await _editor_call(knowledge_editor_sql.create_draft(
+        conn, clinic_id=body.clinic_id, kind=body.kind, code=body.code, title=body.title, body=body.body, synonyms=body.synonyms, patient_phrases=body.patient_phrases, audience=body.audience, idempotency_key=idempotency_key))
+    return KnowledgeDraftCreatedOut(draft_id=draft_id, created=created)
+
+
+@staff_knowledge.put("/drafts/{draft_id}", response_model=KnowledgeResultOut)
+async def edit_knowledge_draft(draft_id: uuid.UUID, body: KnowledgeDraftEditIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> KnowledgeResultOut:
+    """Change a draft you wrote while it is still a draft. 404 if the clinic is not visible to you, 403 unless you are the AUTHOR (a nurse or doctor there, with a recent second factor), 503 unless the editor is on. `invalid_state` once it is
+    submitted or decided. Idempotent on the key."""
+    await _console_clinic(conn, body.clinic_id, KNOWLEDGE_AUTHORS)
+    _knowledge_editor_on()
+    result = await _editor_call(knowledge_editor_sql.edit_draft(
+        conn, clinic_id=body.clinic_id, draft_id=draft_id, title=body.title, body=body.body, synonyms=body.synonyms, patient_phrases=body.patient_phrases, audience=body.audience, idempotency_key=idempotency_key))
+    return KnowledgeResultOut(result=result)
+
+
+@staff_knowledge.post("/drafts/{draft_id}/submit", response_model=KnowledgeResultOut)
+async def submit_knowledge_draft(draft_id: uuid.UUID, body: KnowledgeClinicIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> KnowledgeResultOut:
+    """Freeze your draft and send it for approval. 404 if the clinic is not visible to you, 403 unless you are the author (with a recent second factor), 503 unless the editor is on. `invalid_state` if it is not a draft. Idempotent on the key."""
+    await _console_clinic(conn, body.clinic_id, KNOWLEDGE_AUTHORS)
+    _knowledge_editor_on()
+    return KnowledgeResultOut(result=await _editor_call(knowledge_editor_sql.submit_draft(conn, clinic_id=body.clinic_id, draft_id=draft_id, idempotency_key=idempotency_key)))
+
+
+@staff_knowledge.post("/drafts/{draft_id}/decision", response_model=KnowledgeDecisionOut)
+async def decide_knowledge_draft(draft_id: uuid.UUID, body: KnowledgeDecisionIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> KnowledgeDecisionOut:
+    """Approve or reject a submitted draft. 404 if the clinic is not visible to you, 403 unless you are a DOCTOR there (with a recent second factor) and NOT the author (an author never decides their own draft), 503 unless the editor is on, 422 for a
+    reject without a reason word. An approval returns the new `version`. Idempotent on the key; `invalid_state` if it is not waiting for a decision."""
+    await _console_clinic(conn, body.clinic_id, KNOWLEDGE_APPROVERS)
+    _knowledge_editor_on()
+    result, version = await _editor_call(knowledge_editor_sql.decide_draft(conn, clinic_id=body.clinic_id, draft_id=draft_id, decision=body.decision, reason=body.reason, idempotency_key=idempotency_key))
+    return KnowledgeDecisionOut(result=result, version=version)
+
+
+@staff_knowledge.get("/drafts", response_model=KnowledgeDraftList)
+async def list_knowledge_drafts(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Annotated[int, Query(ge=1, le=200)] = 100) -> KnowledgeDraftList:
+    """The clinic's drafts, newest first, with their content and status. 404 if the clinic is not visible to you, 403 unless you are a nurse or doctor there (with a recent second factor), 503 unless the editor is on."""
+    await _console_clinic(conn, clinic_id, KNOWLEDGE_AUTHORS)
+    _knowledge_editor_on()
+    rows = await _editor_call(knowledge_editor_sql.list_drafts(conn, clinic_id, limit))
+    return KnowledgeDraftList(drafts=[KnowledgeDraftOut(draft_id=r.id, kind=r.kind, code=r.code, title=r.title, body=r.body, synonyms=r.synonyms, patient_phrases=r.patient_phrases, audience=r.audience, status=r.status, author=r.author, decided_by=r.decided_by, reject_reason=r.reject_reason, updated_at=r.updated_at) for r in rows])  # type: ignore[arg-type]
+
+
+@staff_knowledge.get("/items", response_model=KnowledgeVersionList)
+async def list_knowledge_items(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims), limit: Annotated[int, Query(ge=1, le=200)] = 100) -> KnowledgeVersionList:
+    """The clinic's approved versions (kind, code, version, title, audience, author and approver ids), newest first; no body. 404 if the clinic is not visible to you, 403 unless you are a nurse or doctor there (with a recent second factor), 503 unless the editor is on."""
+    await _console_clinic(conn, clinic_id, KNOWLEDGE_AUTHORS)
+    _knowledge_editor_on()
+    rows = await _editor_call(knowledge_editor_sql.list_versions(conn, clinic_id, limit))
+    return KnowledgeVersionList(items=[KnowledgeVersionOut(kind=r.kind, code=r.code, version=r.version, title=r.title, audience=r.audience, author=r.author, approved_by=r.approved_by, approved_at=r.approved_at) for r in rows])  # type: ignore[arg-type]
+
+
 # ---- Portal claim resolution and consent notice publication (migration 0051; BUILD-SPEC.md 17.2, 20.1) --------------------------------------------------------------------------------------------------------
 #
 # A claim that found no single confirmed record becomes a pending request; a FRONT-DESK person of the clinic resolves it (audited by the database): approve binds the claimant's account to a CONFIRMED, unbound
@@ -6299,6 +6479,8 @@ def create_app(
         sweeps.append(lambda conn: watchdog_sweep(conn, AlertRouter(SqlAlertSink(conn), {}, sign_in_url), deadlines, watchdog_limits))
         sweeps.append(lambda conn: voice_purge_sweep(conn, app.state.voice_retention_days))  # deletes EXPIRED voice transcript chunks (migration 0063); nothing while the retention setting is unset
         sweeps.append(lambda conn: retention_report_sweep(conn, app.state.retention_checkpoint_days, app.state.retention_clinical_record_days))  # REPORT-ONLY (migration 0071): counts what is past each period, deletes nothing
+        if knowledge_editor_sql.enabled() and app.state.knowledge is not None:
+            sweeps.append(lambda conn: knowledge_editor_sql.index_sweep(conn, app.state.knowledge))  # the WORKER indexes approved cards (never the approver's session); only with an embedding route, which the clinical profile has none of
         sweeps.append(lambda conn: care_gap_overdue_sweep(conn, app.state.care_gap_alert_days))  # raises nothing while the alert age is unset
         try:
             review_sample_rate = learning_labels.sample_rate_from(p4env)

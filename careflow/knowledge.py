@@ -110,22 +110,39 @@ class KnowledgeSearch:
 
     def __init__(
         self, cards: Sequence[DemoCard], embedder_for: Callable[[uuid.UUID], tuple[EmbeddingPort, str]], policy: AbstentionPolicy | None, *, reranker: RerankPort | None = None,
-        budget_tokens: int | None = None, top_k: int = TOP_K,
+        budget_tokens: int | None = None, top_k: int = TOP_K, db_cards: bool = False,
     ) -> None:
         self.cards, self._embedder_for, self.policy, self.reranker, self.budget_tokens, self.top_k = tuple(cards), embedder_for, policy, reranker, budget_tokens, top_k
+        self.db_cards = db_cards  # also read the clinic's APPROVED cards (the knowledge editor, migration 0090) for the keyword side, only those the caller's role may read
         self.texts: dict[str, str] = {c.fields.card_id: retrieval_text(c.fields) for c in self.cards}
 
-    def _bm25(self, scope: dict[str, str]) -> Bm25Index:
-        return Bm25Index(self.texts, {cid: scope for cid in self.texts}, {c.fields.card_id: c.fields.version for c in self.cards})
+    @staticmethod
+    def _bm25(cards: Sequence[DemoCard], scope: dict[str, str]) -> tuple[Bm25Index, dict[str, str]]:
+        texts = {c.fields.card_id: retrieval_text(c.fields) for c in cards}
+        return Bm25Index(texts, {cid: scope for cid in texts}, {c.fields.card_id: c.fields.version for c in cards}), texts
+
+    async def _cards_for(self, conn: AsyncConnection, clinic_id: uuid.UUID) -> list[DemoCard]:
+        """The placeholder cards plus, when the editor is on, the clinic's approved cards (an approved card of the same code replaces the placeholder). A refusal means no approved cards are readable by this caller."""
+        cards = {c.fields.card_id: c for c in self.cards}
+        if self.db_cards:
+            from careflow import knowledge_editor_sql
+
+            try:
+                for c in await knowledge_editor_sql.current_cards(conn, clinic_id):
+                    cards[c.fields.card_id] = c
+            except knowledge_editor_sql.Refused:
+                pass
+        return list(cards.values())
 
     async def search(self, conn: AsyncConnection, clinic_id: uuid.UUID, origin: str, query: str) -> SearchOutcome:
         masked = mask_pii(query).text
         embedder, model_id = self._embedder_for(clinic_id)
         scope = {"clinic_id": str(clinic_id), "origin": origin}
-        retriever = CardRetriever(embedder, PgVectorStore(conn, model_id), PgCardTruth(conn, clinic_id=clinic_id, origin=origin, model_id=model_id), self._bm25(scope), self.policy, self.top_k)
+        bm25, texts = self._bm25(await self._cards_for(conn, clinic_id), scope)
+        retriever = CardRetriever(embedder, PgVectorStore(conn, model_id), PgCardTruth(conn, clinic_id=clinic_id, origin=origin, model_id=model_id), bm25, self.policy, self.top_k)
         found = await retriever.retrieve(masked, scope=scope)
         if self.reranker is not None:
-            found, did = await rerank(found, masked, self.texts, self.reranker)
+            found, did = await rerank(found, masked, texts, self.reranker)
             return SearchOutcome(found, model_id, did)
         return SearchOutcome(found, model_id)
 
@@ -146,4 +163,6 @@ def from_environment(environ: Mapping[str, str], settings: Mapping[str, str], pr
                 return hosted, model_id
         return HashingEmbedding(), FAKE_MODEL_ID
 
-    return KnowledgeSearch(cards, embedder_for, policy_from(settings), reranker=FakeRerank("fake-rerank"), budget_tokens=budget_from(settings))
+    from careflow import knowledge_editor_sql
+
+    return KnowledgeSearch(cards, embedder_for, policy_from(settings), reranker=FakeRerank("fake-rerank"), budget_tokens=budget_from(settings), db_cards=knowledge_editor_sql.enabled(environ))

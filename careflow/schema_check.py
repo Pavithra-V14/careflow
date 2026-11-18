@@ -23,6 +23,7 @@ REQUIRED: Final = (
     ("0083", "sched.patient_book_slot(uuid,text)", "proc"),
     ("0085", "kb.search_card_embeddings(uuid,text,text,text,integer)", "proc"),
     ("0089", "sched.patient_mark_prep(uuid,text,boolean,text)", "proc"),
+    ("0090", "kb.knowledge_draft_decide(uuid,uuid,text,text,text)", "proc"),
 )
 
 
