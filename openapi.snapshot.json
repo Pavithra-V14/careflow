@@ -2998,6 +2998,161 @@
         "title": "ExportRecordOut",
         "type": "object"
       },
+      "FamilyLinkDecisionIn": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "decision": {
+            "enum": [
+              "verify",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "dependant_consent": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dependant Consent"
+          },
+          "dependant_patient_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dependant Patient Id"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_]{0,59}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "decision"
+        ],
+        "title": "FamilyLinkDecisionIn",
+        "type": "object"
+      },
+      "FamilyLinkDecisionOut": {
+        "additionalProperties": false,
+        "properties": {
+          "result": {
+            "enum": [
+              "recorded",
+              "replay",
+              "invalid_state",
+              "age_not_allowed",
+              "consent_required"
+            ],
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "FamilyLinkDecisionOut",
+        "type": "object"
+      },
+      "FamilyLinkRequestIn": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "link_type": {
+            "enum": [
+              "guardian_of_minor",
+              "carer_of_adult"
+            ],
+            "title": "Link Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clinic_id",
+          "link_type"
+        ],
+        "title": "FamilyLinkRequestIn",
+        "type": "object"
+      },
+      "FamilyLinkRequestOut": {
+        "additionalProperties": false,
+        "properties": {
+          "link_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link Id"
+          },
+          "result": {
+            "enum": [
+              "recorded",
+              "replay",
+              "already_requested"
+            ],
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result",
+          "link_id"
+        ],
+        "title": "FamilyLinkRequestOut",
+        "type": "object"
+      },
+      "FamilyLinkRevokeOut": {
+        "additionalProperties": false,
+        "properties": {
+          "result": {
+            "enum": [
+              "recorded",
+              "replay",
+              "invalid_state"
+            ],
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "FamilyLinkRevokeOut",
+        "type": "object"
+      },
       "GrievanceCategoriesOut": {
         "additionalProperties": false,
         "properties": {
@@ -4971,6 +5126,70 @@
           "truncated"
         ],
         "title": "MyDataOut",
+        "type": "object"
+      },
+      "MyFamilyLinkList": {
+        "additionalProperties": false,
+        "properties": {
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/MyFamilyLinkOut"
+            },
+            "title": "Links",
+            "type": "array"
+          }
+        },
+        "required": [
+          "links"
+        ],
+        "title": "MyFamilyLinkList",
+        "type": "object"
+      },
+      "MyFamilyLinkOut": {
+        "additionalProperties": false,
+        "properties": {
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "link_id": {
+            "format": "uuid",
+            "title": "Link Id",
+            "type": "string"
+          },
+          "link_type": {
+            "enum": [
+              "guardian_of_minor",
+              "carer_of_adult"
+            ],
+            "title": "Link Type",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "requested",
+              "verified",
+              "rejected",
+              "revoked"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "link_id",
+          "clinic_id",
+          "link_type",
+          "status",
+          "created_at"
+        ],
+        "title": "MyFamilyLinkOut",
         "type": "object"
       },
       "NoteIn": {
@@ -9406,6 +9625,83 @@
         "title": "StaffAccountOut",
         "type": "object"
       },
+      "StaffFamilyLinkList": {
+        "additionalProperties": false,
+        "properties": {
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/StaffFamilyLinkOut"
+            },
+            "title": "Links",
+            "type": "array"
+          }
+        },
+        "required": [
+          "links"
+        ],
+        "title": "StaffFamilyLinkList",
+        "type": "object"
+      },
+      "StaffFamilyLinkOut": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dependant_patient_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dependant Patient Id"
+          },
+          "link_id": {
+            "format": "uuid",
+            "title": "Link Id",
+            "type": "string"
+          },
+          "link_type": {
+            "enum": [
+              "guardian_of_minor",
+              "carer_of_adult"
+            ],
+            "title": "Link Type",
+            "type": "string"
+          },
+          "requester_patient_id": {
+            "format": "uuid",
+            "title": "Requester Patient Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "requested",
+              "verified",
+              "rejected",
+              "revoked"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "link_id",
+          "link_type",
+          "status",
+          "requester_patient_id",
+          "dependant_patient_id",
+          "created_at"
+        ],
+        "title": "StaffFamilyLinkOut",
+        "type": "object"
+      },
       "StaffPatientRequestList": {
         "additionalProperties": false,
         "properties": {
@@ -11119,6 +11415,257 @@
           }
         ],
         "summary": "Portal Record Consent",
+        "tags": [
+          "patient portal"
+        ]
+      }
+    },
+    "/v1/portal/family-links": {
+      "get": {
+        "description": "Your own link requests and links (a closed status each; no name, no date of birth). 503 unless family links are switched on; 403 unless you are an active patient account.",
+        "operationId": "list_my_family_links_v1_portal_family_links_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyFamilyLinkList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List My Family Links",
+        "tags": [
+          "patient portal"
+        ]
+      },
+      "post": {
+        "description": "Ask to be linked as the guardian of a child or the carer of an adult at a clinic (a staff member verifies it afterwards). 503 unless family links are switched on AND the clinic's rules for this link type have been entered\n(`family links are not set up: the clinic has not entered its rules`: deny by default); 403 unless you are an active patient account with a live record at that clinic. Idempotent on the key.",
+        "operationId": "request_family_link_v1_portal_family_links_post",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 173,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FamilyLinkRequestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FamilyLinkRequestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Request Family Link",
+        "tags": [
+          "patient portal"
+        ]
+      }
+    },
+    "/v1/portal/family-links/{link_id}/revoke": {
+      "post": {
+        "description": "Withdraw your own link request or link. 503 unless family links are switched on; 403 unless you are an active patient account; 404 for a link that is not yours (missing and someone else's are one answer). Idempotent on the key.",
+        "operationId": "revoke_family_link_v1_portal_family_links__link_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "link_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Link Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 173,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FamilyLinkRevokeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Revoke Family Link",
         "tags": [
           "patient portal"
         ]
@@ -16921,6 +17468,208 @@
         "summary": "Cancel Patient Erasure Route",
         "tags": [
           "staff erasure"
+        ]
+      }
+    },
+    "/v1/staff/family-links": {
+      "get": {
+        "description": "The clinic's open link requests and verified links (ids and a closed type and status; no names). 404 if the clinic is not visible to you, 403 unless you are front desk there (with a recent second factor), 503 unless family links are switched on.",
+        "operationId": "list_staff_family_links_v1_staff_family_links_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "clinic_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Clinic Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffFamilyLinkList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Staff Family Links",
+        "tags": [
+          "staff family links"
+        ]
+      }
+    },
+    "/v1/staff/family-links/{link_id}/decision": {
+      "post": {
+        "description": "Verify or reject a link request. A verify names the dependant's record, records whether the linked person's consent was obtained, and is checked against the clinic's rule (the age comes from the stored date of birth, never from you).\n404 if the clinic is not visible to you, 403 unless you are front desk there (with a recent second factor) or the record is not in this clinic, 503 unless family links are switched on or while the clinic's rules are not entered\n(`family links are not set up: the clinic has not entered its rules`). `age_not_allowed` or `consent_required` when the rule is not met; `invalid_state` if it is not waiting for a decision. Idempotent on the key.",
+        "operationId": "decide_family_link_v1_staff_family_links__link_id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "link_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Link Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 173,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FamilyLinkDecisionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FamilyLinkDecisionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Decide Family Link",
+        "tags": [
+          "staff family links"
         ]
       }
     },

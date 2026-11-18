@@ -3671,6 +3671,77 @@ def ke_items_list_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(), None)[:4]
 
 
+# ---- family links (migration 0091, deferred item 21). OFF unless the owner sets CAREFLOW_FAMILY_LINKS=on, so the matrix patient gets a fixed 503 "not set up"; who-you-are is checked FIRST, so every other role is refused 403
+# whatever the setting. Staff: front desk gets the same fixed 503, every other role that sees the clinic is refused 403, everyone else the one 404. The flows with the setting on (deny by default while counsel's rules are not
+# entered, the age and consent rules, the front-desk verification, revoke) are in tests/test_family_links_db_live.py.
+
+FAMILY = PORTAL + "/family-links"
+STAFF_FAMILY = "/v1/staff/family-links"
+FAMILY_OFF = lambda b: b == {"detail": "family links are not set up"}
+
+
+def portal_family_request_cases(ids) -> list[tuple]:
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "link_type": "guardian_of_minor", **o}
+    cases = [_case(ids, "with family links not turned on an active patient account is told it is not set up", "patient", 503, FAMILY, json=body(), body=FAMILY_OFF)]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, FAMILY, json=body(), body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases += [
+        _case(ids, "a link type that is not offered is rejected", "patient", 422, FAMILY, json=body(link_type="owner_of_pet"), body=_fixed(422)),
+        _case(ids, "an extra field (a dependant, a date of birth) is rejected", "patient", 422, FAMILY, json=body(dependant_patient_id=str(uuid.uuid4())), body=_fixed(422)),
+        _case(ids, "a clinic id that is not a uuid is rejected", "patient", 422, FAMILY, json=body(clinic_id="nope"), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "patient", 422, FAMILY, json=body(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, FAMILY, body())
+
+
+def portal_family_list_cases(ids) -> list[tuple]:
+    cases = [_case(ids, "with family links not turned on an active patient account is told it is not set up", "patient", 503, FAMILY, key=None, body=FAMILY_OFF)]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, FAMILY, key=None, body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    return cases + _unauthenticated(ids, FAMILY, None)[:4]
+
+
+def portal_family_revoke_cases(ids) -> list[tuple]:
+    path = lambda: f"{FAMILY}/{uuid.uuid4()}/revoke"
+    cases = [_case(ids, "with family links not turned on an active patient account is told it is not set up", "patient", 503, path(), body=FAMILY_OFF)]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused", p, 403, path(), body=NOT_A_PATIENT) for p in _non_patients(ids)]
+    cases += [
+        _case(ids, "a link id that is not a uuid is rejected", "patient", 422, f"{FAMILY}/nope/revoke", body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "patient", 422, path(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), None)
+
+
+def _family_staff_roles(ids, path, *, json=None, key="new"):
+    cases = [_case(ids, "front_desk_a is told family links are not set up", "front_desk_a", 503, path, json=json, key=key, body=FAMILY_OFF)]
+    refused = ("nurse_a", "doctor_a", "admin_a", "business_owner_a", "auditor_a", "multi")
+    cases += [_case(ids, f"{p} sees the clinic but is refused", p, 403, path, json=json, key=key, body=NOT_YOUR_ROLE) for p in refused]
+    others = [p for p in ids.people if p not in ("front_desk_a", *refused)]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused with the one not-found", p, 404, path, json=json, key=key, body=_fixed(404)) for p in others]
+    return cases
+
+
+def staff_family_list_cases(ids) -> list[tuple]:
+    path = lambda **o: STAFF_FAMILY + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
+    cases = _family_staff_roles(ids, path(), key=None)
+    cases += [_case(ids, "an unknown clinic is not found", "front_desk_a", 404, path(clinic_id=uuid.uuid4()), key=None, body=_fixed(404))]
+    return cases + _unauthenticated(ids, path(), None)[:4]
+
+
+def staff_family_decision_cases(ids) -> list[tuple]:
+    path = lambda: f"{STAFF_FAMILY}/{uuid.uuid4()}/decision"
+    verify = lambda **o: {"clinic_id": str(ids.clinic_a), "decision": "verify", "dependant_patient_id": str(uuid.uuid4()), "dependant_consent": True, **o}
+    cases = _family_staff_roles(ids, path(), json=verify())
+    cases += [
+        _case(ids, "a verify without a dependant record is rejected", "front_desk_a", 422, path(), json=verify(dependant_patient_id=None), body=_fixed(422)),
+        _case(ids, "a verify that does not say whether consent was obtained is rejected", "front_desk_a", 422, path(), json=verify(dependant_consent=None), body=_fixed(422)),
+        _case(ids, "a reject without a reason word is rejected", "front_desk_a", 422, path(), json={"clinic_id": str(ids.clinic_a), "decision": "reject"}, body=_fixed(422)),
+        _case(ids, "a reject that names a dependant is rejected", "front_desk_a", 422, path(), json={"clinic_id": str(ids.clinic_a), "decision": "reject", "reason": "not_verified", "dependant_patient_id": str(uuid.uuid4())}, body=_fixed(422)),
+        _case(ids, "the age cannot be supplied by the caller (an extra field)", "front_desk_a", 422, path(), json=verify(dependant_age_years=10), body=_fixed(422)),
+        _case(ids, "a decision that is not verify or reject is rejected", "front_desk_a", 422, path(), json=verify(decision="maybe"), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "front_desk_a", 422, path(), json=verify(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, path(), verify())
+
+
 def staff_patient_request_list_cases(ids) -> list[tuple]:
     path = lambda **o: STAFF_PATIENT_REQUESTS + "?" + "&".join(f"{k}={v}" for k, v in {"clinic_id": ids.clinic_a, **o}.items())
     visible = ("nurse_a", "doctor_a", "admin_a", "business_owner_a", "auditor_a", "multi")
@@ -4146,6 +4217,11 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("POST", MEDICATIONS): medication_record_cases,
     ("GET", MEDICATIONS): medication_list_cases,
     ("POST", KNOWLEDGE): knowledge_search_cases,
+    ("POST", FAMILY): portal_family_request_cases,
+    ("GET", FAMILY): portal_family_list_cases,
+    ("POST", FAMILY + "/{link_id}/revoke"): portal_family_revoke_cases,
+    ("GET", STAFF_FAMILY): staff_family_list_cases,
+    ("POST", STAFF_FAMILY + "/{link_id}/decision"): staff_family_decision_cases,
     ("POST", KE + "/drafts"): ke_draft_create_cases,
     ("PUT", KE + "/drafts/{draft_id}"): ke_draft_edit_cases,
     ("POST", KE + "/drafts/{draft_id}/submit"): ke_draft_submit_cases,
