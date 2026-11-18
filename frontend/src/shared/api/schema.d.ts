@@ -253,6 +253,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/portal/family-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List My Family Links
+         * @description Your own link requests and links (a closed status each; no name, no date of birth). 503 unless family links are switched on; 403 unless you are an active patient account.
+         */
+        get: operations["list_my_family_links_v1_portal_family_links_get"];
+        put?: never;
+        /**
+         * Request Family Link
+         * @description Ask to be linked as the guardian of a child or the carer of an adult at a clinic (a staff member verifies it afterwards). 503 unless family links are switched on AND the clinic's rules for this link type have been entered
+         *     (`family links are not set up: the clinic has not entered its rules`: deny by default); 403 unless you are an active patient account with a live record at that clinic. Idempotent on the key.
+         */
+        post: operations["request_family_link_v1_portal_family_links_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/portal/family-links/{link_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke Family Link
+         * @description Withdraw your own link request or link. 503 unless family links are switched on; 403 unless you are an active patient account; 404 for a link that is not yours (missing and someone else's are one answer). Idempotent on the key.
+         */
+        post: operations["revoke_family_link_v1_portal_family_links__link_id__revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/portal/grievance-categories": {
         parameters: {
             query?: never;
@@ -501,6 +546,48 @@ export interface paths {
          *     through the existing two-person flow); nothing is changed by the request itself. Idempotent on the key. 403 unless you are an active patient account with a live record at that clinic, 422 for a correction without a field or another kind with one.
          */
         post: operations["file_patient_request_v1_portal_requests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/portal/visits/{booking_id}/prep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Patient Visit Prep
+         * @description What to prepare for one of your own confirmed visits, with what you have marked. 503 unless visit preparation is switched on; 403 unless you are an active patient account; 404 for a visit that is not yours (missing,
+         *     someone else's and cancelled are one answer). With no checklist configured for the visit type the answer has no items and the fixed note "Nothing to prepare for this visit.".
+         */
+        get: operations["patient_visit_prep_v1_portal_visits__booking_id__prep_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/portal/visits/{booking_id}/prep/{item_id}/done": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Patient Mark Visit Prep
+         * @description Mark one checklist item of your own upcoming visit done or not done (`done` true or false). Idempotent on the key. 503 unless visit preparation is switched on; 403 unless you are an active patient account; 404 for a visit that is not
+         *     yours, has started or is cancelled, and for an item that is not on that visit type's checklist; 409 if the key was used for a different mark.
+         */
+        post: operations["patient_mark_visit_prep_v1_portal_visits__booking_id__prep__item_id__done_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1376,6 +1463,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/family-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Staff Family Links
+         * @description The clinic's open link requests and verified links (ids and a closed type and status; no names). 404 if the clinic is not visible to you, 403 unless you are front desk there (with a recent second factor), 503 unless family links are switched on.
+         */
+        get: operations["list_staff_family_links_v1_staff_family_links_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/family-links/{link_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide Family Link
+         * @description Verify or reject a link request. A verify names the dependant's record, records whether the linked person's consent was obtained, and is checked against the clinic's rule (the age comes from the stored date of birth, never from you).
+         *     404 if the clinic is not visible to you, 403 unless you are front desk there (with a recent second factor) or the record is not in this clinic, 503 unless family links are switched on or while the clinic's rules are not entered
+         *     (`family links are not set up: the clinic has not entered its rules`). `age_not_allowed` or `consent_required` when the rule is not met; `invalid_state` if it is not waiting for a decision. Idempotent on the key.
+         */
+        post: operations["decide_family_link_v1_staff_family_links__link_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/grievances": {
         parameters: {
             query?: never;
@@ -1468,6 +1597,113 @@ export interface paths {
          * @description Records the matcher queued for a person to compare (newest first; `pending` by default, `status` filters). Front desk only. 403 otherwise.
          */
         get: operations["list_possible_duplicates_v1_staff_identity_possible_duplicates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/knowledge/drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Knowledge Drafts
+         * @description The clinic's drafts, newest first, with their content and status. 404 if the clinic is not visible to you, 403 unless you are a nurse or doctor there (with a recent second factor), 503 unless the editor is on.
+         */
+        get: operations["list_knowledge_drafts_v1_staff_knowledge_drafts_get"];
+        put?: never;
+        /**
+         * Create Knowledge Draft
+         * @description Start a draft card or message template (typed by you; nothing is suggested or seeded). 404 if the clinic is not visible to you, 403 unless you are a nurse or doctor there (with a recent second factor), 503 unless the knowledge editor
+         *     is switched on, 409 if the key was used for a different request or a draft for this code is already open, 422 for a malformed field (a card needs an audience). Idempotent on the key.
+         */
+        post: operations["create_knowledge_draft_v1_staff_knowledge_drafts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/knowledge/drafts/{draft_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Edit Knowledge Draft
+         * @description Change a draft you wrote while it is still a draft. 404 if the clinic is not visible to you, 403 unless you are the AUTHOR (a nurse or doctor there, with a recent second factor), 503 unless the editor is on. `invalid_state` once it is
+         *     submitted or decided. Idempotent on the key.
+         */
+        put: operations["edit_knowledge_draft_v1_staff_knowledge_drafts__draft_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/knowledge/drafts/{draft_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide Knowledge Draft
+         * @description Approve or reject a submitted draft. 404 if the clinic is not visible to you, 403 unless you are a DOCTOR there (with a recent second factor) and NOT the author (an author never decides their own draft), 503 unless the editor is on, 422 for a
+         *     reject without a reason word. An approval returns the new `version`. Idempotent on the key; `invalid_state` if it is not waiting for a decision.
+         */
+        post: operations["decide_knowledge_draft_v1_staff_knowledge_drafts__draft_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/knowledge/drafts/{draft_id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit Knowledge Draft
+         * @description Freeze your draft and send it for approval. 404 if the clinic is not visible to you, 403 unless you are the author (with a recent second factor), 503 unless the editor is on. `invalid_state` if it is not a draft. Idempotent on the key.
+         */
+        post: operations["submit_knowledge_draft_v1_staff_knowledge_drafts__draft_id__submit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/knowledge/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Knowledge Items
+         * @description The clinic's approved versions (kind, code, version, title, audience, author and approver ids), newest first; no body. 404 if the clinic is not visible to you, 403 unless you are a nurse or doctor there (with a recent second factor), 503 unless the editor is on.
+         */
+        get: operations["list_knowledge_items_v1_staff_knowledge_items_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2723,6 +2959,27 @@ export interface paths {
          * @description Confirmed visits that have not started yet, soonest first: ids and times only (never a name). It gives visit readiness the visit id to work with. 404 if the clinic is not visible to you, 403 unless you are a nurse or doctor there.
          */
         get: operations["upcoming_visits_v1_staff_visits_upcoming_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/visits/{visit_id}/prep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Staff Visit Prep
+         * @description What the patient has marked for a visit's preparation checklist (read-only). 404 if the visit is not visible to you, 403 unless you are a nurse or doctor there (with a recent second factor, checked again by the database),
+         *     503 unless visit preparation is switched on. With no checklist configured the answer has no items and the fixed note.
+         */
+        get: operations["staff_visit_prep_v1_staff_visits__visit_id__prep_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4085,6 +4342,64 @@ export interface components {
             /** Phone */
             phone: string | null;
         };
+        /** FamilyLinkDecisionIn */
+        FamilyLinkDecisionIn: {
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "verify" | "reject";
+            /** Dependant Consent */
+            dependant_consent?: boolean | null;
+            /** Dependant Patient Id */
+            dependant_patient_id?: string | null;
+            /** Reason */
+            reason?: string | null;
+        };
+        /** FamilyLinkDecisionOut */
+        FamilyLinkDecisionOut: {
+            /**
+             * Result
+             * @enum {string}
+             */
+            result: "recorded" | "replay" | "invalid_state" | "age_not_allowed" | "consent_required";
+        };
+        /** FamilyLinkRequestIn */
+        FamilyLinkRequestIn: {
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /**
+             * Link Type
+             * @enum {string}
+             */
+            link_type: "guardian_of_minor" | "carer_of_adult";
+        };
+        /** FamilyLinkRequestOut */
+        FamilyLinkRequestOut: {
+            /** Link Id */
+            link_id: string | null;
+            /**
+             * Result
+             * @enum {string}
+             */
+            result: "recorded" | "replay" | "already_requested";
+        };
+        /** FamilyLinkRevokeOut */
+        FamilyLinkRevokeOut: {
+            /**
+             * Result
+             * @enum {string}
+             */
+            result: "recorded" | "replay" | "invalid_state";
+        };
         /** GrievanceCategoriesOut */
         GrievanceCategoriesOut: {
             /** Categories */
@@ -4362,6 +4677,149 @@ export interface components {
             /** Version */
             version: number;
         };
+        /** KnowledgeClinicIn */
+        KnowledgeClinicIn: {
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+        };
+        /** KnowledgeDecisionIn */
+        KnowledgeDecisionIn: {
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "reject";
+            /** Reason */
+            reason?: string | null;
+        };
+        /** KnowledgeDecisionOut */
+        KnowledgeDecisionOut: {
+            /**
+             * Result
+             * @enum {string}
+             */
+            result: "recorded" | "replay" | "invalid_state";
+            /** Version */
+            version: number | null;
+        };
+        /** KnowledgeDraftCreatedOut */
+        KnowledgeDraftCreatedOut: {
+            /** Created */
+            created: boolean;
+            /**
+             * Draft Id
+             * Format: uuid
+             */
+            draft_id: string;
+        };
+        /** KnowledgeDraftEditIn */
+        KnowledgeDraftEditIn: {
+            /** Audience */
+            audience?: ("front_desk" | "nurse" | "doctor" | "admin" | "queue_worker")[];
+            /** Body */
+            body: string;
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /** Patient Phrases */
+            patient_phrases?: string[];
+            /** Synonyms */
+            synonyms?: string[];
+            /** Title */
+            title: string;
+        };
+        /** KnowledgeDraftIn */
+        KnowledgeDraftIn: {
+            /** Audience */
+            audience?: ("front_desk" | "nurse" | "doctor" | "admin" | "queue_worker")[];
+            /** Body */
+            body: string;
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /** Code */
+            code: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "card" | "template";
+            /** Patient Phrases */
+            patient_phrases?: string[];
+            /** Synonyms */
+            synonyms?: string[];
+            /** Title */
+            title: string;
+        };
+        /** KnowledgeDraftList */
+        KnowledgeDraftList: {
+            /** Drafts */
+            drafts: components["schemas"]["KnowledgeDraftOut"][];
+        };
+        /** KnowledgeDraftOut */
+        KnowledgeDraftOut: {
+            /** Audience */
+            audience: string[];
+            /**
+             * Author
+             * Format: uuid
+             */
+            author: string;
+            /** Body */
+            body: string;
+            /** Code */
+            code: string;
+            /** Decided By */
+            decided_by: string | null;
+            /**
+             * Draft Id
+             * Format: uuid
+             */
+            draft_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "card" | "template";
+            /** Patient Phrases */
+            patient_phrases: string[];
+            /** Reject Reason */
+            reject_reason: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "submitted" | "approved" | "rejected";
+            /** Synonyms */
+            synonyms: string[];
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** KnowledgeResultOut */
+        KnowledgeResultOut: {
+            /**
+             * Result
+             * @enum {string}
+             */
+            result: "recorded" | "replay" | "invalid_state";
+        };
         /** KnowledgeSearchIn */
         KnowledgeSearchIn: {
             /**
@@ -4387,6 +4845,42 @@ export interface components {
             reason: ("no_calibrated_policy" | "no_candidates" | "dense_unavailable" | "below_threshold" | "all_stale") | null;
             /** Reranked */
             reranked: boolean;
+        };
+        /** KnowledgeVersionList */
+        KnowledgeVersionList: {
+            /** Items */
+            items: components["schemas"]["KnowledgeVersionOut"][];
+        };
+        /** KnowledgeVersionOut */
+        KnowledgeVersionOut: {
+            /**
+             * Approved At
+             * Format: date-time
+             */
+            approved_at: string;
+            /**
+             * Approved By
+             * Format: uuid
+             */
+            approved_by: string;
+            /** Audience */
+            audience: string[];
+            /**
+             * Author
+             * Format: uuid
+             */
+            author: string;
+            /** Code */
+            code: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "card" | "template";
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
         };
         /** LabelsIn */
         LabelsIn: {
@@ -4722,6 +5216,39 @@ export interface components {
             stage: "registered" | "new_patient" | "pending_activation" | "active";
             /** Truncated */
             truncated: boolean;
+        };
+        /** MyFamilyLinkList */
+        MyFamilyLinkList: {
+            /** Links */
+            links: components["schemas"]["MyFamilyLinkOut"][];
+        };
+        /** MyFamilyLinkOut */
+        MyFamilyLinkOut: {
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Link Id
+             * Format: uuid
+             */
+            link_id: string;
+            /**
+             * Link Type
+             * @enum {string}
+             */
+            link_type: "guardian_of_minor" | "carer_of_adult";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "requested" | "verified" | "rejected" | "revoked";
         };
         /** NoteIn */
         NoteIn: {
@@ -5131,6 +5658,24 @@ export interface components {
              */
             thread_id: string;
         };
+        /** PatientPrepOut */
+        PatientPrepOut: {
+            /**
+             * Booking Id
+             * Format: uuid
+             */
+            booking_id: string;
+            /** Items */
+            items: components["schemas"]["PrepItemOut"][];
+            /** Note */
+            note: string | null;
+            /** Nothing To Prepare */
+            nothing_to_prepare: boolean;
+            /** Starts At */
+            starts_at: string | null;
+            /** Visit Type */
+            visit_type: string;
+        };
         /** PatientRequestFiledOut */
         PatientRequestFiledOut: {
             /** Created */
@@ -5396,6 +5941,36 @@ export interface components {
              * @enum {string}
              */
             result: "registered" | "exists";
+        };
+        /** PrepItemOut */
+        PrepItemOut: {
+            /** Done */
+            done: boolean | null;
+            /** Item Id */
+            item_id: string;
+            /** Marked At */
+            marked_at: string | null;
+            /** Text */
+            text: string;
+        };
+        /** PrepMarkIn */
+        PrepMarkIn: {
+            /** Done */
+            done: boolean;
+        };
+        /** PrepMarkOut */
+        PrepMarkOut: {
+            /**
+             * Booking Id
+             * Format: uuid
+             */
+            booking_id: string;
+            /** Created */
+            created: boolean;
+            /** Done */
+            done: boolean;
+            /** Item Id */
+            item_id: string;
         };
         /** PriorityLevelList */
         PriorityLevelList: {
@@ -6578,6 +7153,41 @@ export interface components {
              */
             status: "invited" | "active" | "suspended" | "closed";
         };
+        /** StaffFamilyLinkList */
+        StaffFamilyLinkList: {
+            /** Links */
+            links: components["schemas"]["StaffFamilyLinkOut"][];
+        };
+        /** StaffFamilyLinkOut */
+        StaffFamilyLinkOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Dependant Patient Id */
+            dependant_patient_id: string | null;
+            /**
+             * Link Id
+             * Format: uuid
+             */
+            link_id: string;
+            /**
+             * Link Type
+             * @enum {string}
+             */
+            link_type: "guardian_of_minor" | "carer_of_adult";
+            /**
+             * Requester Patient Id
+             * Format: uuid
+             */
+            requester_patient_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "requested" | "verified" | "rejected" | "revoked";
+        };
         /** StaffPatientRequestList */
         StaffPatientRequestList: {
             /** Requests */
@@ -7596,6 +8206,186 @@ export interface operations {
             };
         };
     };
+    list_my_family_links_v1_portal_family_links_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyFamilyLinkList"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    request_family_link_v1_portal_family_links_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FamilyLinkRequestIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FamilyLinkRequestOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+            /** @description Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    revoke_family_link_v1_portal_family_links__link_id__revoke_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path: {
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FamilyLinkRevokeOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+            /** @description Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     grievance_categories_v1_portal_grievance_categories_get: {
         parameters: {
             query?: never;
@@ -8368,6 +9158,157 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+        };
+    };
+    patient_visit_prep_v1_portal_visits__booking_id__prep_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                booking_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatientPrepOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+            /** @description Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    patient_mark_visit_prep_v1_portal_visits__booking_id__prep__item_id__done_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path: {
+                booking_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrepMarkIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrepMarkOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+            /** @description Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -11336,6 +12277,147 @@ export interface operations {
             };
         };
     };
+    list_staff_family_links_v1_staff_family_links_get: {
+        parameters: {
+            query: {
+                clinic_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffFamilyLinkList"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+            /** @description Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    decide_family_link_v1_staff_family_links__link_id__decision_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path: {
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FamilyLinkDecisionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FamilyLinkDecisionOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+            /** @description Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     list_clinic_grievances_v1_staff_grievances_get: {
         parameters: {
             query: {
@@ -11614,6 +12696,445 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+        };
+    };
+    list_knowledge_drafts_v1_staff_knowledge_drafts_get: {
+        parameters: {
+            query: {
+                clinic_id: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeDraftList"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+            /** @description Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_knowledge_draft_v1_staff_knowledge_drafts_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KnowledgeDraftIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeDraftCreatedOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+            /** @description Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    edit_knowledge_draft_v1_staff_knowledge_drafts__draft_id__put: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KnowledgeDraftEditIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeResultOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+            /** @description Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    decide_knowledge_draft_v1_staff_knowledge_drafts__draft_id__decision_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KnowledgeDecisionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeDecisionOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+            /** @description Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    submit_knowledge_draft_v1_staff_knowledge_drafts__draft_id__submit_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KnowledgeClinicIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeResultOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+            /** @description Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_knowledge_items_v1_staff_knowledge_items_get: {
+        parameters: {
+            query: {
+                clinic_id: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeVersionList"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+            /** @description Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -15928,6 +17449,73 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+        };
+    };
+    staff_visit_prep_v1_staff_visits__visit_id__prep_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatientPrepOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+            /** @description Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
