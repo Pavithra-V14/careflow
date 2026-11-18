@@ -6,7 +6,7 @@
 // backend disagree, the backend wins and this list is the thing to fix. Roles below follow the route docstrings in
 // openapi.snapshot.json and docs/design/review-task-routes.md.
 
-type SectionId = 'referrals' | 'tasks' | 'patients' | 'messages' | 'identity' | 'scheduling' | 'alerts' | 'dashboard' | 'care' | 'admin' | 'readiness' | 'claims' | 'requests' | 'access' | 'notes' | 'audit' | 'erasure';
+type SectionId = 'referrals' | 'tasks' | 'patients' | 'messages' | 'family' | 'knowledge' | 'identity' | 'scheduling' | 'alerts' | 'dashboard' | 'care' | 'admin' | 'readiness' | 'claims' | 'requests' | 'access' | 'notes' | 'audit' | 'erasure';
 
 export interface Section {
   id: SectionId;
@@ -21,6 +21,8 @@ const SECTIONS: readonly Section[] = [
   { id: 'tasks', path: '/tasks', labelKey: 'nav.tasks', roles: ['front_desk', 'front_desk_supervisor', 'nurse', 'doctor', 'admin'] },
   { id: 'patients', path: '/patients', labelKey: 'nav.patients', roles: ['front_desk', 'nurse', 'doctor'] },
   { id: 'messages', path: '/messages', labelKey: 'nav.messages', roles: ['front_desk', 'nurse', 'doctor'] },
+  { id: 'family', path: '/family', labelKey: 'nav.family', roles: ['front_desk'] },
+  { id: 'knowledge', path: '/knowledge', labelKey: 'nav.knowledge', roles: ['nurse', 'doctor'] },
   { id: 'identity', path: '/identity', labelKey: 'nav.identity', roles: ['front_desk', 'nurse', 'doctor'] },
   { id: 'scheduling', path: '/scheduling', labelKey: 'nav.scheduling', roles: ['front_desk', 'nurse', 'doctor', 'admin'] },
   { id: 'alerts', path: '/alerts', labelKey: 'nav.alerts', roles: ['front_desk', 'nurse', 'doctor', 'admin'] },
@@ -67,6 +69,8 @@ export const CAN_USE_MEDICATIONS = ['nurse', 'doctor'] as const;
 export const CAN_RECORD_RESULT = ['nurse', 'doctor'] as const;
 /** Approve or reject a draft red-flag rule: doctors only (two different doctors). Admins read the list and decide nothing. */
 export const CAN_DECIDE_RULE = ['doctor'] as const;
+/** Approve or reject a submitted card or template: doctors only, and never the author (the backend refuses both; this only hides the buttons). */
+export const CAN_DECIDE_KNOWLEDGE = ['doctor'] as const;
 export const CAN_RELEASE_HOLD = ['front_desk'] as const;
 /** Hold, book, cancel and join the waitlist, and mark an offer delivered (the routes say front desk; the backend decides). */
 export const CAN_SCHEDULE = ['front_desk'] as const;

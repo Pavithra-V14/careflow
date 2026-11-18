@@ -1,8 +1,8 @@
 # Tamil review pack (AI-prepared, NOT reviewed by a native speaker)
 
-Prepared 2026-11-14. Machine-checked on 2026-11-14; NOT human-reviewed; the Tamil reader must still approve (Part 0). Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 1840 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
+Prepared 2026-11-18. Machine-checked on 2026-11-14; NOT human-reviewed; the Tamil reader must still approve (Part 0). Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 2016 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
 
-**Regenerated 2026-11-14** by `npm run i18n:pack` from the strings as they are now, so it covers every current string, including the newest screens (patient voice setting, consent withdrawal and history, activating a staff account, withdrawing and retiring a red-flag rule). Each is written and second-passed in the same way and is just as unreviewed.
+**Regenerated 2026-11-18** by `npm run i18n:pack` from the strings as they are now, so it covers every current string, including the newest screens (patient voice setting, consent withdrawal and history, activating a staff account, withdrawing and retiring a red-flag rule). Each is written and second-passed in the same way and is just as unreviewed.
 
 ## What the second pass looked at
 
@@ -12,9 +12,9 @@ Meaning errors, register for patients, medical or safety terms, unsafe ambiguity
 - **B** wrong or odd meaning, wrong register, or an inconsistent term. Needs a native speaker.
 - **C** minor wording, or an administrator-only technical label.
 
-How it was done, honestly: all 1840 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and the strings that carry meaning (sentences of four words or more, and short strings that differ from their English) were read by an AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
+How it was done, honestly: all 2016 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and the strings that carry meaning (sentences of four words or more, and short strings that differ from their English) were read by an AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
 
-Automatic checks: 1840 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
+Automatic checks: 2016 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
 
 Notes: 71 grade A, 125 grade B, 58 grade C (254 rows with a note; some notes cover a group of similar strings, named in the note).
 
@@ -29,7 +29,7 @@ How it was done: every Tamil string was back-translated to English on its own, w
 | Checked | 1778 (1747 back-translated, 31 left in English by design) |
 | Fixed (a clear defect) | 1 |
 | Flagged for the human reviewer | 35 (grade A: 4, B: 14, C: 17) |
-| Strings added since this check, not covered | 62 |
+| Strings added since this check, not covered | 238 |
 
 Automatic findings: 0 placeholder mismatches, 0 changed numbers, 0 lost negations, 0 informal pronouns, 1 string with a different number of sentences (fixed). 199 strings whose back-translation overlapped little with the English, or that the script flagged, were read side by side; the rest agreed. Most of the low-overlap ones were synonyms ("Expires" and "Expiry", "Phone" and "Telephone") and are not listed.
 
@@ -381,25 +381,25 @@ Grade A: a safety, privacy or patient-rights meaning could be misread. B: a wron
 
 | English term | Tamil used (number of strings, approximate: substring match) | Problem |
 |---|---|---|
-| approve | ஒப்புக்கொள் (verb), ஒப்புதல் (noun) (62) | The verb also means "admit/agree"; some places use ஒப்புதல் அளி. |
+| approve | ஒப்புக்கொள் (verb), ஒப்புதல் (noun) (72) | The verb also means "admit/agree"; some places use ஒப்புதல் அளி. |
 | acknowledge | ஏற்றுக்கொள் ("accept") (15) | Same verb as approve; the action only records that you have seen something. |
-| record / log / transcript / register | பதிவு everywhere (156) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
-| result / decision / end | முடிவு everywhere (70) | One word for a clinical result, a person's decision and an end time. |
-| role | பங்கு (14) | Also means "share"; பணி is used for "task". |
-| merge / link / connect / attach | இணை / இணைப்பு (56) | Merging two patient records, linking a portal account, attaching a note: one word. |
+| record / log / transcript / register | பதிவு everywhere (175) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
+| result / decision / end | முடிவு everywhere (77) | One word for a clinical result, a person's decision and an end time. |
+| role | பங்கு (15) | Also means "share"; பணி is used for "task". |
+| merge / link / connect / attach | இணை / இணைப்பு (81) | Merging two patient records, linking a portal account, attaching a note: one word. |
 | red flag | சிவப்புக் கொடி (literal) (26) | Check the wording clinicians use. |
 | hold (a slot or a referral) | நிறுத்து / நிறுத்தம் (stop) and ஒதுக்கீடு (allocation) (53) | Two or three words for one idea. |
-| retire (a rule version) and withdraw (a draft) | நிறுத்து (retire) and திரும்பப் பெறு (withdraw) (63) | The rule screens need two different words; "withdraw" shares its Tamil with "revoke" and "cannot be undone". |
-| task / job | பணி (72) | A review task and a queued job share the word. |
+| retire (a rule version) and withdraw (a draft) | நிறுத்து (retire) and திரும்பப் பெறு (withdraw) (71) | The rule screens need two different words; "withdraw" shares its Tamil with "revoke" and "cannot be undone". |
+| task / job | பணி (76) | A review task and a queued job share the word. |
 | approved (a status) and approve (a button) | அங்கீகரிக்கப்பட்டது (status) and ஒப்புக்கொள் (button) (14) | Two word families for one idea in the red-flag rule screens. |
-| patient | நோயாளி and நோயாளர் (95) | Two spellings. |
-| clinic / hospital | மருத்துவமனை (most strings), கிளினிக் (1) (78) | Check which is meant where. |
-| front desk | வரவேற்பு மேசை and முன்பணியாளர் (8) | Two renderings. |
+| patient | நோயாளி and நோயாளர் (101) | Two spellings. |
+| clinic / hospital | மருத்துவமனை (most strings), கிளினிக் (1) (91) | Check which is meant where. |
+| front desk | வரவேற்பு மேசை and முன்பணியாளர் (9) | Two renderings. |
 | confidence | நம்பிக்கை (2) | Means belief or hope; the strings mean how sure the system is. |
 | sample (a sampled decision) | மாதிரி (6) | Reads as a laboratory specimen. |
-| revoke / take back, and "cannot be undone" | திரும்பப் பெறு for both (21) | The same verb for "revoke" and "cannot be reversed". |
-| grant / withdraw (a consent) | வழங்கு (grant) and திரும்பப் பெறு (withdraw) (23) | Consent withdrawal is one click in the portal, so the word must be unmistakable. |
-| fresh (code) | புதிய ("new") (33) | Means a recently entered code, not a new one. |
+| revoke / take back, and "cannot be undone" | திரும்பப் பெறு for both (29) | The same verb for "revoke" and "cannot be reversed". |
+| grant / withdraw (a consent) | வழங்கு (grant) and திரும்பப் பெறு (withdraw) (27) | Consent withdrawal is one click in the portal, so the word must be unmistakable. |
+| fresh (code) | புதிய ("new") (35) | Means a recently entered code, not a new one. |
 | screen (the rules read text) | பரிசோதனை (12) | The word for a medical examination or test. |
 | escalate | உயர்நிலைக்கு அனுப்பு ("send to a higher level") (5) | Loses the sense of raising urgency. |
 | authenticator | அங்கீகார செயலி (app) / அங்கீகார குறியீடு (code) (16) | Consistent; check it is the word staff use. |
@@ -444,7 +444,7 @@ These are the same in English and Tamil by design, and a Tamil-speaking patient 
 - `tasks.kind.screening_unassessable`
 - `tasks.kind.triage_proposal`
 
-## Part 7. All 1840 strings
+## Part 7. All 2016 strings
 
 Fill in the last column. Write **OK**, or write the full corrected Tamil (keep every {{placeholder}} exactly as it is). Leave a row empty if you have not looked at it.
 
@@ -1254,6 +1254,43 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `errorBoundary.home` | Go to the home screen | முகப்புத் திரைக்குச் செல் | B: Register: செல் / திற / திரும்பு are informal singular imperatives (also pages.backHome, patients.full.open, patients.openTitle). Staff and patient pages should use the polite form throughout. | |
 | `errorBoundary.reload` | Reload the page | பக்கத்தை மீண்டும் ஏற்று | no issue found | |
 | `errorBoundary.title` | This screen could not be shown | இந்தத் திரையைக் காட்ட முடியவில்லை | no issue found | |
+| `familyStaff.col.action` | Action | செயல் | no issue found | |
+| `familyStaff.col.dependant` | Dependant | சார்ந்தவர் | no issue found | |
+| `familyStaff.col.link` | Link | இணைப்பு | no issue found | |
+| `familyStaff.col.received` | Received | பெறப்பட்டது | no issue found | |
+| `familyStaff.col.requester` | Requester | கோரியவர் | no issue found | |
+| `familyStaff.col.status` | Status | நிலை | no issue found | |
+| `familyStaff.col.type` | Type | வகை | no issue found | |
+| `familyStaff.consent` | Was the linked person's consent obtained? | இணைக்கப்பட்டவரின் சம்மதம் பெறப்பட்டதா? | no issue found | |
+| `familyStaff.consentChoice.no` | No, it was not obtained | இல்லை, பெறப்படவில்லை | no issue found | |
+| `familyStaff.consentChoice.yes` | Yes, it was obtained | ஆம், பெறப்பட்டது | no issue found | |
+| `familyStaff.empty` | There are no family link requests. | குடும்ப இணைப்புக் கோரிக்கைகள் எதுவும் இல்லை. | no issue found | |
+| `familyStaff.gone` | This request was not found. Nothing was recorded. | இந்தக் கோரிக்கை கிடைக்கவில்லை. எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
+| `familyStaff.invalid` | That decision was not accepted. Check what you entered. Nothing was recorded. | அந்த முடிவு ஏற்கப்படவில்லை. நீங்கள் உள்ளிட்டதைச் சரிபார்க்கவும். எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
+| `familyStaff.noRules` | Family links are not set up for this clinic: the clinic has not entered its rules. Nothing can be recorded. | இந்த மருத்துவமனைக்குக் குடும்ப இணைப்புகள் அமைக்கப்படவில்லை: மருத்துவமனை தனது விதிகளை உள்ளிடவில்லை. எதையும் பதிவு செய்ய முடியாது. | no issue found | |
+| `familyStaff.note` | Requests by patients to be linked as the guardian of a child or the carer of an adult. The list shows ids, a type and a status, never a name. A verified link grants nothing yet; it is only recorded. Recording a decision needs a recent second factor. | ஒரு குழந்தையின் பாதுகாவலராக அல்லது ஒரு வயது வந்தவரின் பராமரிப்பாளராக இணைக்கப்படக் கோரும் நோயாளிகளின் கோரிக்கைகள். பட்டியலில் அடையாளங்கள், ஒரு வகை, ஒரு நிலை மட்டுமே இருக்கும்; பெயர் ஒருபோதும் இருக்காது. சரிபார்க்கப்பட்ட இணைப்பு இன்னும் எதற்கும் அனுமதி தராது; அது பதிவு மட்டுமே செய்யப்படும். முடிவைப் பதிவு செய்யச் சமீபத்திய இரண்டாம் காரணி தேவை. | no issue found | |
+| `familyStaff.off` | Family links are not turned on yet. | குடும்ப இணைப்புகள் இன்னும் இயக்கப்படவில்லை. | no issue found | |
+| `familyStaff.reason` | Reason word | காரணச் சொல் | no issue found | |
+| `familyStaff.reasonHint` | One word from the hospital's list: lowercase letters, digits and underscores, starting with a letter. | மருத்துவமனையின் பட்டியலிலிருந்து ஒரு சொல்: சிற்றெழுத்துகள், எண்கள், அடிக்கோடுகள்; ஓர் எழுத்தில் தொடங்க வேண்டும். | no issue found | |
+| `familyStaff.refused` | You may not decide this, or it needs a recent second factor, or the record is not in this clinic. Nothing was recorded. | இதை முடிவு செய்ய உங்களுக்கு அனுமதி இல்லை, அல்லது சமீபத்திய இரண்டாம் காரணி தேவை, அல்லது பதிவு இந்த மருத்துவமனையில் இல்லை. எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
+| `familyStaff.reject` | Reject | நிராகரி | no issue found | |
+| `familyStaff.rejectBody` | Rejects the request and records one reason word. The decision is recorded under your name. | கோரிக்கையை நிராகரித்து ஒரு காரணச் சொல்லைப் பதிவு செய்கிறது. முடிவு உங்கள் பெயரில் பதிவாகும். | no issue found | |
+| `familyStaff.rejectTitle` | Reject this link? | இந்த இணைப்பை நிராகரிக்கவா? | no issue found | |
+| `familyStaff.result.age_not_allowed` | The clinic's rule does not allow this link for the dependant's age. Nothing was recorded. | சார்ந்தவரின் வயதுக்கு இந்த இணைப்பை மருத்துவமனையின் விதி அனுமதிக்கவில்லை. எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
+| `familyStaff.result.consent_required` | The clinic's rule needs the linked person's consent. Nothing was recorded. | மருத்துவமனையின் விதிக்கு இணைக்கப்பட்டவரின் சம்மதம் தேவை. எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
+| `familyStaff.result.invalid_state` | This request is not waiting for a decision. Nothing was recorded. | இந்தக் கோரிக்கை முடிவுக்காகக் காத்திருக்கவில்லை. எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
+| `familyStaff.result.recorded` | The decision was recorded. | முடிவு பதிவு செய்யப்பட்டது. | no issue found | |
+| `familyStaff.result.replay` | This was already recorded. | இது ஏற்கெனவே பதிவு செய்யப்பட்டது. | no issue found | |
+| `familyStaff.status.rejected` | Rejected | நிராகரிக்கப்பட்டது | no issue found | |
+| `familyStaff.status.requested` | Waiting for a check | சரிபார்ப்புக்குக் காத்திருக்கிறது | no issue found | |
+| `familyStaff.status.revoked` | Withdrawn | திரும்பப் பெறப்பட்டது | no issue found | |
+| `familyStaff.status.verified` | Verified | சரிபார்க்கப்பட்டது | no issue found | |
+| `familyStaff.title` | Family link requests | குடும்ப இணைப்புக் கோரிக்கைகள் | no issue found | |
+| `familyStaff.types.carer_of_adult` | Carer of an adult | ஒரு வயது வந்தவரின் பராமரிப்பாளர் | no issue found | |
+| `familyStaff.types.guardian_of_minor` | Guardian of a child | ஒரு குழந்தையின் பாதுகாவலர் | no issue found | |
+| `familyStaff.verify` | Verify | சரிபார் | no issue found | |
+| `familyStaff.verifyBody` | Choose the dependant's record and say whether the linked person's consent was obtained. The server checks the clinic's rule, using the age from the stored date of birth. The decision is recorded under your name. | சார்ந்தவரின் பதிவைத் தேர்ந்தெடுத்து, இணைக்கப்பட்டவரின் சம்மதம் பெறப்பட்டதா என்று சொல்லுங்கள். சேமிக்கப்பட்ட பிறந்த தேதியிலிருந்து வயதைக் கொண்டு, மருத்துவமனையின் விதியை அமைப்பு சரிபார்க்கும். முடிவு உங்கள் பெயரில் பதிவாகும். | no issue found | |
+| `familyStaff.verifyTitle` | Verify this link? | இந்த இணைப்பைச் சரிபார்க்கவா? | no issue found | |
 | `identity.actions` | Actions | செயல்கள் | no issue found | |
 | `identity.actionsSoon` | Approve and unmerge | ஒப்புதல் மற்றும் இணைப்பு நீக்கம் | no issue found | |
 | `identity.all` | All | அனைத்தும் | no issue found | |
@@ -1306,6 +1343,84 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `idle.body` | You will be signed out in {{n}} seconds because the page has not been used. Anything on the screen will be cleared. | பக்கம் பயன்படுத்தப்படாததால் {{n}} வினாடிகளில் நீங்கள் வெளியேற்றப்படுவீர்கள். திரையில் உள்ளவை அழிக்கப்படும். | no issue found | |
 | `idle.stay` | Stay signed in | உள்நுழைந்தே இருங்கள் | no issue found | |
 | `idle.title` | Are you still there? | நீங்கள் இன்னும் இருக்கிறீர்களா? | no issue found | |
+| `knowledge.approve` | Approve | ஒப்புக்கொள் | no issue found | |
+| `knowledge.approveBody` | Approving makes this the next version. It is recorded under your name. You are approving exactly the text shown above. | ஒப்புக்கொண்டால் இது அடுத்த பதிப்பாகும். இது உங்கள் பெயரில் பதிவாகும். மேலே காட்டப்பட்ட உரையையே நீங்கள் ஒப்புக்கொள்கிறீர்கள். | no issue found | |
+| `knowledge.approveTitle` | Approve this draft? | இந்த வரைவை ஒப்புக்கொள்ளவா? | no issue found | |
+| `knowledge.approved` | Approved versions | ஒப்புக்கொள்ளப்பட்ட பதிப்புகள் | no issue found | |
+| `knowledge.approvedAs` | Approved as version {{version}}. | பதிப்பு {{version}} ஆக ஒப்புக்கொள்ளப்பட்டது. | no issue found | |
+| `knowledge.audience` | May be read by | படிக்கக்கூடியவர்கள் | no issue found | |
+| `knowledge.audienceLabel` | Who may read it | யார் படிக்கலாம் | no issue found | |
+| `knowledge.bodyLabel` | Text | உரை | no issue found | |
+| `knowledge.cardNeedsAudience` | A card needs at least one role. | ஒரு அட்டைக்குக் குறைந்தது ஒரு பங்கு தேவை. | no issue found | |
+| `knowledge.chooseKind` | Choose | தேர்ந்தெடுக்கவும் | no issue found | |
+| `knowledge.close` | Close | மூடு | no issue found | |
+| `knowledge.code` | Code | குறியீடு | no issue found | |
+| `knowledge.codeHint` | Lowercase letters, digits, dots, dashes and underscores, starting with a letter or digit (at most 100 characters). One open draft per code. | சிற்றெழுத்துகள், எண்கள், புள்ளிகள், கோடுகள், அடிக்கோடுகள்; ஓர் எழுத்தில் அல்லது எண்ணில் தொடங்க வேண்டும் (அதிகபட்சம் 100 எழுத்துகள்). ஒரு குறியீட்டுக்கு ஒரு திறந்த வரைவு. | no issue found | |
+| `knowledge.col.action` | Action | செயல் | no issue found | |
+| `knowledge.col.approvedAt` | Approved | ஒப்புக்கொள்ளப்பட்டது | no issue found | |
+| `knowledge.col.approver` | Approved by | ஒப்புக்கொண்டவர் | no issue found | |
+| `knowledge.col.audience` | May be read by | படிக்கக்கூடியவர்கள் | no issue found | |
+| `knowledge.col.author` | Author | எழுதியவர் | no issue found | |
+| `knowledge.col.code` | Code | குறியீடு | no issue found | |
+| `knowledge.col.decider` | Decided by | முடிவெடுத்தவர் | no issue found | |
+| `knowledge.col.kind` | Kind | வகை | no issue found | |
+| `knowledge.col.status` | Status | நிலை | no issue found | |
+| `knowledge.col.titleCol` | Title | தலைப்பு | no issue found | |
+| `knowledge.col.updated` | Updated | புதுப்பிக்கப்பட்டது | no issue found | |
+| `knowledge.col.version` | Version | பதிப்பு | no issue found | |
+| `knowledge.conflict` | A draft for this code is already open, or this request conflicts with an earlier one. Nothing was saved. | இந்தக் குறியீட்டுக்கு ஒரு வரைவு ஏற்கெனவே திறந்துள்ளது, அல்லது இந்தக் கோரிக்கை முந்தையதுடன் முரண்படுகிறது. எதுவும் சேமிக்கப்படவில்லை. | no issue found | |
+| `knowledge.created` | The draft was saved. | வரைவு சேமிக்கப்பட்டது. | no issue found | |
+| `knowledge.decideRefused` | You may not decide this: only a doctor who did not write the draft may, and it needs a recent second factor. Nothing was recorded. | இதை முடிவு செய்ய உங்களுக்கு அனுமதி இல்லை: வரைவை எழுதாத ஒரு மருத்துவர் மட்டுமே முடிவெடுக்க முடியும், சமீபத்திய இரண்டாம் காரணியும் தேவை. எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
+| `knowledge.drafts` | Drafts | வரைவுகள் | no issue found | |
+| `knowledge.draftsEmpty` | There are no drafts. Nothing is supplied by the system: every card and template is typed by staff. | வரைவுகள் எதுவும் இல்லை. அமைப்பு எதையும் வழங்குவதில்லை: ஒவ்வொரு அட்டையையும் வார்ப்புருவையும் பணியாளர்களே தட்டச்சு செய்கிறார்கள். | no issue found | |
+| `knowledge.edit` | Edit | திருத்து | no issue found | |
+| `knowledge.editTitle` | Edit your draft | உங்கள் வரைவைத் திருத்துங்கள் | no issue found | |
+| `knowledge.edited` | The draft was changed. | வரைவு மாற்றப்பட்டது. | no issue found | |
+| `knowledge.formBody` | Type the content yourself. Nothing is filled in for you. It is saved as a draft only; it is never in use until a doctor approves it. | உள்ளடக்கத்தை நீங்களே தட்டச்சு செய்யுங்கள். உங்களுக்காக எதுவும் நிரப்பப்படுவதில்லை. இது வரைவாக மட்டுமே சேமிக்கப்படும்; ஒரு மருத்துவர் ஒப்புக்கொள்ளும் வரை இது பயன்பாட்டில் இருக்காது. | no issue found | |
+| `knowledge.gone` | This draft was not found. Nothing was recorded. | இந்த வரைவு கிடைக்கவில்லை. எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
+| `knowledge.invalid` | That was not accepted. Check what you typed. Nothing was recorded. | அது ஏற்கப்படவில்லை. நீங்கள் தட்டச்சு செய்ததைச் சரிபார்க்கவும். எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
+| `knowledge.itemsEmpty` | There are no approved cards or templates. | ஒப்புக்கொள்ளப்பட்ட அட்டைகள் அல்லது வார்ப்புருக்கள் எதுவும் இல்லை. | no issue found | |
+| `knowledge.kind` | Kind | வகை | no issue found | |
+| `knowledge.kinds.card` | Card | அட்டை | no issue found | |
+| `knowledge.kinds.template` | Template | வார்ப்புரு | no issue found | |
+| `knowledge.linesHint` | Each line at most 200 characters. Empty lines are ignored. | ஒவ்வொரு வரியும் அதிகபட்சம் 200 எழுத்துகள். காலி வரிகள் புறக்கணிக்கப்படும். | no issue found | |
+| `knowledge.look` | Look | பார் | no issue found | |
+| `knowledge.new` | Write a new draft | புதிய வரைவை எழுது | no issue found | |
+| `knowledge.newTitle` | Write a new draft | புதிய வரைவை எழுது | no issue found | |
+| `knowledge.note` | Everything here is typed by a nurse or a doctor. Nothing is supplied by the system. A draft is written by a nurse or a doctor, submitted by its author, and approved or rejected by a doctor who is not the author. Every change needs a recent second factor. | இங்குள்ள அனைத்தையும் ஒரு செவிலியர் அல்லது ஒரு மருத்துவர் தட்டச்சு செய்கிறார். அமைப்பு எதையும் வழங்குவதில்லை. வரைவை ஒரு செவிலியர் அல்லது மருத்துவர் எழுதுவார்; அதை எழுதியவரே சமர்ப்பிப்பார்; எழுதியவர் அல்லாத ஒரு மருத்துவர் அதை ஒப்புக்கொள்வார் அல்லது நிராகரிப்பார். ஒவ்வொரு மாற்றத்துக்கும் சமீபத்திய இரண்டாம் காரணி தேவை. | no issue found | |
+| `knowledge.off` | The cards and templates editor is not turned on yet. | அட்டைகள் மற்றும் வார்ப்புருக்கள் தொகுப்பி இன்னும் இயக்கப்படவில்லை. | no issue found | |
+| `knowledge.phrases` | Phrases patients use | நோயாளிகள் பயன்படுத்தும் சொற்றொடர்கள் | no issue found | |
+| `knowledge.phrasesLabel` | Phrases patients use (one per line, at most 20) | நோயாளிகள் பயன்படுத்தும் சொற்றொடர்கள் (ஒரு வரிக்கு ஒன்று, அதிகபட்சம் 20) | no issue found | |
+| `knowledge.reason` | Reason word | காரணச் சொல் | no issue found | |
+| `knowledge.reasonHint` | One word: lowercase letters, digits and underscores, starting with a letter (at most 60 characters). | ஒரு சொல்: சிற்றெழுத்துகள், எண்கள், அடிக்கோடுகள்; ஓர் எழுத்தில் தொடங்க வேண்டும் (அதிகபட்சம் 60 எழுத்துகள்). | no issue found | |
+| `knowledge.refused` | You may not do this, or it needs a recent second factor. Nothing was saved. | இதைச் செய்ய உங்களுக்கு அனுமதி இல்லை, அல்லது சமீபத்திய இரண்டாம் காரணி தேவை. எதுவும் சேமிக்கப்படவில்லை. | no issue found | |
+| `knowledge.reject` | Reject | நிராகரி | no issue found | |
+| `knowledge.rejectBody` | Rejecting closes this draft. It is recorded under your name, with one reason word. | நிராகரித்தால் இந்த வரைவு மூடப்படும். இது உங்கள் பெயரில் ஒரு காரணச் சொல்லுடன் பதிவாகும். | no issue found | |
+| `knowledge.rejectTitle` | Reject this draft? | இந்த வரைவை நிராகரிக்கவா? | no issue found | |
+| `knowledge.result.invalid_state` | This draft can no longer be changed or decided in this way. Nothing was recorded. | இந்த வரைவை இனி இந்த வழியில் மாற்றவோ முடிவெடுக்கவோ முடியாது. எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
+| `knowledge.result.recorded` | It was recorded. | அது பதிவு செய்யப்பட்டது. | no issue found | |
+| `knowledge.result.replay` | This was already recorded. | இது ஏற்கெனவே பதிவு செய்யப்பட்டது. | no issue found | |
+| `knowledge.roles.admin` | Admin | நிர்வாகி | no issue found | |
+| `knowledge.roles.doctor` | Doctor | மருத்துவர் | no issue found | |
+| `knowledge.roles.front_desk` | Front desk | வரவேற்பு மேசை | no issue found | |
+| `knowledge.roles.nurse` | Nurse | செவிலியர் | no issue found | |
+| `knowledge.roles.queue_worker` | Background worker | பின்னணிப் பணியாளர் | no issue found | |
+| `knowledge.save` | Save the draft | வரைவைச் சேமி | no issue found | |
+| `knowledge.saveBody` | This saves exactly what you typed as a draft. A draft is never in use. It is recorded under your name. | நீங்கள் தட்டச்சு செய்ததையே இது வரைவாகச் சேமிக்கிறது. வரைவு ஒருபோதும் பயன்பாட்டில் இருக்காது. இது உங்கள் பெயரில் பதிவாகும். | no issue found | |
+| `knowledge.saveTitle` | Save this draft? | இந்த வரைவைச் சேமிக்கவா? | no issue found | |
+| `knowledge.status.approved` | Approved | ஒப்புக்கொள்ளப்பட்டது | no issue found | |
+| `knowledge.status.draft` | Draft | வரைவு | no issue found | |
+| `knowledge.status.rejected` | Rejected | நிராகரிக்கப்பட்டது | no issue found | |
+| `knowledge.status.submitted` | Waiting for a doctor | மருத்துவருக்காகக் காத்திருக்கிறது | no issue found | |
+| `knowledge.submit` | Submit | சமர்ப்பி | no issue found | |
+| `knowledge.submitBody` | This freezes the draft and sends it to a doctor. You cannot edit it afterwards. | இது வரைவை முடக்கி ஒரு மருத்துவருக்கு அனுப்பும். பிறகு இதைத் திருத்த முடியாது. | no issue found | |
+| `knowledge.submitTitle` | Submit this draft for approval? | இந்த வரைவை ஒப்புதலுக்குச் சமர்ப்பிக்கவா? | no issue found | |
+| `knowledge.synonyms` | Synonyms | ஒத்த சொற்கள் | no issue found | |
+| `knowledge.synonymsLabel` | Synonyms (one per line, at most 20) | ஒத்த சொற்கள் (ஒரு வரிக்கு ஒன்று, அதிகபட்சம் 20) | no issue found | |
+| `knowledge.title` | Cards and templates | அட்டைகளும் வார்ப்புருக்களும் | no issue found | |
+| `knowledge.titleLabel` | Title | தலைப்பு | no issue found | |
+| `knowledge.you` | you | நீங்கள் | no issue found | |
+| `knowledge.youWrote` | You wrote this draft. A different doctor must decide. | இந்த வரைவை நீங்கள் எழுதினீர்கள். வேறொரு மருத்துவர் முடிவெடுக்க வேண்டும். | no issue found | |
 | `labels.born` | born {{year}} | பிறந்த ஆண்டு {{year}} | no issue found | |
 | `labels.confirmBody` | Shows the name, year of birth and last four digits of the phone for {{n}} patients on this list. The reading is recorded as one audit entry that holds only the count. | இந்தப் பட்டியலில் உள்ள {{n}} நோயாளிகளின் பெயர், பிறந்த ஆண்டு, தொலைபேசியின் கடைசி நான்கு இலக்கங்களைக் காட்டுகிறது. இந்தப் படிப்பு எண்ணிக்கை மட்டும் கொண்ட ஒரு தணிக்கைப் பதிவாகப் பதிவாகும். | no issue found | |
 | `labels.confirmTitle` | Show names for these patients? | இந்த நோயாளிகளின் பெயர்களைக் காட்டவா? | no issue found | |
@@ -1449,8 +1564,10 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `nav.claims` | Portal claims | வலைவாசல் கோரிக்கைகள் | no issue found | |
 | `nav.dashboard` | Dashboard | கட்டுப்பாட்டுப் பலகை | no issue found | |
 | `nav.erasure` | Erasure requests | அழிப்புக் கோரிக்கைகள் | no issue found | |
+| `nav.family` | Family links | குடும்ப இணைப்புகள் | no issue found | |
 | `nav.home` | Home | முகப்பு | no issue found | |
 | `nav.identity` | Identity | அடையாளம் | no issue found | |
+| `nav.knowledge` | Cards and templates | அட்டைகளும் வார்ப்புருக்களும் | no issue found | |
 | `nav.label` | Sections | பிரிவுகள் | no issue found | |
 | `nav.messages` | Messages | செய்திகள் | no issue found | |
 | `nav.none` | No sections are available to your role. | உங்கள் பங்கிற்குக் கிடைக்கும் பிரிவுகள் எதுவும் இல்லை. | no issue found | |
@@ -1648,6 +1765,36 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `portal.consent.withdrawn` | Withdrawn | திரும்பப் பெறப்பட்டது | no issue found | |
 | `portal.consent.withdrawnDone` | Your consent was withdrawn. You can grant it again at any time. | உங்கள் ஒப்புதல் திரும்பப் பெறப்பட்டது. எப்போது வேண்டுமானாலும் மீண்டும் வழங்கலாம். | A: Tells the patient their consent was withdrawn, at once, with no confirmation step. It must read as done and reversible ("மீண்டும் வழங்கலாம்"). "திரும்பப் பெறப்பட்டது" shares its verb with revoke and cannot-be-undone elsewhere (Part 4). | |
 | `portal.erased` | Erased | அழிக்கப்பட்டது | no issue found | |
+| `portal.family.ask` | Ask for this link | இந்த இணைப்புக்குக் கேளுங்கள் | no issue found | |
+| `portal.family.body` | You can ask to be linked as the guardian of a child or as the carer of an adult at a hospital. A member of the hospital staff checks the request afterwards. | ஒரு மருத்துவமனையில் ஒரு குழந்தையின் பாதுகாவலராக அல்லது ஒரு வயது வந்தவரின் பராமரிப்பாளராக இணைக்கப்படக் கேட்கலாம். மருத்துவமனைப் பணியாளர் ஒருவர் பிறகு கோரிக்கையைச் சரிபார்ப்பார். | no issue found | |
+| `portal.family.chooseType` | Choose | தேர்ந்தெடுக்கவும் | no issue found | |
+| `portal.family.confirmBody` | This sends a request to the hospital. A staff member checks it. It does not give you access to anything. | இது மருத்துவமனைக்கு ஒரு கோரிக்கையை அனுப்பும். ஒரு பணியாளர் அதைச் சரிபார்ப்பார். இது உங்களுக்கு எதற்கும் அனுமதி தராது. | no issue found | |
+| `portal.family.confirmTitle` | Ask for this link? | இந்த இணைப்புக்குக் கேட்கவா? | no issue found | |
+| `portal.family.gone` | This was not found. Nothing was changed. | இது கிடைக்கவில்லை. எதுவும் மாற்றப்படவில்லை. | no issue found | |
+| `portal.family.grantsNothing` | A verified link does not give you access to the other person's record or let you act for them. It is only recorded. | சரிபார்க்கப்பட்ட இணைப்பு மற்றவரின் பதிவைப் பார்க்கவோ அவர் சார்பாகச் செயல்படவோ உங்களுக்கு அனுமதி தராது. அது பதிவு மட்டுமே செய்யப்படும். | no issue found | |
+| `portal.family.invalid` | That request was not accepted. Check your choices. Nothing was sent. | அந்தக் கோரிக்கை ஏற்கப்படவில்லை. உங்கள் தேர்வுகளைச் சரிபார்க்கவும். எதுவும் அனுப்பப்படவில்லை. | no issue found | |
+| `portal.family.mine` | Your requests and links | உங்கள் கோரிக்கைகளும் இணைப்புகளும் | no issue found | |
+| `portal.family.noRules` | Family links are not set up at this hospital yet: the hospital has not entered its rules. Nothing was sent. | இந்த மருத்துவமனையில் குடும்ப இணைப்புகள் இன்னும் அமைக்கப்படவில்லை: மருத்துவமனை தனது விதிகளை உள்ளிடவில்லை. எதுவும் அனுப்பப்படவில்லை. | no issue found | |
+| `portal.family.none` | You have no requests or links. | உங்களுக்குக் கோரிக்கைகளோ இணைப்புகளோ இல்லை. | no issue found | |
+| `portal.family.off` | Family links are not turned on at this hospital yet. Nothing was sent. | இந்த மருத்துவமனையில் குடும்ப இணைப்புகள் இன்னும் இயக்கப்படவில்லை. எதுவும் அனுப்பப்படவில்லை. | no issue found | |
+| `portal.family.refused` | This cannot be done for this account: it must be active and linked to a record at that hospital. Nothing was sent. | இந்தக் கணக்கிற்கு இதைச் செய்ய முடியாது: அது செயலில் இருக்க வேண்டும், அந்த மருத்துவமனையின் பதிவுடன் இணைக்கப்பட்டிருக்க வேண்டும். எதுவும் அனுப்பப்படவில்லை. | no issue found | |
+| `portal.family.result.already_requested` | You already have an open request of this kind. | இந்த வகையில் உங்களுக்கு ஏற்கெனவே ஒரு திறந்த கோரிக்கை உள்ளது. | no issue found | |
+| `portal.family.result.recorded` | Your request was sent. | உங்கள் கோரிக்கை அனுப்பப்பட்டது. | no issue found | |
+| `portal.family.result.replay` | This request was already sent. | இந்தக் கோரிக்கை ஏற்கெனவே அனுப்பப்பட்டது. | no issue found | |
+| `portal.family.revoke` | Withdraw | திரும்பப் பெறு | no issue found | |
+| `portal.family.revokeBody` | This withdraws your request or link. Nothing about the other person is changed. | இது உங்கள் கோரிக்கையை அல்லது இணைப்பைத் திரும்பப் பெறும். மற்றவரைப் பற்றி எதுவும் மாறாது. | no issue found | |
+| `portal.family.revokeResult.invalid_state` | It cannot be withdrawn now. Nothing was changed. | இப்போது அதைத் திரும்பப் பெற முடியாது. எதுவும் மாற்றப்படவில்லை. | no issue found | |
+| `portal.family.revokeResult.recorded` | It was withdrawn. | அது திரும்பப் பெறப்பட்டது. | no issue found | |
+| `portal.family.revokeResult.replay` | It was already withdrawn. | அது ஏற்கெனவே திரும்பப் பெறப்பட்டது. | no issue found | |
+| `portal.family.revokeTitle` | Withdraw this? | இதைத் திரும்பப் பெறவா? | no issue found | |
+| `portal.family.status.rejected` | Not accepted | ஏற்கப்படவில்லை | no issue found | |
+| `portal.family.status.requested` | Waiting for a check | சரிபார்ப்புக்குக் காத்திருக்கிறது | no issue found | |
+| `portal.family.status.revoked` | Withdrawn | திரும்பப் பெறப்பட்டது | no issue found | |
+| `portal.family.status.verified` | Verified | சரிபார்க்கப்பட்டது | no issue found | |
+| `portal.family.title` | Family links | குடும்ப இணைப்புகள் | no issue found | |
+| `portal.family.type` | What kind of link? | எந்த வகை இணைப்பு? | no issue found | |
+| `portal.family.types.carer_of_adult` | Carer of an adult | ஒரு வயது வந்தவரின் பராமரிப்பாளர் | no issue found | |
+| `portal.family.types.guardian_of_minor` | Guardian of a child | ஒரு குழந்தையின் பாதுகாவலர் | no issue found | |
 | `portal.grievance.body` | Use this to send a complaint. To ask for your record to be erased, a detail corrected or a nominee recorded, use the section above. A person at the hospital reads it. | புகாரை அனுப்ப இதைப் பயன்படுத்துங்கள். உங்கள் பதிவை அழிக்க, ஒரு விவரத்தைத் திருத்த அல்லது ஒரு நியமனதாரரைப் பதிவு செய்யக் கேட்க, மேலே உள்ள பகுதியைப் பயன்படுத்துங்கள். மருத்துவமனையில் ஒருவர் இதைப் படிப்பார். | A: "nominee" (a person a patient names to act for them) is rendered பரிந்துரைக்கப்பட்டவர் ("a person who was recommended"). The usual legal word for a nominee differs; this is a patient-rights term, send to the hospital's counsel and a native reviewer. | |
 | `portal.grievance.category` | Category | வகை | no issue found | |
 | `portal.grievance.categoryHint` | A code from the hospital's list (lowercase letters, digits and underscores). The hospital tells you which codes exist. | மருத்துவமனையின் பட்டியலிலிருந்து ஒரு குறியீடு (சிற்றெழுத்துகள், எண்கள், அடிக்கோடுகள்). எந்தக் குறியீடுகள் உள்ளன என்பதை மருத்துவமனை உங்களுக்குச் சொல்லும். | no issue found | |
@@ -1722,6 +1869,18 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `portal.notifications.read` | Read | படித்தது | no issue found | |
 | `portal.notifications.title` | Your notices | உங்கள் அறிவிப்புகள் | no issue found | |
 | `portal.notifications.unread` | Unread: {{n}} | படிக்காதவை: {{n}} | C: A count after a label. | |
+| `portal.prep.gone` | This visit was not found, or it has already started. | இந்த வருகை கிடைக்கவில்லை, அல்லது ஏற்கெனவே தொடங்கிவிட்டது. | no issue found | |
+| `portal.prep.markConflict` | That mark conflicts with an earlier request. Refresh and try again. Nothing was changed. | அந்தக் குறியீடு முந்தைய கோரிக்கையுடன் முரண்படுகிறது. புதுப்பித்து மீண்டும் முயலுங்கள். எதுவும் மாற்றப்படவில்லை. | no issue found | |
+| `portal.prep.markDone` | Mark done | செய்தேன் எனக் குறி | no issue found | |
+| `portal.prep.markGone` | This item could not be marked: the visit has started, was cancelled, or the item is no longer on its list. Nothing was changed. | இந்த உருப்படியைக் குறிக்க முடியவில்லை: வருகை தொடங்கிவிட்டது, ரத்தானது, அல்லது உருப்படி இனி பட்டியலில் இல்லை. எதுவும் மாற்றப்படவில்லை. | no issue found | |
+| `portal.prep.markNotDone` | Mark not done | செய்யவில்லை எனக் குறி | no issue found | |
+| `portal.prep.markedDone` | You marked this done | இதைச் செய்தாகக் குறித்தீர்கள் | no issue found | |
+| `portal.prep.markedNotDone` | You marked this not done | இதைச் செய்யவில்லை எனக் குறித்தீர்கள் | no issue found | |
+| `portal.prep.notMarked` | Not marked yet | இன்னும் குறிக்கவில்லை | no issue found | |
+| `portal.prep.nothing` | Nothing to prepare for this visit. | இந்த வருகைக்குத் தயாராக வேண்டியவை எதுவும் இல்லை. | no issue found | |
+| `portal.prep.off` | Visit preparation is not turned on at this hospital yet. | இந்த மருத்துவமனையில் வருகைக்கான தயாரிப்பு இன்னும் இயக்கப்படவில்லை. | no issue found | |
+| `portal.prep.title` | What to prepare | தயாராக வேண்டியவை | no issue found | |
+| `portal.prep.toggle` | What to prepare | தயாராக வேண்டியவை | no issue found | |
 | `portal.profile.choose` | Choose | தேர்ந்தெடுக்கவும் | no issue found | |
 | `portal.profile.clear` | Clear | அழி | no issue found | |
 | `portal.profile.clearBody` | This removes the saved value from your details. You can choose a new one at any time. | இது உங்கள் விவரங்களில் சேமிக்கப்பட்ட மதிப்பை நீக்கும். எப்போது வேண்டுமானாலும் புதியதைத் தேர்ந்தெடுக்கலாம். | no issue found | |
@@ -2290,3 +2449,20 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `upload.scanStatus` | Scan status | ஸ்கேன் நிலை | no issue found | |
 | `upload.submit` | Upload | பதிவேற்று | no issue found | |
 | `upload.title` | Upload a document | ஆவணத்தைப் பதிவேற்று | no issue found | |
+| `visitPrep.col.item` | Item | உருப்படி | no issue found | |
+| `visitPrep.col.state` | Marked | குறித்தது | no issue found | |
+| `visitPrep.col.when` | When | எப்போது | no issue found | |
+| `visitPrep.done` | Done | செய்தது | no issue found | |
+| `visitPrep.gone` | This visit was not found. Nothing was shown. | இந்த வருகை கிடைக்கவில்லை. எதுவும் காட்டப்படவில்லை. | no issue found | |
+| `visitPrep.hide` | Hide | மறை | no issue found | |
+| `visitPrep.notDone` | Not done | செய்யவில்லை | no issue found | |
+| `visitPrep.notMarked` | Not marked | குறிக்கவில்லை | no issue found | |
+| `visitPrep.note` | The hospital's own checklist for this visit type, and what the patient has marked. Read-only. It needs a recent second factor. | இந்த வகை வருகைக்கான மருத்துவமனையின் சொந்தப் பட்டியல், மற்றும் நோயாளி குறித்தவை. படிக்க மட்டும். இதற்குச் சமீபத்திய இரண்டாம் காரணி தேவை. | no issue found | |
+| `visitPrep.nothing` | Nothing to prepare for this visit. | இந்த வருகைக்குத் தயாராக வேண்டியவை எதுவும் இல்லை. | no issue found | |
+| `visitPrep.off` | Visit preparation is not turned on yet. | வருகைத் தயாரிப்பு இன்னும் இயக்கப்படவில்லை. | no issue found | |
+| `visitPrep.refused` | You may not read this, or it needs a recent second factor. Nothing was shown. | இதைப் படிக்க உங்களுக்கு அனுமதி இல்லை, அல்லது சமீபத்திய இரண்டாம் காரணி தேவை. எதுவும் காட்டப்படவில்லை. | no issue found | |
+| `visitPrep.show` | Show what the patient marked | நோயாளி குறித்தவற்றைக் காட்டு | no issue found | |
+| `visitPrep.starts` | Starts | தொடக்கம் | no issue found | |
+| `visitPrep.title` | Visit preparation (what the patient marked) | வருகைத் தயாரிப்பு (நோயாளி குறித்தவை) | no issue found | |
+| `visitPrep.visit` | Visit | வருகை | no issue found | |
+| `visitPrep.visitType` | Visit type | வருகை வகை | no issue found | |

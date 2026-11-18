@@ -41,6 +41,8 @@ const SCREENS: Screen[] = [
   { name: 'alerts', role: 'nurse', hash: '/alerts', path: '/v1/staff/console/alerts', empty: items },
   { name: 'portal claims', role: 'front_desk', hash: '/claims', path: '/v1/staff/portal-claims', empty: () => json({ claims: [] }) },
   { name: 'staff messages', role: 'nurse', hash: '/messages', path: '/v1/staff/messages/threads', empty: items },
+  { name: 'family links', role: 'front_desk', hash: '/family', path: '/v1/staff/family-links', empty: () => json({ links: [] }) },
+  { name: 'knowledge drafts', role: 'nurse', hash: '/knowledge', path: '/v1/staff/knowledge/drafts', empty: () => json({ drafts: [] }), also: [['get', '/v1/staff/knowledge/items', () => json({ items: [] })]] },
   { name: 'patient requests', role: 'front_desk', hash: '/requests', path: '/v1/staff/patient-requests', empty: () => json({ requests: [] }) },
   { name: 'care plans', role: 'doctor', hash: '/care/plans', path: '/v1/staff/care-plans', empty: () => json({ plans: [] }) },
   { name: 'accounts', role: 'admin', hash: '/admin/accounts', path: '/v1/staff/accounts', empty: items },

@@ -32,6 +32,11 @@ export type PatientRequestIn = components['schemas']['PatientRequestIn'];
 export type PublicGrievanceIn = components['schemas']['PublicGrievanceIn'];
 export type PatientMessageIn = components['schemas']['PatientMessageIn'];
 export type LabelsIn = components['schemas']['LabelsIn'];
+export type KnowledgeDraftIn = components['schemas']['KnowledgeDraftIn'];
+export type KnowledgeDraftEditIn = components['schemas']['KnowledgeDraftEditIn'];
+export type KnowledgeDecisionIn = components['schemas']['KnowledgeDecisionIn'];
+export type FamilyLinkRequestIn = components['schemas']['FamilyLinkRequestIn'];
+export type FamilyLinkDecisionIn = components['schemas']['FamilyLinkDecisionIn'];
 type PatientRequestStatus = components['schemas']['PatientRequestStatusIn']['status'];
 export type NoteIn = components['schemas']['NoteIn'];
 export type BreakGlassOpenIn = components['schemas']['BreakGlassOpenIn'];
@@ -150,6 +155,20 @@ export const OPERATIONS = {
   listThreads: { method: 'get', path: '/v1/staff/messages/threads' },
   listThreadMessages: { method: 'get', path: '/v1/staff/messages/threads/{thread_id}/messages' },
   screenMessage: { method: 'post', path: '/v1/staff/messages/{message_id}/screen' },
+  getMyVisitPrep: { method: 'get', path: '/v1/portal/visits/{booking_id}/prep' },
+  markMyPrepItem: { method: 'post', path: '/v1/portal/visits/{booking_id}/prep/{item_id}/done' },
+  getStaffVisitPrep: { method: 'get', path: '/v1/staff/visits/{visit_id}/prep' },
+  listMyFamilyLinks: { method: 'get', path: '/v1/portal/family-links' },
+  requestFamilyLink: { method: 'post', path: '/v1/portal/family-links' },
+  revokeFamilyLink: { method: 'post', path: '/v1/portal/family-links/{link_id}/revoke' },
+  listStaffFamilyLinks: { method: 'get', path: '/v1/staff/family-links' },
+  decideFamilyLink: { method: 'post', path: '/v1/staff/family-links/{link_id}/decision' },
+  listKnowledgeDrafts: { method: 'get', path: '/v1/staff/knowledge/drafts' },
+  createKnowledgeDraft: { method: 'post', path: '/v1/staff/knowledge/drafts' },
+  editKnowledgeDraft: { method: 'put', path: '/v1/staff/knowledge/drafts/{draft_id}' },
+  submitKnowledgeDraft: { method: 'post', path: '/v1/staff/knowledge/drafts/{draft_id}/submit' },
+  decideKnowledgeDraft: { method: 'post', path: '/v1/staff/knowledge/drafts/{draft_id}/decision' },
+  listKnowledgeItems: { method: 'get', path: '/v1/staff/knowledge/items' },
   patientLabels: { method: 'post', path: '/v1/staff/patients/labels' },
   // ---- lists that replace typing: clinic, grievance categories, break-glass reasons and grants, upcoming visits ----
   publicClinic: { method: 'get', path: '/public/clinic' },
@@ -486,6 +505,26 @@ export function createApi(options: ApiOptions) {
       client.POST('/v1/staff/scheduling/offers/interpret-reply', { params: { header: { 'X-Idempotency-Key': key(o) } }, body: { message_id: messageId } }),
     listThreads: (patientId?: string, topic?: ThreadTopic) =>
       client.GET('/v1/staff/messages/threads', { params: { query: { ...(patientId ? { patient_id: patientId } : {}), ...(topic ? { topic } : {}) } } }),
+    getMyVisitPrep: (bookingId: string) => client.GET('/v1/portal/visits/{booking_id}/prep', { params: { path: { booking_id: bookingId } } }),
+    markMyPrepItem: (bookingId: string, itemId: string, done: boolean, o?: WriteOptions) =>
+      client.POST('/v1/portal/visits/{booking_id}/prep/{item_id}/done', { params: { path: { booking_id: bookingId, item_id: itemId }, header: { 'X-Idempotency-Key': key(o) } }, body: { done } }),
+    getStaffVisitPrep: (visitId: string) => client.GET('/v1/staff/visits/{visit_id}/prep', { params: { path: { visit_id: visitId } } }),
+    listMyFamilyLinks: () => client.GET('/v1/portal/family-links'),
+    requestFamilyLink: (body: FamilyLinkRequestIn, o?: WriteOptions) => client.POST('/v1/portal/family-links', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    revokeFamilyLink: (linkId: string, o?: WriteOptions) =>
+      client.POST('/v1/portal/family-links/{link_id}/revoke', { params: { path: { link_id: linkId }, header: { 'X-Idempotency-Key': key(o) } } }),
+    listStaffFamilyLinks: (clinicId: string) => client.GET('/v1/staff/family-links', { params: { query: { clinic_id: clinicId } } }),
+    decideFamilyLink: (linkId: string, body: FamilyLinkDecisionIn, o?: WriteOptions) =>
+      client.POST('/v1/staff/family-links/{link_id}/decision', { params: { path: { link_id: linkId }, header: { 'X-Idempotency-Key': key(o) } }, body }),
+    listKnowledgeDrafts: (clinicId: string) => client.GET('/v1/staff/knowledge/drafts', { params: { query: { clinic_id: clinicId } } }),
+    createKnowledgeDraft: (body: KnowledgeDraftIn, o?: WriteOptions) => client.POST('/v1/staff/knowledge/drafts', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
+    editKnowledgeDraft: (draftId: string, body: KnowledgeDraftEditIn, o?: WriteOptions) =>
+      client.PUT('/v1/staff/knowledge/drafts/{draft_id}', { params: { path: { draft_id: draftId }, header: { 'X-Idempotency-Key': key(o) } }, body }),
+    submitKnowledgeDraft: (draftId: string, clinicId: string, o?: WriteOptions) =>
+      client.POST('/v1/staff/knowledge/drafts/{draft_id}/submit', { params: { path: { draft_id: draftId }, header: { 'X-Idempotency-Key': key(o) } }, body: { clinic_id: clinicId } }),
+    decideKnowledgeDraft: (draftId: string, body: KnowledgeDecisionIn, o?: WriteOptions) =>
+      client.POST('/v1/staff/knowledge/drafts/{draft_id}/decision', { params: { path: { draft_id: draftId }, header: { 'X-Idempotency-Key': key(o) } }, body }),
+    listKnowledgeItems: (clinicId: string) => client.GET('/v1/staff/knowledge/items', { params: { query: { clinic_id: clinicId } } }),
     screenMessage: (messageId: string, o?: WriteOptions) => client.POST('/v1/staff/messages/{message_id}/screen', { params: { path: { message_id: messageId }, header: { 'X-Idempotency-Key': key(o) } } }),
     // A read-only POST (the ids stay out of the URL); the route takes no idempotency key, like the patient search.
     patientLabels: (body: LabelsIn) => client.POST('/v1/staff/patients/labels', { body }),

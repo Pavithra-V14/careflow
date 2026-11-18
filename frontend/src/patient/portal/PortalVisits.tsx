@@ -10,6 +10,7 @@ import { Badge, Time, UUID, useWord } from '../../staff/ui/bits';
 import { ProblemText } from '../../staff/ui/states';
 import { WriteProblem } from '../../staff/ui/WriteProblem';
 import { usePortalQuery } from './portalQuery';
+import { PrepPanel } from './PrepPanel';
 import { useClinicField } from './PortalSections';
 
 type Booking = components['schemas']['PatientBookingOut'];
@@ -47,6 +48,7 @@ export function BookingSection({ api }: { api: Api }) {
   const [clinic, setClinic] = useState('');
   const [cancelling, setCancelling] = useState<Booking | null>(null);
   const [booking, setBooking] = useState<Slot | null>(null);
+  const [prepFor, setPrepFor] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const mine = usePortalQuery(['portal-bookings'], () => unwrap(api.listMyBookings()));
   const clinicField = useClinicField(api, 'bk', clinic, setClinic);
@@ -96,9 +98,13 @@ export function BookingSection({ api }: { api: Api }) {
                   {b.cancellable && (
                     <>
                       {' '}
+                      <button type="button" className="button button-secondary" aria-expanded={prepFor === b.booking_id} aria-label={`${t('portal.prep.toggle')}: ${b.visit_type_name}`} onClick={() => setPrepFor(prepFor === b.booking_id ? null : b.booking_id)}>
+                        {t('portal.prep.toggle')}
+                      </button>{' '}
                       <button type="button" className="button button-secondary" aria-label={`${t('portal.booking.cancel')}: ${b.visit_type_name}`} onClick={() => setCancelling(b)}>
                         {t('portal.booking.cancel')}
                       </button>
+                      {prepFor === b.booking_id && <PrepPanel api={api} bookingId={b.booking_id} />}
                     </>
                   )}
                 </li>
