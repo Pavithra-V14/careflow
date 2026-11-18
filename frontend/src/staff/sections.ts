@@ -6,7 +6,7 @@
 // backend disagree, the backend wins and this list is the thing to fix. Roles below follow the route docstrings in
 // openapi.snapshot.json and docs/design/review-task-routes.md.
 
-type SectionId = 'referrals' | 'tasks' | 'patients' | 'identity' | 'scheduling' | 'alerts' | 'dashboard' | 'care' | 'admin' | 'readiness' | 'claims' | 'requests' | 'access' | 'notes' | 'audit' | 'erasure';
+type SectionId = 'referrals' | 'tasks' | 'patients' | 'messages' | 'identity' | 'scheduling' | 'alerts' | 'dashboard' | 'care' | 'admin' | 'readiness' | 'claims' | 'requests' | 'access' | 'notes' | 'audit' | 'erasure';
 
 export interface Section {
   id: SectionId;
@@ -20,6 +20,7 @@ const SECTIONS: readonly Section[] = [
   { id: 'referrals', path: '/referrals', labelKey: 'nav.referrals', roles: ['front_desk', 'nurse', 'doctor'] },
   { id: 'tasks', path: '/tasks', labelKey: 'nav.tasks', roles: ['front_desk', 'front_desk_supervisor', 'nurse', 'doctor', 'admin'] },
   { id: 'patients', path: '/patients', labelKey: 'nav.patients', roles: ['front_desk', 'nurse', 'doctor'] },
+  { id: 'messages', path: '/messages', labelKey: 'nav.messages', roles: ['front_desk', 'nurse', 'doctor'] },
   { id: 'identity', path: '/identity', labelKey: 'nav.identity', roles: ['front_desk', 'nurse', 'doctor'] },
   { id: 'scheduling', path: '/scheduling', labelKey: 'nav.scheduling', roles: ['front_desk', 'nurse', 'doctor', 'admin'] },
   { id: 'alerts', path: '/alerts', labelKey: 'nav.alerts', roles: ['front_desk', 'nurse', 'doctor', 'admin'] },

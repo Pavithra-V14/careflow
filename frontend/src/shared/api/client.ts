@@ -31,6 +31,7 @@ export type ProfileIn = components['schemas']['ProfileIn'];
 export type PatientRequestIn = components['schemas']['PatientRequestIn'];
 export type PublicGrievanceIn = components['schemas']['PublicGrievanceIn'];
 export type PatientMessageIn = components['schemas']['PatientMessageIn'];
+export type LabelsIn = components['schemas']['LabelsIn'];
 type PatientRequestStatus = components['schemas']['PatientRequestStatusIn']['status'];
 export type NoteIn = components['schemas']['NoteIn'];
 export type BreakGlassOpenIn = components['schemas']['BreakGlassOpenIn'];
@@ -148,6 +149,8 @@ export const OPERATIONS = {
   viewPatientRecord: { method: 'get', path: '/v1/staff/patients/{patient_id}/view' },
   listThreads: { method: 'get', path: '/v1/staff/messages/threads' },
   listThreadMessages: { method: 'get', path: '/v1/staff/messages/threads/{thread_id}/messages' },
+  screenMessage: { method: 'post', path: '/v1/staff/messages/{message_id}/screen' },
+  patientLabels: { method: 'post', path: '/v1/staff/patients/labels' },
   // ---- lists that replace typing: clinic, grievance categories, break-glass reasons and grants, upcoming visits ----
   publicClinic: { method: 'get', path: '/public/clinic' },
   grievanceCategories: { method: 'get', path: '/v1/portal/grievance-categories' },
@@ -481,7 +484,11 @@ export function createApi(options: ApiOptions) {
     viewPatientRecord: (patientId: string) => client.GET('/v1/staff/patients/{patient_id}/view', { params: { path: { patient_id: patientId } } }),
     interpretReply: (messageId: string, o?: WriteOptions) =>
       client.POST('/v1/staff/scheduling/offers/interpret-reply', { params: { header: { 'X-Idempotency-Key': key(o) } }, body: { message_id: messageId } }),
-    listThreads: (patientId: string, topic: ThreadTopic) => client.GET('/v1/staff/messages/threads', { params: { query: { patient_id: patientId, topic } } }),
+    listThreads: (patientId?: string, topic?: ThreadTopic) =>
+      client.GET('/v1/staff/messages/threads', { params: { query: { ...(patientId ? { patient_id: patientId } : {}), ...(topic ? { topic } : {}) } } }),
+    screenMessage: (messageId: string, o?: WriteOptions) => client.POST('/v1/staff/messages/{message_id}/screen', { params: { path: { message_id: messageId }, header: { 'X-Idempotency-Key': key(o) } } }),
+    // A read-only POST (the ids stay out of the URL); the route takes no idempotency key, like the patient search.
+    patientLabels: (body: LabelsIn) => client.POST('/v1/staff/patients/labels', { body }),
     listThreadMessages: (threadId: string) => client.GET('/v1/staff/messages/threads/{thread_id}/messages', { params: { path: { thread_id: threadId } } }),
 
     // ---- lists that replace typing ------------------------------------------------------------------------------------------------

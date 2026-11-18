@@ -1,6 +1,6 @@
 # Tamil review pack (AI-prepared, NOT reviewed by a native speaker)
 
-Prepared 2026-11-14. Machine-checked on 2026-11-14; NOT human-reviewed; the Tamil reader must still approve (Part 0). Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 1778 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
+Prepared 2026-11-14. Machine-checked on 2026-11-14; NOT human-reviewed; the Tamil reader must still approve (Part 0). Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 1840 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
 
 **Regenerated 2026-11-14** by `npm run i18n:pack` from the strings as they are now, so it covers every current string, including the newest screens (patient voice setting, consent withdrawal and history, activating a staff account, withdrawing and retiring a red-flag rule). Each is written and second-passed in the same way and is just as unreviewed.
 
@@ -12,9 +12,9 @@ Meaning errors, register for patients, medical or safety terms, unsafe ambiguity
 - **B** wrong or odd meaning, wrong register, or an inconsistent term. Needs a native speaker.
 - **C** minor wording, or an administrator-only technical label.
 
-How it was done, honestly: all 1778 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and the strings that carry meaning (sentences of four words or more, and short strings that differ from their English) were read by an AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
+How it was done, honestly: all 1840 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and the strings that carry meaning (sentences of four words or more, and short strings that differ from their English) were read by an AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
 
-Automatic checks: 1778 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
+Automatic checks: 1840 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
 
 Notes: 71 grade A, 125 grade B, 58 grade C (254 rows with a note; some notes cover a group of similar strings, named in the note).
 
@@ -29,7 +29,7 @@ How it was done: every Tamil string was back-translated to English on its own, w
 | Checked | 1778 (1747 back-translated, 31 left in English by design) |
 | Fixed (a clear defect) | 1 |
 | Flagged for the human reviewer | 35 (grade A: 4, B: 14, C: 17) |
-| Strings added since this check, not covered | 0 |
+| Strings added since this check, not covered | 62 |
 
 Automatic findings: 0 placeholder mismatches, 0 changed numbers, 0 lost negations, 0 informal pronouns, 1 string with a different number of sentences (fixed). 199 strings whose back-translation overlapped little with the English, or that the script flagged, were read side by side; the rest agreed. Most of the low-overlap ones were synonyms ("Expires" and "Expiry", "Phone" and "Telephone") and are not listed.
 
@@ -383,24 +383,24 @@ Grade A: a safety, privacy or patient-rights meaning could be misread. B: a wron
 |---|---|---|
 | approve | ஒப்புக்கொள் (verb), ஒப்புதல் (noun) (62) | The verb also means "admit/agree"; some places use ஒப்புதல் அளி. |
 | acknowledge | ஏற்றுக்கொள் ("accept") (15) | Same verb as approve; the action only records that you have seen something. |
-| record / log / transcript / register | பதிவு everywhere (152) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
-| result / decision / end | முடிவு everywhere (69) | One word for a clinical result, a person's decision and an end time. |
+| record / log / transcript / register | பதிவு everywhere (156) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
+| result / decision / end | முடிவு everywhere (70) | One word for a clinical result, a person's decision and an end time. |
 | role | பங்கு (14) | Also means "share"; பணி is used for "task". |
 | merge / link / connect / attach | இணை / இணைப்பு (56) | Merging two patient records, linking a portal account, attaching a note: one word. |
-| red flag | சிவப்புக் கொடி (literal) (21) | Check the wording clinicians use. |
+| red flag | சிவப்புக் கொடி (literal) (26) | Check the wording clinicians use. |
 | hold (a slot or a referral) | நிறுத்து / நிறுத்தம் (stop) and ஒதுக்கீடு (allocation) (53) | Two or three words for one idea. |
 | retire (a rule version) and withdraw (a draft) | நிறுத்து (retire) and திரும்பப் பெறு (withdraw) (63) | The rule screens need two different words; "withdraw" shares its Tamil with "revoke" and "cannot be undone". |
-| task / job | பணி (68) | A review task and a queued job share the word. |
+| task / job | பணி (72) | A review task and a queued job share the word. |
 | approved (a status) and approve (a button) | அங்கீகரிக்கப்பட்டது (status) and ஒப்புக்கொள் (button) (14) | Two word families for one idea in the red-flag rule screens. |
-| patient | நோயாளி and நோயாளர் (84) | Two spellings. |
-| clinic / hospital | மருத்துவமனை (most strings), கிளினிக் (1) (76) | Check which is meant where. |
+| patient | நோயாளி and நோயாளர் (95) | Two spellings. |
+| clinic / hospital | மருத்துவமனை (most strings), கிளினிக் (1) (78) | Check which is meant where. |
 | front desk | வரவேற்பு மேசை and முன்பணியாளர் (8) | Two renderings. |
 | confidence | நம்பிக்கை (2) | Means belief or hope; the strings mean how sure the system is. |
 | sample (a sampled decision) | மாதிரி (6) | Reads as a laboratory specimen. |
 | revoke / take back, and "cannot be undone" | திரும்பப் பெறு for both (21) | The same verb for "revoke" and "cannot be reversed". |
 | grant / withdraw (a consent) | வழங்கு (grant) and திரும்பப் பெறு (withdraw) (23) | Consent withdrawal is one click in the portal, so the word must be unmistakable. |
-| fresh (code) | புதிய ("new") (32) | Means a recently entered code, not a new one. |
-| screen (the rules read text) | பரிசோதனை (6) | The word for a medical examination or test. |
+| fresh (code) | புதிய ("new") (33) | Means a recently entered code, not a new one. |
+| screen (the rules read text) | பரிசோதனை (12) | The word for a medical examination or test. |
 | escalate | உயர்நிலைக்கு அனுப்பு ("send to a higher level") (5) | Loses the sense of raising urgency. |
 | authenticator | அங்கீகார செயலி (app) / அங்கீகார குறியீடு (code) (16) | Consistent; check it is the word staff use. |
 
@@ -444,7 +444,7 @@ These are the same in English and Tamil by design, and a Tamil-speaking patient 
 - `tasks.kind.screening_unassessable`
 - `tasks.kind.triage_proposal`
 
-## Part 7. All 1778 strings
+## Part 7. All 1840 strings
 
 Fill in the last column. Write **OK**, or write the full corrected Tamil (keep every {{placeholder}} exactly as it is). Leave a row empty if you have not looked at it.
 
@@ -1306,6 +1306,18 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `idle.body` | You will be signed out in {{n}} seconds because the page has not been used. Anything on the screen will be cleared. | பக்கம் பயன்படுத்தப்படாததால் {{n}} வினாடிகளில் நீங்கள் வெளியேற்றப்படுவீர்கள். திரையில் உள்ளவை அழிக்கப்படும். | no issue found | |
 | `idle.stay` | Stay signed in | உள்நுழைந்தே இருங்கள் | no issue found | |
 | `idle.title` | Are you still there? | நீங்கள் இன்னும் இருக்கிறீர்களா? | no issue found | |
+| `labels.born` | born {{year}} | பிறந்த ஆண்டு {{year}} | no issue found | |
+| `labels.confirmBody` | Shows the name, year of birth and last four digits of the phone for {{n}} patients on this list. The reading is recorded as one audit entry that holds only the count. | இந்தப் பட்டியலில் உள்ள {{n}} நோயாளிகளின் பெயர், பிறந்த ஆண்டு, தொலைபேசியின் கடைசி நான்கு இலக்கங்களைக் காட்டுகிறது. இந்தப் படிப்பு எண்ணிக்கை மட்டும் கொண்ட ஒரு தணிக்கைப் பதிவாகப் பதிவாகும். | no issue found | |
+| `labels.confirmTitle` | Show names for these patients? | இந்த நோயாளிகளின் பெயர்களைக் காட்டவா? | no issue found | |
+| `labels.firstOnly` | Only the first {{max}} on the list are shown at a time. | ஒரு நேரத்தில் பட்டியலில் முதல் {{max}} பேர் மட்டுமே காட்டப்படுவார்கள். | no issue found | |
+| `labels.gone` | This clinic was not found. Nothing was shown. | இந்த மருத்துவமனை கிடைக்கவில்லை. எதுவும் காட்டப்படவில்லை. | no issue found | |
+| `labels.noPhone` | no phone recorded | தொலைபேசி பதிவில் இல்லை | no issue found | |
+| `labels.phone` | phone ends {{last4}} | தொலைபேசி முடிவு {{last4}} | no issue found | |
+| `labels.refused` | You may not see names here. Nothing was shown. | இங்கே பெயர்களைப் பார்க்க உங்களுக்கு அனுமதி இல்லை. எதுவும் காட்டப்படவில்லை. | no issue found | |
+| `labels.show` | Show names | பெயர்களைக் காட்டு | no issue found | |
+| `labels.shown` | Names shown for {{n}} patients. They go when you leave this screen. | {{n}} நோயாளிகளின் பெயர்கள் காட்டப்பட்டன. இந்தத் திரையை விட்டுச் சென்றதும் அவை போய்விடும். | no issue found | |
+| `labels.tooMany` | Too many patients at once. Nothing was shown. | ஒரே நேரத்தில் மிக அதிக நோயாளிகள். எதுவும் காட்டப்படவில்லை. | no issue found | |
+| `labels.unavailable` | Names cannot be shown in this environment. Nothing was shown. | இந்தச் சூழலில் பெயர்களைக் காட்ட முடியாது. எதுவும் காட்டப்படவில்லை. | no issue found | |
 | `landing.about.heading` | About the hospital | மருத்துவமனை பற்றி | no issue found | |
 | `landing.account` | Account | கணக்கு | no issue found | |
 | `landing.departments.heading` | Departments and doctors | துறைகள் மற்றும் மருத்துவர்கள் | no issue found | |
@@ -1380,6 +1392,55 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `medications.validTo` | To (leave empty if no end is recorded) | முடிவு (முடிவு நேரம் பதிவு செய்யப்படாவிட்டால் காலியாக விடவும்) | no issue found | |
 | `medications.validToHint` | An empty end is saved as "no end recorded". It is not read as "still taking". | காலியான முடிவு "முடிவு பதிவு செய்யப்படவில்லை" என்று சேமிக்கப்படும். அது "இன்னும் எடுத்துக்கொள்ளப்படுகிறது" என்று கருதப்படாது. | A: The "still taking" statement was reworded without a gendered verb (இன்னும் எடுத்துக்கொள்ளப்படுகிறது, passive). A native clinician should confirm it reads naturally and clearly says an empty end is NOT read as ongoing. Item 36 on docs/design/clinician-sheet.md. | |
 | `medications.verified` | Verified | சரிபார்க்கப்பட்டது | B: சரிபார்க்கப்பட்டது (verified): check who verified is not implied. | |
+| `messages.allTopics` | All topics | எல்லாத் தலைப்புகளும் | no issue found | |
+| `messages.bodyTitle` | The message | செய்தி | no issue found | |
+| `messages.col.action` | Action | செயல் | no issue found | |
+| `messages.col.count` | Messages | செய்திகள் | no issue found | |
+| `messages.col.last` | Last message | கடைசிச் செய்தி | no issue found | |
+| `messages.col.message` | Message | செய்தி | no issue found | |
+| `messages.col.patient` | Patient | நோயாளி | no issue found | |
+| `messages.col.sender` | From | அனுப்பியவர் | no issue found | |
+| `messages.col.status` | Status | நிலை | no issue found | |
+| `messages.col.thread` | Conversation | உரையாடல் | no issue found | |
+| `messages.col.time` | Time | நேரம் | no issue found | |
+| `messages.col.topic` | Topic | தலைப்பு | no issue found | |
+| `messages.empty` | There are no conversations. | உரையாடல்கள் எதுவும் இல்லை. | no issue found | |
+| `messages.erased` | Erased | அழிக்கப்பட்டது | no issue found | |
+| `messages.hide` | Close | மூடு | no issue found | |
+| `messages.hideBody` | Hide the text | உரையை மறை | no issue found | |
+| `messages.noMessages` | There are no messages in this conversation. | இந்த உரையாடலில் செய்திகள் எதுவும் இல்லை. | no issue found | |
+| `messages.note` | The conversations of this clinic. The lists show ids, a closed topic, who sent each message and when, and never the text. A message is read one at a time, after a confirmation, and every reading is recorded. | இந்த மருத்துவமனையின் உரையாடல்கள். பட்டியல்களில் அடையாளங்கள், ஒரு நிலையான தலைப்பு, ஒவ்வொரு செய்தியையும் யார் எப்போது அனுப்பினார் என்பது மட்டுமே இருக்கும்; உரை ஒருபோதும் இருக்காது. ஒரு செய்தி உறுதிப்படுத்தலுக்குப் பிறகு ஒன்று ஒன்றாகப் படிக்கப்படும்; ஒவ்வொரு படிப்பும் பதிவாகும். | no issue found | |
+| `messages.open` | Open | திற | no issue found | |
+| `messages.patientFilter` | Patient id (optional) | நோயாளி அடையாளம் (விருப்பம்) | no issue found | |
+| `messages.patientInvalid` | That is not a patient id. The list is not filtered by it. | அது நோயாளி அடையாளம் அல்ல. பட்டியல் அதனால் வடிகட்டப்படவில்லை. | no issue found | |
+| `messages.read` | Read | படி | no issue found | |
+| `messages.readBody` | The text is shown here only while you keep it open. This reading is recorded under your name. | நீங்கள் திறந்து வைத்திருக்கும் வரை மட்டுமே உரை இங்கே காட்டப்படும். இந்தப் படிப்பு உங்கள் பெயரில் பதிவாகும். | no issue found | |
+| `messages.readGone` | This message was not found, or its text was erased. Nothing was shown. | இந்தச் செய்தி கிடைக்கவில்லை, அல்லது அதன் உரை அழிக்கப்பட்டது. எதுவும் காட்டப்படவில்லை. | no issue found | |
+| `messages.readRefused` | You may not read this message. Nothing was shown. | இந்தச் செய்தியைப் படிக்க உங்களுக்கு அனுமதி இல்லை. எதுவும் காட்டப்படவில்லை. | no issue found | |
+| `messages.readTitle` | Read this message? | இந்தச் செய்தியைப் படிக்கவா? | no issue found | |
+| `messages.screen.outcome.clear` | The rules found no red flag. | விதிகள் சிவப்புக் கொடி எதையும் காணவில்லை. | no issue found | |
+| `messages.screen.outcome.red_flag` | The rules found a red flag. A nurse task was raised. | விதிகள் சிவப்புக் கொடியைக் கண்டன. செவிலியர் பணி எழுப்பப்பட்டது. | no issue found | |
+| `messages.screen.outcome.unassessable` | The rules could not assess this message. A nurse task was raised. | விதிகளால் இந்தச் செய்தியை மதிப்பிட முடியவில்லை. செவிலியர் பணி எழுப்பப்பட்டது. | no issue found | |
+| `messages.screen.replayed` | This was already screened. | இது ஏற்கெனவே பரிசோதிக்கப்பட்டது. | no issue found | |
+| `messages.screen.reply.not_required` | No reply to the patient is needed. | நோயாளிக்குப் பதில் தேவையில்லை. | no issue found | |
+| `messages.screen.reply.pending_clinician_template` | No reply is sent: the patient-facing wording has not been written by a clinician yet. | எந்தப் பதிலும் அனுப்பப்படவில்லை: நோயாளிக்கான சொற்களை மருத்துவர் இன்னும் எழுதவில்லை. | no issue found | |
+| `messages.screenBody` | The red-flag rules read this stored message and the result is recorded. A red flag, or a message the rules cannot assess, raises a nurse task. Nothing is sent to the patient from here. | சிவப்புக் கொடி விதிகள் சேமிக்கப்பட்ட இந்தச் செய்தியைப் படித்து, முடிவைப் பதிவு செய்யும். சிவப்புக் கொடி அல்லது விதிகளால் மதிப்பிட முடியாத செய்தி செவிலியர் பணியை எழுப்பும். இங்கிருந்து நோயாளிக்கு எதுவும் அனுப்பப்படாது. | no issue found | |
+| `messages.screenButton` | Screen for red flags | சிவப்புக் கொடிக்குப் பரிசோதி | no issue found | |
+| `messages.screenErased` | The text of this message was erased, so it cannot be screened. Nothing was recorded. | இந்தச் செய்தியின் உரை அழிக்கப்பட்டது, எனவே பரிசோதிக்க முடியாது. எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
+| `messages.screenRefused` | You may not screen this message. Nothing was recorded. | இந்தச் செய்தியைப் பரிசோதிக்க உங்களுக்கு அனுமதி இல்லை. எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
+| `messages.screenTitle` | Screen this message for red flags? | இந்தச் செய்தியைச் சிவப்புக் கொடிக்குப் பரிசோதிக்கவா? | no issue found | |
+| `messages.screenUnavailable` | Screening is not available now (encryption is not set up). Nothing was recorded. | பரிசோதனை இப்போது கிடைக்கவில்லை (குறியாக்கம் அமைக்கப்படவில்லை). எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
+| `messages.sender.patient` | Patient | நோயாளி | no issue found | |
+| `messages.sender.staff` | Staff | பணியாளர் | no issue found | |
+| `messages.sender.system` | System | அமைப்பு | no issue found | |
+| `messages.threadStatus.closed` | Closed | மூடப்பட்டது | no issue found | |
+| `messages.threadStatus.open` | Open | திறந்துள்ளது | no issue found | |
+| `messages.threadTitle` | Messages in this conversation (newest first) | இந்த உரையாடலில் உள்ள செய்திகள் (புதியவை முதலில்) | no issue found | |
+| `messages.title` | Messages | செய்திகள் | no issue found | |
+| `messages.topic` | Topic | தலைப்பு | no issue found | |
+| `messages.topics.appointments` | Appointments | சந்திப்புகள் | no issue found | |
+| `messages.topics.care` | Care | சிகிச்சை | no issue found | |
+| `messages.topics.safety` | Safety | பாதுகாப்பு | no issue found | |
 | `nav.access` | Break-glass | அவசரகால அணுகல் | no issue found; machine back-translation check: flagged C (Part 0) | |
 | `nav.admin` | Admin | நிர்வாகம் | no issue found | |
 | `nav.alerts` | Alerts | எச்சரிக்கைகள் | no issue found | |
@@ -1391,6 +1452,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `nav.home` | Home | முகப்பு | no issue found | |
 | `nav.identity` | Identity | அடையாளம் | no issue found | |
 | `nav.label` | Sections | பிரிவுகள் | no issue found | |
+| `nav.messages` | Messages | செய்திகள் | no issue found | |
 | `nav.none` | No sections are available to your role. | உங்கள் பங்கிற்குக் கிடைக்கும் பிரிவுகள் எதுவும் இல்லை. | no issue found | |
 | `nav.notes` | Notes | குறிப்புகள் | no issue found | |
 | `nav.patientRequests` | Patient requests | நோயாளி கோரிக்கைகள் | no issue found | |
