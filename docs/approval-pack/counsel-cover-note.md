@@ -53,3 +53,6 @@ Patient name, date of birth and phone are stored only as ciphertext. Staff acces
 
 ## What counsel returns
 For each document: the approved wording or the changes, any extra questions, the date, and counsel's name. Please mark anything that needs a state-specific answer.
+
+## Added 2026-11-14: family links (deferred item 21)
+The software can now record that a patient account is linked to a family member (the guardian of a child, the carer of an adult), verified by front desk with the linked person's consent recorded. **It ships DENYING every request until you answer:** the clinic's rule table is empty. Please state, per clinic and link type: (1) the youngest and oldest age of the dependant for which a link may be made (for a guardian of a minor, and for a carer of an adult), (2) whether the linked person's own consent must be recorded, and in what form. Also (3) what, if anything, a verified link may later allow (reading a record, booking, messaging): **today it allows nothing.** The owner enters your values into the rule table; nothing here is a legal position.

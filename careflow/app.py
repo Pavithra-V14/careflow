@@ -84,6 +84,7 @@ from careflow import (
     demo_phase3,
     demo_phase4,
     demo_real_models,
+    family_links_sql,
     identity,
     knowledge,
     knowledge_editor_sql,
@@ -4745,6 +4746,159 @@ async def patient_mark_visit_prep(booking_id: uuid.UUID, item_id: Annotated[str,
     return PrepMarkOut(booking_id=booking_id, item_id=item_id, done=body.done, created=created)
 
 
+# ---- family links (migration 0091; deferred item 21) -------------------------------------------------------------------------------------------------------------------------------
+# MECHANISM, OFF BY DEFAULT, DENY BY DEFAULT: every route answers 503 unless the owner sets CAREFLOW_FAMILY_LINKS=on, and a link can be requested or verified only for a clinic and link type whose rule row COUNSEL'S values were
+# entered into (iam.family_link_rules ships empty: until then `not_configured`, in fixed wording). A patient asks; a front-desk person verifies (the dependant's age is checked against the rule, the linked person's consent is
+# recorded, with a recent second factor); the patient can revoke. A VERIFIED LINK GRANTS NOTHING: no account can read or act for another through it in this build.
+
+FamilyLinkType = Literal["guardian_of_minor", "carer_of_adult"]
+FamilyLinkStatus = Literal["requested", "verified", "rejected", "revoked"]
+FAMILY_VERIFIERS = ("front_desk",)
+
+
+class FamilyLinkRequestIn(_Body):
+    clinic_id: uuid.UUID
+    link_type: FamilyLinkType
+
+
+class FamilyLinkRequestOut(_Out):
+    result: Literal["recorded", "replay", "already_requested"]
+    link_id: uuid.UUID | None
+
+
+class MyFamilyLinkOut(_Out):
+    link_id: uuid.UUID
+    clinic_id: uuid.UUID
+    link_type: FamilyLinkType
+    status: FamilyLinkStatus
+    created_at: datetime
+
+
+class MyFamilyLinkList(_Out):
+    links: list[MyFamilyLinkOut]
+
+
+class FamilyLinkRevokeOut(_Out):
+    result: Literal["recorded", "replay", "invalid_state"]
+
+
+class StaffFamilyLinkOut(_Out):
+    link_id: uuid.UUID
+    link_type: FamilyLinkType
+    status: FamilyLinkStatus
+    requester_patient_id: uuid.UUID
+    dependant_patient_id: uuid.UUID | None
+    created_at: datetime
+
+
+class StaffFamilyLinkList(_Out):
+    links: list[StaffFamilyLinkOut]
+
+
+class FamilyLinkDecisionIn(_Body):
+    clinic_id: uuid.UUID
+    decision: Literal["verify", "reject"]
+    dependant_patient_id: uuid.UUID | None = None
+    dependant_consent: bool | None = None  # the front desk records that the linked person's consent was obtained
+    reason: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]{0,59}$")
+
+    @model_validator(mode="after")
+    def _each_decision_takes_its_own_fields(self) -> "FamilyLinkDecisionIn":
+        if self.decision == "verify" and (self.dependant_patient_id is None or self.dependant_consent is None or self.reason is not None):
+            raise ValueError("a verify names the dependant's record and says whether consent was obtained")
+        if self.decision == "reject" and (self.reason is None or self.dependant_patient_id is not None or self.dependant_consent is not None):
+            raise ValueError("a reject needs a reason word and nothing else")
+        return self
+
+
+class FamilyLinkDecisionOut(_Out):
+    result: Literal["recorded", "replay", "invalid_state", "age_not_allowed", "consent_required"]
+
+
+def _family_links_on() -> None:
+    if not family_links_sql.enabled():
+        raise HTTPException(status_code=503, detail="family links are not set up")
+
+
+async def _family_call(coro):
+    try:
+        return await coro
+    except family_links_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    except family_links_sql.Conflict:
+        raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request") from None
+
+
+@portal.post("/family-links", response_model=FamilyLinkRequestOut, status_code=201)
+async def request_family_link(body: FamilyLinkRequestIn, idempotency_key: IdempotencyKey, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> FamilyLinkRequestOut:
+    """Ask to be linked as the guardian of a child or the carer of an adult at a clinic (a staff member verifies it afterwards). 503 unless family links are switched on AND the clinic's rules for this link type have been entered
+    (`family links are not set up: the clinic has not entered its rules`: deny by default); 403 unless you are an active patient account with a live record at that clinic. Idempotent on the key."""
+    await _patient_account(conn, claims)
+    _family_links_on()
+    result, link_id = await _family_call(family_links_sql.request_link(conn, clinic_id=body.clinic_id, link_type=body.link_type, idempotency_key=idempotency_key))
+    if result == "not_configured":
+        raise HTTPException(status_code=503, detail=family_links_sql.NOT_CONFIGURED)
+    return FamilyLinkRequestOut(result=result, link_id=link_id)  # type: ignore[arg-type]
+
+
+@portal.get("/family-links", response_model=MyFamilyLinkList)
+async def list_my_family_links(conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> MyFamilyLinkList:
+    """Your own link requests and links (a closed status each; no name, no date of birth). 503 unless family links are switched on; 403 unless you are an active patient account."""
+    await _patient_account(conn, claims)
+    _family_links_on()
+    rows = await _family_call(family_links_sql.my_links(conn))
+    return MyFamilyLinkList(links=[MyFamilyLinkOut(link_id=r.link_id, clinic_id=r.clinic_id, link_type=r.link_type, status=r.status, created_at=r.created_at) for r in rows])  # type: ignore[arg-type]
+
+
+@portal.post("/family-links/{link_id}/revoke", response_model=FamilyLinkRevokeOut)
+async def revoke_family_link(link_id: uuid.UUID, idempotency_key: IdempotencyKey, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> FamilyLinkRevokeOut:
+    """Withdraw your own link request or link. 503 unless family links are switched on; 403 unless you are an active patient account; 404 for a link that is not yours (missing and someone else's are one answer). Idempotent on the key."""
+    await _patient_account(conn, claims)
+    _family_links_on()
+    try:
+        return FamilyLinkRevokeOut(result=await family_links_sql.revoke(conn, link_id=link_id, idempotency_key=idempotency_key))  # type: ignore[arg-type]
+    except family_links_sql.Refused:
+        raise HTTPException(status_code=404, detail="not found") from None
+    except family_links_sql.Conflict:
+        raise HTTPException(status_code=409, detail="this idempotency key was already used by a different request") from None
+
+
+staff_family = APIRouter(prefix="/v1/staff/family-links", tags=["staff family links"])
+
+
+@staff_family.get("", response_model=StaffFamilyLinkList)
+async def list_staff_family_links(clinic_id: uuid.UUID, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> StaffFamilyLinkList:
+    """The clinic's open link requests and verified links (ids and a closed type and status; no names). 404 if the clinic is not visible to you, 403 unless you are front desk there (with a recent second factor), 503 unless family links are switched on."""
+    await _console_clinic(conn, clinic_id, FAMILY_VERIFIERS)
+    _family_links_on()
+    rows = await _family_call(family_links_sql.staff_links(conn, clinic_id))
+    return StaffFamilyLinkList(links=[StaffFamilyLinkOut(link_id=r.link_id, link_type=r.link_type, status=r.status, requester_patient_id=r.requester_patient_id, dependant_patient_id=r.dependant_patient_id, created_at=r.created_at) for r in rows])  # type: ignore[arg-type]
+
+
+@staff_family.post("/{link_id}/decision", response_model=FamilyLinkDecisionOut)
+async def decide_family_link(link_id: uuid.UUID, body: FamilyLinkDecisionIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> FamilyLinkDecisionOut:
+    """Verify or reject a link request. A verify names the dependant's record, records whether the linked person's consent was obtained, and is checked against the clinic's rule (the age comes from the stored date of birth, never from you).
+    404 if the clinic is not visible to you, 403 unless you are front desk there (with a recent second factor) or the record is not in this clinic, 503 unless family links are switched on or while the clinic's rules are not entered
+    (`family links are not set up: the clinic has not entered its rules`). `age_not_allowed` or `consent_required` when the rule is not met; `invalid_state` if it is not waiting for a decision. Idempotent on the key."""
+    await _console_clinic(conn, body.clinic_id, FAMILY_VERIFIERS)
+    _family_links_on()
+    age: int | None = None
+    if body.decision == "verify":
+        vault: DemographicVault | None = request.app.state.vault
+        if vault is None:
+            raise HTTPException(status_code=503, detail="family links are not set up")
+        assert body.dependant_patient_id is not None
+        try:
+            age = await _family_call(family_links_sql.dependant_age(conn, vault, clinic_id=body.clinic_id, patient_id=body.dependant_patient_id, today=datetime.now(UTC).date()))
+        except family_links_sql.CannotAge:
+            raise HTTPException(status_code=409, detail="the dependant's record cannot be used") from None
+    result = await _family_call(family_links_sql.decide(
+        conn, clinic_id=body.clinic_id, link_id=link_id, decision=body.decision, dependant_patient_id=body.dependant_patient_id, age=age, consent=body.dependant_consent, reason=body.reason, idempotency_key=idempotency_key))
+    if result == "not_configured":
+        raise HTTPException(status_code=503, detail=family_links_sql.NOT_CONFIGURED)
+    return FamilyLinkDecisionOut(result=result)  # type: ignore[arg-type]
+
+
 # ---- Knowledge search (migration 0085; BUILD-SPEC.md 10): MECHANISM over SYNTHETIC placeholder cards ------------------------------------------------------------------------------------------------------------
 #
 # A nurse or doctor asks a question and gets back card IDS, versions and scores: never a card's text, never the question (it is masked before any embedding model and stored nowhere). The search always filters by
@@ -6567,6 +6721,7 @@ def create_app(
     app.include_router(staff_results)
     app.include_router(staff_medications)
     app.include_router(staff_knowledge)
+    app.include_router(staff_family)
     app.include_router(staff_break_glass)
     app.include_router(portal_rights)
     app.include_router(staff_grievances)
@@ -6575,7 +6730,7 @@ def create_app(
     app.include_router(staff_notes)
     app.include_router(health)
     app.include_router(public_config)
-    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, portal, staff_voice, staff_care_plans, staff_results, staff_medications, staff_knowledge, staff_portal_claims, staff_visits, staff_break_glass, portal_rights, staff_grievances, staff_recovery, staff_notes, patient_requests_staff, public_config])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
+    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, portal, staff_voice, staff_care_plans, staff_results, staff_medications, staff_knowledge, staff_family, staff_portal_claims, staff_visits, staff_break_glass, portal_rights, staff_grievances, staff_recovery, staff_notes, patient_requests_staff, public_config])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
     return app
 
 
