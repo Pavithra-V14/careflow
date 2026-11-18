@@ -1,8 +1,8 @@
 """The Postgres-backed queue and transactional outbox (BUILD-SPEC.md §7.2, §7.3, §7.4, §17.1 `ops`).
 
 `QueuePort` is the interface (`enqueue`, `claim`, `acknowledge`, `dead_letter`); `PostgresQueue` implements
-it over SQLAlchemy Core async. A second, unwired Redis/SQS-style adapter is a future option (§7.4) and is
-deliberately not built: this workload (jobs that wait days) does not need it.
+it over SQLAlchemy Core async. A second, UNWIRED adapter stub (`careflow.queue_broker_stub`, refuses every call, imports no broker library) is the
+future option (§7.4): this workload (jobs that wait days) does not need a broker.
 
 Every method takes an `AsyncConnection` already inside a transaction, running as the restricted app role
 with the verified claims set (`careflow.db.set_request_claims`). Row-level security decides who may do what:
