@@ -373,6 +373,9 @@ Counsel's questions (the age limits for a minor and an adult, whether consent is
 ### 34. Idle sign-out durations: DECIDED (2026-11-14)
 Decided by the user: idle sign-out is on, driven by two build-time settings with no default (`CAREFLOW_IDLE_MINUTES_STAFF`, `CAREFLOW_IDLE_MINUTES_PATIENT`), with a "still there?" warning one minute before sign-out. The demo and browser-test builds supply labelled placeholders (15 minutes for staff, 10 for patients); the real values are the privacy owner's and are a pre-launch checklist row (docs/frontend-live-checklist.md). Nothing is needed from the backend.
 
+### 39. Please regenerate the Tamil reader's file (requested 2026-11-18; do not run it from the frontend)
+The Tamil pack was machine-checked a second time on 2026-11-18 (docs/approval-pack/tamil-review.md, Part 0): 2016 strings, two passes (2026-11-14: 1778 strings; 2026-11-18: the 238 strings added since plus 1 re-check), 2 clear defects fixed, 43 strings flagged (grade A 5, B 15, C 23), nothing marked reviewed. Please run `python scripts/export_approval_pack.py tamil-reader` so `docs/approval-pack/export/tamil-reader.docx` carries it. Nothing in the exporter has to change: the flagged table in Part 0 still starts with the header `| Key | Grade | English | Tamil | What looks wrong | Suggested fix |` that its `grade_last` step looks for, and the pack, README and notes file are the same three parts. The new data files `docs/approval-pack/tamil-machine-check.tsv` and `.json` feed Part 0 and need not be part of the export.
+
 ## Decisions recorded here for later readers
 
 - **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;

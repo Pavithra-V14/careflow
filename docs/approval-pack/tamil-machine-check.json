@@ -1,7 +1,7 @@
 {
-  "date": "2026-11-14",
-  "checked": 1778,
-  "backTranslated": 1747,
+  "date": "2026-11-18",
+  "checked": 2016,
+  "backTranslated": 1985,
   "keptInEnglish": 31,
   "fixed": [
     {
@@ -9,6 +9,12 @@
       "why": "The English ends with \"Nothing is sent.\" and the Tamil had no such sentence (the English was extended on 2026-11-14 and the Tamil was not). A lost \"nothing is sent\" on the offer draft screen is a safety-relevant omission.",
       "before": "வரைவு வாய்ப்பின் படிக்க-மட்டும் பார்வை. நீங்கள் கேட்கும்போது கணக்கிடப்படுகிறது, எங்கும் சேமிக்கப்படுவதில்லை.",
       "after": "வரைவு வாய்ப்பின் படிக்க-மட்டும் பார்வை. நீங்கள் கேட்கும்போது கணக்கிடப்படுகிறது, எங்கும் சேமிக்கப்படுவதில்லை. எதுவும் அனுப்பப்படாது."
+    },
+    {
+      "key": "portal.prep.markedDone",
+      "why": "A spelling error: \"செய்தாகக்\" is not a valid form (it must be \"செய்ததாகக்\", \"that you did it\"). It is the line a patient reads under a checklist item they marked done.",
+      "before": "இதைச் செய்தாகக் குறித்தீர்கள்",
+      "after": "இதைச் செய்ததாகக் குறித்தீர்கள்"
     }
   ],
   "automatic": {
@@ -19,5 +25,23 @@
     "sentenceCountMismatches": 1,
     "sentenceCountMismatchesFixed": 1
   },
-  "candidatesReadSideBySide": 199
+  "candidatesReadSideBySide": 222,
+  "passes": [
+    {
+      "date": "2026-11-14",
+      "checked": 1778,
+      "backTranslated": 1747,
+      "fixed": 1,
+      "flagged": 35
+    },
+    {
+      "date": "2026-11-18",
+      "checked": 239,
+      "backTranslated": 239,
+      "newStrings": 238,
+      "reChecked": 1,
+      "fixed": 1,
+      "flagged": 8
+    }
+  ]
 }
