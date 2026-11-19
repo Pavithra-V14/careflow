@@ -45,3 +45,7 @@ Each person has a single file to open, answer, sign and send back in `docs/appro
 - **Not now:** vital signs and resource history (build when a feature needs them); the pre-visit brief (asked of the clinician, sheet item 40).
 - See `docs/spec-sweep.md` for the counts.
 - **2026-11-19, later:** the dependency gate stays strict (no severity service). A repeated referral review with a different escalation assessment is a 409, "the first decision stands and cannot be changed". Provenance for care-plan and scheduling decisions: later, when needed.
+
+## 2026-11-19: demo placeholders (nothing approved)
+
+- `scripts/seed_demo_placeholders.py` (migration 0096) enters labelled placeholders into the dev database: break-glass reasons and limits, the public-grievance cap, the canary cap, the per-call spend cap and the bookable visit types. Every row carries "DEMO PLACEHOLDER, not approved by the clinic owner"; the application refuses to start outside the synthetic demo while one exists. Inventory, owners and what stays blocked: `docs/demo-placeholders.md`; commands: `docs/demo-runbook.md` section 14.

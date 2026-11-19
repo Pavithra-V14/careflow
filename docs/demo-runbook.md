@@ -142,6 +142,51 @@ The rows are labelled "DEMO PLACEHOLDER, not counsel's values" (a guardian link 
 
 ---
 
+## 14. Demo placeholders for every non-clinical screen (synthetic data only; nothing is approved)
+
+`docs/demo-placeholders.md` lists what is entered, what stays blocked and who owns it. Everything below is labelled "DEMO PLACEHOLDER, not approved by the clinic owner" (or "DEMO ONLY"). The application **refuses to start** in any profile except demo with synthetic data while a labelled row exists, so these cannot leak into a clinical deployment; take them out with `--remove` first.
+
+**1. Migrate** (window A; the new migration is 0096, which adds the label column and the check):
+```powershell
+cd E:\Claude\careflow-run
+git fetch origin
+git checkout --detach origin/main
+.\.venv\Scripts\python.exe -m careflow.migrate --check
+.\.venv\Scripts\python.exe -m careflow.migrate
+```
+
+**2. Enter the placeholders** (each asks you to TYPE the project host, refuses outside dev + demo + synthetic, prints counts only; rehearse with `--dry-run`; use your dev clinic id):
+```powershell
+.\.venv\Scripts\python.exe scripts\seed_demo_placeholders.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2 --dry-run
+.\.venv\Scripts\python.exe scripts\seed_demo_placeholders.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
+.\.venv\Scripts\python.exe scripts\seed_demo_family_rules.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
+.\.venv\Scripts\python.exe scripts\seed_consent_notices.py
+```
+The first enters the break-glass reasons and limits, the public-grievance cap, the canary cap, the per-call spend cap and the bookable visit types. The second is the family-link rules (section 13). The third publishes the labelled DEMO ONLY consent notices from the demo pack (it needs `CAREFLOW_DEMO_PHASE4=1` and is permanent by design: a notice cannot be removed, which is why the startup refusal exists).
+
+**3. The switches** (lines in `E:\Claude\careflow-run\.env`, exactly `on` or `1`; restart the backend after any change; never paste the file anywhere):
+
+| To see | Switch |
+|---|---|
+| The review console, watchdog, canaries, cost canvas, grievance and erase words, consent labels, time zone, care-gap shape | `CAREFLOW_DEMO_PHASE4=1` |
+| Patient messaging | `CAREFLOW_PATIENT_MESSAGING=on` (also needs `CAREFLOW_MESSAGE_MAX_PER_MINUTE`, which the demo pack supplies) |
+| Patient booking (the visit types the script marked bookable) | `CAREFLOW_PATIENT_BOOKING=on` |
+| Visit preparation | `CAREFLOW_PATIENT_VISIT_PREP=on` |
+| Family links | `CAREFLOW_FAMILY_LINKS=on` |
+| Card and template editor | `CAREFLOW_KNOWLEDGE_EDITOR=on` |
+| Break-glass | none (a grant needs the reasons and limits from step 2, a second factor, and a patient of the clinic) |
+| Public grievance form | none beyond the demo pack and the clinic being published (`scripts\dev_clinic.py publish --clinic-id <id>`) |
+| The checkpoint-retention report | optional line: `CAREFLOW_RETENTION_CHECKPOINT_DAYS=90` (the specification's starting value, **not approved**; report only, deletes nothing) |
+
+**4. Take everything out again** (labelled rows only; a row without the label is never touched):
+```powershell
+.\.venv\Scripts\python.exe scripts\seed_demo_placeholders.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2 --remove
+.\.venv\Scripts\python.exe scripts\seed_demo_family_rules.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2 --remove
+```
+Consent notices cannot be removed. **What you should see:** the screens above open with their placeholder lists; every value is visibly a demo (labelled or "DEMO ONLY"). **Say out loud when showing it that none of it is approved.** Still blocked, with reasons by owner: `docs/demo-placeholders.md`.
+
+---
+
 ## If something goes wrong: the fixed causes
 1. **Window B not running or stopped:** every page fails; start step 1.
 2. **Database behind the code:** the backend refuses to start; run the migrations (step 0.1).
