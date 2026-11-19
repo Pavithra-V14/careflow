@@ -46,6 +46,9 @@ comment on function ops.demo_placeholder_rows() is 'Counts of demo placeholder r
 
 do $$
 begin
+    if not (select rolsuper or rolbypassrls from pg_roles where rolname = current_user) then
+        raise exception '0096: the migrating role must bypass row-level security (ops.demo_placeholder_rows counts rows through it; without that it would report zero and a placeholder would go unseen)';
+    end if;
     if has_table_privilege('careflow_app', 'iam.break_glass_settings', 'select') or has_table_privilege('careflow_app', 'ops.spend_limits', 'select') then
         raise exception '0096: the application role must still have no grant on the owner-managed tables';
     end if;

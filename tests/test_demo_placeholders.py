@@ -139,7 +139,7 @@ async def test_in_the_synthetic_demo_the_check_does_not_even_look():
 
 
 async def test_outside_the_demo_any_placeholder_row_refuses_to_start_naming_sources_and_counts_only():
-    engine = Engine(rows=[("iam.break_glass_reasons", 4), ("ops.spend_limits", 0), ("iam.consent_notices", 2)])
+    engine = Engine(rows=[(source, {"iam.break_glass_reasons": 4, "iam.consent_notices": 2}.get(source, 0)) for source in pc.EXPECTED_SOURCES])
     with pytest.raises(pc.PlaceholdersPresent) as info:
         await pc.check(engine, demo_allowed=False)  # type: ignore[arg-type]
     message = str(info.value)
@@ -147,7 +147,7 @@ async def test_outside_the_demo_any_placeholder_row_refuses_to_start_naming_sour
 
 
 async def test_outside_the_demo_a_clean_database_starts_and_an_unreadable_one_does_not():
-    await pc.check(Engine(rows=[("iam.break_glass_reasons", 0)]), demo_allowed=False)  # type: ignore[arg-type]
+    await pc.check(Engine(rows=[(source, 0) for source in pc.EXPECTED_SOURCES]), demo_allowed=False)  # type: ignore[arg-type]
     with pytest.raises(pc.PlaceholdersPresent, match="cannot rule out"):
         await pc.check(Engine(fail=RuntimeError("SECRET detail")), demo_allowed=False)  # type: ignore[arg-type]  # unknown is not clean
     try:
@@ -160,3 +160,19 @@ async def test_the_application_runs_the_check_with_the_profile_and_policy_on_a_r
     source = (ROOT / "careflow" / "app.py").read_text(encoding="utf-8")
     assert "await placeholder_check.check(app.state.engine, demo_allowed=demo_allowed(resolve_profile(), _data_policy(os.environ)))" in source
     assert source.index("schema_check.check(app.state.engine)") < source.index("placeholder_check.check(app.state.engine")
+
+
+async def test_an_empty_or_partial_answer_is_not_clean_because_absence_is_not_a_value():
+    every = [(source, 0) for source in pc.EXPECTED_SOURCES]
+    for rows in ([], every[:-1], every[1:], [("iam.break_glass_reasons", 0)]):
+        with pytest.raises(pc.PlaceholdersPresent, match="incomplete"):
+            await pc.check(Engine(rows=rows), demo_allowed=False)  # type: ignore[arg-type]
+    await pc.check(Engine(rows=every), demo_allowed=False)  # type: ignore[arg-type]
+
+
+def test_the_expected_sources_are_exactly_the_ones_the_migration_counts_and_it_guards_against_a_role_that_cannot_see_the_rows():
+    sql = (ROOT / "db" / "migrations" / "0096_demo_placeholder_labels.sql").read_text(encoding="utf-8")
+    code = "\n".join(line for line in sql.splitlines() if not line.lstrip().startswith("--"))
+    func = code[code.index("create function ops.demo_placeholder_rows") : code.index("revoke all on function")]
+    assert set(re.findall(r"select '([a-z_.]+)'", func)) == set(pc.EXPECTED_SOURCES)
+    assert "rolsuper or rolbypassrls" in code  # the function sees every row only if the owner bypasses row-level security
