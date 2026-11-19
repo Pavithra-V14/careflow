@@ -292,3 +292,43 @@ describe('visit preparation (staff view)', () => {
     expect(await screen.findByText('Nothing to prepare for this visit.')).toBeInTheDocument();
   });
 });
+
+describe('family links (front desk): revoke and the two newer results', () => {
+  const link = (over: Record<string, unknown> = {}) => ({ created_at: '2026-11-09T05:00:00Z', dependant_patient_id: ID.patient2, link_id: D1, link_type: 'carer_of_adult', requester_patient_id: ID.patient, status: 'verified', ...over });
+  const family = (rows: unknown[]): Routes[number] => ['get', '/v1/staff/family-links', () => json({ links: rows })];
+
+  it('revokes a verified link only after a confirmation, with a reason word and a key', async () => {
+    const user = userEvent.setup();
+    const { calls } = await openConsole({ hash: '/family', routes: [family([link()]), ['post', `/v1/staff/family-links/${D1}/revoke`, () => json({ result: 'recorded' })]] });
+    await user.click(await screen.findByRole('button', { name: /^Revoke/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Revoke this link or request?' });
+    expect(within(dialog).getByRole('button', { name: 'Revoke' })).toBeDisabled();
+    await user.type(within(dialog).getByLabelText('Reason word'), 'consent_withdrawn');
+    expect(writes(calls)).toHaveLength(0);
+    await user.click(within(dialog).getByRole('button', { name: 'Revoke' }));
+    expect(await screen.findByText('It was revoked. The patient sees it as withdrawn.')).toBeInTheDocument();
+    expect(writes(calls)[0]?.body).toEqual({ clinic_id: CLINIC_A, reason: 'consent_withdrawn' });
+    expect(writes(calls)[0]?.key).toBeTruthy();
+  });
+
+  it('offers Revoke on a waiting request too, and nothing on a rejected or withdrawn one', async () => {
+    await openConsole({ hash: '/family', routes: [family([link({ status: 'requested', dependant_patient_id: null }), link({ link_id: D2, status: 'rejected' }), link({ link_id: ID.doc, status: 'revoked' })])] });
+    const rows = within(await screen.findByRole('table')).getAllByRole('row');
+    expect(within(rows[1]!).getAllByRole('button').map((b) => b.getAttribute('aria-label')?.split(' ')[0])).toEqual(['Verify', 'Reject', 'Revoke']);
+    expect(within(rows[2]!).queryAllByRole('button')).toHaveLength(0);
+    expect(within(rows[3]!).queryAllByRole('button')).toHaveLength(0);
+  });
+
+  it.each([
+    ['requester_not_active', 'This request can no longer be verified: the person who asked no longer has an active account or record. Nothing was recorded.'],
+    ['already_linked', 'This person is already linked to that dependant. Nothing was recorded.'],
+  ])('says %s in fixed words', async (result, words) => {
+    const user = userEvent.setup();
+    await openConsole({ hash: '/family', routes: [family([link({ status: 'requested', dependant_patient_id: null })]), ['post', `/v1/staff/family-links/${D1}/decision`, () => json({ result })]] });
+    await user.click(await screen.findByRole('button', { name: /^Reject/ }));
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByLabelText('Reason word'), 'not_verified');
+    await user.click(within(dialog).getByRole('button', { name: 'Reject' }));
+    expect(await screen.findByText(words)).toBeInTheDocument();
+  });
+});

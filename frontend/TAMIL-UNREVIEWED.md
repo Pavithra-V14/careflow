@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-2016 of 2016 strings are unreviewed.
+2024 of 2024 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -887,10 +887,18 @@ Terms standardised: proposal, resolve / resolved.
 | `familyStaff.rejectBody` | Rejects the request and records one reason word. The decision is recorded under your name. | கோரிக்கையை நிராகரித்து ஒரு காரணச் சொல்லைப் பதிவு செய்கிறது. முடிவு உங்கள் பெயரில் பதிவாகும். | ok |
 | `familyStaff.rejectTitle` | Reject this link? | இந்த இணைப்பை நிராகரிக்கவா? | ok |
 | `familyStaff.result.age_not_allowed` | The clinic's rule does not allow this link for the dependant's age. Nothing was recorded. | சார்ந்தவரின் வயதுக்கு இந்த இணைப்பை மருத்துவமனையின் விதி அனுமதிக்கவில்லை. எதுவும் பதிவு செய்யப்படவில்லை. | ok |
+| `familyStaff.result.already_linked` | This person is already linked to that dependant. Nothing was recorded. | இந்த நபர் ஏற்கெனவே அந்தச் சார்ந்தவருடன் இணைக்கப்பட்டுள்ளார். எதுவும் பதிவு செய்யப்படவில்லை. | ok |
 | `familyStaff.result.consent_required` | The clinic's rule needs the linked person's consent. Nothing was recorded. | மருத்துவமனையின் விதிக்கு இணைக்கப்பட்டவரின் சம்மதம் தேவை. எதுவும் பதிவு செய்யப்படவில்லை. | ok |
 | `familyStaff.result.invalid_state` | This request is not waiting for a decision. Nothing was recorded. | இந்தக் கோரிக்கை முடிவுக்காகக் காத்திருக்கவில்லை. எதுவும் பதிவு செய்யப்படவில்லை. | ok |
 | `familyStaff.result.recorded` | The decision was recorded. | முடிவு பதிவு செய்யப்பட்டது. | ok |
 | `familyStaff.result.replay` | This was already recorded. | இது ஏற்கெனவே பதிவு செய்யப்பட்டது. | ok |
+| `familyStaff.result.requester_not_active` | This request can no longer be verified: the person who asked no longer has an active account or record. Nothing was recorded. | இந்தக் கோரிக்கையை இனிச் சரிபார்க்க முடியாது: கோரியவருக்கு இப்போது செயலில் உள்ள கணக்கோ பதிவோ இல்லை. எதுவும் பதிவு செய்யப்படவில்லை. | ok |
+| `familyStaff.revoke` | Revoke | திரும்பப் பெறு | ok |
+| `familyStaff.revokeBody` | Closes the request or link. The patient then sees it as withdrawn. It needs one reason word and is recorded under your name. Nothing about either person's record is changed. | கோரிக்கையை அல்லது இணைப்பை மூடுகிறது. நோயாளிக்கு அது திரும்பப் பெறப்பட்டதாகத் தெரியும். இதற்கு ஒரு காரணச் சொல் தேவை; இது உங்கள் பெயரில் பதிவாகும். இருவரின் பதிவுகளிலும் எதுவும் மாறாது. | ok |
+| `familyStaff.revokeResult.invalid_state` | This is already closed. Nothing was recorded. | இது ஏற்கெனவே மூடப்பட்டுள்ளது. எதுவும் பதிவு செய்யப்படவில்லை. | ok |
+| `familyStaff.revokeResult.recorded` | It was revoked. The patient sees it as withdrawn. | அது திரும்பப் பெறப்பட்டது. நோயாளிக்கு அது திரும்பப் பெறப்பட்டதாகத் தெரியும். | ok |
+| `familyStaff.revokeResult.replay` | This was already recorded. | இது ஏற்கெனவே பதிவு செய்யப்பட்டது. | ok |
+| `familyStaff.revokeTitle` | Revoke this link or request? | இந்த இணைப்பை அல்லது கோரிக்கையைத் திரும்பப் பெறவா? | ok |
 | `familyStaff.status.rejected` | Rejected | நிராகரிக்கப்பட்டது | ok |
 | `familyStaff.status.requested` | Waiting for a check | சரிபார்ப்புக்குக் காத்திருக்கிறது | ok |
 | `familyStaff.status.revoked` | Withdrawn | திரும்பப் பெறப்பட்டது | ok |

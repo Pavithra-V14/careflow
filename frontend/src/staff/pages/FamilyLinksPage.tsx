@@ -33,6 +33,7 @@ export function FamilyLinksPage() {
   const queryClient = useQueryClient();
   const labels = usePatientLabels();
   const [acting, setActing] = useState<{ row: Row; decision: 'verify' | 'reject' } | null>(null);
+  const [revoking, setRevoking] = useState<Row | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const query = useApiQuery(['family-links', active.clinicId], () => unwrap(api.listStaffFamilyLinks(active.clinicId)));
   const off = query.isError && query.error.status === 503; // 503: the owner's switch is off, or the clinic has not entered its rules; a 502 or 504 is an ordinary failure
@@ -92,8 +93,15 @@ export function FamilyLinksPage() {
                               </button>{' '}
                               <button type="button" aria-label={`${t('familyStaff.reject')} ${l.link_id.slice(0, 8)}`} onClick={() => { setNote(null); setActing({ row: l, decision: 'reject' }); }}>
                                 {t('familyStaff.reject')}
+                              </button>{' '}
+                              <button type="button" aria-label={`${t('familyStaff.revoke')} ${l.link_id.slice(0, 8)}`} onClick={() => { setNote(null); setRevoking(l); }}>
+                                {t('familyStaff.revoke')}
                               </button>
                             </>
+                          ) : l.status === 'verified' ? (
+                            <button type="button" aria-label={`${t('familyStaff.revoke')} ${l.link_id.slice(0, 8)}`} onClick={() => { setNote(null); setRevoking(l); }}>
+                              {t('familyStaff.revoke')}
+                            </button>
                           ) : (
                             '–'
                           )}
@@ -106,6 +114,18 @@ export function FamilyLinksPage() {
             )}
           </QueryView>
         </>
+      )}
+      {revoking && (
+        <RevokeDialog
+          row={revoking}
+          onClose={(message) => {
+            setRevoking(null);
+            if (message) {
+              setNote(message);
+              void queryClient.invalidateQueries();
+            }
+          }}
+        />
       )}
       {acting && (
         <DecisionDialog
@@ -216,6 +236,52 @@ function DecisionDialog({ row, decision, onClose }: { row: Row; decision: 'verif
           </p>
         </>
       )}
+    </ConfirmDialog>
+  );
+}
+
+function RevokeDialog({ row, onClose }: { row: Row; onClose: (message: string | null) => void }) {
+  const { t } = useTranslation();
+  const { api } = useAuth();
+  const { active } = useSession();
+  const [reason, setReason] = useState('');
+  const write = useIdempotentWrite(
+    (_: void, key) => unwrap(api.staffRevokeFamilyLink(row.link_id, { clinic_id: active.clinicId, reason }, { idempotencyKey: key })),
+    (r) => onClose(t(`familyStaff.revokeResult.${r.result}`)),
+  );
+  return (
+    <ConfirmDialog
+      title={t('familyStaff.revokeTitle')}
+      confirmLabel={t('familyStaff.revoke')}
+      busy={write.isPending}
+      confirmDisabled={!REASON.test(reason)}
+      onConfirm={() => write.mutate()}
+      onCancel={() => {
+        write.reset();
+        onClose(null);
+      }}
+      status={<WriteProblem problem={write.error} forbidden={t('familyStaff.refused')} calm={{ not_found: t('familyStaff.gone'), unavailable: t('familyStaff.off'), invalid: t('familyStaff.invalid') }} />}
+    >
+      <p>
+        <ShortId id={row.link_id} />
+      </p>
+      <p>{t('familyStaff.revokeBody')}</p>
+      <label htmlFor="fam-revoke-reason">{t('familyStaff.reason')}</label>
+      <input
+        id="fam-revoke-reason"
+        type="text"
+        autoComplete="off"
+        spellCheck={false}
+        value={reason}
+        aria-describedby="fam-revoke-reason-hint"
+        onChange={(e) => {
+          setReason(e.target.value);
+          write.reset();
+        }}
+      />
+      <p id="fam-revoke-reason-hint" className="hint">
+        {t('familyStaff.reasonHint')}
+      </p>
     </ConfirmDialog>
   );
 }

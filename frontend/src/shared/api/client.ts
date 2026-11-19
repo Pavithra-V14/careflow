@@ -36,6 +36,7 @@ export type KnowledgeDraftIn = components['schemas']['KnowledgeDraftIn'];
 export type KnowledgeDraftEditIn = components['schemas']['KnowledgeDraftEditIn'];
 export type KnowledgeDecisionIn = components['schemas']['KnowledgeDecisionIn'];
 export type FamilyLinkRequestIn = components['schemas']['FamilyLinkRequestIn'];
+export type FamilyLinkStaffRevokeIn = components['schemas']['FamilyLinkStaffRevokeIn'];
 export type FamilyLinkDecisionIn = components['schemas']['FamilyLinkDecisionIn'];
 type PatientRequestStatus = components['schemas']['PatientRequestStatusIn']['status'];
 export type NoteIn = components['schemas']['NoteIn'];
@@ -163,6 +164,7 @@ export const OPERATIONS = {
   revokeFamilyLink: { method: 'post', path: '/v1/portal/family-links/{link_id}/revoke' },
   listStaffFamilyLinks: { method: 'get', path: '/v1/staff/family-links' },
   decideFamilyLink: { method: 'post', path: '/v1/staff/family-links/{link_id}/decision' },
+  staffRevokeFamilyLink: { method: 'post', path: '/v1/staff/family-links/{link_id}/revoke' },
   listKnowledgeDrafts: { method: 'get', path: '/v1/staff/knowledge/drafts' },
   createKnowledgeDraft: { method: 'post', path: '/v1/staff/knowledge/drafts' },
   editKnowledgeDraft: { method: 'put', path: '/v1/staff/knowledge/drafts/{draft_id}' },
@@ -516,6 +518,8 @@ export function createApi(options: ApiOptions) {
     listStaffFamilyLinks: (clinicId: string) => client.GET('/v1/staff/family-links', { params: { query: { clinic_id: clinicId } } }),
     decideFamilyLink: (linkId: string, body: FamilyLinkDecisionIn, o?: WriteOptions) =>
       client.POST('/v1/staff/family-links/{link_id}/decision', { params: { path: { link_id: linkId }, header: { 'X-Idempotency-Key': key(o) } }, body }),
+    staffRevokeFamilyLink: (linkId: string, body: FamilyLinkStaffRevokeIn, o?: WriteOptions) =>
+      client.POST('/v1/staff/family-links/{link_id}/revoke', { params: { path: { link_id: linkId }, header: { 'X-Idempotency-Key': key(o) } }, body }),
     listKnowledgeDrafts: (clinicId: string) => client.GET('/v1/staff/knowledge/drafts', { params: { query: { clinic_id: clinicId } } }),
     createKnowledgeDraft: (body: KnowledgeDraftIn, o?: WriteOptions) => client.POST('/v1/staff/knowledge/drafts', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
     editKnowledgeDraft: (draftId: string, body: KnowledgeDraftEditIn, o?: WriteOptions) =>

@@ -1,8 +1,8 @@
 # Tamil review pack (AI-prepared, NOT reviewed by a native speaker)
 
-Prepared 2026-11-18. Machine-checked on 2026-11-18; NOT human-reviewed; the Tamil reader must still approve (Part 0). Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 2016 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
+Prepared 2026-11-19. Machine-checked on 2026-11-18; NOT human-reviewed; the Tamil reader must still approve (Part 0). Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 2024 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
 
-**Regenerated 2026-11-18** by `npm run i18n:pack` from the strings as they are now, so it covers every current string, including the newest screens (patient voice setting, consent withdrawal and history, activating a staff account, withdrawing and retiring a red-flag rule). Each is written and second-passed in the same way and is just as unreviewed.
+**Regenerated 2026-11-19** by `npm run i18n:pack` from the strings as they are now, so it covers every current string, including the newest screens (patient voice setting, consent withdrawal and history, activating a staff account, withdrawing and retiring a red-flag rule). Each is written and second-passed in the same way and is just as unreviewed.
 
 ## What the second pass looked at
 
@@ -12,9 +12,9 @@ Meaning errors, register for patients, medical or safety terms, unsafe ambiguity
 - **B** wrong or odd meaning, wrong register, or an inconsistent term. Needs a native speaker.
 - **C** minor wording, or an administrator-only technical label.
 
-How it was done, honestly: all 2016 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and the strings that carry meaning (sentences of four words or more, and short strings that differ from their English) were read by an AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
+How it was done, honestly: all 2024 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and the strings that carry meaning (sentences of four words or more, and short strings that differ from their English) were read by an AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
 
-Automatic checks: 2016 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
+Automatic checks: 2024 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
 
 Notes: 71 grade A, 125 grade B, 58 grade C (254 rows with a note; some notes cover a group of similar strings, named in the note).
 
@@ -29,7 +29,7 @@ How it was done: every Tamil string was back-translated to English on its own, w
 | Checked | 2016 (1985 back-translated, 31 left in English by design) |
 | Fixed (a clear defect) | 2 |
 | Flagged for the human reviewer | 43 (grade A: 5, B: 15, C: 23) |
-| Strings added since this check, not covered | 0 |
+| Strings added since this check, not covered | 8 |
 
 Automatic findings: 0 placeholder mismatches, 0 changed numbers, 0 lost negations, 0 informal pronouns, 1 string with a different number of sentences (fixed). 222 strings whose back-translation overlapped little with the English, or that the script flagged, were read side by side; the rest agreed. Most of the low-overlap ones were synonyms ("Expires" and "Expiry", "Phone" and "Telephone") and are not listed.
 
@@ -392,22 +392,22 @@ Grade A: a safety, privacy or patient-rights meaning could be misread. B: a wron
 |---|---|---|
 | approve | ஒப்புக்கொள் (verb), ஒப்புதல் (noun) (72) | The verb also means "admit/agree"; some places use ஒப்புதல் அளி. |
 | acknowledge | ஏற்றுக்கொள் ("accept") (15) | Same verb as approve; the action only records that you have seen something. |
-| record / log / transcript / register | பதிவு everywhere (175) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
+| record / log / transcript / register | பதிவு everywhere (180) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
 | result / decision / end | முடிவு everywhere (77) | One word for a clinical result, a person's decision and an end time. |
 | role | பங்கு (15) | Also means "share"; பணி is used for "task". |
-| merge / link / connect / attach | இணை / இணைப்பு (81) | Merging two patient records, linking a portal account, attaching a note: one word. |
+| merge / link / connect / attach | இணை / இணைப்பு (84) | Merging two patient records, linking a portal account, attaching a note: one word. |
 | red flag | சிவப்புக் கொடி (literal) (26) | Check the wording clinicians use. |
 | hold (a slot or a referral) | நிறுத்து / நிறுத்தம் (stop) and ஒதுக்கீடு (allocation) (53) | Two or three words for one idea. |
-| retire (a rule version) and withdraw (a draft) | நிறுத்து (retire) and திரும்பப் பெறு (withdraw) (71) | The rule screens need two different words; "withdraw" shares its Tamil with "revoke" and "cannot be undone". |
+| retire (a rule version) and withdraw (a draft) | நிறுத்து (retire) and திரும்பப் பெறு (withdraw) (75) | The rule screens need two different words; "withdraw" shares its Tamil with "revoke" and "cannot be undone". |
 | task / job | பணி (76) | A review task and a queued job share the word. |
 | approved (a status) and approve (a button) | அங்கீகரிக்கப்பட்டது (status) and ஒப்புக்கொள் (button) (14) | Two word families for one idea in the red-flag rule screens. |
-| patient | நோயாளி and நோயாளர் (101) | Two spellings. |
+| patient | நோயாளி and நோயாளர் (103) | Two spellings. |
 | clinic / hospital | மருத்துவமனை (most strings), கிளினிக் (1) (91) | Check which is meant where. |
 | front desk | வரவேற்பு மேசை and முன்பணியாளர் (9) | Two renderings. |
 | confidence | நம்பிக்கை (2) | Means belief or hope; the strings mean how sure the system is. |
 | sample (a sampled decision) | மாதிரி (6) | Reads as a laboratory specimen. |
-| revoke / take back, and "cannot be undone" | திரும்பப் பெறு for both (29) | The same verb for "revoke" and "cannot be reversed". |
-| grant / withdraw (a consent) | வழங்கு (grant) and திரும்பப் பெறு (withdraw) (27) | Consent withdrawal is one click in the portal, so the word must be unmistakable. |
+| revoke / take back, and "cannot be undone" | திரும்பப் பெறு for both (33) | The same verb for "revoke" and "cannot be reversed". |
+| grant / withdraw (a consent) | வழங்கு (grant) and திரும்பப் பெறு (withdraw) (28) | Consent withdrawal is one click in the portal, so the word must be unmistakable. |
 | fresh (code) | புதிய ("new") (35) | Means a recently entered code, not a new one. |
 | screen (the rules read text) | பரிசோதனை (12) | The word for a medical examination or test. |
 | escalate | உயர்நிலைக்கு அனுப்பு ("send to a higher level") (5) | Loses the sense of raising urgency. |
@@ -453,7 +453,7 @@ These are the same in English and Tamil by design, and a Tamil-speaking patient 
 - `tasks.kind.screening_unassessable`
 - `tasks.kind.triage_proposal`
 
-## Part 7. All 2016 strings
+## Part 7. All 2024 strings
 
 Fill in the last column. Write **OK**, or write the full corrected Tamil (keep every {{placeholder}} exactly as it is). Leave a row empty if you have not looked at it.
 
@@ -1286,10 +1286,18 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `familyStaff.rejectBody` | Rejects the request and records one reason word. The decision is recorded under your name. | கோரிக்கையை நிராகரித்து ஒரு காரணச் சொல்லைப் பதிவு செய்கிறது. முடிவு உங்கள் பெயரில் பதிவாகும். | no issue found | |
 | `familyStaff.rejectTitle` | Reject this link? | இந்த இணைப்பை நிராகரிக்கவா? | no issue found | |
 | `familyStaff.result.age_not_allowed` | The clinic's rule does not allow this link for the dependant's age. Nothing was recorded. | சார்ந்தவரின் வயதுக்கு இந்த இணைப்பை மருத்துவமனையின் விதி அனுமதிக்கவில்லை. எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
+| `familyStaff.result.already_linked` | This person is already linked to that dependant. Nothing was recorded. | இந்த நபர் ஏற்கெனவே அந்தச் சார்ந்தவருடன் இணைக்கப்பட்டுள்ளார். எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
 | `familyStaff.result.consent_required` | The clinic's rule needs the linked person's consent. Nothing was recorded. | மருத்துவமனையின் விதிக்கு இணைக்கப்பட்டவரின் சம்மதம் தேவை. எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
 | `familyStaff.result.invalid_state` | This request is not waiting for a decision. Nothing was recorded. | இந்தக் கோரிக்கை முடிவுக்காகக் காத்திருக்கவில்லை. எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
 | `familyStaff.result.recorded` | The decision was recorded. | முடிவு பதிவு செய்யப்பட்டது. | no issue found | |
 | `familyStaff.result.replay` | This was already recorded. | இது ஏற்கெனவே பதிவு செய்யப்பட்டது. | no issue found | |
+| `familyStaff.result.requester_not_active` | This request can no longer be verified: the person who asked no longer has an active account or record. Nothing was recorded. | இந்தக் கோரிக்கையை இனிச் சரிபார்க்க முடியாது: கோரியவருக்கு இப்போது செயலில் உள்ள கணக்கோ பதிவோ இல்லை. எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
+| `familyStaff.revoke` | Revoke | திரும்பப் பெறு | no issue found | |
+| `familyStaff.revokeBody` | Closes the request or link. The patient then sees it as withdrawn. It needs one reason word and is recorded under your name. Nothing about either person's record is changed. | கோரிக்கையை அல்லது இணைப்பை மூடுகிறது. நோயாளிக்கு அது திரும்பப் பெறப்பட்டதாகத் தெரியும். இதற்கு ஒரு காரணச் சொல் தேவை; இது உங்கள் பெயரில் பதிவாகும். இருவரின் பதிவுகளிலும் எதுவும் மாறாது. | no issue found | |
+| `familyStaff.revokeResult.invalid_state` | This is already closed. Nothing was recorded. | இது ஏற்கெனவே மூடப்பட்டுள்ளது. எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
+| `familyStaff.revokeResult.recorded` | It was revoked. The patient sees it as withdrawn. | அது திரும்பப் பெறப்பட்டது. நோயாளிக்கு அது திரும்பப் பெறப்பட்டதாகத் தெரியும். | no issue found | |
+| `familyStaff.revokeResult.replay` | This was already recorded. | இது ஏற்கெனவே பதிவு செய்யப்பட்டது. | no issue found | |
+| `familyStaff.revokeTitle` | Revoke this link or request? | இந்த இணைப்பை அல்லது கோரிக்கையைத் திரும்பப் பெறவா? | no issue found | |
 | `familyStaff.status.rejected` | Rejected | நிராகரிக்கப்பட்டது | no issue found | |
 | `familyStaff.status.requested` | Waiting for a check | சரிபார்ப்புக்குக் காத்திருக்கிறது | no issue found | |
 | `familyStaff.status.revoked` | Withdrawn | திரும்பப் பெறப்பட்டது | no issue found | |

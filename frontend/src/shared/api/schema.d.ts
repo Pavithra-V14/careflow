@@ -1496,9 +1496,30 @@ export interface paths {
          * Decide Family Link
          * @description Verify or reject a link request. A verify names the dependant's record, records whether the linked person's consent was obtained, and is checked against the clinic's rule (the age comes from the stored date of birth, never from you).
          *     404 if the clinic is not visible to you, 403 unless you are front desk there (with a recent second factor) or the record is not in this clinic, 503 unless family links are switched on or while the clinic's rules are not entered
-         *     (`family links are not set up: the clinic has not entered its rules`). `age_not_allowed` or `consent_required` when the rule is not met; `invalid_state` if it is not waiting for a decision. Idempotent on the key.
+         *     (`family links are not set up: the clinic has not entered its rules`). `age_not_allowed` or `consent_required` when the rule is not met; `requester_not_active` if the requester's record was erased or their account closed since the request; `invalid_state` if it is not waiting for a decision. Idempotent on the key (tied to you: another person's key is not a replay).
          */
         post: operations["decide_family_link_v1_staff_family_links__link_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/family-links/{link_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Staff Revoke Family Link
+         * @description Revoke a family link or a pending request as front desk (a consent withdrawn, a safeguarding reason): a reason WORD is required, audited. 404 if the clinic is not visible to you, 403 unless you are front desk there (with a recent
+         *     second factor) or the link is not in this clinic, 503 unless family links are switched on, 422 for a reason that is not a word. `invalid_state` if it is already closed. Idempotent on the key (tied to you).
+         */
+        post: operations["staff_revoke_family_link_v1_staff_family_links__link_id__revoke_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4367,7 +4388,7 @@ export interface components {
              * Result
              * @enum {string}
              */
-            result: "recorded" | "replay" | "invalid_state" | "age_not_allowed" | "consent_required";
+            result: "recorded" | "replay" | "invalid_state" | "age_not_allowed" | "consent_required" | "requester_not_active" | "already_linked";
         };
         /** FamilyLinkRequestIn */
         FamilyLinkRequestIn: {
@@ -4399,6 +4420,16 @@ export interface components {
              * @enum {string}
              */
             result: "recorded" | "replay" | "invalid_state";
+        };
+        /** FamilyLinkStaffRevokeIn */
+        FamilyLinkStaffRevokeIn: {
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /** Reason */
+            reason: string;
         };
         /** GrievanceCategoriesOut */
         GrievanceCategoriesOut: {
@@ -12369,6 +12400,80 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FamilyLinkDecisionOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
+                };
+            };
+            /** @description Unavailable: the feature is not configured in this deployment, or a dependency is down. Fixed body. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    staff_revoke_family_link_v1_staff_family_links__link_id__revoke_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path: {
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FamilyLinkStaffRevokeIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FamilyLinkRevokeOut"];
                 };
             };
             /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */

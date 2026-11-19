@@ -119,7 +119,9 @@
       "replay": "This was already recorded.",
       "invalid_state": "This request is not waiting for a decision. Nothing was recorded.",
       "age_not_allowed": "The clinic's rule does not allow this link for the dependant's age. Nothing was recorded.",
-      "consent_required": "The clinic's rule needs the linked person's consent. Nothing was recorded."
+      "consent_required": "The clinic's rule needs the linked person's consent. Nothing was recorded.",
+      "requester_not_active": "This request can no longer be verified: the person who asked no longer has an active account or record. Nothing was recorded.",
+      "already_linked": "This person is already linked to that dependant. Nothing was recorded."
     },
     "refused": "You may not decide this, or it needs a recent second factor, or the record is not in this clinic. Nothing was recorded.",
     "gone": "This request was not found. Nothing was recorded.",
@@ -127,6 +129,14 @@
     "consentChoice": {
       "yes": "Yes, it was obtained",
       "no": "No, it was not obtained"
+    },
+    "revoke": "Revoke",
+    "revokeTitle": "Revoke this link or request?",
+    "revokeBody": "Closes the request or link. The patient then sees it as withdrawn. It needs one reason word and is recorded under your name. Nothing about either person's record is changed.",
+    "revokeResult": {
+      "recorded": "It was revoked. The patient sees it as withdrawn.",
+      "replay": "This was already recorded.",
+      "invalid_state": "This is already closed. Nothing was recorded."
     }
   },
   "knowledge": {
