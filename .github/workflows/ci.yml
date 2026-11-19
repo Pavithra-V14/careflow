@@ -272,6 +272,7 @@ jobs:
               tests/test_voice_admin_db_live.py
               tests/test_care_gap_producers_db_live.py
               tests/test_patient_portal_db_live.py
+              tests/test_care_plan_http_live.py
           - shard: 9  # PART 4 of 4 of the header dimension, plus the eight database files that were in shard 5 (hardening, replica-mode guards, origin oracle, backfill durable, canary document, care gaps, voice, alerts). Added 2026-11-12: shards 5 and 6 measured 57 and 52 minutes of a 60-minute limit (run 43036262441).
             matrix_part: "4/4"
             files: >-
