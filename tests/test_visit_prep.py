@@ -74,3 +74,14 @@ def test_the_new_live_file_is_in_exactly_one_ci_shard_and_the_schema_check_knows
     assert ci.count("tests/test_visit_prep_db_live.py") == 1
     assert "0089" in (ROOT / "careflow" / "schema_check.py").read_text(encoding="utf-8")
     assert pytest
+
+
+def test_a_done_mark_must_be_an_exact_boolean():
+    from pydantic import ValidationError
+
+    from careflow.app import PrepMarkIn
+
+    assert PrepMarkIn(done=True).done is True and PrepMarkIn(done=False).done is False
+    for bad in ("yes", "true", "on", 1, 0, None):
+        with pytest.raises(ValidationError):
+            PrepMarkIn(done=bad)  # type: ignore[arg-type]
