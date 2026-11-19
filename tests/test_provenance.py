@@ -36,3 +36,10 @@ def test_migration_0095_is_append_only_forced_rls_ids_only_with_an_insert_only_g
     assert "force row level security" in code and "agents.append_only()" in code and code.count("create policy") == 2
     assert "grant insert (clinic_id, origin, proposal_id, kind, ref, version)" in code and "grant update" not in code and "grant delete" not in code
     assert "check (ref ~" in code and "kind in ('document', 'patient', 'card', 'rule_set', 'rule')" in code
+
+
+def test_migration_0095_lets_provenance_be_written_only_in_the_transaction_that_created_the_proposal():
+    sql = (ROOT / "db" / "migrations" / "0095_decision_provenance.sql").read_text(encoding="utf-8")
+    code = "\n".join(line for line in sql.splitlines() if not line.lstrip().startswith("--"))
+    policy = code[code.index("create policy decision_provenance_insert") : code.index("create policy decision_provenance_select")]
+    assert "p.created_at >= transaction_timestamp()" in policy and "agents.triage_proposals" in policy

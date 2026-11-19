@@ -68,7 +68,7 @@ class Conn:
         if "select id from agents.review_tasks" in sql:
             return Result(Row(id=TASK))
         if "insert into agents.triage_proposals" in sql:
-            return Result(None)
+            return Result(Row(id=proposal_id_for(CLINIC, KEY)) if self.proposal_new else None)
         if "insert into agents.decision_provenance" in sql:
             result = Result(None)
             result.rowcount = 1
@@ -279,3 +279,9 @@ def _conn_failing_provenance():
     conn = Conn(fail_on="insert into agents.decision_provenance")
     conn.error_state = "42501"
     return conn
+
+
+async def test_a_replayed_proposal_writes_no_provenance_because_only_the_creating_transaction_may():
+    conn = Conn(proposal_new=False)
+    await propose(conn)
+    assert not [1 for sql, _ in conn.calls if "insert into agents.decision_provenance" in sql]

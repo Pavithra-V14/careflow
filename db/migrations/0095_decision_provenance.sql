@@ -12,6 +12,8 @@
 -- The point (9.5): a CORRECTION to a fact must be able to find the decisions that read it by id and version, not by guessing. `ref` is pattern-checked to ids and hashes, so no sentence, name or value can
 -- be put in it. Append-only (the triggers of 0018 are reused); one row per (proposal, kind, ref, version); written by the same roles that may write the proposal (queue worker, nurse, doctor) under the
 -- same row-level policy; readable by those roles. No update or delete grant. No new function. No route exposes it (a later correction feature reads it through `careflow/provenance_sql.py`).
+-- The insert policy also requires the proposal to have been created in the SAME transaction (its created_at is not before this transaction began): the read-set is written with the decision and cannot be
+-- extended later. A replay of the proposal therefore writes no provenance (the writer inserts it only when the proposal is new).
 -- Engine, model id, confidence and rule that decided are already on the proposal's candidates (0018 and `careflow/decision_info.py`) and are not copied here.
 
 create table agents.decision_provenance (
@@ -38,7 +40,11 @@ alter table agents.decision_provenance enable row level security;
 alter table agents.decision_provenance force row level security;
 
 create policy decision_provenance_insert on agents.decision_provenance for insert to careflow_app
-    with check (iam.has_clinic_role(clinic_id, array['queue_worker', 'nurse', 'doctor']));
+    with check (
+        iam.has_clinic_role(clinic_id, array['queue_worker', 'nurse', 'doctor'])
+        -- only in the transaction that CREATED the proposal: a later transaction cannot add a fact to an old decision, and the rows are append-only, so a false read-set could never be removed
+        and exists (select 1 from agents.triage_proposals p where p.id = proposal_id and p.clinic_id = decision_provenance.clinic_id and p.created_at >= transaction_timestamp())
+    );
 create policy decision_provenance_select on agents.decision_provenance for select to careflow_app
     using (iam.has_clinic_role(clinic_id, array['queue_worker', 'nurse', 'doctor']));
 
