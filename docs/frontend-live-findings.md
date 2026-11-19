@@ -290,3 +290,28 @@ These screens were built after the second live pass and have only been tested ag
 | Patient portal: appointments, messages, family links, requests, profile, notices | The patient sign-in is not set up for live walks (phone sign-in); the screens were tested against the fake API only. |
 
 When the owner says the switches and the demo family-rule script are ready, the walks to run (read-only, the user types the password) are: nurse (visit preparation staff view, cards and templates as a reader), doctor (cards and templates, including a second person approving), front desk (family links), and the same four screens' 503 states with the switches still off.
+
+## Third live pass (19 Nov 2026): visit preparation, family links, /knowledge, messages, labels, patient portal
+
+Backend `127.0.0.1:8000` with migrations 0089-0093, the three switches on, `CAREFLOW_REQUIRE_AAL2=false`, demo placeholder family-link rules. Dev server with the dev-only skip switch on. The user typed every password. Read-only: no writes, and the only non-GET is the names read (`POST /v1/staff/patients/labels`, after its confirmation, no key by design).
+
+| Walk | Calls | Schema mismatches | Writes |
+|---|---|---|---|
+| Front desk (pavithravenkatesh341@gmail.com) | 76 | 0 | 0 |
+| Nurse, first run | 66 | 0 | 0; **discarded**: from call 55 the backend answered 502 for the rest of the walk (11 calls), so none of the new screens were seen |
+| Nurse, second run (pavithra.v2022ece@sece.ac.in) | 98 | 0 | 0 |
+| Doctor (pavithravenkatesh1974@gmail.com) | 99 | 0 | 0 |
+| Patient portal | 0 | n/a | 0 |
+
+| Screen | Result | Detail |
+|---|---|---|
+| Messages (list, a conversation's headers, one message read after its confirmation) | pass | Front desk, nurse and doctor: `GET /v1/staff/messages/threads`, `.../threads/{id}/messages`, `/v1/staff/messages/{id}` all 200, 0 mismatches. |
+| Patient labels (Show names) | pass | `POST /v1/staff/patients/labels` 200 after the confirmation, in all three walks. |
+| Family links, front desk page | not tested live | `GET /v1/staff/family-links` answered 403 to the front desk. The call record keeps no reason, so whether this is the second factor or something else is not known; the most likely cause is the second factor. Nurse and doctor 403 is expected (front desk only). |
+| /knowledge, nurse and doctor | not tested live | `GET /v1/staff/knowledge/drafts` and `/items` answered 403 to both the nurse and the doctor (front desk 403 is expected). Same cause as above is likely: needs second factor. No frontend fault is indicated. |
+| Visit preparation, staff view | not tested live | `GET /v1/staff/visits/upcoming` 200 for nurse and doctor (403 for front desk), but no visit was opened, so `GET /v1/staff/visits/{id}/prep` was never called. |
+| Visit preparation, patient view; family section; profile; notices; requests; appointments; messages (portal) | not tested live | Phone sign-in could not send a code (the portal showed its fixed "The code could not be sent" message), so no portal screen was reached and no portal call was made. Likely cause is on the hosted Supabase side (phone sign-in or an SMS provider not set up for the dev project); not confirmed. |
+
+Walk-tool fixes in this pass: the patient-labels read is no longer reported as "write without key" (it takes no key by design); the front desk, nurse and doctor walks open the new screens and wait for them to settle.
+
+To finish: a second-factor-capable pass (or a backend with the second-factor check relaxed for these routes) for family links, /knowledge and the staff prep view, and a patient test number for portal phone sign-in.

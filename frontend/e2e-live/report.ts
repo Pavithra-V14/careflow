@@ -79,7 +79,7 @@ export function findings(spec: Spec, calls: Call[]): Finding[] {
     if (c.status >= 500 && c.status !== 503) add({ kind: 'server error', where, detail: `status ${c.status}, during "${c.phase}"` });
     else if (c.template !== '?' && !EXPECTED_REFUSALS.has(c.status) && c.status >= 400) add({ kind: 'unexpected status', where, detail: `status ${c.status}, during "${c.phase}"` });
     else if (c.template !== '?' && c.status < 400 && !documentedStatuses(spec, c.method, c.template).includes(String(c.status))) add({ kind: 'unexpected status', where, detail: `status ${c.status} is not in the schema's responses (${documentedStatuses(spec, c.method, c.template).join(', ')})` });
-    if (c.method !== 'GET' && c.method !== 'HEAD' && c.method !== 'OPTIONS' && !c.hasIdempotencyKey && c.template !== '/v1/staff/patients/search') add({ kind: 'write without key', where, detail: `during "${c.phase}"` });
+    if (c.method !== 'GET' && c.method !== 'HEAD' && c.method !== 'OPTIONS' && !c.hasIdempotencyKey && c.template !== '/v1/staff/patients/search' && c.template !== '/v1/staff/patients/labels') add({ kind: 'write without key', where, detail: `during "${c.phase}"` });
     if (c.activeRoleHeaderSent) add({ kind: 'active-role header sent', where, detail: 'the flag should be off' });
     for (const i of c.issues) add({ kind: i.severity === 'error' ? 'schema error' : 'schema note', where, detail: `${i.path}: ${i.problem}` });
   }
