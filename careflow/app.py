@@ -98,6 +98,7 @@ from careflow import (
     offers,
     openapi_errors,
     patient_view,
+    placeholder_check,
     portal_booking_sql,
     portal_extras_sql,
     portal_messages_sql,
@@ -6557,6 +6558,7 @@ def create_app(
         app.state.engine = engine or make_app_engine(cfg.database_url_app, pool_size=5, max_overflow=5, pool_pre_ping=True)
         if engine is None:  # a real engine built from the settings (tests inject their own): refuse to start on a database that has not applied the migrations this code needs
             await schema_check.check(app.state.engine)
+            await placeholder_check.check(app.state.engine, demo_allowed=demo_allowed(resolve_profile(), _data_policy(os.environ)))  # refuses to start with a demo placeholder row outside the synthetic demo
         app.state.vault = vault if vault is not None else _load_vault()
         app.state.active_key_version = cfg.active_key_version
         app.state.step_up_max_age_seconds = cfg.step_up_max_age_seconds
