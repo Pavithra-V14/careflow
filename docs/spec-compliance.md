@@ -14,7 +14,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 | 1.2 | Care Journey and Visit Readiness behind flags, off by default | BUILT | `FEATURE_CARE_JOURNEY`, `FEATURE_VISIT_READINESS` | `careflow/care_journey_sql.py`, `visit_readiness_sql.py` |
 | 1.3 | Voice is an in-app opt-in channel behind a clinic flag AND a per-patient preference | BUILT (mechanism), FAKE engine | Flag, `voice_enabled`, sessions, transcript monitor exist; no real engine (owner decision) | `careflow/voice.py`, `voice_sql.py`, migrations 0045, 0047 |
 | 1.4 | Autonomy per clinic: shadow / assisted / autonomous, never a global constant | BUILT | History table, mode switch; `autonomous` is a two-person act and is off until two settings exist | `careflow/autonomy.py`, migrations 0048, 0053, 0054 |
-| 1.5 | Default mode is `assisted` | DECISION | Built default is `shadow` (a recorded, owner-accepted departure: the safer direction) | `careflow/autonomy.py` |
+| 1.5 | Default mode is `assisted` | DEVIATION (deliberate, owner 2026-11-18) | The built default stays `shadow`, the safer start: the specification's wording is unchanged and a clinic moves to `assisted` by a recorded act | `careflow/autonomy.py` |
 | 1.6 | Locked regardless of mode: merge, non-template patient messages, out-of-range readiness answer | BUILT | Merge is two-person; no free-text patient message path exists; a not-done readiness answer reaches a nurse in every mode | `careflow/identity.py`, `mpi.py`, `visit_readiness.py` |
 | 1.7 | The fixed-template emergency response is always automatic and a nurse must acknowledge | FAKE | The red-flag nurse task is built and immediate; the patient-facing template text is clinician content (`pending_clinician_template`) | `careflow/rules.py`, migration 0013 |
 | 1.8 | The system does not diagnose, treat or free-text reply | BUILT | No such path exists; replies and offers are templates | `careflow/offers.py`, `messages.py` |
@@ -41,7 +41,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 | 3.6 | Two MCP servers in process: `scheduling` (read+write), `clinical` (read-only) | BUILT, FAKE data | The clinical server has no chart data to read yet | `careflow/mcp_kit.py`, `clinical_server.py`, `scheduling_agent.py`, `scheduling_write_tools.py` |
 | 3.7 | Postgres-backed queue behind a `QueuePort`; Redis/SQS adapter stubbed | BUILT / NOT BUILT | Queue built; the stub adapter is deferred until volume needs it | `careflow/queue.py`, `ports.py` |
 | 3.8 | React + Vite + TypeScript frontend, Vitest, contract test | OUT OF SCOPE HERE | A separate workstream | `frontend/` |
-| 3.9 | Auth: Supabase Auth; Vectors: Qdrant | BUILT / DEVIATION | Auth built; vectors are in Postgres with pgvector (owner decision 2026-11-14, `docs/design/retrieval-pgvector.md`): a documented deviation from Qdrant, no new service; the spec text is not edited | `careflow/auth.py`, `ports.py` |
+| 3.9 | Auth: Supabase Auth; Vectors: Qdrant | BUILT / DEVIATION | Auth built; vectors are in Postgres with pgvector (owner decision 2026-11-14, `docs/design/retrieval-pgvector.md`): a documented deviation from Qdrant, no new service; a dated amendment note was added to `BUILD-SPEC.md` 3 and 16.6 on 2026-11-18 (the original wording is kept) | `careflow/auth.py`, `ports.py` |
 
 ## 4. Use-case and agent inventory (spec 4)
 
@@ -72,7 +72,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 | 6.1 | In-process gateway: routing, fallback, per-request and per-clinic-day ceilings, breakers at both layers | BUILT / FAKE | In-process gateway and breakers built; the Cloudflare pass-through is an external service not approved | `careflow/gateway.py` |
 | 6.1b | Ceilings: 12 model calls (warn 8), 25 tool calls, 40 steps, 40 s per tick, $1 per job; the red-flag path never limited | BUILT | `RunBudget` and the tick clock | `careflow/budget.py`, `tick.py` |
 | 6.2a | Prompt-prefix caching: byte-stable prompts, no PHI in a prompt, a CI scan | BUILT | | `careflow/prompts.py`, `prompt_scan.py` |
-| 6.2b | Exact-match cache (embeddings, ICD, cards and rules, model lists) | NOT BUILT | Needs an embedding model, an ICD source and a model-list call (external) | `docs/gap-audit.md` |
+| 6.2b | Exact-match cache (embeddings, ICD, cards and rules, model lists) | DEVIATION (deliberate, owner 2026-11-18) | Cards and red-flag rules are deliberately NOT cached, so a withdrawn rule stops working immediately; embeddings are content-hashed; ICD and model-list caches need external sources | `careflow/knowledge_sql.py` |
 | 6.2c | Semantic cache of de-identified card queries only | NOT BUILT | Needs embeddings and a vector store | `docs/gap-audit.md` |
 | 6.2d | Request-scoped memoisation of tool reads within one run | BUILT | A per-run memo; not yet used by a tool | `careflow/spend_policy.py` (`RunMemo`) |
 | 6.2e | The gateway's own response cache disabled for patient text | DECISION | The Cloudflare pass-through is not approved or built | `docs/design/pending-owner-ok-2026-11-04.md` |
@@ -108,7 +108,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 | 9.4 | Retention defaults and a scheduled, audited deletion job | BUILT (partial) | Report-only job (0071), voice transcript purge, audited erasure; deletion of append-only ledgers is excluded by owner decision; the periods are counsel's and the clinical lead's | `docs/design/retention-and-erasure.md`, migrations 0047, 0063, 0071 |
 | 9.5 | Bi-temporal clinical state (results, medications, notes): never overwrite | BUILT (partial) | Results, notes, medications built; vitals and resource history are not; the 30-day correction window is not (every acted-on decision is reviewed) | `careflow/clinical_server.py`, migrations 0050, 0061, 0074 |
 | 9.5b | Amendment versus correction declared by the writer, inferred otherwise | BUILT | | `careflow/care_journey_sql.py`, migration 0061 |
-| 9.5c | Every decision records the versioned ids it read | NOT BUILT | Only care-plan steps cite a result; a general provenance record needs a design | `docs/gap-audit.md` |
+| 9.5c | Every decision records the versioned ids it read | BUILT (triage proposals) | Migration 0095: ids and versions only (document, patient, cards with versions, the rule-set hash), append-only, forced RLS; other decision kinds do not write it yet | `careflow/provenance_sql.py`, `tests/test_provenance.py` |
 | 9.6 | Notes append-only with addenda; structure-aware splitting; content-addressed embedding cache; sync embed on save | BUILT (append-only), NOT BUILT (rest) | Splitting and embeddings need an embedding model and a vector store | `careflow/notes_sql.py`, migration 0061 |
 
 ## 10. Retrieval (spec 10)
@@ -170,7 +170,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 | 14.2 | pytest gates; DeepEval; Langfuse experiments | BUILT (pytest) / NOT BUILT | DeepEval and Langfuse are new external dependencies | `careflow/evalmetrics.py` |
 | 14.3 | Hard gates including red-flag recall 100% | BUILT (runner) / DECISION | The runner scores the real rule engine and writes evidence; bars, cases and rules are clinician-owned | `careflow/eval_runner.py`, `scripts/gold_run.py`, `gates.py` |
 | 14.3b | Threshold gates with a variance band (mean minus 2 SD over 3 runs) | BUILT | Bars are required settings | `careflow/evalmetrics.py` |
-| 14.4 | Metric source discipline; grounding rate; latency in three parts; two reason codes for escalation accuracy | BUILT (partial) | Grounding-rate and three-part latency functions built; the two escalation reason codes need a data design (a new column on reviewed tasks) and measured data | `careflow/spend_policy.py`, `metrics_catalog.py` |
+| 14.4 | Metric source discipline; grounding rate; latency in three parts; two reason codes for escalation accuracy | BUILT (partial) | Grounding-rate and three-part latency functions built; the two escalation words are an optional closed column on the review decision since migration 0094 (null = not recorded); measured data needs real reviews | `careflow/spend_policy.py`, `metrics_catalog.py` |
 | 14.5 | Business KPIs | NOT BUILT | Needs a baseline and owner-set targets | `docs/gap-audit.md` |
 | 14.6 | Pre-deployment go/no-go and scorecard | UNMEASURED | The checker is built; every evidence cell is empty, so the answer is NO-GO | `careflow/predeploy.py`, `gates.py`, `drills.py` |
 | 14.7 | Automatic demotion; promotion evidence | BUILT (demotion) / UNMEASURED | Promotion needs months of data | `careflow/autonomy.py`, `reviewer_stats.py` |
@@ -266,7 +266,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 
 | Req | Requirement | Status | Reason | Where |
 |---|---|---|---|---|
-| 22.1 | Pre-visit brief for the clinician, grounded, decorative | NOT BUILT | The brief narrative needs a model route and chart data | `docs/gap-audit.md` |
+| 22.1 | Pre-visit brief for the clinician, grounded, decorative | NOT BUILT (owner decision 2026-11-18) | Not built; the question of which chart fields and which roles is item 40 of the clinician sheet; a narrative would need a model route | `docs/design/clinician-sheet.md` |
 | 22.2 | Adaptive intake: the card's declared facts, only the missing ones asked, clinician-worded questions, rules on every reply, intent classification | BUILT (mechanism), FAKE models | Questions are the required setting `CAREFLOW_VISIT_READINESS_CONTENT`; with no model route every reply is unclear, re-asked once, then front desk | `careflow/visit_readiness.py`, `visit_readiness_content.py`, migration 0052 |
 | 22.3 | Readiness checklist; any not-done or unclear reaches a nurse in every mode | BUILT | | `careflow/visit_readiness.py` |
 | 22.4 | Barrier classification; rebooking hands off to Scheduling; social barriers to front desk | BUILT (partial) | The classifier is a port; the rebooking hand-off raises a front-desk task | `careflow/visit_readiness.py`, `care_gaps.py` |

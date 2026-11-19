@@ -118,6 +118,8 @@ MCP: scheduling   MCP: clinical (read-only, field-filtered, audited)
 | Auth | Supabase Auth |
 | Vectors | Qdrant (cards; patient-note vectors too — see §17.6) |
 
+> **Amendment 2026-11-18 (owner decision; the wording above is kept as written).** The build keeps vectors in Postgres with pgvector, not Qdrant (migration 0085, `docs/design/retrieval-pgvector.md`): no new service, one erasure path, tenancy by row-level security. This is a recorded deviation; Qdrant remains only a possible future adapter behind the same port. Where this specification says Qdrant, read pgvector for this build.
+
 ---
 
 ## 4. Layer 1 — Use-case and agent inventory
@@ -674,6 +676,8 @@ Each stage transition needs: exit criteria met from the relevant Layer 11 gate; 
 - Breach runbook: covers the 72-hour DPDP notification window; every incident feeds the MTTR metric via an incident register.
 
 ### 16.6 Vector storage location
+
+> **Amendment 2026-11-18 (owner decision; the text below is kept as written).** For this build both card vectors and note vectors are in Postgres (pgvector), see §3. The profile gating below applies to whatever store holds them: in `clinical`, notes search stays off without an approved route, and the nightly index rebuild is a `demo`-profile job only (`CAREFLOW_VECTOR_REBUILD`, refused in `clinical`).
 
 **Both card vectors and patient-note vectors live in Qdrant** (patient-note vectors were deliberately moved off Postgres/pgvector per an explicit build decision — see Appendix A for the trade-off this accepts). This is **profile-gated**:
 - `demo` profile: Qdrant Cloud free tier is acceptable.
