@@ -322,6 +322,6 @@ async def test_decision_provenance_is_ids_and_versions_only_append_only_and_clin
     assert await outcome(db, "update agents.decision_provenance set ref = 'x'") == "23001"
     assert await outcome(db, "delete from agents.decision_provenance") == "23001"
     assert await as_app(db, p["nurse_a"], "update agents.decision_provenance set ref = 'x'") == "42501"
-    seen = await as_app(db, p["nurse_a"], "select count(*) from agents.decision_provenance where kind = 'card' and ref = 'c1'", fetch=True)
+    seen = await as_app(db, p["nurse_a"], f"select count(*) from agents.decision_provenance where clinic_id = '{w.a}' and kind = 'card' and ref = 'c1'", fetch=True)
     assert seen[0][0] == 1
-    assert (await as_app(db, p["nurse_b"], "select count(*) from agents.decision_provenance", fetch=True))[0][0] == 0  # row-level security: another clinic sees none
+    assert (await as_app(db, p["nurse_b"], f"select count(*) from agents.decision_provenance where clinic_id = '{w.a}'", fetch=True))[0][0] == 0  # row-level security: another clinic sees none
