@@ -1,0 +1,14 @@
+# The reviewed ignore list for the dependency-audit gate (scripts/audit_gate.py; BUILD-SPEC.md 21; owner decision 2026-11-18).
+#
+# pip-audit reports no severity, so every finding that has a fix version FAILS the build unless it is listed here. To list one, a PERSON reads the advisory, decides it is not high or critical for this project
+# (or is not reachable), and adds an entry. Nothing is added by a tool. An entry stops working on its `expires` date, so it comes back for review.
+#
+# ignore:
+#   - id: GHSA-xxxx-xxxx-xxxx          # the advisory id pip-audit prints
+#     aliases: [CVE-2026-00000]        # optional: other ids for the same advisory
+#     package: example                 # optional, for the reader
+#     reason: "moderate; we never call the affected function (reviewed the advisory text)"   # at least ten characters
+#     reviewed: 2026-11-19
+#     expires: 2027-02-19              # must be after `reviewed`
+#
+ignore: []
