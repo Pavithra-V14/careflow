@@ -12,7 +12,7 @@ import os
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Final
 
 from sqlalchemy import text
@@ -126,9 +126,10 @@ async def current_cards(conn: AsyncConnection, clinic_id: uuid.UUID) -> list[Dem
     return [DemoCard(CardFields(r.o_code, r.o_version, r.o_title, r.o_body, tuple(r.o_synonyms), tuple(r.o_patient_phrases)), ()) for r in rows]
 
 
-async def index_sweep(conn: AsyncConnection, search: Any, *, origins: Sequence[str] = ("test", "live")) -> int:
+async def index_sweep(conn: AsyncConnection, search: Any, *, origins: Sequence[str] = ("test", "live"), batches: int = 1, errors: list[str] | None = None) -> int:
     """The worker's end-of-tick job: index every approved card version that is not in the vector table yet, in ascending version order, through the existing `kb.index_card_embedding`, per clinic the worker serves, one
-    clinic failing never stopping the others. Needs an embedding route (`search`, which is None in the clinical profile): with none, nothing is indexed and nothing is invented. Returns the number indexed."""
+    clinic failing never stopping the others. Needs an embedding route (`search`, which is None in the clinical profile): with none, nothing is indexed and nothing is invented. Up to `batches` batches of 50 per clinic
+    (one by default). Returns the number indexed."""
     if search is None:
         return 0
     from careflow.producer_sweeps import _clinics
@@ -138,16 +139,51 @@ async def index_sweep(conn: AsyncConnection, search: Any, *, origins: Sequence[s
         for clinic in await _clinics(conn, origin):
             try:
                 async with conn.begin_nested():
-                    pending = await _call(conn, "select o_code, o_version, o_title, o_body, o_synonyms, o_patient_phrases, o_audience from kb.knowledge_versions_to_index(:c, 50)", {"c": clinic})
-                    if not pending:
-                        continue
-                    cards = [
-                        DemoCard(CardFields(r.o_code, r.o_version, r.o_title, r.o_body, tuple(r.o_synonyms), tuple(r.o_patient_phrases)), tuple(r.o_audience))
-                        for r in pending
-                    ]
-                    embedder, model_id = search._embedder_for(clinic)
-                    result = await index_cards(conn, embedder, model_id, cards, clinic_id=clinic, origin=origin)
-                    done += result.created
+                    for _ in range(max(1, batches)):
+                        pending = await _call(conn, "select o_code, o_version, o_title, o_body, o_synonyms, o_patient_phrases, o_audience from kb.knowledge_versions_to_index(:c, 50)", {"c": clinic})
+                        if not pending:
+                            break
+                        cards = [
+                            DemoCard(CardFields(r.o_code, r.o_version, r.o_title, r.o_body, tuple(r.o_synonyms), tuple(r.o_patient_phrases)), tuple(r.o_audience))
+                            for r in pending
+                        ]
+                        embedder, model_id = search._embedder_for(clinic)
+                        result = await index_cards(conn, embedder, model_id, cards, clinic_id=clinic, origin=origin)
+                        done += result.created
+                        if result.created == 0:
+                            break  # nothing new was written: stop rather than loop on the same batch
             except Exception as exc:  # noqa: BLE001 - one clinic failing must not stop the others; the class name only, never a card's words
                 log.error("approved cards could not be indexed for one clinic (%s)", type(exc).__name__)
+                if errors is not None:
+                    errors.append(type(exc).__name__)
+    return done
+
+
+REBUILD_SETTING: Final = "CAREFLOW_VECTOR_REBUILD"
+REBUILD_BATCHES: Final = 20
+
+
+class RebuildRefused(Exception):
+    """The vector index rebuild is a DEMO-PROFILE job (spec 16.6; owner decision 2026-11-18): refused in the clinical profile and anywhere that is not demo + synthetic_only."""
+
+
+def rebuild_enabled(environ: Mapping[str, str] | None = None) -> bool:
+    return ((environ if environ is not None else os.environ).get(REBUILD_SETTING) or "").strip().lower() == "on"
+
+
+def refuse_unless_demo(profile: str, policy: str | None) -> None:
+    if profile != "demo" or policy != "synthetic_only":
+        raise RebuildRefused("the vector index rebuild runs only in profile=demo with data_policy=synthetic_only")
+
+
+async def rebuild_sweep(conn: AsyncConnection, search: Any, *, profile: str, policy: str | None, state: dict[str, Any], today: date) -> int:
+    """The nightly reconcile of the vector index from Postgres, the source of truth (spec 16.6, 10.8): at most once per calendar day per process, it drains every approved card version that is missing from the index
+    (the index is append-only and idempotent, so a second run changes nothing). DEMO ONLY: raises `RebuildRefused` outside demo + synthetic_only, before anything is read. Returns the number indexed (0 when already done today)."""
+    refuse_unless_demo(profile, policy)
+    if state.get("last_day") == today:
+        return 0
+    errors: list[str] = []
+    done = await index_sweep(conn, search, batches=REBUILD_BATCHES, errors=errors)
+    if not errors:
+        state["last_day"] = today  # only after a clean pass, so a failed night is tried again on the next tick
     return done

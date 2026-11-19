@@ -6660,6 +6660,11 @@ def create_app(
         sweeps.append(lambda conn: retention_report_sweep(conn, app.state.retention_checkpoint_days, app.state.retention_clinical_record_days))  # REPORT-ONLY (migration 0071): counts what is past each period, deletes nothing
         if knowledge_editor_sql.enabled() and app.state.knowledge is not None:
             sweeps.append(lambda conn: knowledge_editor_sql.index_sweep(conn, app.state.knowledge))  # the WORKER indexes approved cards (never the approver's session); only with an embedding route, which the clinical profile has none of
+        if knowledge_editor_sql.rebuild_enabled() and not demo_allowed(resolve_profile(), _data_policy(os.environ)):  # refused in the clinical profile whether or not a search route exists
+            raise knowledge_editor_sql.RebuildRefused(f"{knowledge_editor_sql.REBUILD_SETTING} may be on only in profile=demo with data_policy=synthetic_only: refusing to start")
+        if knowledge_editor_sql.rebuild_enabled() and app.state.knowledge is not None:
+            rebuild_state: dict[str, Any] = {}
+            sweeps.append(lambda conn: knowledge_editor_sql.rebuild_sweep(conn, app.state.knowledge, profile=resolve_profile(), policy=_data_policy(os.environ), state=rebuild_state, today=datetime.now(UTC).date()))  # DEMO ONLY, once a day
         sweeps.append(lambda conn: care_gap_overdue_sweep(conn, app.state.care_gap_alert_days))  # raises nothing while the alert age is unset
         try:
             review_sample_rate = learning_labels.sample_rate_from(p4env)
