@@ -2088,7 +2088,10 @@ class RunOut(_Out):
 class ReviewIn(_Body):
     decision: Literal["approve", "edit", "reject"]
     reason_code: str | None = Field(default=None, min_length=1, max_length=60, pattern=r"^[a-z][a-z0-9_]*$")  # a word from the clinic's picklist (12.2); required for reject and edit once the list is configured
-    escalation_assessment: Literal["unnecessary_escalation", "missed_by_system"] | None = None  # optional (spec 14.4); omitted means not recorded; the first decision recorded keeps its value
+    escalation_assessment: Literal["unnecessary_escalation", "missed_by_system"] | None = None  # optional (spec 14.4); omitted means not recorded; a repeat with a different value (or omitted when one was recorded) is a 409 and the first decision stands
+
+
+ASSESSMENT_STANDS: Final = "the first decision stands and cannot be changed"  # fixed wording for a repeat that carries a different escalation assessment
 
 
 class ReviewOut(_Out):
@@ -2161,6 +2164,8 @@ async def review_referral(
     if state.next != ("review",):
         decided = state.values.get("decision") if state.values.get("status") == "reviewed" else None
         if decided and decided["decision"] == body.decision and decided["reviewer_id"] == reviewer:
+            if decided.get("escalation_assessment") != body.escalation_assessment:
+                raise HTTPException(status_code=409, detail=ASSESSMENT_STANDS)  # the first decision stands; the assessment is never edited (append-only)
             return ReviewOut(document_id=document_id, decision=body.decision, replayed=True)
         raise HTTPException(status_code=409, detail="this referral is not waiting for a decision")
     try:

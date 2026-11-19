@@ -231,6 +231,22 @@ def test_a_repeated_decision_is_a_replay_and_a_different_one_or_by_somebody_else
     assert world.graph.invoked == []
 
 
+def test_a_repeat_with_a_different_escalation_assessment_is_409_in_fixed_words_and_the_same_one_still_replays(world):
+    done = {"status": "reviewed", "decision": {"decision": "approve", "reviewer_id": str(SUB), "escalation_assessment": "missed_by_system"}}
+    world.graph = FakeGraph(done, ())
+    with make_client() as c:
+        same = c.post(REVIEW.format(DOC), headers=key(), json={"decision": "approve", "escalation_assessment": "missed_by_system"})
+        other_word = c.post(REVIEW.format(DOC), headers=key(), json={"decision": "approve", "escalation_assessment": "unnecessary_escalation"})
+        omitted = c.post(REVIEW.format(DOC), headers=key(), json={"decision": "approve"})
+        world.graph = FakeGraph({"status": "reviewed", "decision": {"decision": "approve", "reviewer_id": str(SUB)}}, ())  # recorded with no assessment
+        added_later = c.post(REVIEW.format(DOC), headers=key(), json={"decision": "approve", "escalation_assessment": "missed_by_system"})
+        unchanged = c.post(REVIEW.format(DOC), headers=key(), json={"decision": "approve"})
+    assert same.status_code == 200 and same.json()["replayed"] is True and unchanged.status_code == 200 and unchanged.json()["replayed"] is True
+    for refused in (other_word, omitted, added_later):
+        assert refused.status_code == 409 and refused.json() == {"detail": "the first decision stands and cannot be changed"}
+    assert world.graph.invoked == []
+
+
 @pytest.mark.parametrize(
     ("error", "status", "detail"),
     [(DecisionConflict("SECRET"), 409, "this referral is not waiting for a decision"), (NotPermitted("SECRET"), 403, "you cannot record this decision"),

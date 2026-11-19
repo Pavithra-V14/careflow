@@ -44,3 +44,4 @@ Each person has a single file to open, answer, sign and send back in `docs/appro
 - **Deliberate deviations recorded:** no cache for rules and cards (6.2b), default mode `shadow` (1.5), pgvector instead of Qdrant (3.9, dated amendment notes in `BUILD-SPEC.md`).
 - **Not now:** vital signs and resource history (build when a feature needs them); the pre-visit brief (asked of the clinician, sheet item 40).
 - See `docs/spec-sweep.md` for the counts.
+- **2026-11-19, later:** the dependency gate stays strict (no severity service). A repeated referral review with a different escalation assessment is a 409, "the first decision stands and cannot be changed". Provenance for care-plan and scheduling decisions: later, when needed.
