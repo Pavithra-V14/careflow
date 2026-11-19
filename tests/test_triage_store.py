@@ -68,7 +68,11 @@ class Conn:
         if "select id from agents.review_tasks" in sql:
             return Result(Row(id=TASK))
         if "insert into agents.triage_proposals" in sql:
-            return Result(None)
+            return Result(Row(id=proposal_id_for(CLINIC, KEY)) if self.proposal_new else None)
+        if "insert into agents.decision_provenance" in sql:
+            result = Result(None)
+            result.rowcount = 1
+            return result
         if "from agents.triage_proposals where clinic_id" in sql:
             return Result(Row(id=proposal_id_for(CLINIC, KEY), review_task_id=TASK))
         if "select origin, review_task_id" in sql:
@@ -237,3 +241,47 @@ async def test_the_hold_priority_has_no_default_roles_are_limited_and_a_replay_f
     refused.error_state = "42501"
     with pytest.raises(NotPermitted):
         await writer.raise_hold(refused, document_id=DOC, clinic_id=CLINIC, origin="test", assigned_role="nurse", status="s", reasons=[], idempotency_key="k")
+
+
+async def test_an_unknown_escalation_assessment_is_refused_before_the_database_is_touched():
+    conn = Conn()
+    for bad in ("accurate", "", "MISSED_BY_SYSTEM"):
+        with pytest.raises(TriageStoreError):
+            await SqlReviewRecorder().record(conn, proposal_id=proposal_id_for(CLINIC, KEY), clinic_id=CLINIC, decision="approve", reviewer_id=REVIEWER, idempotency_key="k", escalation_assessment=bad)
+    await SqlReviewRecorder().record(conn, proposal_id=proposal_id_for(CLINIC, KEY), clinic_id=CLINIC, decision="approve", reviewer_id=REVIEWER, idempotency_key="k2", escalation_assessment="unnecessary_escalation")
+
+
+def test_migration_0094_adds_one_closed_nullable_column_with_an_insert_only_grant():
+    from pathlib import Path
+
+    sql = (Path(__file__).resolve().parent.parent / "db" / "migrations" / "0094_review_escalation_assessment.sql").read_text(encoding="utf-8")
+    code = "\n".join(line for line in sql.splitlines() if not line.lstrip().startswith("--"))
+    assert "add column escalation_assessment text check (escalation_assessment is null or escalation_assessment in ('unnecessary_escalation', 'missed_by_system'))" in code
+    assert "grant insert (escalation_assessment) on agents.review_decisions to careflow_app" in code
+    assert "not null" not in code.split("add column")[1].split("grant")[0] and " default " not in code.split("add column")[1].split("grant")[0]  # null means not recorded: never a default
+    assert "update (" not in code and "grant update" not in code and "create table" not in code and "create function" not in code
+
+
+async def test_a_proposal_writes_provenance_of_ids_and_versions_only():
+    conn = Conn()
+    await propose(conn, rule_set_hash="a" * 64)
+    rows = [(p["k"], p["r"], p["v"]) for sql, p in conn.calls if "insert into agents.decision_provenance" in sql]
+    assert ("document", str(DOC), None) in rows and ("patient", str(PATIENT), None) in rows and ("card", "c1", 2) in rows and ("rule_set", "a" * 64, None) in rows
+    assert all(isinstance(v, (int, type(None))) and len(r) <= 100 for _, r, v in rows)  # ids and versions: no field can carry a sentence
+
+
+async def test_a_role_without_the_insert_policy_is_refused_cleanly_on_the_provenance_write():
+    with pytest.raises(NotPermitted):
+        await propose(_conn_failing_provenance())
+
+
+def _conn_failing_provenance():
+    conn = Conn(fail_on="insert into agents.decision_provenance")
+    conn.error_state = "42501"
+    return conn
+
+
+async def test_a_replayed_proposal_writes_no_provenance_because_only_the_creating_transaction_may():
+    conn = Conn(proposal_new=False)
+    await propose(conn)
+    assert not [1 for sql, _ in conn.calls if "insert into agents.decision_provenance" in sql]

@@ -37,3 +37,10 @@ Each person has a single file to open, answer, sign and send back in `docs/appro
 - **A Tamil reader:** a review of the Tamil screens and of the Sarvam draft before anything Tamil is ever sent to a patient (today every Tamil string is unreviewed and nothing is sent).
 - **The clinic owner:** the real settings (time zone, grievance categories, visit types a patient may book, deadlines, spend limits), the clinic's own approvers, and the decision on turning each off-by-default feature on.
 - **Priya, one more question under item 38:** version N+1 of a card retires N the moment it is indexed, and a mistaken version has no tombstone. Decided 2026-11-14 to leave it as it is; whether it should need an approval, and by whom, is hers to answer.
+
+## 2026-11-19: decisions on the spec sweep
+
+- **Built:** migration 0094 (optional escalation assessment on the referral review decision, `escalation_assessment`), migration 0095 (decision provenance: ids and versions of what a triage proposal read), a nightly vector index rebuild for the demo profile only (`CAREFLOW_VECTOR_REBUILD=on`, refused in clinical), the care-plan flow over HTTP in the live shards, and a dependency audit that now FAILS the build on a fixable finding unless `ops/audit-ignore.yaml` names it.
+- **Deliberate deviations recorded:** no cache for rules and cards (6.2b), default mode `shadow` (1.5), pgvector instead of Qdrant (3.9, dated amendment notes in `BUILD-SPEC.md`).
+- **Not now:** vital signs and resource history (build when a feature needs them); the pre-visit brief (asked of the clinician, sheet item 40).
+- See `docs/spec-sweep.md` for the counts.

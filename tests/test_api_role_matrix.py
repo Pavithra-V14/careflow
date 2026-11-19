@@ -1097,6 +1097,8 @@ def referral_review_cases(ids) -> list[tuple]:
     for label, bad in (
         ("an empty body", {}), ("a decision that is not one of the three", {"decision": "approve-all"}),
         ("a body that names the reviewer (the reviewer is the signed-in account, never the body)", {"decision": "approve", "reviewer_id": str(uuid.uuid4())}),
+        ("an escalation assessment outside the two words (spec 14.4)", {"decision": "approve", "escalation_assessment": "accurate"}),
+        ("a free-text escalation assessment", {"decision": "approve", "escalation_assessment": "the nurse thought it was over the top"}),
     ):
         cases.append(_case(ids, f"{label} is rejected", "nurse_a", 422, path(), json=bad, body=_fixed(422)))
     return cases

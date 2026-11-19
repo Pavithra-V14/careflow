@@ -272,6 +272,7 @@ jobs:
               tests/test_voice_admin_db_live.py
               tests/test_care_gap_producers_db_live.py
               tests/test_patient_portal_db_live.py
+              tests/test_care_plan_http_live.py
           - shard: 9  # PART 4 of 4 of the header dimension, plus the eight database files that were in shard 5 (hardening, replica-mode guards, origin oracle, backfill durable, canary document, care gaps, voice, alerts). Added 2026-11-12: shards 5 and 6 measured 57 and 52 minutes of a 60-minute limit (run 43036262441).
             matrix_part: "4/4"
             files: >-
@@ -363,13 +364,12 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-  # Dependency vulnerability audit (BUILD-SPEC.md 21; owner decision 2026-11-04). REPORT-ONLY for now: `continue-on-error`, and the `test` job below does not depend on it. It audits the exact versions in
-  # uv.lock against the public advisory database (pip-audit, pinned; the only thing sent out is package names and versions, no patient data). Stage two, after the first run's output has been read:
-  # fail the build on a vulnerability that has a fix version, with a reviewed ignore list (reason and date per entry). pip-audit reports no severity, so "high" is judged from the advisory text.
+  # Dependency vulnerability audit (BUILD-SPEC.md 21; owner decisions 2026-11-04 and 2026-11-18). A GATE: it audits the exact versions in uv.lock against the public advisory database (pip-audit, pinned; the only
+  # thing sent out is package names and versions, no patient data) and `scripts/audit_gate.py` fails the job on any finding with a fix version that is not on the reviewed ignore list `ops/audit-ignore.yaml`
+  # (reason, reviewed and expiry date per entry). pip-audit reports no severity and looking one up would be a new service, so an unknown severity is treated as not low.
   dependency-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -382,14 +382,17 @@ jobs:
           python -m pip install --upgrade pip uv
           uv export --frozen --no-hashes --no-emit-project > audit-requirements.txt
 
-      - name: pip-audit (report only)
+      - name: pip-audit, then the gate
         run: |
           set +e
-          uvx --from pip-audit==2.9.0 pip-audit -r audit-requirements.txt --no-deps --disable-pip --progress-spinner off 2>&1 | tee audit.out
-          status=${PIPESTATUS[0]}
-          { echo "### Dependency audit (report only)"; echo; echo '```'; cat audit.out; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-          echo "pip-audit exit status: $status (report only; not a failure yet)"
-          exit 0
+          uvx --from pip-audit==2.9.0 pip-audit -r audit-requirements.txt --no-deps --disable-pip --progress-spinner off -f json > audit.json 2> audit.err
+          status=$?
+          python -m pip install pyyaml
+          python scripts/audit_gate.py < audit.json | tee audit.out
+          gate=${PIPESTATUS[0]}
+          { echo "### Dependency audit"; echo; echo '```'; cat audit.out; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          echo "pip-audit exit status: $status; gate exit status: $gate"
+          exit $gate
 
   # The gate scorecard fed by real test results (BUILD-SPEC.md 14.3; docs/design/remaining-work.md A11). REPORT ONLY: `continue-on-error`, not needed by `test`. The three gates that already have CI tests
   # (clinic isolation, double booking, idempotency) read MEASURED when their files ran and passed; every gold-set gate stays NOT MEASURED.

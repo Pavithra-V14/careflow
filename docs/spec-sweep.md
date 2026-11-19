@@ -17,35 +17,37 @@ Total rows: 173.
 
 | Status | Rows |
 |---|---|
-| built and tested | 46 |
+| built and tested | 48 |
 | built, offline test only | 51 |
-| partial | 52 |
-| not built | 24 |
+| partial | 51 |
+| not built | 23 |
 
 | Partial or not built, by reason | Partial | Not built |
 |---|---|---|
-| deliberate decision | 8 | 4 |
-| waiting on a person | 21 | 8 |
+| deliberate decision | 9 | 3 |
+| waiting on a person | 22 | 9 |
 | needs an external service | 20 | 11 |
-| simply missed | 3 | 1 |
+| simply missed | 0 | 0 |
 
 ## Found by this sweep
 
 - **Built now:** 3.7, the unwired second queue adapter (`careflow/queue_broker_stub.py`, refuses every call, imports no broker library, nothing wires it; `tests/test_queue_broker_stub.py`). The old comment in `queue.py` said it was deliberately not built; the spec says to write it.
-- **Simply missed, and not built here because each needs a decision from you first:** 9.5 (vitals and resource history), 9.5c (decision read-set provenance), 14.4b (the two escalation reason codes) and 21.4 (the care-plan flow over HTTP; a test I cannot run from here because it needs the live database). See the next section.
+- **Simply missed, now built (2026-11-18):** 9.5c decision provenance (0095), 14.4b escalation assessment (0094), the 16.6 demo rebuild, the care-plan flow over HTTP (21.4) and the dependency gate (21.6). The rows say what remains.
 - **Corrections to `docs/spec-compliance.md`:** none of its cited files or migrations is missing. Its card-schema rows (17.1, 20.2) predate migration 0090 and are updated here; its 'NOT BUILT' for 3.7 is now built.
 
-## Items needing your decision
+## Decisions recorded 2026-11-18 (owner answers to the first sweep)
 
-1. **6.2b exact-match cache of published cards and red-flag rules (5 minutes).** The spec asks for it; a cache of rules could keep a withdrawn red-flag rule active for up to 5 minutes. Build it with an invalidate-on-withdraw step, or leave rules uncached? (Recommended: leave uncached; the saving is small.)
-2. **14.4b two escalation reason codes** (`unnecessary_escalation`, `missed_by_system`) on every reviewed task: needs a new column on the append-only review decisions and a field on the decision route. This touches the approval path; do you want it now, and who may set `missed_by_system` (it comes from the 5% after-the-fact review)?
-3. **9.5c provenance:** record the exact versioned ids each decision read. A table of (decision, resource, version) rows written at proposal time. Needs your yes on the shape before a migration.
-4. **9.5 vitals and resource history:** bi-temporal vital signs are in the spec, no feature reads them yet. Build the table now or when a feature needs it?
-5. **22.1 pre-visit brief:** a structured, cited brief for the clinician from medications, results and the referral reason (no model). Which fields may it show, and to which roles?
-6. **16.6 nightly reconcile of the vector index** needs an embedding route, so it is built only for the demo profile: want it for the demo?
-7. **21.4 / 21.6:** add the care-plan flow over HTTP to the live end-to-end shard, and turn pip-audit from report-only into a gate (it will start failing the build when a dependency has a known issue).
-8. **1.5 default autonomy mode** is `shadow`, the spec says `assisted`. Already accepted as safer; confirm it stays.
-9. **3.9 and 10.1 pgvector instead of Qdrant** is a recorded deviation; confirm the spec should be amended rather than the code.
+1. **6.2b rule cache:** not cached; a deliberate deviation, so a withdrawn red-flag rule stops working immediately.
+2. **14.4b escalation reason codes:** built (migration 0094).
+3. **9.5c decision provenance:** built (migration 0095).
+4. **9.5 vitals and resource history:** build when a feature needs it.
+5. **22.1 pre-visit brief:** not built; asked of the clinician (sheet item 40).
+6. **16.6 vector index rebuild:** built for the demo profile only; refused in clinical.
+7. **21.4 / 21.6:** the care-plan flow runs over HTTP in the live shards; the dependency audit is a gate with a written ignore list.
+8. **1.5 default mode:** stays `shadow`; a deliberate deviation recorded here and in `docs/spec-compliance.md`.
+9. **3.9 / 10.1 vectors:** pgvector stays; dated amendment notes added to `BUILD-SPEC.md` (original wording kept).
+
+Still open: the decisions that belong to others (clinician sheet items, counsel, the privacy owner) and everything that needs an external service (see the rows).
 
 ## The rows
 
@@ -58,7 +60,7 @@ Total rows: 173.
 | 1.2 | Care Journey and Visit Readiness behind flags, off by default | built, offline test only |  | FEATURE_CARE_JOURNEY, FEATURE_VISIT_READINESS; feature_flags tests |
 | 1.3 | Voice: clinic flag AND per-patient preference | built and tested |  | voice_sql.py, 0045/0047; test_voice*_live |
 | 1.4 | Autonomy per clinic, three modes, never global | built and tested |  | autonomy.py, 0048/0053/0054; live tests |
-| 1.5 | Default mode `assisted` | partial | deliberate decision | Built default is `shadow` (owner-accepted, safer); spec text says assisted |
+| 1.5 | Default mode `assisted` | partial | deliberate decision | DELIBERATE DEVIATION (owner 2026-11-18): the built default is `shadow`, the safer start; the spec text is unchanged and says assisted. Recorded in spec-compliance.md |
 | 1.6 | Locked: merge, non-template patient message, out-of-range readiness answer | built and tested |  | two-person merge live tests; no free-text patient send path; readiness test |
 | 1.7 | Emergency template always automatic, nurse must acknowledge | partial | waiting on a person | Nurse task is automatic and tested; the patient-facing template wording is clinician content (pending_clinician_template) |
 | 1.8 | Never diagnoses, treats, or free-text replies | built, offline test only |  | no such path; offers/replies are templates |
@@ -85,7 +87,7 @@ Total rows: 173.
 | 3.6 | Two MCP servers in process (scheduling read+write, clinical read-only) | built, offline test only |  | mcp_kit.py, clinical_server.py; the clinical server has little chart data |
 | 3.7 | Postgres queue behind QueuePort; second unwired Redis/SQS adapter stubbed | built, offline test only |  | Queue built and live-tested. The unwired stub `queue_broker_stub.py` was MISSED earlier and is built in this sweep (no broker library imported) |
 | 3.8 | React + Vite + TypeScript, Vitest, contract test | built, offline test only |  | Frontend workstream (not assessed here) |
-| 3.9 | Vectors in Qdrant | partial | deliberate decision | pgvector instead (owner decision 2026-11-14, retrieval-pgvector.md); documented deviation |
+| 3.9 | Vectors in Qdrant | partial | deliberate decision | DELIBERATE DEVIATION: pgvector instead (owner 2026-11-14, confirmed 2026-11-18); dated amendment notes added to BUILD-SPEC.md 3 and 16.6, the original wording kept |
 
 ### 4. Use-case and agent inventory
 
@@ -118,7 +120,7 @@ Total rows: 173.
 | 6.1b | Cloudflare AI Gateway pass-through | not built | needs an external service | External service not approved |
 | 6.1c | Ceilings 12/25/40/40s/$1; red-flag path never limited | built, offline test only |  | budget.py, tick.py |
 | 6.2a | Prompt-prefix stability; no PHI in prompts; CI scan | built, offline test only |  | prompts.py, prompt_scan.py, test_prompt_scan.py |
-| 6.2b | Exact-match cache: card/rule bodies 5 min, ICD 30 d, model lists 24 h | not built | deliberate decision | Not built on purpose: a 5-minute cache of red-flag rules could keep a withdrawn rule live for 5 minutes. Needs the owner's decision (see sweep notes). Embeddings are content-hashed (knowledge_sql.content_hash) |
+| 6.2b | Exact-match cache: card/rule bodies 5 min, ICD 30 d, model lists 24 h | not built | deliberate decision | DELIBERATE DEVIATION (owner 2026-11-18): rules and cards are NOT cached, so a withdrawn red-flag rule stops working immediately. Embeddings are content-hashed (knowledge_sql.content_hash) |
 | 6.2c | Semantic cache of de-identified card queries | not built | needs an external service | Needs a hosted embedding route in clinical; none approved |
 | 6.2d | Request-scoped memoisation | built, offline test only |  | RunMemo; no tool uses it yet |
 | 6.2e | Gateway response cache off for patient text | not built | needs an external service | No pass-through exists, so nothing to switch off |
@@ -152,10 +154,10 @@ Total rows: 173.
 | 9.2 | Last turns + typed state; priority-ordered context; drops logged | built, offline test only |  | context_assembler.py; no real model call uses it yet |
 | 9.3 | Care episodes and recurrence rules | built and tested |  | care_gaps.py, 0044/0048; live tests. Rule definitions are a clinician setting |
 | 9.4 | Retention periods and a scheduled, audited deletion job | partial | waiting on a person | Report-only retention job (0071), voice purge, audited erasure; periods are counsel's/clinical lead's; ledgers excluded by owner decision |
-| 9.5 | Bi-temporal clinical rows (vitals, labs, meds, notes) | partial | simply missed | Results, medications, notes built (0050/0061/0074); vital_signs and resource history do not exist |
+| 9.5 | Bi-temporal clinical rows (vitals, labs, meds, notes) | partial | deliberate decision | Results, medications, notes built (0050/0061/0074). Vital signs and resource history: BUILD WHEN A FEATURE NEEDS THEM (owner 2026-11-18) |
 | 9.5a | Correction: block unacted decisions; review decisions acted on within 30 days | partial | deliberate decision | Built reviews EVERY acted-on decision (stricter than the 30-day line); the spec's 30 days is 'tune with clinical input' |
 | 9.5b | Amendment vs correction declared by the writer, inferred otherwise | built and tested |  | 0061; live tests |
-| 9.5c | Every decision records versioned ids read, card version, rule ids, engine | partial | simply missed | Engine/model/confidence/rule are recorded on review proposals; care-plan steps cite a result. No general read-set provenance. Needs a design (see sweep notes) |
+| 9.5c | Every decision records versioned ids read, card version, rule ids, engine | built and tested |  | Migration 0095 `agents.decision_provenance` (document, patient, cards with versions, rule-set hash; ids and versions only, append-only, forced RLS), written by the triage proposer; engine, model and confidence stay on the proposal; live test in test_rls_triage_live. Care-plan and scheduling decisions do not write it yet |
 | 9.6 | Notes append-only, structure-aware splitting, content-addressed embedding cache, sync embed on save | partial | needs an external service | Append-only built and tested (0061); splitting/embedding of notes needs an embedding route |
 
 ### 10. Retrieval
@@ -217,7 +219,7 @@ Total rows: 173.
 | 14.3 | Hard gates incl. red-flag recall 100% | partial | waiting on a person | Runner scores the real engine; bars, cases and rules are clinician-owned |
 | 14.3b | Threshold gates with variance band | built, offline test only |  | evalmetrics.py; bars are required settings |
 | 14.4 | Metric source discipline; grounding rate; three-part latency | built, offline test only |  | functions built and tested |
-| 14.4b | Two reason codes on every reviewed task (unnecessary escalation / missed by system) | not built | simply missed | Not built. Needs a column on review decisions plus a route/field; touches the approval path, so it is listed for your decision (see sweep notes) |
+| 14.4b | Two reason codes on every reviewed task (unnecessary escalation / missed by system) | built and tested |  | Migration 0094: optional closed `escalation_assessment` on `agents.review_decisions` (null = not recorded), set on the referral review route; live test in test_rls_triage_live and role-matrix cases. Only the referral review writes decisions today |
 | 14.5 | Business KPIs with owner-set targets | not built | waiting on a person | Needs a baseline and the owner's numeric targets |
 | 14.6 | Pre-deployment go/no-go scorecard | partial | waiting on a person | Checker built; every evidence cell empty (NO-GO) |
 | 14.7 | Automatic demotion; promotion evidence gates | partial | waiting on a person | Demotion built and tested; promotion needs months of data |
@@ -245,7 +247,7 @@ Total rows: 173.
 | 16.5b | Database in an India region; PHI only to approved calls | not built | waiting on a person | Dev/CI are Tokyo and synthetic; production region is the owner's |
 | 16.5c | Encrypted backups, PITR, quarterly restore drill | not built | waiting on a person | Checkers and runbook built; no drill run (drills.py). Backups are Supabase's; see ops-runbook |
 | 16.5d | Breach runbook with 72-hour window | partial | waiting on a person | Skeleton; contacts and wording are the owner's and counsel's |
-| 16.6 | Vector store safeguards: ids-only payloads, one query wrapper, verified erase, nightly reconcile | partial | needs an external service | Wrapper, ids-only payloads and verified delete built over the port; the nightly reconcile re-embeds cards, which needs an embedding route (none in the clinical profile) |
+| 16.6 | Vector store safeguards: ids-only payloads, one query wrapper, verified erase, nightly reconcile | partial | needs an external service | Wrapper, ids-only payloads and verified delete built over the port. The nightly reconcile is built for the DEMO profile only (`CAREFLOW_VECTOR_REBUILD=on`, refused in clinical; owner 2026-11-18); in clinical it needs an approved embedding route |
 
 ### 17. Data model, identity, infrastructure
 
@@ -303,15 +305,15 @@ Total rows: 173.
 | 21.1 | GitHub Actions; hosted Supabase for CI; restricted role | built and tested |  | ci.yml shards |
 | 21.2 | Unit/graph tests with fakes for every port | built, offline test only |  | about 2,580 offline tests |
 | 21.3 | Integration tests listed (200 concurrent bookings, isolation, audit immutability, resume, dead-letter) | built and tested |  | test_scheduling_concurrency_live, test_rls_child_tables_live, test_dead_letters_live |
-| 21.4 | End-to-end flows over HTTP | partial | simply missed | Referral->review, cancel->booking, red-flag covered; the care-plan->conditional-referral flow is in-process only, not over HTTP |
+| 21.4 | End-to-end flows over HTTP | partial | deliberate decision | Referral to review, cancel to booking and red-flag are covered. The care-plan flow now runs over HTTP (create, confirm, result, audit: test_care_plan_http_live, in the live shards); the wake-up and the conditional referral are the WORKER's step and stay in test_care_journey_db_live |
 | 21.5 | Contract test + stale snapshot check | built and tested |  | test_openapi_snapshot.py; frontend check:api (it currently fails until the frontend regenerates types) |
-| 21.6 | Dependency/secret scanning; red-team and load suites | partial | deliberate decision | pip-audit is report-only by plan (stage two after the output is read, ci.yml); load/chaos run in process with a placeholder peak; no visual regression (frontend) |
+| 21.6 | Dependency/secret scanning; red-team and load suites | partial | waiting on a person | The dependency audit is now a GATE (2026-11-18; scripts/audit_gate.py, ops/audit-ignore.yaml: any fixable finding fails unless a person listed it, because pip-audit gives no severity). Load/chaos run in process with a placeholder peak (the owner's expected peak is missing); no visual regression (frontend) |
 
 ### 22. Visit Readiness
 
 | Req | Requirement | Status | Reason | Evidence or note |
 |---|---|---|---|---|
-| 22.1 | Pre-visit brief (structured, cited, decorative) | not built | deliberate decision | Needs a decision on which chart fields a clinician brief may show; narrative needs a model route (see sweep notes) |
+| 22.1 | Pre-visit brief (structured, cited, decorative) | not built | waiting on a person | NOT BUILT by owner decision 2026-11-18; the question (which chart fields, which roles) is item 40 of the clinician sheet; a narrative also needs a model route |
 | 22.2 | Adaptive intake from the card's missing facts; clinician-worded questions | built, offline test only |  | visit_readiness.py; questions are a required clinician setting |
 | 22.3 | Readiness checklist; not-done/unclear reach a nurse in every mode | built and tested |  | visit_readiness.py; live tests |
 | 22.4 | Barrier classification; rebooking hand-off; social barriers to front desk | partial | needs an external service | Classifier is a port with no model route; hand-off raises a front-desk task |

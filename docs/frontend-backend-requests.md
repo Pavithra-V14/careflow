@@ -378,6 +378,11 @@ Decided by the user: idle sign-out is on, driven by two build-time settings with
 ### 39. Please regenerate the Tamil reader's file (requested 2026-11-18; do not run it from the frontend)
 The Tamil pack was machine-checked a second time on 2026-11-18 (docs/approval-pack/tamil-review.md, Part 0): 2016 strings, two passes (2026-11-14: 1778 strings; 2026-11-18: the 238 strings added since plus 1 re-check), 2 clear defects fixed, 43 strings flagged (grade A 5, B 15, C 23), nothing marked reviewed. Please run `python scripts/export_approval_pack.py tamil-reader` so `docs/approval-pack/export/tamil-reader.docx` carries it. Nothing in the exporter has to change: the flagged table in Part 0 still starts with the header `| Key | Grade | English | Tamil | What looks wrong | Suggested fix |` that its `grade_last` step looks for, and the pack, README and notes file are the same three parts. The new data files `docs/approval-pack/tamil-machine-check.tsv` and `.json` feed Part 0 and need not be part of the export.
 
+### 40. Escalation assessment on a referral review (2026-11-18, migration 0094; spec 14.4)
+`POST /v1/staff/referrals/{document_id}/review` accepts one more OPTIONAL field: `escalation_assessment`, exactly `"unnecessary_escalation"` or `"missed_by_system"` (anything else, including free text, is a 422). Omit it when the reviewer has no view: omitted means "not recorded", never "accurate". Suggested control: an optional two-choice question on the review screen ("This escalation was unnecessary" / "The system should have escalated this and did not"), blank by default, nothing preselected. Nothing else about the review changes (decision, reason code, one decision per referral). The first recorded decision keeps its value; a repeat with a different assessment is not an edit.
+
+**Note on 0095 (decision provenance, 2026-11-18):** no route exposes it and the frontend has nothing to build. The backend now records, for every triage proposal, the ids and versions of what it read (document, patient, cards, rule set); a later correction feature will read it.
+
 ## Decisions recorded here for later readers
 
 - **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;
