@@ -19,6 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from careflow import provenance_sql
 from careflow.decision_info import candidate_entry
 from careflow.front_door import STATUSES as KNOWN_STATUSES
 from careflow.front_door import TriageProposal
@@ -58,7 +59,7 @@ class SqlTriageProposer:
 
     async def propose(
         self, conn: AsyncConnection, *, document_id: uuid.UUID, clinic_id: uuid.UUID, origin: str, patient_id: uuid.UUID | None,
-        candidates: list[dict[str, Any]], abstained: bool, idempotency_key: str,
+        candidates: list[dict[str, Any]], abstained: bool, idempotency_key: str, rule_set_hash: str | None = None,
     ) -> TriageProposal:
         if patient_id is None:
             raise TriageStoreError("a triage proposal needs a resolved patient")
@@ -96,6 +97,16 @@ class SqlTriageProposer:
                 raise NotPermitted("this role may not write a triage proposal here") from None
             if state == _UNIQUE_VIOLATION:
                 raise TriageStoreError("a different proposal already exists for this document") from None
+            raise
+        try:
+            async with conn.begin_nested():
+                await provenance_sql.record(
+                    conn, clinic_id=clinic_id, origin=origin, proposal_id=proposal_id,
+                    items=provenance_sql.items_for(document_id=document_id, patient_id=patient_id, candidates=ids, rule_set_hash=rule_set_hash),
+                )  # ids and versions only; idempotent, so a replay adds nothing
+        except DBAPIError as exc:
+            if getattr(exc.orig, "sqlstate", None) == _INSUFFICIENT_PRIVILEGE:
+                raise NotPermitted("this role may not write a triage proposal here") from None
             raise
         stored = (
             await conn.execute(text("select id, review_task_id from agents.triage_proposals where clinic_id = :c and idempotency_key = :k"), {"c": clinic_id, "k": idempotency_key})

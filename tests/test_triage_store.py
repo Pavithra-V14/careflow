@@ -69,6 +69,10 @@ class Conn:
             return Result(Row(id=TASK))
         if "insert into agents.triage_proposals" in sql:
             return Result(None)
+        if "insert into agents.decision_provenance" in sql:
+            result = Result(None)
+            result.rowcount = 1
+            return result
         if "from agents.triage_proposals where clinic_id" in sql:
             return Result(Row(id=proposal_id_for(CLINIC, KEY), review_task_id=TASK))
         if "select origin, review_task_id" in sql:
@@ -256,3 +260,22 @@ def test_migration_0094_adds_one_closed_nullable_column_with_an_insert_only_gran
     assert "grant insert (escalation_assessment) on agents.review_decisions to careflow_app" in code
     assert "not null" not in code.split("add column")[1].split("grant")[0] and " default " not in code.split("add column")[1].split("grant")[0]  # null means not recorded: never a default
     assert "update (" not in code and "grant update" not in code and "create table" not in code and "create function" not in code
+
+
+async def test_a_proposal_writes_provenance_of_ids_and_versions_only():
+    conn = Conn()
+    await propose(conn, rule_set_hash="a" * 64)
+    rows = [(p["k"], p["r"], p["v"]) for sql, p in conn.calls if "insert into agents.decision_provenance" in sql]
+    assert ("document", str(DOC), None) in rows and ("patient", str(PATIENT), None) in rows and ("card", "c1", 2) in rows and ("rule_set", "a" * 64, None) in rows
+    assert all(isinstance(v, (int, type(None))) and len(r) <= 100 for _, r, v in rows)  # ids and versions: no field can carry a sentence
+
+
+async def test_a_role_without_the_insert_policy_is_refused_cleanly_on_the_provenance_write():
+    with pytest.raises(NotPermitted):
+        await propose(_conn_failing_provenance())
+
+
+def _conn_failing_provenance():
+    conn = Conn(fail_on="insert into agents.decision_provenance")
+    conn.error_state = "42501"
+    return conn

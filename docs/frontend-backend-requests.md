@@ -381,6 +381,8 @@ The Tamil pack was machine-checked a second time on 2026-11-18 (docs/approval-pa
 ### 40. Escalation assessment on a referral review (2026-11-18, migration 0094; spec 14.4)
 `POST /v1/staff/referrals/{document_id}/review` accepts one more OPTIONAL field: `escalation_assessment`, exactly `"unnecessary_escalation"` or `"missed_by_system"` (anything else, including free text, is a 422). Omit it when the reviewer has no view: omitted means "not recorded", never "accurate". Suggested control: an optional two-choice question on the review screen ("This escalation was unnecessary" / "The system should have escalated this and did not"), blank by default, nothing preselected. Nothing else about the review changes (decision, reason code, one decision per referral). The first recorded decision keeps its value; a repeat with a different assessment is not an edit.
 
+**Note on 0095 (decision provenance, 2026-11-18):** no route exposes it and the frontend has nothing to build. The backend now records, for every triage proposal, the ids and versions of what it read (document, patient, cards, rule set); a later correction feature will read it.
+
 ## Decisions recorded here for later readers
 
 - **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;

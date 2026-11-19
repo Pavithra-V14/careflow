@@ -297,3 +297,31 @@ async def test_the_escalation_assessment_is_a_closed_optional_word_written_with_
     assert got == {"ea4": None, "ea6": "missed_by_system"}
     assert await outcome(db, "update agents.review_decisions set escalation_assessment = 'unnecessary_escalation' where idempotency_key = 'ea4'") == "23001"  # append-only
     assert await as_app(db, nurse, "update agents.review_decisions set escalation_assessment = 'unnecessary_escalation'") == "42501"  # no update grant
+
+
+async def test_decision_provenance_is_ids_and_versions_only_append_only_and_clinic_scoped(db):
+    """Migration 0095 (spec 9.5): the roles that may write a proposal may write its provenance; a sentence cannot be stored; another clinic sees nothing."""
+    w = await world(db)
+    p = w.people
+    pid = await seed_proposal(db, w)
+    row = lambda kind, ref, version, clinic=None: (
+        f"insert into agents.decision_provenance (clinic_id, origin, proposal_id, kind, ref, version) values ('{clinic or w.a}', 'test', '{pid}', '{kind}', '{ref}', {version})"
+    )
+    for who in ("worker_a", "nurse_a", "doctor_a"):
+        assert str(await as_app(db, p[who], row("card", f"card-{who}", 2))).startswith("INSERT"), who
+    for who in ("front_desk_a", "admin_a", "auditor_a", "nurse_b"):
+        assert await as_app(db, p[who], row("card", "c9", 1)) == "42501", who
+    assert await as_app(db, p["nurse_a"], row("card", "Chest pain on exertion", 1)) == "23514"  # a sentence is not an id
+    assert await as_app(db, p["nurse_a"], row("note", "c1", 1)) == "23514"  # an unknown kind
+    assert await as_app(db, p["nurse_a"], row("card", "c1", -1)) == "23514"
+    assert await outcome(db, row("card", "c1", 2)) is None
+    assert await outcome(db, row("card", "c1", 2)) == "23505"  # one row per fact
+    assert await outcome(db, row("patient", "p1", "null")) is None
+    assert await outcome(db, row("patient", "p1", "null")) == "23505"  # null versions are one fact too
+    assert await outcome(db, row("card", "c1", 3, clinic=w.b)) == "23503"  # a proposal of another clinic cannot be referenced
+    assert await outcome(db, "update agents.decision_provenance set ref = 'x'") == "23001"
+    assert await outcome(db, "delete from agents.decision_provenance") == "23001"
+    assert await as_app(db, p["nurse_a"], "update agents.decision_provenance set ref = 'x'") == "42501"
+    seen = await as_app(db, p["nurse_a"], "select count(*) from agents.decision_provenance where kind = 'card' and ref = 'c1'", fetch=True)
+    assert seen[0][0] == 1
+    assert (await as_app(db, p["nurse_b"], "select count(*) from agents.decision_provenance", fetch=True))[0][0] == 0  # row-level security: another clinic sees none

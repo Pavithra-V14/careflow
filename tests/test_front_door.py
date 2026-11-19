@@ -80,9 +80,9 @@ class Effects:
 
 
 class Proposer(Effects):
-    async def propose(self, conn, *, document_id, clinic_id, origin, patient_id, candidates, abstained, idempotency_key):
+    async def propose(self, conn, *, document_id, clinic_id, origin, patient_id, candidates, abstained, idempotency_key, rule_set_hash=None):
         self._do(idempotency_key)
-        self.last = {"patient_id": patient_id, "candidates": candidates, "abstained": abstained}
+        self.last = {"patient_id": patient_id, "candidates": candidates, "abstained": abstained, "rule_set_hash": rule_set_hash}
         return TriageProposal(uuid.uuid5(uuid.NAMESPACE_URL, idempotency_key))
 
 

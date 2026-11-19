@@ -98,6 +98,7 @@ class FrontDoorState(TypedDict, total=False):
     reasons: list[str]
     patient_id: str
     candidates: list[dict[str, Any]]  # {"card_id": str, "version": int}: ids only
+    rule_set_hash: str  # the identity (a hash of rule ids and versions) of the rule set the screening ran against: provenance (spec 9.5), no text
     abstained: bool
     abstain_reason: str
     proposal_id: str
@@ -142,7 +143,7 @@ class TriageProposal:
 class TriageProposer(Protocol):
     async def propose(
         self, conn: AsyncConnection, *, document_id: uuid.UUID, clinic_id: uuid.UUID, origin: str, patient_id: uuid.UUID | None,
-        candidates: list[dict[str, Any]], abstained: bool, idempotency_key: str,
+        candidates: list[dict[str, Any]], abstained: bool, idempotency_key: str, rule_set_hash: str | None = None,
     ) -> TriageProposal:
         """Write the triage proposal and its review task. P2-9 supplies the real writer; it must be idempotent on the key and must never approve
         anything itself."""
@@ -278,7 +279,7 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
         held = _suspect_text(text_)
         if held is not None:
             return held
-        return {"status": "started", "reasons": []}
+        return {"status": "started", "reasons": [], "rule_set_hash": screened.evaluation.rule_set_hash}
 
     async def resolve_identity(state: FrontDoorState) -> FrontDoorState:
         assert_tracing_off()  # also at run time: the environment can change after the graph was built
@@ -341,6 +342,7 @@ def build_front_door(deps: FrontDoorDeps, checkpointer: Any, *, environ: dict[st
                 conn, document_id=document_id, clinic_id=clinic_id, origin=state["origin"],
                 patient_id=uuid.UUID(state["patient_id"]) if state.get("patient_id") else None,
                 candidates=state.get("candidates", []), abstained=state.get("abstained", True), idempotency_key=f"triage:{document_id}",
+                **({"rule_set_hash": state["rule_set_hash"]} if state.get("rule_set_hash") else {}),
             )
         return {"status": "triage_proposed", "proposal_id": str(proposal.proposal_id)}
 
