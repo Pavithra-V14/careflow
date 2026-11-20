@@ -131,3 +131,11 @@ async def pending_claims(conn: AsyncConnection, clinic_id: uuid.UUID, limit: int
 
 async def resolve_claim(conn: AsyncConnection, *, request_id: uuid.UUID, decision: str, patient_id: uuid.UUID | None, idempotency_key: str) -> str:
     return str(await _call(conn, "select mpi.resolve_claim_request(:r, :d, :p, :k)", {"r": request_id, "d": decision, "p": patient_id, "k": idempotency_key}))
+
+
+ORIGIN_MISMATCH = "this account was created under a different environment than this server (origin mismatch): register a new account while the server runs as the demo"
+
+
+def origin_mismatch(account_origin: str, profile: str) -> bool:
+    """True when the account's origin tag is not the one this deployment gives a new account (the profile decides: demo means test, anything else live). Said in fixed words; nothing about any other account."""
+    return account_origin != ("test" if profile == "demo" else "live")
