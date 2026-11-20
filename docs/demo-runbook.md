@@ -178,6 +178,12 @@ The first enters the break-glass reasons and limits, the public-grievance cap, t
 | Public grievance form | none beyond the demo pack and the clinic being published (`scripts\dev_clinic.py publish --clinic-id <id>`) |
 | The checkpoint-retention report | optional line: `CAREFLOW_RETENTION_CHECKPOINT_DAYS=90` (the specification's starting value, **not approved**; report only, deletes nothing) |
 
+**3b. Check that everything is in place** (read-only, prints PASS or FAIL lines and counts only, never a value; asks you to TYPE the project host; exit status 0 only if every check passes):
+```powershell
+.\.venv\Scripts\python.exe scripts\demo_smoke.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
+```
+It checks: migrations applied, the clinic is published, staff roles exist, every demo placeholder is labelled, the six demo cards are indexed, a search returns a card (with the local embedder: nothing is spent), provider keys and spend ceilings present when `CAREFLOW_DEMO_REAL_MODELS=on` (names only), the rules-before-models guarantees, and that the switches in `.env` match this section. A FAIL line says in plain words what to run.
+
 **4. Take everything out again** (labelled rows only; a row without the label is never touched):
 ```powershell
 .\.venv\Scripts\python.exe scripts\seed_demo_placeholders.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2 --remove

@@ -6,7 +6,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "scripts" / "demo_smoke.py"
 spec = importlib.util.spec_from_file_location("demo_smoke", SCRIPT)
