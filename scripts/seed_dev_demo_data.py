@@ -350,11 +350,41 @@ async def seed(conn: AsyncConnection, clinic: uuid.UUID, vault: DemographicVault
         say(f"  {name} | born {dob} | phone ends {phone[-4:] if phone else '(none)'}")
 
 
+async def add_bookable_slots(conn: AsyncConnection, clinic: uuid.UUID, say=print, *, days: int = 3) -> int:
+    """OPT-IN (--add-bookable-slots): fresh OPEN slots from tomorrow, of every visit type the owner listed as bookable (and active), at every ACTIVE location, with an active provider, origin `test` (the demo patient's origin). The
+    ordinary seed adds slots of its first visit type only, and only when no future demo slot exists; this is the fix for "booking is set up but the patient is offered no open time" (see scripts/diagnose_patient_slots.py). The slots sit
+    in the EVENING (16:30 India time onward, one hour block per visit type) so they cannot overlap the seed's morning and afternoon slots: one provider cannot have two overlapping live slots. Keys carry the start time, so a second run the same
+    day adds nothing. Run seed_demo_placeholders.py FIRST: it is what lists the visit types as bookable."""
+    types = (await conn.execute(text(
+        "select vt.id from sched.patient_bookable_visit_types b join sched.visit_types vt on vt.id = b.visit_type_id and vt.clinic_id = b.clinic_id and vt.active where b.clinic_id = :c order by vt.id"), {"c": clinic})).scalars().all()
+    locations = (await conn.execute(text("select id from sched.locations where clinic_id = :c and active order by id"), {"c": clinic})).scalars().all()
+    providers = (await conn.execute(text("select id from sched.providers where clinic_id = :c and active order by id"), {"c": clinic})).scalars().all()
+    if not types:
+        raise Refused("refusing: no active visit type is listed as bookable for patients: run scripts/seed_demo_placeholders.py first")
+    if not locations or not providers:
+        raise Refused("refusing: the clinic has no active location or no active provider")
+    k = f"{SEED}:{clinic}"
+    first_day = (datetime.now(IST) + timedelta(days=1)).replace(hour=16, minute=30, second=0, microsecond=0)
+    added = 0
+    for t, visit_type in enumerate(types):
+        for d in range(days):
+            for s_index in range(2):
+                start = (first_day + timedelta(days=d, hours=t, minutes=30 * s_index)).astimezone(UTC)
+                done = await conn.execute(
+                    text("insert into sched.slots (clinic_id, provider_id, location_id, visit_type_id, starts_at, ends_at, origin, idempotency_key) values (:c, :p, :l, :v, :s, :e, 'test', :k) on conflict (idempotency_key) do nothing"),
+                    {"c": clinic, "p": providers[t % len(providers)], "l": locations[(d + t) % len(locations)], "v": visit_type, "s": start, "e": start + timedelta(minutes=30), "k": f"{k}:slot:bookable:{start:%Y%m%d%H%M}:{t}"},
+                )
+                added += done.rowcount or 0
+    say(f"bookable slots: {added} added (open, 30 minutes, from tomorrow evening, for {len(types)} bookable visit type(s) at {len(locations)} active location(s))")
+    return added
+
+
 async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--clinic-id", required=True, type=uuid.UUID)
     ap.add_argument("--env-file", default=".env")
     ap.add_argument("--dry-run", action="store_true", help="do everything, then roll it back: nothing is kept")
+    ap.add_argument("--add-bookable-slots", action="store_true", help="also add open evening slots from tomorrow for every bookable visit type (run seed_demo_placeholders.py first); the fix for an empty patient list")
     ap.add_argument("--allow-second-seeded-clinic", action="store_true", help="seed this clinic although another clinic already holds demo data")
     args = ap.parse_args()
     env = dict(dotenv_values(Path(args.env_file)))
@@ -381,6 +411,8 @@ async def main() -> int:
                 tx = await conn.begin()
                 try:
                     await seed(conn, args.clinic_id, vault, key_version, allow_second_clinic=args.allow_second_seeded_clinic)
+                    if args.add_bookable_slots:
+                        await add_bookable_slots(conn, args.clinic_id)
                     if args.dry_run:
                         await tx.rollback()
                         print("dry run: everything was rolled back, nothing was kept")
