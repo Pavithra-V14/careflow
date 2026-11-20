@@ -81,7 +81,8 @@ async def test_who_may_ask_and_the_request_is_idempotent_and_one_open_per_type(d
     first = await ask(db, w, key="same")
     assert first[0][0] == "recorded"
     assert await ask(db, w, key="same") == [("replay", first[0][1])]
-    assert await ask(db, w, key="same", t="carer_of_adult") == "23505"  # the key for a different request
+    await owner(db, "insert into iam.family_link_rules (clinic_id, link_type, min_dependant_age_years, max_dependant_age_years, requires_dependant_consent) values (:c, 'carer_of_adult', 30, 130, true)", c=w["clinic"])
+    assert await ask(db, w, key="same", t="carer_of_adult") == "23505"  # the key for a different request (the rule check comes first, so this type needs a rule)
     assert await ask(db, w, key="another") == [("already_requested", None)]  # one open request per link type
     assert await owner(db, "select count(*) from iam.family_links where clinic_id = :c", c=w["clinic"]) == [(1,)]
     audit = await owner(db, "select count(*), bool_and(idempotency_key like 'sys:family-link:%') from audit.log where action = 'iam.family_link.requested' and clinic_id = :c", c=w["clinic"])
