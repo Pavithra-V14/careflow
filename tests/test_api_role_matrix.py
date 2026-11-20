@@ -2832,6 +2832,35 @@ def voice_transcript_read_cases(ids) -> list[tuple]:
     return cases + _unauthenticated(ids, path(), None)[:4]
 
 
+CLINIC_PROFILE = "/v1/staff/clinic/public-profile"
+
+
+def clinic_profile_cases(ids) -> list[tuple]:
+    """The hospital's public profile (migration 0100): admin of the clinic only, with a verified second factor (the database checks it too), idempotent on the key, audited. The public READ is outside /v1 and has its own tests."""
+    body = lambda **o: {"clinic_id": str(ids.clinic_a), "about": "DEMO about text", "departments": [{"name": "DEMO department", "doctors": []}], **o}
+    key = f"profile-{uuid.uuid4()}"
+    cases = [
+        _case(ids, "admin_a sets the profile", "admin_a", 200, CLINIC_PROFILE, json=body(), key=key, body=lambda b: b == {"result": "recorded"}),
+        _case(ids, "the same request with the same key is a replay", "admin_a", 200, CLINIC_PROFILE, json=body(), key=key, body=lambda b: b == {"result": "replay"}),
+        _case(ids, "the same key with other content is refused", "admin_a", 409, CLINIC_PROFILE, json=body(about="DEMO other text"), key=key, body=lambda b: b == {"detail": "this idempotency key was used for a different request"}),
+        _case(ids, "a profile with every field left out is a valid profile of nothing supplied", "admin_a", 200, CLINIC_PROFILE, json={"clinic_id": str(ids.clinic_a)}, body=lambda b: b["result"] == "recorded"),
+    ]
+    cases += [_case(ids, f"{p} sees the clinic but is refused", p, 403, CLINIC_PROFILE, json=body(), body=NOT_YOUR_ROLE) for p in VOICE_ADMIN_VISIBLE]
+    others = [p for p in ids.people if p != "admin_a" and p not in VOICE_ADMIN_VISIBLE]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused with the one not-found", p, 404, CLINIC_PROFILE, json=body(), body=_fixed(404)) for p in others]
+    cases += [
+        _case(ids, "an empty string is not content", "admin_a", 422, CLINIC_PROFILE, json=body(about=""), body=_fixed(422)),
+        _case(ids, "a control character is refused", "admin_a", 422, CLINIC_PROFILE, json=body(address="line one\nline two"), body=_fixed(422)),
+        _case(ids, "an extra field is rejected", "admin_a", 422, CLINIC_PROFILE, json=body(extra=1), body=_fixed(422)),
+        _case(ids, "a department without a name is rejected", "admin_a", 422, CLINIC_PROFILE, json=body(departments=[{"doctors": []}]), body=_fixed(422)),
+        _case(ids, "an empty department list is rejected (null means not supplied)", "admin_a", 422, CLINIC_PROFILE, json=body(departments=[]), body=_fixed(422)),
+        _case(ids, "a department with an unknown field is rejected", "admin_a", 422, CLINIC_PROFILE, json=body(departments=[{"name": "DEMO", "rooms": 3}]), body=_fixed(422)),
+        _case(ids, "an about text over 2000 characters is rejected", "admin_a", 422, CLINIC_PROFILE, json=body(about="x" * 2001), body=_fixed(422)),
+        _case(ids, "missing X-Idempotency-Key is rejected", "admin_a", 422, CLINIC_PROFILE, json=body(), key=None, body=_fixed(422)),
+    ]
+    return cases + _unauthenticated(ids, CLINIC_PROFILE, body())
+
+
 def voice_purge_cases(ids) -> list[tuple]:
     body = lambda **o: {"clinic_id": str(ids.clinic_a), **o}
     done = lambda b: b == {"deleted": 0}
@@ -4261,6 +4290,7 @@ MATRIX: dict[tuple[str, str], Callable] = {
     ("GET", VOICE_ADMIN + "/sessions"): voice_sessions_list_cases,
     ("GET", VOICE_ADMIN + "/sessions/{session_id}/transcript"): voice_transcript_read_cases,
     ("POST", VOICE_ADMIN + "/purge"): voice_purge_cases,
+    ("PUT", CLINIC_PROFILE): clinic_profile_cases,
     ("GET", ACCOUNTS): staff_list_cases,
     ("POST", ACCOUNTS + "/invite"): staff_invite_cases,
     ("POST", ACCOUNTS + "/activate-me"): staff_activate_cases,

@@ -235,3 +235,33 @@ async def test_the_booking_functions_use_server_made_audit_keys_and_no_advisory_
     await as_app(db, w["fd"], plant, c=w["clinic"], a=w["fd"], b=str(booked[0][0]), k=f"patient-cancel-audit:{booked[0][0]}")
     assert await as_app(db, w["fd"], plant, c=w["clinic"], a=w["fd"], b="x", k="sys:patient-cancel:1") == "42501"
     assert await as_app(db, w["pa1"], "select o_changed from sched.patient_cancel_booking(:b, 'a2')", b=booked[0][0]) == [(True,)]
+
+
+STATE = "select sched.patient_booking_state(:c)"
+
+
+async def test_the_empty_list_says_why_in_one_word_and_the_word_agrees_with_the_list(db):
+    """Migration 0099: not_set_up (nothing bookable is listed or the listed type is inactive), no_open_times (set up, nothing open and in the future), ok (the list is not empty)."""
+    w = await world(db)
+    h = await pg(db)
+    assert await as_app(db, w["pa1"], STATE, c=w["clinic"]) == [("no_open_times",)]  # the owner listed a type, but there is no slot at all
+    await slot(db, w, hours=-5)  # already started
+    await slot(db, w, vt="vt2")  # a type the owner did not list
+    await slot(db, w, status="cancelled")  # not open
+    assert await as_app(db, w["pa1"], STATE, c=w["clinic"]) == [("no_open_times",)]
+    assert await as_app(db, w["pa1"], "select slot_id from sched.patient_open_slots(:c, 50)", c=w["clinic"]) == []  # the word and the list agree
+    good = await slot(db, w)
+    assert await as_app(db, w["pa1"], STATE, c=w["clinic"]) == [("ok",)]
+    assert await as_app(db, w["pa1"], "select slot_id from sched.patient_open_slots(:c, 50)", c=w["clinic"]) == [(good,)]
+    await h.execute("update sched.visit_types set active = false where id = $1", w["vt"])
+    assert await as_app(db, w["pa1"], STATE, c=w["clinic"]) == [("not_set_up",)]  # the only listed type is inactive
+    await h.execute("update sched.visit_types set active = true where id = $1", w["vt"])
+    await h.execute("delete from sched.patient_bookable_visit_types where clinic_id = $1", w["clinic"])
+    assert await as_app(db, w["pa1"], STATE, c=w["clinic"]) == [("not_set_up",)]  # nothing is listed as bookable
+
+
+async def test_only_an_active_bound_patient_of_the_clinic_may_ask_why(db):
+    w = await world(db)
+    assert await as_app(db, w["pa3"], STATE, c=w["clinic"]) == "42501"  # no record there
+    assert await as_app(db, w["pa1"], STATE, c=w["other"]) == "42501"  # another clinic
+    assert await as_app(db, w["fd"], STATE, c=w["clinic"]) == "42501"  # staff

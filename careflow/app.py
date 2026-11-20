@@ -80,6 +80,7 @@ from careflow import (
     care_gap_sql,
     care_gaps,
     care_journey_sql,
+    clinic_profile_sql,
     consent_settings,
     demo_email_signin,
     demo_front_door,
@@ -5968,6 +5969,115 @@ async def public_clinic(request: Request) -> PublicClinicOut:
     return PublicClinicOut(clinic_id=row.clinic_id, name=row.name)
 
 
+class PublicDepartmentOut(_Out):
+    name: str
+    doctors: list[str]  # display names the clinic chose to publish (may be empty)
+
+
+class PublicFeaturesOut(_Out):
+    booking: bool
+    messaging: bool
+    offers: bool
+    records: bool
+    visit_preparation: bool
+    family_links: bool
+
+
+class PublicClinicProfileOut(_Out):
+    name: str
+    about: str | None
+    departments: list[PublicDepartmentOut] | None
+    address: str | None
+    opening_hours: str | None
+    phone: str | None
+    privacy_promise: str | None  # counsel's text: null until counsel's wording is entered
+    placeholder: bool  # true while the values are labelled demo placeholders: show a visible demo badge
+    features: PublicFeaturesOut
+    languages: list[Literal["en", "ta"]]
+
+
+def _public_features(request: Request, profile: "clinic_profile_sql.PublicProfile") -> PublicFeaturesOut:
+    """What is really on, not what is merely built: a switch is on AND the route would work (its keys, limit, content or rows exist). `records` is false: the portal has a download of your own data, not a records view.
+    `offers` follow messaging (a patient reads the clinic's offers as messages of the appointments topic)."""
+    state = request.app.state
+    has_vault = getattr(state, "vault", None) is not None
+    messaging = portal_messages_sql.enabled() and has_vault and _active_key_version(request) is not None and message_limiter(request) is not None
+    return PublicFeaturesOut(
+        booking=portal_booking_sql.enabled() and profile.has_bookable_type,
+        messaging=messaging,
+        offers=messaging,
+        records=False,
+        visit_preparation=visit_prep_sql.enabled() and getattr(state, "visit_content", None) is not None and has_vault,
+        family_links=family_links_sql.enabled() and profile.has_family_rule and has_vault,
+    )
+
+
+_NO_STORE = {"Cache-Control": "no-store"}
+
+
+@public_config.get("/public/clinic/profile", response_model=PublicClinicProfileOut)
+async def public_clinic_profile(request: Request, response: Response) -> PublicClinicProfileOut:
+    """The published clinic's public profile for the signed-out home page: optional text fields (null = not supplied), the departments (and doctors' display names the clinic chose to publish), and which features are really on. No sign-in, never PHI,
+    never another clinic, no counts. 404 while no clinic is published, 503 until the per-address limit is set (never an unlimited door), 429 over it. Cached for a minute."""
+    limiter = _public_read_limiter(_effective_environ(request))
+    if limiter is None:
+        raise HTTPException(status_code=503, detail="unavailable", headers=_NO_STORE)
+    if not limiter.allow(request.client.host if request.client else "unknown"):
+        raise HTTPException(status_code=429, detail="too many requests; wait and try again", headers=_NO_STORE)
+    async with request.app.state.engine.connect() as conn:
+        profile = await clinic_profile_sql.read_public(conn)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="not found", headers=_NO_STORE)  # headers set on `response` are dropped when an exception is raised: they must ride on the exception
+    response.headers["Cache-Control"] = "public, max-age=60"
+    departments = None if profile.departments is None else [PublicDepartmentOut(name=d["name"], doctors=list(d.get("doctors", []))) for d in profile.departments]
+    return PublicClinicProfileOut(
+        name=profile.name, about=profile.about, departments=departments, address=profile.address, opening_hours=profile.opening_hours, phone=profile.phone, privacy_promise=profile.privacy_promise,
+        placeholder=profile.placeholder, features=_public_features(request, profile), languages=["en", "ta"],
+    )
+
+
+_PLAIN_LINE = r"^[^\x00-\x1f\x7f]+$"  # one line of printable text: no control characters
+
+
+class DepartmentIn(_Body):
+    name: str = Field(min_length=1, max_length=80, pattern=_PLAIN_LINE)
+    doctors: list[Annotated[str, Field(min_length=1, max_length=80, pattern=_PLAIN_LINE)]] = Field(default_factory=list, max_length=20)
+
+
+class ClinicPublicProfileIn(_Body):
+    clinic_id: uuid.UUID
+    about: str | None = Field(default=None, min_length=1, max_length=2000, pattern=_PLAIN_LINE)
+    departments: list[DepartmentIn] | None = Field(default=None, min_length=1, max_length=30)
+    address: str | None = Field(default=None, min_length=1, max_length=300, pattern=_PLAIN_LINE)
+    opening_hours: str | None = Field(default=None, min_length=1, max_length=500, pattern=_PLAIN_LINE)
+    phone: str | None = Field(default=None, min_length=1, max_length=60, pattern=_PLAIN_LINE)
+    privacy_promise: str | None = Field(default=None, min_length=1, max_length=4000, pattern=_PLAIN_LINE)
+
+
+class ClinicProfileSetOut(_Out):
+    result: Literal["recorded", "replay"]
+
+
+staff_clinic_profile = APIRouter(prefix="/v1/staff/clinic", tags=["staff clinic profile"])
+
+
+@staff_clinic_profile.put("/public-profile", response_model=ClinicProfileSetOut)
+async def set_clinic_public_profile(body: ClinicPublicProfileIn, idempotency_key: IdempotencyKey, conn: TxConn, claims: dict[str, Any] = Depends(verified_claims)) -> ClinicProfileSetOut:
+    """Set the public profile of the clinic (the WHOLE profile: a field left out or null is "not supplied"), as an ADMIN of the clinic with a recent second factor. The hospital supplies every field; the privacy promise is counsel's wording. Audited by the
+    database (the names of the fields set, never their text). Idempotent on the key: a repeat is a `replay`, the same key with other content is a 409. 404 if the clinic is not visible to you, 403 unless you are an admin there, 422 for a field that is not allowed."""
+    await _console_clinic(conn, body.clinic_id, ("admin",))
+    try:
+        result = await clinic_profile_sql.set_profile(
+            conn, clinic_id=body.clinic_id, about=body.about, departments=None if body.departments is None else [d.model_dump() for d in body.departments], address=body.address,
+            opening_hours=body.opening_hours, phone=body.phone, privacy_promise=body.privacy_promise, idempotency_key=idempotency_key,
+        )
+    except clinic_profile_sql.Refused:
+        raise HTTPException(status_code=403, detail="your role may not do this") from None
+    except clinic_profile_sql.KeyReused:
+        raise HTTPException(status_code=409, detail="this idempotency key was used for a different request") from None
+    return ClinicProfileSetOut(result=result)  # type: ignore[arg-type]
+
+
 
 # ---- patient profile, in-app notifications, patient requests, the public grievance (migration 0080; frontend requests 20, 22, 24, 26) -----------------------------------------------------------------
 # MECHANISM ONLY: the sex words are the required setting CAREFLOW_SEX_WORDS (no default), the public route needs CAREFLOW_PUBLIC_GRIEVANCE_IP_PER_HOUR (no default) and the owner-managed hourly cap; nothing here decides wording.
@@ -6246,6 +6356,7 @@ class PatientSlotOut(_Out):
 
 class PatientSlotList(_Out):
     slots: list[PatientSlotOut]
+    empty_reason: Literal["no_open_times", "not_set_up"] | None = None  # only when `slots` is empty: no open times right now, or booking is not set up for this clinic (fixed words; migration 0099)
 
 
 class PatientBookedOut(_Out):
@@ -6289,7 +6400,14 @@ async def list_bookable_slots(clinic_id: uuid.UUID, conn: TxConnAllGrants, claim
         rows = await portal_booking_sql.open_slots(conn, clinic_id, limit)
     except portal_booking_sql.Refused:
         raise HTTPException(status_code=403, detail="your role may not do this") from None
-    return PatientSlotList(slots=[PatientSlotOut(slot_id=r.slot_id, starts_at=r.starts_at, ends_at=r.ends_at, visit_type_id=r.visit_type_id, visit_type_name=r.visit_type_name, location_name=r.location_name) for r in rows])
+    reason = None
+    if not rows:
+        try:
+            state = await portal_booking_sql.booking_state(conn, clinic_id)
+        except portal_booking_sql.Refused:
+            raise HTTPException(status_code=403, detail="your role may not do this") from None
+        reason = state if state in ("no_open_times", "not_set_up") else None
+    return PatientSlotList(empty_reason=reason, slots=[PatientSlotOut(slot_id=r.slot_id, starts_at=r.starts_at, ends_at=r.ends_at, visit_type_id=r.visit_type_id, visit_type_name=r.visit_type_name, location_name=r.location_name) for r in rows])
 
 
 @portal.post("/booking/slots/{slot_id}/book", response_model=PatientBookedOut, status_code=201)
@@ -6781,7 +6899,8 @@ def create_app(
     app.include_router(staff_notes)
     app.include_router(health)
     app.include_router(public_config)
-    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, portal, staff_voice, staff_care_plans, staff_results, staff_medications, staff_knowledge, staff_family, staff_portal_claims, staff_visits, staff_break_glass, portal_rights, staff_grievances, staff_recovery, staff_notes, patient_requests_staff, public_config])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
+    app.include_router(staff_clinic_profile)
+    openapi_errors.install(app, [router, scheduling, staff_messages, staff_patients, staff_merges, staff_referrals, staff_review_tasks, staff_documents, staff_identity, staff_audit, staff_accounts, staff_erasure, staff_console, staff_care_gaps, portal_voice, portal, staff_voice, staff_care_plans, staff_results, staff_medications, staff_knowledge, staff_family, staff_portal_claims, staff_visits, staff_break_glass, portal_rights, staff_grievances, staff_recovery, staff_notes, patient_requests_staff, public_config, staff_clinic_profile])  # describe the fixed error responses in the OpenAPI document (no behaviour change)
     return app
 
 

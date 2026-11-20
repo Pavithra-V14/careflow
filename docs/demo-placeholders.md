@@ -16,6 +16,7 @@
 | Canary cap per day | Clinic owner / clinical lead | No row: no canary is injected | Yes: invented demo number 5 | `CAREFLOW_CANARY_RATE` (demo pack) |
 | Per-call spend cap for session model calls | Owner | No row: session calls are refused | Yes: invented demo number 0.05 | none |
 | Bookable visit types for patient booking, 2 future bookings each | Clinic owner | Nothing is bookable by a patient | Yes: every visit type of the dev clinic | `CAREFLOW_PATIENT_BOOKING=on` |
+| Public home page: about, departments and one doctor name, address, opening hours, phone (migration 0100) | Hospital | All null: the page says "not available yet" | Yes: `seed_demo_placeholders.py`; every value starts with "DEMO", is plainly not a real address or number, and claims nothing (the test checks it); the response carries `placeholder: true` for a demo badge | none (always on) |
 | Family-link rules (guardian 0 to 9, carer 30 to 130, consent required) | Counsel | Every request is refused | Yes: `seed_demo_family_rules.py` | `CAREFLOW_FAMILY_LINKS=on` |
 | Consent notices and their patient-facing names | Counsel and privacy owner | Nothing can be consented to | Yes, DEMO ONLY wording: demo pack + `seed_consent_notices.py` | none |
 | Review reason codes, task deadlines, watchdog limits, canary and sample rates, rubber-stamp thresholds, cost figures, sign-in link | Clinic owner and clinical lead | The review console, watchdog, canaries and cost canvas report "not configured" | Yes: demo pack, every value labelled | `CAREFLOW_DEMO_PHASE4=1` |
@@ -38,7 +39,7 @@
 | Clinical-record retention period (`CAREFLOW_RETENTION_CLINICAL_RECORD_DAYS`) | Counsel and the clinical lead | The proposal leaves it for counsel to state in days; a legal period is not ours to guess | The retention report skips clinical records |
 | Real consent wording, real grievance categories and wording, what erasure keeps, retention schedule | Counsel and privacy owner | Legal text and legal periods | A real launch; `docs/approval-pack` carries the proposals |
 | Breach-notification templates and contacts | Owner and counsel | Wording and contacts are legal and personal; the runbook keeps blanks (checklist row 56). No screen reads them | The breach runbook cannot be walked end to end |
-| Clinic opening hours and limits | Clinic owner | No table or screen in this build reads opening hours, and the proposals contain none: there is nothing to enter | Nothing in the demo |
+| The privacy promise on the public home page (`iam.clinic_public_profile.privacy_promise`) | Counsel | It is legal wording a patient reads as the hospital's promise: not ours to write, so the seed leaves it null | The home page shows its own "not available yet" line |
 | Break-glass reviewer and review deadline | Clinic owner | The proposal leaves it as a question | The after-the-fact review has no named reviewer |
 | Real family-link age limits and consent rule | Counsel | Counsel's decision (a placeholder exists for the demo only) | A real launch |
 | Tamil strings reviewed | Tamil reader | Never marked reviewed by us; 43 flagged | The Tamil approval row |
