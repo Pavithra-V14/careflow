@@ -75,7 +75,8 @@ async def test_only_a_nurse_or_doctor_with_a_second_factor_creates_a_draft_and_i
     first = await draft(db, w, key="same")
     assert first[0][1] is True
     assert (await draft(db, w, key="same"))[0] == (first[0][0], False)  # a replay
-    assert await draft(db, w, key="same", title="ZZ other") == "23505"  # the key for a different draft
+    assert (await draft(db, w, key="same", title="ZZ other"))[0] == (first[0][0], False)  # another title is still the same request (0092: a key identifies kind and code only)
+    assert await draft(db, w, key="same", code="zz-different-code") == "23505"  # the key for a different draft
     assert await draft(db, w, code="zz-card", key="other-key") == "23505"  # one OPEN draft per code
     for who in ("fd", "admin", "worker", "nurse_b", "patient"):
         assert await draft(db, w, who, code="zz-other") == "42501", who
@@ -105,7 +106,7 @@ async def test_only_the_author_edits_and_only_while_a_draft_and_a_submitted_draf
     assert await as_app(db, w["doctor"], SUBMIT, c=w["a"], d=did, key="s3") == "42501"  # not the author
     assert await owner(db, "update kb.knowledge_drafts set title = 'tampered' where id = :d", d=did) == "23001"  # the freeze holds for the owner
     assert await owner(db, "delete from kb.knowledge_drafts where id = :d", d=did) == "23001"
-    assert await owner(db, "truncate kb.knowledge_drafts") == "23001"
+    assert await owner(db, "truncate kb.knowledge_drafts") in ("23001", "0A000")  # refused by the guard, or earlier by the foreign key of the versions
 
 
 async def test_a_doctor_who_is_not_the_author_decides_and_an_approval_writes_the_next_immutable_version(db):
