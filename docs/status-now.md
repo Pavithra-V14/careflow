@@ -49,3 +49,4 @@ Each person has a single file to open, answer, sign and send back in `docs/appro
 ## 2026-11-19: demo placeholders (nothing approved)
 
 - `scripts/seed_demo_placeholders.py` (migration 0096) enters labelled placeholders into the dev database: break-glass reasons and limits, the public-grievance cap, the canary cap, the per-call spend cap and the bookable visit types. Every row carries "DEMO PLACEHOLDER, not approved by the clinic owner"; the application refuses to start outside the synthetic demo while one exists. Inventory, owners and what stays blocked: `docs/demo-placeholders.md`; commands: `docs/demo-runbook.md` section 14.
+- **2026-11-20:** patient portal claim by e-mail + password for dev walks only (`CAREFLOW_DEMO_EMAIL_SIGNIN=on`, demo + synthetic only; refuses to start elsewhere). `scripts/seed_dev_portal_patient.py` prepares one synthetic patient; the account is bound by the portal's own claim. Steps: `docs/demo-runbook.md` section 15.
