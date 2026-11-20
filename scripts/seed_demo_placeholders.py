@@ -8,7 +8,7 @@ The values come from the AI-prepared proposals in docs/approval-pack/clinic-prop
 give no number (the public-grievance hourly cap, the canary cap, the per-call spend cap, how many future bookings a patient may hold) the number is an INVENTED DEMO NUMBER and the label says so. No clinical content is
 entered: no card, no red-flag rule, no threshold, no wording a patient reads. Nothing is written to a migration or a repository default.
 
-Entered, per clinic: iam.break_glass_reasons and iam.break_glass_settings, iam.public_grievance_limits, docs.canary_settings, ops.spend_limits, sched.patient_bookable_visit_types (every visit type of the clinic).
+Entered, per clinic: iam.break_glass_reasons and iam.break_glass_settings, iam.public_grievance_limits, docs.canary_settings, ops.spend_limits, sched.patient_bookable_visit_types (every visit type of the clinic), iam.clinic_public_profile (the public home page's about, departments, address, opening hours and phone: obviously fake DEMO values; the privacy promise is counsel's and is NOT entered).
 Not entered here: family-link rules (scripts/seed_demo_family_rules.py), consent notices (scripts/seed_consent_notices.py with the demo pack), and every setting that lives in the environment (the demo pack and
 docs/demo-runbook.md). See docs/demo-placeholders.md for what stays blocked, by owner.
 
@@ -48,8 +48,20 @@ CANARY_PER_DAY = 5
 SPEND_USD_PER_CALL = Decimal("0.05")
 BOOKABLE_MAX_FUTURE = 2
 
+# The hospital's public profile (migration 0100): OBVIOUSLY FAKE demo values, every one starting with DEMO. No real street, no dialable number, no real person, no claim of any kind.
+# The privacy promise is COUNSEL'S wording and is deliberately NOT entered: it stays null, so the page shows its own placeholder.
+PROFILE_ABOUT = "DEMO - sample text for a demonstration. It does not describe a real hospital."
+PROFILE_DEPARTMENTS = (
+    {"name": "DEMO Department One", "doctors": ["DEMO Doctor One"]},
+    {"name": "DEMO Department Two", "doctors": []},
+)
+PROFILE_ADDRESS = "DEMO - 1 Example Street, Sample Town (not a real address)"
+PROFILE_OPENING_HOURS = "DEMO - sample opening hours only"
+PROFILE_PHONE = "DEMO - not a real number"
+
 TABLES = (
     "iam.break_glass_reasons", "iam.break_glass_settings", "iam.public_grievance_limits", "docs.canary_settings", "ops.spend_limits", "sched.patient_bookable_visit_types",
+    "iam.clinic_public_profile",
 )
 
 
@@ -87,6 +99,17 @@ async def run(env: dict[str, str], clinic: uuid.UUID, *, remove: bool, dry_run: 
                             {"a": BOOKABLE_MAX_FUTURE},
                         ),
                     )
+                    import json
+
+                    counts["iam.clinic_public_profile"] = (
+                        await conn.execute(
+                            text(
+                                "insert into iam.clinic_public_profile (clinic_id, about, departments, address, opening_hours, phone, provenance) "
+                                "values (:c, :about, cast(:dep as jsonb), :addr, :hours, :phone, :l) on conflict (clinic_id) do nothing"
+                            ),
+                            {"c": clinic, "l": LABEL, "about": PROFILE_ABOUT, "dep": json.dumps(PROFILE_DEPARTMENTS), "addr": PROFILE_ADDRESS, "hours": PROFILE_OPENING_HOURS, "phone": PROFILE_PHONE},
+                        )
+                    ).rowcount
                     for table, sql, extra in steps:
                         counts[table] = (await conn.execute(text(sql), {**p, **extra})).rowcount
                 say(("removed" if remove else "entered") + " (rows per table; a row already there is left alone and not counted):")

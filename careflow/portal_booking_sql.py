@@ -79,6 +79,17 @@ async def open_slots(conn: AsyncConnection, clinic_id: uuid.UUID, limit: int) ->
     return [OpenSlot(r.slot_id, r.starts_at, r.ends_at, r.visit_type_id, r.visit_type_name, r.location_name) for r in rows]
 
 
+async def booking_state(conn: AsyncConnection, clinic_id: uuid.UUID) -> str:
+    """`ok`, `no_open_times` or `not_set_up` (migration 0099): why the list of bookable slots is, or is not, empty. One word, never a count or a name."""
+    try:
+        async with conn.begin_nested():
+            word = (await conn.execute(text("select sched.patient_booking_state(:c)"), {"c": clinic_id})).scalar_one()
+    except DBAPIError as exc:
+        _map(exc)
+        raise
+    return str(word)
+
+
 async def book(conn: AsyncConnection, slot_id: uuid.UUID, idempotency_key: str) -> tuple[uuid.UUID, uuid.UUID, bool]:
     try:
         async with conn.begin_nested():

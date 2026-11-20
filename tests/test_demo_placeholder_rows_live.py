@@ -69,10 +69,11 @@ async def test_labelled_rows_are_counted_per_source_unlabelled_rows_are_not_and_
     await db.execute(text("insert into docs.canary_settings (clinic_id, max_per_day, provenance) values (:c, 5, :l)"), p)
     await db.execute(text("insert into ops.spend_limits (clinic_id, max_usd_per_call, provenance) values (:c, 0.05, :l)"), p)
     await db.execute(text("insert into sched.patient_bookable_visit_types (clinic_id, visit_type_id, max_future_bookings, provenance) values (:c, :v, 2, :l)"), p)
+    await db.execute(text("insert into iam.clinic_public_profile (clinic_id, about, provenance) values (:c, 'DEMO about', :l)"), p)
     await db.execute(text("insert into iam.family_link_rules (clinic_id, link_type, min_dependant_age_years, max_dependant_age_years, requires_dependant_consent, provenance) values (:c, 'guardian_of_minor', 0, 9, true, :l)"), p)
     after = await counts(db)
     assert set(after) == {"iam.break_glass_reasons", "iam.break_glass_settings", "iam.public_grievance_limits", "docs.canary_settings", "ops.spend_limits", "sched.patient_bookable_visit_types",
-                          "iam.family_link_rules", "iam.consent_notices"}
+                          "iam.family_link_rules", "iam.consent_notices", "iam.clinic_public_profile"}
     for source in after:
         if source != "iam.consent_notices":
             assert after[source] >= before[source] + 1, source
