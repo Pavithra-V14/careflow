@@ -16,6 +16,7 @@ import pytest
 
 from tests.test_api_offers_live import (  # noqa: F401  (the fixtures are imported so this module seeds its own world)
     DRAFT,
+    MIGRATOR,
     SEND,
     draft,
     headers,
@@ -26,7 +27,7 @@ from tests.test_api_offers_live import (  # noqa: F401  (the fixtures are import
     world,
 )
 
-pytestmark = pytest.mark.asyncio(loop_scope="module")
+pytestmark = [pytest.mark.asyncio(loop_scope="module"), pytest.mark.skipif(not MIGRATOR, reason="DATABASE_URL_MIGRATOR not configured")]
 SCHED = "/v1/staff/scheduling"
 
 

@@ -1,4 +1,4 @@
-# CareFlow: what is built and what is not, as of 2026-11-14
+# CareFlow: what is built and what is not, as of 2026-11-20 (the dated sections at the end are newer than sections (a) to (d))
 
 Plain words. Everything here is **synthetic demo data in the dev project**; nothing has touched a real patient. "Demo-verified" means the owner ran it for real on the demo clinic and it worked. "Built, offline only" means the code and its tests pass (the offline suite, and in CI the live database tests where they exist) but nobody has run that feature by hand against real services. The detail behind each line is in `docs/spec-compliance.md` (per spec section), `docs/gap-audit.md` and `docs/design/pre-launch-checklist.md`.
 
@@ -50,3 +50,9 @@ Each person has a single file to open, answer, sign and send back in `docs/appro
 
 - `scripts/seed_demo_placeholders.py` (migration 0096) enters labelled placeholders into the dev database: break-glass reasons and limits, the public-grievance cap, the canary cap, the per-call spend cap and the bookable visit types. Every row carries "DEMO PLACEHOLDER, not approved by the clinic owner"; the application refuses to start outside the synthetic demo while one exists. Inventory, owners and what stays blocked: `docs/demo-placeholders.md`; commands: `docs/demo-runbook.md` section 14.
 - **2026-11-20:** patient portal claim by e-mail + password for dev walks only (`CAREFLOW_DEMO_EMAIL_SIGNIN=on`, demo + synthetic only; refuses to start elsewhere). `scripts/seed_dev_portal_patient.py` prepares one synthetic patient; the account is bound by the portal's own claim. Steps: `docs/demo-runbook.md` section 15.
+
+## 2026-11-20: what is verified and what is not (honest state)
+- **Offline suite, run locally on 2026-11-20:** 2,700 passed, 1,788 skipped (the live tests skip without the database credentials). One live module errored locally because it lacked the same skip guard as the others; that is fixed.
+- **Verified by the owner on the dev project, by hand:** the portal claim end to end with the e-mail + password demo sign-in (claimed directly after the front desk confirmed the identity; 49 calls, no mismatch); the front-desk search finding exactly one demo patient; the demo backend started through `scripts/run_demo_backend.ps1`; the first run of `scripts/demo_up.ps1` (10 passed, 4 findings, three of them false alarms since fixed).
+- **Not yet confirmed on a finished CI run:** see the CI state recorded below once a run has finished. Until then the live tests of migrations 0092 to 0098, the role-matrix cases for the e-mail-only claim and the origin mismatch, the care-plan HTTP test and the knowledge search shard are written and reviewed but unconfirmed.
+- **Never claimed here:** any counsel, privacy-owner, clinic-owner or clinician approval, any Tamil string reviewed, any real patient, any drill run.

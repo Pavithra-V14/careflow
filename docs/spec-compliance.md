@@ -35,11 +35,11 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 |---|---|---|---|---|
 | 3.1 | FastAPI async, Pydantic v2, OpenAPI feeds a contract test | BUILT | Snapshot test fails when stale | `careflow/app.py`, `tests/test_openapi_snapshot.py` |
 | 3.2 | SQLAlchemy Core async + asyncpg, hand-written SQL | BUILT | | `careflow/db.py` |
-| 3.3 | Plain SQL migrations, checksummed ledger, advisory lock, append-only | BUILT | 79 migrations | `careflow/migrate.py`, `db/migrations/` |
+| 3.3 | Plain SQL migrations, checksummed ledger, advisory lock, append-only | BUILT | 98 migrations (0001 to 0098) | `careflow/migrate.py`, `db/migrations/` |
 | 3.4 | FHIR R4-shaped JSON validated by a FHIR library | NOT BUILT | Results and medications are plain typed rows; no FHIR library (a new dependency, and a modelling decision) | `docs/gap-audit.md` |
 | 3.5 | LangGraph with durable Postgres checkpointing | BUILT | Own asyncpg checkpointer | `careflow/checkpointer.py`, migration 0021 |
 | 3.6 | Two MCP servers in process: `scheduling` (read+write), `clinical` (read-only) | BUILT, FAKE data | The clinical server has no chart data to read yet | `careflow/mcp_kit.py`, `clinical_server.py`, `scheduling_agent.py`, `scheduling_write_tools.py` |
-| 3.7 | Postgres-backed queue behind a `QueuePort`; Redis/SQS adapter stubbed | BUILT / NOT BUILT | Queue built; the stub adapter is deferred until volume needs it | `careflow/queue.py`, `ports.py` |
+| 3.7 | Postgres-backed queue behind a `QueuePort`; Redis/SQS adapter stubbed | BUILT | Queue built and live-tested; the unwired second adapter exists as a stub that refuses every call and imports no broker library (`careflow/queue_broker_stub.py`) | `careflow/queue.py`, `queue_broker_stub.py`, `ports.py` |
 | 3.8 | React + Vite + TypeScript frontend, Vitest, contract test | OUT OF SCOPE HERE | A separate workstream | `frontend/` |
 | 3.9 | Auth: Supabase Auth; Vectors: Qdrant | BUILT / DEVIATION | Auth built; vectors are in Postgres with pgvector (owner decision 2026-11-14, `docs/design/retrieval-pgvector.md`): a documented deviation from Qdrant, no new service; a dated amendment note was added to `BUILD-SPEC.md` 3 and 16.6 on 2026-11-18 (the original wording is kept) | `careflow/auth.py`, `ports.py` |
 
@@ -63,7 +63,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 | 5.2e | Red-flag rules run first on every path; a model can only escalate | BUILT | Every text path calls the engine first | `careflow/rules.py`, `front_door.py`, `messages.py`, `voice.py` |
 | 5.2f | Vision may precede the rules only as a transcription; screened first; failure is never clear | BUILT | The narrow carve-out | `careflow/extraction.py`, `adapters/vision.py`, `front_door.py` |
 | 5.2g | Safety-net second opinion, fail closed to a nurse | NOT BUILT | Escalate-only path needs a clinician design | `docs/gap-audit.md` |
-| 5.3 | Model deprecation handling (listing job, auto-disable, alert) | BUILT (pure check), NOT BUILT (job) | The comparison logic is built, with an unreadable listing never read as "vanished"; the scheduled job needs each provider's listing call (Appendix B, unverified) | `careflow/spend_policy.py` |
+| 5.3 | Model deprecation handling (listing job, auto-disable, alert) | BUILT (pure check), NOT BUILT (job: needs each provider's listing call, an external call) | The comparison logic is built, with an unreadable listing never read as "vanished" | `careflow/spend_policy.py` |
 
 ## 6. Gateway and caching (spec 6)
 
@@ -204,7 +204,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 
 | Req | Requirement | Status | Reason | Where |
 |---|---|---|---|---|
-| 17.1 | Eleven schema families with their tables | BUILT (partial) | `kb.cards`, card versions, match log, calibration, ICD cache do not exist (clinician content); `clinical` lacks vitals and resource history; the double-booking exclusion constraint exists | `db/migrations/` |
+| 17.1 | Eleven schema families with their tables | BUILT (partial) | The knowledge editor's tables exist since 0090 (`kb.knowledge_drafts`, `kb.knowledge_versions`); a match log, calibration and an ICD cache do not (clinician content or an external source); `clinical` lacks vitals and resource history (build when a feature needs them); the double-booking exclusion constraint exists | `db/migrations/` |
 | 17.1b | RLS keyed on `auth.uid()`; forced RLS; restricted role | BUILT | Role-matrix test against the real restricted role | `tests/test_api_role_matrix.py`, migrations |
 | 17.2 | MPI: encrypted demographics, keyed HMAC tokens, confident link, near-match flag, DOB required, claim needs both factors, logical merges and unmerge | BUILT | | `careflow/mpi.py`, `identity.py`, `crypto.py`, migrations 0002, 0003, 0008, 0029 |
 | 17.2b | Key versioning in the schema; rotation as a documented manual procedure | BUILT | | `careflow/rotation.py`, `docs/runbooks/key_rotation.md` |
@@ -224,7 +224,7 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 | 18.1 | JWT verified per request by `kid`, claims set with `set_config(..., true)`; the transaction-mode pooler with no driver-side prepared statements | BUILT | | `careflow/auth.py`, `db.py`, `scripts/verify_app_role.py` |
 | 18.1b | Staff invitation-only, mandatory second factor, step-up for sensitive actions | BUILT (API and database) / DECISION | TOTP enforced in the API and in the database for tables since 0047; older tables are an accepted residual; passkeys excluded by the owner; invitation needs the unwired Auth admin call | `careflow/auth.py`, `auth_admin.py`, migration 0047, 0065 |
 | 18.1c | Staff recovery through two admins | BUILT, port unverified | The factor reset goes through the Auth admin port (a fake) | `careflow/recovery_sql.py`, migration 0060 |
-| 18.1d | Patient OTP, device list, rate limits, CAPTCHA, guardian accounts | DECISION | Hosted Auth project settings; devices need the Auth admin API (unwired, owner decision); guardian consent is counsel's (family members NOT built yet) | `docs/frontend-backend-requests.md` items 21, 23 |
+| 18.1d | Patient OTP, device list, rate limits, CAPTCHA, guardian accounts | DECISION | Hosted Auth project settings; devices need the Auth admin API (unwired, owner decision); family links exist as a record only (0091, deny by default, grants nothing) and acting for a dependant is counsel's; the demo-only e-mail + password claim path never replaces patient OTP | `docs/frontend-backend-requests.md` items 21, 23, 41 |
 | 18.2 | SMS port; DLT registration; mitigations; sandbox sink in demo | FAKE / DECISION | Send guard and an empty template registry built; nothing registered, no provider | `careflow/sms.py`, `config/sms-templates.yaml` |
 | 18.3 | Email port with two adapters; free fallback default; failure alert | FAKE | Port only | `careflow/ports.py` |
 | 18.4 | RBAC at three layers; deny by default | BUILT | API, RLS, tool-server scopes | `careflow/active_role.py`, migrations |
@@ -249,18 +249,18 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 | 20.1c | Under-18: guardian consent and a proxy trail | DECISION | Counsel confirms the specifics first | `docs/drafts/` |
 | 20.1d | Training labels only from de-identified, clinician-confirmed labels with consent | BUILT (mechanism) | | `careflow/learning_labels.py` |
 | 20.2 | Seeded cards, rules, templates are `draft_unreviewed` and unusable in `clinical` until two-person approval; no invented clinical content | BUILT | Rule authoring (drafts only), approval, withdrawal and retirement; cards and templates have no tables | migrations 0007, 0072, 0076 to 0079 |
-| 20.2b | An admin card editor with embedded test cases | DECISION | Protocol cards are clinician content; no card schema table exists; frontend request 27 | `docs/frontend-backend-requests.md` item 27 |
+| 20.2b | An admin card editor with embedded test cases | BUILT (editor), DECISION (embedded test cases) | The editor exists (0090 to 0093, off by default, nothing seeded); a card's own embedded test cases need a card schema the clinicians decide | `docs/frontend-backend-requests.md` items 27, 38 |
 
 ## 21. Testing strategy (spec 21)
 
 | Req | Requirement | Status | Reason | Where |
 |---|---|---|---|---|
 | 21.1 | GitHub Actions; hosted Supabase for CI; the restricted role | BUILT | Live shards | `.github/workflows/ci.yml` |
-| 21.2 | Unit and graph tests with fakes for every port; the structural test | BUILT | About 2,360 offline tests | `tests/` |
+| 21.2 | Unit and graph tests with fakes for every port; the structural test | BUILT | 2,700 offline tests passed locally on 2026-11-20 | `tests/` |
 | 21.3 | Integration: 200 concurrent bookings, idempotent retries, cross-clinic isolation incl. child tables, immutable audit, resume without repeating, dead-letter | BUILT | | `tests/test_scheduling_concurrency_live.py`, `test_rls_child_tables_live.py`, `test_dead_letters_live.py` |
 | 21.4 | End-to-end flows over HTTP | BUILT (partial) | Referral to review, cancel to booking, red-flag, plus a scripted scheduling sequence; the care-plan flow is in-process | `tests/test_phase2_e2e_live.py`, `test_e2e_demo_flow_live.py` |
 | 21.5 | Contract test and a stale-snapshot check | BUILT | | `tests/test_openapi_snapshot.py` |
-| 21.6 | Dependency and secret scanning; visual regression; red-team and load suites | BUILT (partial) | pip-audit is report-only; no visual regression; load and chaos run in process with a placeholder peak | `.github/workflows/ci.yml`, `tests/test_chaos_and_load.py` |
+| 21.6 | Dependency and secret scanning; visual regression; red-team and load suites | BUILT (partial) | The dependency audit is a GATE since 2026-11-18 (`scripts/audit_gate.py`; any finding with a fix fails unless `ops/audit-ignore.yaml` lists it); no visual regression; load and chaos run in process with a placeholder peak | `.github/workflows/ci.yml`, `tests/test_chaos_and_load.py` |
 
 ## 22. Visit Readiness (spec 22)
 
@@ -350,9 +350,9 @@ Rows that were buildable under the rule of the 2026-11-14 instruction (no extern
 - The per-account message rate limit on the two staff routes that write a patient-facing message (11.5), the three-part latency function (14.4) and the gateway's feature plan (15.2).
 - The typed offer-draft response (`OfferDraftOut`: a closed reason word, the missing settings in their own field, typed data) for the frontend request about typed envelopes (8.3).
 
-## Patient-facing routes still not built (owner decision 2026-11-14 to build them as mechanism)
+## Patient-facing routes (state on 2026-11-20)
 
-Not built yet: family members and guardians (request 21), the protocol-card and message-template editor (27) and patient visit readiness (30). Patient booking (28) and messaging (29) are built as mechanism, off by default. The editor needs a card and template schema and a two-person publish like the rules; family needs the proxy trail and counsel's under-18 rules; readiness has no patient-facing channel by owner decision (a nurse or doctor relays replies).
+Built as mechanism, off by default: patient booking (28), patient messaging (29), patient visit preparation (30, 0089), family links (21, 0091: a record only, deny by default, grants nothing) and the card and template editor (27, 0090 to 0093). Not built: acting for a family member (counsel's under-18 rules first) and a patient-facing readiness channel (owner decision: a nurse or doctor relays replies). A demo-only e-mail + password claim path exists for dev walks and is refused outside the synthetic demo.
 
 ## What remains and why (the short list)
 
