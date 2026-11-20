@@ -439,3 +439,25 @@ The user typed the demo password. Read-only: **no write was made, so no booking*
 | Staff view of the same visit (front desk, second factor) | not tested live | There is no booking, so there is no visit to look at; this step was not run. (The front desk scheduling lists, run earlier, showed 12 slots in the clinic; why none is offered to this patient is the backend's to check.) |
 
 27 calls, 0 schema mismatches, no 403, no write, no unanswered write. The `empty_reason` handling built from backend item 48 is therefore also seen working against the real backend: the screen showed the fixed sentence for the word, never backend text.
+
+## The public home page found broken live, fixed (20 Nov 2026)
+
+The user reloaded the signed-out home page and it still showed every placeholder. Read-only diagnosis: (1) the dev server was serving the latest code; (2) the dev proxy forwards `GET /public/clinic` and `GET /public/clinic/profile` and both answered **200** through port 5173: the clinic read has a name; the profile has text for about, address, opening hours and phone (non-null), two departments, `privacy_promise: null`, `placeholder: true`, features booking, messaging, offers, visit_preparation and family_links **true**, records **false**, languages en and ta. **The backend was not the cause** (the route exists, the demo values are seeded, the switches are on). (3) **Frontend defect:** in the development build the app's API base is an empty string (same origin, through the proxy) and the home page treated an empty base as "not configured", so it never asked, and a failed read fell back to placeholders silently. Fixed test first (commit 41e10fc): an empty base means the page's own origin; a failed read is now said in fixed words, 404 "The hospital's details are not available yet.", anything else "The hospital's details could not be loaded.", never backend text. Seen on the live page afterwards (read-only, headless): header and tab title "Demo Clinic"; the "Demo content" mark; booking, offers, messages and family shown as available and only "See your records after your first visit" marked "Coming soon" (records is false); the supplied texts shown and 3 placeholder boxes left (the privacy promise and two FAQ items); the same in Tamil. No command is needed from the user for this one.
+
+## Booking walk with the user's existing booking (20 Nov 2026): visit preparation read, staff side read
+
+**Write made before this run (not by this walk):** ONE booking for DEMO Portal Patient, made by the user in the portal (Confirmed, Demo Visit Type A, Demo Location North, 21 Nov 2026 9:00-9:30). This walk made **no write**, booked nothing and cancelled nothing.
+
+| Screen | Result | Exact screen text and calls |
+|---|---|---|
+| Portal: appointments list | **pass** | `GET /v1/portal/booking/bookings` **200**, 1 appointment on the page (not cancelled). |
+| Portal: open times | **pass** | `GET /v1/portal/booking/slots` **200**, **9 open times offered** now (the earlier empty list answered "No open times at the moment. Please check again later."). No booking made from them. |
+| Portal: visit preparation for the booking | **pass** | "What to prepare" opened; `GET /v1/portal/visits/{booking_id}/prep` **200**; the screen said **"Nothing to prepare for this visit."** (correct: the clinic supplied no checklist items). Nothing was marked. |
+| Portal: messages | pass (empty) | `GET /v1/portal/messages/threads` 200, no conversations to open. Sending not tested live (no write authorised). |
+| Front desk (second factor): scheduling | **pass** | `locations` 200 (2), `providers` 200 (2), `visit-types` 200 (2), `slots` 200 (**22 rows**). |
+| Front desk: the booking as staff see it | **pass** | `GET /v1/staff/scheduling/bookings` **200**, **2 rows** listed in the clinic's bookings. Patient names were not shown (no names read). |
+| Front desk: visit readiness | refused, as expected for the role | `GET /v1/staff/visits/upcoming` **403**, reason given: "your role may not do this". The screen said "This is not available to your role." (a nurse and doctor section). No retry. |
+| Staff view of the visit's preparation | not tested live: needs a nurse or doctor with a second factor | The front desk is refused on visit readiness, and nurse and doctor have no authenticator yet. |
+| Front desk: message screen | **pass** | `GET /v1/staff/messages/threads` **200**, 1 conversation listed, none opened. |
+
+Patient walk: 31 calls, 0 schema mismatches, no 403, no write, no unanswered write. Front desk walk: 12 calls, 0 schema mismatches, one 403 (visit readiness, above), no write, no unanswered write.

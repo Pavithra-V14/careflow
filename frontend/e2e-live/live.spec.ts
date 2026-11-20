@@ -611,6 +611,12 @@ test('DEMO booking, front desk: the same visit on the staff side, and the messag
     await settle(page);
     await page.waitForTimeout(2000);
     await snap('scheduling');
+    phase.current = 'scheduling (bookings list: the booking as staff see it)';
+    await page.evaluate(() => (window.location.hash = '#/scheduling/bookings'));
+    await settle(page);
+    await page.waitForTimeout(2000);
+    await snap('scheduling: bookings');
+    log.push(`## bookings listed: ${await page.locator('main tbody tr').count()} table rows`, '');
     phase.current = 'visit readiness (upcoming visits)';
     await page.evaluate(() => (window.location.hash = '#/readiness'));
     await settle(page);
