@@ -55,6 +55,12 @@ describe('source guards', () => {
     expect(offenders(/process\.env/)).toEqual([]);
   });
 
+  it('has no garbled characters from a wrong text encoding (a middle dot once showed on screen as two odd characters)', () => {
+    // Built from code points so this file itself never contains the garbled pair.
+    const garbled = new RegExp(String.fromCharCode(0xc2, 0xb7) + '|' + String.fromCharCode(0xc3) + '[\u0080-\u00bf]|' + String.fromCharCode(0xe2, 0x20ac));
+    expect(offenders(garbled)).toEqual([]);
+  });
+
   it('keeps analytics, fonts and CDNs out', () => {
     expect(offenders(/google-analytics|googletagmanager|gtag\(|segment\.|mixpanel|hotjar|sentry|fonts\.googleapis|fonts\.gstatic|cdn\./i)).toEqual([]);
   });

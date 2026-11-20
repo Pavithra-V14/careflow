@@ -1733,10 +1733,10 @@ Terms standardised: proposal, resolve / resolved.
 | `referrals.proposalAbstained` | Abstained | முன்மொழிவு அளிக்கவில்லை | corrected after AI review (meaning problem); blind re-check: minor-drift |
 | `referrals.proposalMode` | Mode | முறை | ok |
 | `referrals.registeredBy` | Registered by | பதிவு செய்தவர் | ok |
-| `referrals.review.assessment.choice.missed_by_system` | The system should have escalated this and did not | இதைக் கணினி உயர்த்தியிருக்க வேண்டும்; ஆனால் உயர்த்தவில்லை | ok |
-| `referrals.review.assessment.choice.unnecessary_escalation` | This escalation was unnecessary | இந்த உயர்த்தல் தேவையற்றது | ok |
+| `referrals.review.assessment.choice.missed_by_system` | The system should have escalated this and did not | இதைக் கணினி உயர்நிலைக்கு அனுப்பியிருக்க வேண்டும்; ஆனால் அனுப்பவில்லை | ok |
+| `referrals.review.assessment.choice.unnecessary_escalation` | This escalation was unnecessary | இந்த உயர்நிலை அனுப்புதல் தேவையற்றது | ok |
 | `referrals.review.assessment.hint` | Leave this blank if you have no view. Blank means not recorded, not accurate. A recorded view cannot be changed later. | உங்களுக்குக் கருத்து இல்லையெனில் இதை வெறுமையாக விடுங்கள். வெறுமை என்றால் பதிவு செய்யப்படவில்லை என்று பொருள்; சரியானது என்று அல்ல. பதிவு செய்த கருத்தைப் பின்னர் மாற்ற முடியாது. | ok |
-| `referrals.review.assessment.label` | Was this escalation right? (optional) | இந்த உயர்த்தல் சரியானதா? (விருப்பம்) | ok |
+| `referrals.review.assessment.label` | Was this escalation right? (optional) | இந்த உயர்நிலை அனுப்புதல் சரியானதா? (விருப்பம்) | ok |
 | `referrals.review.assessment.none` | Not recorded | பதிவு செய்யப்படவில்லை | ok |
 | `referrals.review.confirmBody` | You are about to record the decision "{{decision}}" for this referral. It is kept under your name. | இந்தப் பரிந்துரைக்கு "{{decision}}" என்ற முடிவை நீங்கள் பதிவு செய்யப் போகிறீர்கள். அது உங்கள் பெயரில் வைக்கப்படும். | minor drift |
 | `referrals.review.confirmTitle` | Record this decision? | இந்த முடிவைப் பதிவு செய்யவா? | ok |

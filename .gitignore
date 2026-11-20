@@ -29,3 +29,4 @@ Thumbs.db
 
 # Archives: a zip of the repo can contain .env files, so never track one
 *.zip
+test-results-visual/

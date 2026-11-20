@@ -1,6 +1,6 @@
 # Tamil review pack (AI-prepared, NOT reviewed by a native speaker)
 
-Prepared 2026-11-20. Machine-checked on 2026-11-18; NOT human-reviewed; the Tamil reader must still approve (Part 0). Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 2036 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
+Prepared 2026-11-20. Machine-checked on 2026-11-20; NOT human-reviewed; the Tamil reader must still approve (Part 0). Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 2036 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
 
 **Regenerated 2026-11-20** by `npm run i18n:pack` from the strings as they are now, so it covers every current string, including the newest screens (patient voice setting, consent withdrawal and history, activating a staff account, withdrawing and retiring a red-flag rule). Each is written and second-passed in the same way and is just as unreviewed.
 
@@ -20,18 +20,18 @@ Notes: 71 grade A, 125 grade B, 58 grade C (254 rows with a note; some notes cov
 
 ## Part 0. Machine first pass (back-translation)
 
-**Machine-checked on 2026-11-18; NOT human-reviewed; the Tamil reader must still approve.** This is a first pass by an AI model, not a native speaker, and not a substitute for the human reviewer. No string was marked reviewed.
+**Machine-checked on 2026-11-20; NOT human-reviewed; the Tamil reader must still approve.** This is a first pass by an AI model, not a native speaker, and not a substitute for the human reviewer. No string was marked reviewed.
 
-How it was done: every Tamil string was back-translated to English on its own, without the English original in view, and only then compared with the original. Strings that are identical in English and Tamil on purpose (Part 6) were not translated, so they were not back-translated. It was done in 2 pass(es): 2026-11-14: 1778 strings (1 fixed, 35 flagged); 2026-11-18: 239 strings (1 fixed, 8 flagged). The second pass covered only the strings added or changed since the first. A script also checked every string for lost or reordered {{placeholders}}, changed numbers, a lost negation, informal pronouns and a different number of sentences.
+How it was done: every Tamil string was back-translated to English on its own, without the English original in view, and only then compared with the original. Strings that are identical in English and Tamil on purpose (Part 6) were not translated, so they were not back-translated. It was done in 3 pass(es): 2026-11-14: 1778 strings (1 fixed, 35 flagged); 2026-11-18: 239 strings (1 fixed, 8 flagged); 2026-11-20: 20 strings (3 fixed, 3 flagged). The second pass covered only the strings added or changed since the first. A script also checked every string for lost or reordered {{placeholders}}, changed numbers, a lost negation, informal pronouns and a different number of sentences.
 
 | Count | Strings |
 |---|---|
-| Checked | 2016 (1985 back-translated, 31 left in English by design) |
-| Fixed (a clear defect) | 2 |
-| Flagged for the human reviewer | 43 (grade A: 5, B: 15, C: 23) |
-| Strings added since this check, not covered | 20 |
+| Checked | 2036 (2005 back-translated, 31 left in English by design) |
+| Fixed (a clear defect) | 5 |
+| Flagged for the human reviewer | 46 (grade A: 5, B: 15, C: 26) |
+| Strings added since this check, not covered | 0 |
 
-Automatic findings: 0 placeholder mismatches, 0 changed numbers, 0 lost negations, 0 informal pronouns, 1 string with a different number of sentences (fixed). 222 strings whose back-translation overlapped little with the English, or that the script flagged, were read side by side; the rest agreed. Most of the low-overlap ones were synonyms ("Expires" and "Expiry", "Phone" and "Telephone") and are not listed.
+Automatic findings: 0 placeholder mismatches, 0 changed numbers, 0 lost negations, 0 informal pronouns, 1 string with a different number of sentences (fixed). 242 strings whose back-translation overlapped little with the English, or that the script flagged, were read side by side; the rest agreed. Most of the low-overlap ones were synonyms ("Expires" and "Expiry", "Phone" and "Telephone") and are not listed.
 
 ### Fixed
 
@@ -39,6 +39,9 @@ Automatic findings: 0 placeholder mismatches, 0 changed numbers, 0 lost negation
 |---|---|---|---|---|
 | `scheduling.offersNote` | A read-only view of the draft offer. It is computed when you ask and stored nowhere. Nothing is sent. | வரைவு வாய்ப்பின் படிக்க-மட்டும் பார்வை. நீங்கள் கேட்கும்போது கணக்கிடப்படுகிறது, எங்கும் சேமிக்கப்படுவதில்லை. | வரைவு வாய்ப்பின் படிக்க-மட்டும் பார்வை. நீங்கள் கேட்கும்போது கணக்கிடப்படுகிறது, எங்கும் சேமிக்கப்படுவதில்லை. எதுவும் அனுப்பப்படாது. | The English ends with "Nothing is sent." and the Tamil had no such sentence (the English was extended on 2026-11-14 and the Tamil was not). A lost "nothing is sent" on the offer draft screen is a safety-relevant omission. |
 | `portal.prep.markedDone` | You marked this done | இதைச் செய்தாகக் குறித்தீர்கள் | இதைச் செய்ததாகக் குறித்தீர்கள் | A spelling error: "செய்தாகக்" is not a valid form (it must be "செய்ததாகக்", "that you did it"). It is the line a patient reads under a checklist item they marked done. |
+| `referrals.review.assessment.label` | Was this escalation right? (optional) | இந்த உயர்த்தல் சரியானதா? (விருப்பம்) | இந்த உயர்நிலை அனுப்புதல் சரியானதா? (விருப்பம்) | The same word means "escalation" everywhere else in the console (உயர்நிலைக்கு அனுப்பு..., "sent to a higher level"); this string used உயர்த்தல் ("raising"), so the same idea read as two different things on a safety-related screen. |
+| `referrals.review.assessment.choice.unnecessary_escalation` | This escalation was unnecessary | இந்த உயர்த்தல் தேவையற்றது | இந்த உயர்நிலை அனுப்புதல் தேவையற்றது | The same word means "escalation" everywhere else in the console (உயர்நிலைக்கு அனுப்பு..., "sent to a higher level"); this string used உயர்த்தல் ("raising"), so the same idea read as two different things on a safety-related screen. |
+| `referrals.review.assessment.choice.missed_by_system` | The system should have escalated this and did not | இதைக் கணினி உயர்த்தியிருக்க வேண்டும்; ஆனால் உயர்த்தவில்லை | இதைக் கணினி உயர்நிலைக்கு அனுப்பியிருக்க வேண்டும்; ஆனால் அனுப்பவில்லை | The same word means "escalation" everywhere else in the console (உயர்நிலைக்கு அனுப்பு..., "sent to a higher level"); this string used உயர்த்தல் ("raising"), so the same idea read as two different things on a safety-related screen. |
 
 ### Flagged (left as they are, for the human reviewer)
 
@@ -89,6 +92,9 @@ Grade A: a safety, privacy or patient-rights meaning could be misread. B: a wron
 | `portal.prep.markNotDone` | C | Mark not done | செய்யவில்லை எனக் குறி | Register: "Mark not done" is "செய்யவில்லை எனக் குறி" (a bare imperative) on a patient button. Part 5. | செய்யவில்லை எனக் குறியுங்கள். |
 | `messages.screen.reply.pending_clinician_template` | C | No reply is sent: the patient-facing wording has not been written by a clinician yet. | எந்தப் பதிலும் அனுப்பப்படவில்லை: நோயாளிக்கான சொற்களை மருத்துவர் இன்னும் எழுதவில்லை. | The note that no reply is sent because a clinician has not written the wording is in the past tense ("was not sent"); the English says no reply is sent at all for now. | A present-tense form, chosen by the reviewer. |
 | `knowledge.roles.queue_worker` | C | Background worker | பின்னணிப் பணியாளர் | The role "queue_worker" is shown to staff as "Background worker" (பின்னணிப் பணியாளர்); a nurse or doctor may not know what it is. | The reviewer and the clinic decide whether this role should be named in Tamil at all. |
+| `portal.demoSignIn.banner` | C | Demo sign-in. Email and password sign-in is for demonstrations with made-up patients only. It is not how patients sign in. | டெமோ உள்நுழைவு. மின்னஞ்சல் மற்றும் கடவுச்சொல் உள்நுழைவு கற்பனை நோயாளிகளுடன் செய்யும் செயல்விளக்கங்களுக்கு மட்டுமே. நோயாளிகள் இப்படி உள்நுழைவதில்லை. | "Demo" is written as the transliterated loanword டெமோ here and in the title, the button and the failure message (portal.demoSignIn.title, .submit, .failed). A reader may prefer a native word (for example செயல்விளக்க). The sentence itself back-translated correctly: "for demonstrations with imaginary patients only; patients do not sign in like this". | The reviewer decides whether to keep டெமோ or use a Tamil word, once, for all four strings. |
+| `familyStaff.revoke` | C | Revoke | திரும்பப் பெறு | Staff "Revoke" is திரும்பப் பெறு (take back), the same verb as the patient-facing "Withdraw" (consent, family link) and the rule "Withdrawn" status. It is consistent with what the patient sees for a revoked link ("Withdrawn"), but it is also the verb flagged in portal.consent.withdraw (grade A). | Keep it matching the patient wording, or give revoke its own word; the reviewer decides together with portal.consent.withdraw. |
+| `referrals.review.assessment.hint` | C | Leave this blank if you have no view. Blank means not recorded, not accurate. A recorded view cannot be changed later. | உங்களுக்குக் கருத்து இல்லையெனில் இதை வெறுமையாக விடுங்கள். வெறுமை என்றால் பதிவு செய்யப்படவில்லை என்று பொருள்; சரியானது என்று அல்ல. பதிவு செய்த கருத்தைப் பின்னர் மாற்ற முடியாது. | "Blank" is வெறுமை / வெறுமையாக (emptiness, void), which can carry a bleak sense; the everyday interface word for an empty field is காலி. The meaning back-translated correctly ("blank means not recorded, not correct"). | A reviewer may prefer காலியாக விடுங்கள் / காலி என்றால். |
 
 ## Part 1. Strings that most need a native speaker (safety first)
 
@@ -410,7 +416,7 @@ Grade A: a safety, privacy or patient-rights meaning could be misread. B: a wron
 | grant / withdraw (a consent) | வழங்கு (grant) and திரும்பப் பெறு (withdraw) (28) | Consent withdrawal is one click in the portal, so the word must be unmistakable. |
 | fresh (code) | புதிய ("new") (35) | Means a recently entered code, not a new one. |
 | screen (the rules read text) | பரிசோதனை (12) | The word for a medical examination or test. |
-| escalate | உயர்நிலைக்கு அனுப்பு ("send to a higher level") (5) | Loses the sense of raising urgency. |
+| escalate | உயர்நிலைக்கு அனுப்பு ("send to a higher level") (8) | Loses the sense of raising urgency. |
 | authenticator | அங்கீகார செயலி (app) / அங்கீகார குறியீடு (code) (16) | Consistent; check it is the word staff use. |
 
 ## Part 5. Register
@@ -1292,7 +1298,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `familyStaff.result.recorded` | The decision was recorded. | முடிவு பதிவு செய்யப்பட்டது. | no issue found | |
 | `familyStaff.result.replay` | This was already recorded. | இது ஏற்கெனவே பதிவு செய்யப்பட்டது. | no issue found | |
 | `familyStaff.result.requester_not_active` | This request can no longer be verified: the person who asked no longer has an active account or record. Nothing was recorded. | இந்தக் கோரிக்கையை இனிச் சரிபார்க்க முடியாது: கோரியவருக்கு இப்போது செயலில் உள்ள கணக்கோ பதிவோ இல்லை. எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
-| `familyStaff.revoke` | Revoke | திரும்பப் பெறு | no issue found | |
+| `familyStaff.revoke` | Revoke | திரும்பப் பெறு | no issue found; machine back-translation check: flagged C (Part 0) | |
 | `familyStaff.revokeBody` | Closes the request or link. The patient then sees it as withdrawn. It needs one reason word and is recorded under your name. Nothing about either person's record is changed. | கோரிக்கையை அல்லது இணைப்பை மூடுகிறது. நோயாளிக்கு அது திரும்பப் பெறப்பட்டதாகத் தெரியும். இதற்கு ஒரு காரணச் சொல் தேவை; இது உங்கள் பெயரில் பதிவாகும். இருவரின் பதிவுகளிலும் எதுவும் மாறாது. | no issue found | |
 | `familyStaff.revokeResult.invalid_state` | This is already closed. Nothing was recorded. | இது ஏற்கெனவே மூடப்பட்டுள்ளது. எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
 | `familyStaff.revokeResult.recorded` | It was revoked. The patient sees it as withdrawn. | அது திரும்பப் பெறப்பட்டது. நோயாளிக்கு அது திரும்பப் பெறப்பட்டதாகத் தெரியும். | no issue found | |
@@ -1781,7 +1787,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `portal.consent.withdraw` | Withdraw | திரும்பப் பெறு | no issue found; machine back-translation check: flagged A (Part 0) | |
 | `portal.consent.withdrawn` | Withdrawn | திரும்பப் பெறப்பட்டது | no issue found | |
 | `portal.consent.withdrawnDone` | Your consent was withdrawn. You can grant it again at any time. | உங்கள் ஒப்புதல் திரும்பப் பெறப்பட்டது. எப்போது வேண்டுமானாலும் மீண்டும் வழங்கலாம். | A: Tells the patient their consent was withdrawn, at once, with no confirmation step. It must read as done and reversible ("மீண்டும் வழங்கலாம்"). "திரும்பப் பெறப்பட்டது" shares its verb with revoke and cannot-be-undone elsewhere (Part 4). | |
-| `portal.demoSignIn.banner` | Demo sign-in. Email and password sign-in is for demonstrations with made-up patients only. It is not how patients sign in. | டெமோ உள்நுழைவு. மின்னஞ்சல் மற்றும் கடவுச்சொல் உள்நுழைவு கற்பனை நோயாளிகளுடன் செய்யும் செயல்விளக்கங்களுக்கு மட்டுமே. நோயாளிகள் இப்படி உள்நுழைவதில்லை. | no issue found | |
+| `portal.demoSignIn.banner` | Demo sign-in. Email and password sign-in is for demonstrations with made-up patients only. It is not how patients sign in. | டெமோ உள்நுழைவு. மின்னஞ்சல் மற்றும் கடவுச்சொல் உள்நுழைவு கற்பனை நோயாளிகளுடன் செய்யும் செயல்விளக்கங்களுக்கு மட்டுமே. நோயாளிகள் இப்படி உள்நுழைவதில்லை. | no issue found; machine back-translation check: flagged C (Part 0) | |
 | `portal.demoSignIn.email` | Email | மின்னஞ்சல் | no issue found | |
 | `portal.demoSignIn.failed` | The demo sign-in did not work. Check the email and password and try again. | டெமோ உள்நுழைவு வேலை செய்யவில்லை. மின்னஞ்சலையும் கடவுச்சொல்லையும் சரிபார்த்து மீண்டும் முயற்சிக்கவும். | no issue found | |
 | `portal.demoSignIn.password` | Password | கடவுச்சொல் | no issue found | |
@@ -2132,10 +2138,10 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `referrals.proposalAbstained` | Abstained | முன்மொழிவு அளிக்கவில்லை | no issue found; earlier AI pass: corrected (meaning problem) | |
 | `referrals.proposalMode` | Mode | முறை | no issue found | |
 | `referrals.registeredBy` | Registered by | பதிவு செய்தவர் | no issue found | |
-| `referrals.review.assessment.choice.missed_by_system` | The system should have escalated this and did not | இதைக் கணினி உயர்த்தியிருக்க வேண்டும்; ஆனால் உயர்த்தவில்லை | no issue found | |
-| `referrals.review.assessment.choice.unnecessary_escalation` | This escalation was unnecessary | இந்த உயர்த்தல் தேவையற்றது | no issue found | |
-| `referrals.review.assessment.hint` | Leave this blank if you have no view. Blank means not recorded, not accurate. A recorded view cannot be changed later. | உங்களுக்குக் கருத்து இல்லையெனில் இதை வெறுமையாக விடுங்கள். வெறுமை என்றால் பதிவு செய்யப்படவில்லை என்று பொருள்; சரியானது என்று அல்ல. பதிவு செய்த கருத்தைப் பின்னர் மாற்ற முடியாது. | no issue found | |
-| `referrals.review.assessment.label` | Was this escalation right? (optional) | இந்த உயர்த்தல் சரியானதா? (விருப்பம்) | no issue found | |
+| `referrals.review.assessment.choice.missed_by_system` | The system should have escalated this and did not | இதைக் கணினி உயர்நிலைக்கு அனுப்பியிருக்க வேண்டும்; ஆனால் அனுப்பவில்லை | no issue found | |
+| `referrals.review.assessment.choice.unnecessary_escalation` | This escalation was unnecessary | இந்த உயர்நிலை அனுப்புதல் தேவையற்றது | no issue found | |
+| `referrals.review.assessment.hint` | Leave this blank if you have no view. Blank means not recorded, not accurate. A recorded view cannot be changed later. | உங்களுக்குக் கருத்து இல்லையெனில் இதை வெறுமையாக விடுங்கள். வெறுமை என்றால் பதிவு செய்யப்படவில்லை என்று பொருள்; சரியானது என்று அல்ல. பதிவு செய்த கருத்தைப் பின்னர் மாற்ற முடியாது. | no issue found; machine back-translation check: flagged C (Part 0) | |
+| `referrals.review.assessment.label` | Was this escalation right? (optional) | இந்த உயர்நிலை அனுப்புதல் சரியானதா? (விருப்பம்) | no issue found | |
 | `referrals.review.assessment.none` | Not recorded | பதிவு செய்யப்படவில்லை | no issue found | |
 | `referrals.review.confirmBody` | You are about to record the decision "{{decision}}" for this referral. It is kept under your name. | இந்தப் பரிந்துரைக்கு "{{decision}}" என்ற முடிவை நீங்கள் பதிவு செய்யப் போகிறீர்கள். அது உங்கள் பெயரில் வைக்கப்படும். | B: The decision word inside the sentence ("{{decision}}", for example Approve) is deliberately left in English (referrals.decision.*), so a Tamil sentence contains an English word. A native reviewer should say how the decision words should read. | |
 | `referrals.review.confirmTitle` | Record this decision? | இந்த முடிவைப் பதிவு செய்யவா? | no issue found | |

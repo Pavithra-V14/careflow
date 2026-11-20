@@ -1,7 +1,7 @@
 {
-  "date": "2026-11-18",
-  "checked": 2016,
-  "backTranslated": 1985,
+  "date": "2026-11-20",
+  "checked": 2036,
+  "backTranslated": 2005,
   "keptInEnglish": 31,
   "fixed": [
     {
@@ -15,6 +15,24 @@
       "why": "A spelling error: \"செய்தாகக்\" is not a valid form (it must be \"செய்ததாகக்\", \"that you did it\"). It is the line a patient reads under a checklist item they marked done.",
       "before": "இதைச் செய்தாகக் குறித்தீர்கள்",
       "after": "இதைச் செய்ததாகக் குறித்தீர்கள்"
+    },
+    {
+      "key": "referrals.review.assessment.label",
+      "why": "The same word means \"escalation\" everywhere else in the console (உயர்நிலைக்கு அனுப்பு..., \"sent to a higher level\"); this string used உயர்த்தல் (\"raising\"), so the same idea read as two different things on a safety-related screen.",
+      "before": "இந்த உயர்த்தல் சரியானதா? (விருப்பம்)",
+      "after": "இந்த உயர்நிலை அனுப்புதல் சரியானதா? (விருப்பம்)"
+    },
+    {
+      "key": "referrals.review.assessment.choice.unnecessary_escalation",
+      "why": "The same word means \"escalation\" everywhere else in the console (உயர்நிலைக்கு அனுப்பு..., \"sent to a higher level\"); this string used உயர்த்தல் (\"raising\"), so the same idea read as two different things on a safety-related screen.",
+      "before": "இந்த உயர்த்தல் தேவையற்றது",
+      "after": "இந்த உயர்நிலை அனுப்புதல் தேவையற்றது"
+    },
+    {
+      "key": "referrals.review.assessment.choice.missed_by_system",
+      "why": "The same word means \"escalation\" everywhere else in the console (உயர்நிலைக்கு அனுப்பு..., \"sent to a higher level\"); this string used உயர்த்தல் (\"raising\"), so the same idea read as two different things on a safety-related screen.",
+      "before": "இதைக் கணினி உயர்த்தியிருக்க வேண்டும்; ஆனால் உயர்த்தவில்லை",
+      "after": "இதைக் கணினி உயர்நிலைக்கு அனுப்பியிருக்க வேண்டும்; ஆனால் அனுப்பவில்லை"
     }
   ],
   "automatic": {
@@ -25,7 +43,7 @@
     "sentenceCountMismatches": 1,
     "sentenceCountMismatchesFixed": 1
   },
-  "candidatesReadSideBySide": 222,
+  "candidatesReadSideBySide": 242,
   "passes": [
     {
       "date": "2026-11-14",
@@ -42,6 +60,13 @@
       "reChecked": 1,
       "fixed": 1,
       "flagged": 8
+    },
+    {
+      "date": "2026-11-20",
+      "checked": 20,
+      "backTranslated": 20,
+      "fixed": 3,
+      "flagged": 3
     }
   ]
 }

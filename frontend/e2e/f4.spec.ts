@@ -56,7 +56,9 @@ test('keyboard only: record a referral decision (nothing chosen for you, nothing
 
   await page.getByRole('radio').first().focus();
   await page.keyboard.press('Space');
-  await page.keyboard.press('Tab'); // a radio group is ONE tab stop; reasons are a placeholder, not a field, so the next stop is the button
+  await page.keyboard.press('Tab'); // a radio group is ONE tab stop; reasons are a placeholder, not a field, so the next stop is the optional escalation question
+  await expect(page.getByRole('combobox', { name: 'Was this escalation right? (optional)' })).toBeFocused();
+  await page.keyboard.press('Tab'); // left blank, then the button
   await expect(page.getByRole('button', { name: 'Record decision' })).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('dialog')).toBeVisible();

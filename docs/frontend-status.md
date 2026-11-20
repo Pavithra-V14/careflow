@@ -124,6 +124,19 @@ The console's menu and buttons are conveniences; the backend decides. Compared w
 - **Demo patient email + password sign-in** behind the build-time switch `VITE_DEV_PATIENT_PASSWORD_LOGIN` (dev server, or the mock-backed e2e build; never any real build), with a "Demo sign-in" banner. The phone-code form stays the default.
 - **Live walk tool** now stores the reason sentence of every 403 (ids, e-mail addresses and long digit runs removed).
 
+## Visual baselines (2026-11-20)
+
+Screenshots of ten main screens (staff sign-in, referral review, scheduling, patient requests, family links, cards and templates, messages, portal home, portal booking, portal prep) at 320, 768 and 1280 px wide, in English and Tamil, 60 pictures in all, stored in `frontend/e2e-visual/baselines/` (about 6 MB). Every picture is made from the browser tests' fake data (nothing real), with a fixed clock (18 Nov 2026 10:00 UTC), UTC time zone, no animation or caret, reduced motion and a fixed pixel scale.
+
+- `npm run visual:check` compares the screens with the stored pictures and fails on a difference above 0.2 % of the pixels (the report and the diff pictures go to `frontend/test-results-visual/`, which git ignores).
+- `npm run visual:update` replaces the pictures on purpose. Look at them before committing the change.
+- **It is a local check, not a CI job.** Fonts and anti-aliasing differ between operating systems, so the baselines belong to the machine that made them (here, Windows). On another system run `npm run visual:update` first. The Tamil text in the pictures is the machine-checked, not human-reviewed, wording; when the Tamil changes the Tamil pictures change too.
+- Files: `frontend/playwright.visual.config.ts` and `frontend/e2e-visual/visual.spec.ts`. (This reverses the earlier "no visual baselines" decision at the owner's request of 2026-11-20.)
+
+## User guides (2026-11-20)
+
+`docs/user-guide-staff.md` (one section per role: front desk, supervisor, nurse, doctor, admin, and the auditor) and `docs/user-guide-patient.md`, written from the screens as built. They describe only what the screens do, say "not tested live" where a screen has not been walked against the real backend, and mark the Tamil as machine-checked and not human-reviewed. They carry no clinical content.
+
 ## 8. Last full run
 
 The counts for the last full run are given in the report that accompanies each push.

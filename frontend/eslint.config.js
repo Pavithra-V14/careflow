@@ -4,7 +4,7 @@ import jsxA11y from 'eslint-plugin-jsx-a11y';
 import reactHooks from 'eslint-plugin-react-hooks';
 
 export default tseslint.config(
-  { ignores: ['dist/', 'dist-e2e/', 'node_modules/', 'src/shared/api/schema.d.ts', 'playwright-report/', 'test-results/', 'test-results-live/', 'live-report/'] },
+  { ignores: ['dist/', 'dist-e2e/', 'node_modules/', 'src/shared/api/schema.d.ts', 'playwright-report/', 'test-results/', 'test-results-live/', 'test-results-visual/', 'live-report/'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   jsxA11y.flatConfigs.recommended,

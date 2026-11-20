@@ -61,7 +61,7 @@ function Detail({ documentId }: { documentId: string }) {
               </dd>
               <dt>{t('referrals.col.type')}</dt>
               <dd>
-                {TYPE_LABEL[r.content_type] ?? r.content_type} Â· {formatNumber(Math.max(1, Math.round(r.size_bytes / 1024)), lang)} KB
+                {TYPE_LABEL[r.content_type] ?? r.content_type} · {formatNumber(Math.max(1, Math.round(r.size_bytes / 1024)), lang)} KB
               </dd>
               <dt>{t('referrals.registeredBy')}</dt>
               <dd>
@@ -88,7 +88,7 @@ function Detail({ documentId }: { documentId: string }) {
                     <Link to={`/tasks/${h.task_id}`}>
                       <ShortId id={h.task_id} />
                     </Link>{' '}
-                    Â· {t(`roles.${h.assigned_role}`, { defaultValue: h.assigned_role })} Â· <Badge tone={h.status === 'resolved' ? 'ok' : 'warn'}>{t(`tasks.status.${h.status}`)}</Badge>
+                    · {t(`roles.${h.assigned_role}`, { defaultValue: h.assigned_role })} · <Badge tone={h.status === 'resolved' ? 'ok' : 'warn'}>{t(`tasks.status.${h.status}`)}</Badge>
                   </li>
                 ))}
               </ul>
@@ -119,7 +119,7 @@ function Detail({ documentId }: { documentId: string }) {
                   <ul className="plain">
                     {r.proposal.candidates.map((c) => (
                       <li key={`${c.card_id}:${c.version}`}>
-                        {t('referrals.card')} <code>{c.card_id}</code> Â· {t('referrals.version')} {formatNumber(c.version, lang)}
+                        {t('referrals.card')} <code>{c.card_id}</code> · {t('referrals.version')} {formatNumber(c.version, lang)}
                       </li>
                     ))}
                   </ul>
