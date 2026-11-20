@@ -118,7 +118,7 @@ def test_every_check_has_a_fixed_words_fix_line_that_names_a_command_or_a_settin
     names = {
         "migrations are applied", "the clinic is published", "staff roles exist", "demo placeholders carry their labels", "the six demo cards are indexed", "a knowledge search returns a card",
         "provider keys are present", "spend ceilings are set", "rules run before any model", "the .env switches are consistent with section 14", "no backend runs without the demo profile",
-        "portal accounts have the demo origin", "the second factor matches the screens switched on", "the three screen switches are on",
+        "portal accounts have the demo origin", "the second factor matches the screens switched on", "the three screen switches are on", "patient booking and messaging are on",
     }
     assert set(smoke.FIXES) == names
     for name, fix in smoke.FIXES.items():
@@ -222,3 +222,15 @@ def test_the_factor_query_reads_counts_by_role_only_and_the_failure_to_read_it_i
     assert "auth.mfa_factors" in code and "f.status = 'verified'" in code and "group by sr.role" in code
     assert "select sr.account_id" not in code and "email" not in code.lower().split("auth.mfa_factors")[0][-400:]  # no ids or addresses leave the query
     assert "factors = None" in code  # unreadable means "could not be read here", never a guess
+
+
+def test_patient_booking_and_messaging_switches_are_named_in_a_warning_that_does_not_stop_the_start():
+    assert smoke.PATIENT_SWITCHES == ("CAREFLOW_PATIENT_BOOKING", "CAREFLOW_PATIENT_MESSAGING")
+    assert smoke.judge_patient_switches({"CAREFLOW_PATIENT_BOOKING": "on", "CAREFLOW_PATIENT_MESSAGING": "on"}) == ("patient booking and messaging are on", True, "2 of 2 on")
+    result = smoke.judge_patient_switches({"CAREFLOW_PATIENT_BOOKING": "on"})
+    assert result[1] == "warn" and "off: CAREFLOW_PATIENT_MESSAGING" in result[2] and "1 of 2" in result[2]
+    none = smoke.judge_patient_switches({})
+    assert none[1] == "warn" and "CAREFLOW_PATIENT_BOOKING" in none[2] and "CAREFLOW_PATIENT_MESSAGING" in none[2]
+    lines: list[str] = []
+    assert smoke.render([none], lines.append) == 0  # a WARN never stops the start
+    assert lines[0].startswith("WARN patient booking and messaging are on") and "seed_dev_demo_data.py" in lines[1] and "seed_demo_placeholders.py" in lines[1]
