@@ -72,7 +72,7 @@ cd E:\Claude\careflow-run
 .\.venv\Scripts\python.exe scripts\seed_break_glass_reasons.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
 .\.venv\Scripts\python.exe scripts\seed_demo_placeholders.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
 .\.venv\Scripts\python.exe scripts\seed_demo_family_rules.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
-.\.venv\Scripts\python.exe scripts\seed_dev_portal_patient.py --email you@example.test --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
+.\.venv\Scripts\python.exe scripts\seed_dev_portal_patient.py --account-id <THE-USER-UID> --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
 .\.venv\Scripts\python.exe scripts\reset_dev_portal_account.py --account-id <THE-USER-UID> --dry-run
 .\.venv\Scripts\python.exe scripts\index_demo_cards.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
 .\.venv\Scripts\python.exe scripts\dev_clinic.py publish --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
