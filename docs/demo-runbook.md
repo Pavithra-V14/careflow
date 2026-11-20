@@ -187,6 +187,32 @@ Consent notices cannot be removed. **What you should see:** the screens above op
 
 ---
 
+## 15. Patient portal sign-in by e-mail and password (demo only)
+
+Phone codes need a paid SMS provider, which is a new external service and is not approved. For dev walks a patient can sign in with an e-mail address and password instead. It is a **demo convenience**: the backend refuses to start with it on outside the synthetic demo, and the claim route refuses it there too. It reuses the portal's real flow (register, consent, activate, **claim**, front-desk verification); nothing is shortcut.
+
+**1. Create the sign-in yourself** in the Supabase dashboard of the DEV project: Authentication, Users, Add user, tick auto-confirm, choose a password. Never paste the password anywhere.
+
+**2. Switch it on** (one line in `E:\Claude\careflow-run\.env`; the start script already sets the demo profile and synthetic data policy), then restart the backend:
+```
+CAREFLOW_DEMO_EMAIL_SIGNIN=on
+```
+
+**3. Prepare the synthetic patient record** (it asks you to TYPE the project host; use the same e-mail as the auth user; rehearse with `--dry-run`; prints counts only):
+```powershell
+.\.venv\Scripts\python.exe scripts\seed_dev_portal_patient.py --email you@example.test --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2 --dry-run
+.\.venv\Scripts\python.exe scripts\seed_dev_portal_patient.py --email you@example.test --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
+```
+The script creates ONE synthetic patient named `DEMO Portal Patient`, born `1990-01-01`, in the dev clinic. It does not bind your account.
+
+**4. Walk the portal** (the portal sign-in must offer e-mail and password; see the frontend note below): sign in, register, grant the care-delivery consent shown, activate, then **claim** with the name `DEMO Portal Patient` and date of birth `1990-01-01`. The answer is `claimed`; any other answer is `pending_review` and a front-desk person resolves it in the console under portal claims, exactly as in the phone flow. If the consent notice is missing, run `seed_consent_notices.py` (section 14) first.
+
+**5. Take it away again:** `--remove` with the same e-mail erases the synthetic record (identifying fields removed, row and audit trail kept); delete the auth user in the dashboard; remove the switch line.
+
+*If the claim answers 403:* the switch is not on (restart the backend), the token has no e-mail, or the project marks the address unconfirmed. *If it answers `pending_review`:* the name or date of birth was typed differently from step 3, or the e-mail differs from the one the script was given. **Say out loud when showing it that this sign-in is a demo shortcut for the SMS provider that is not approved.**
+
+---
+
 ## If something goes wrong: the fixed causes
 1. **Window B not running or stopped:** every page fails; start step 1.
 2. **Database behind the code:** the backend refuses to start; run the migrations (step 0.1).

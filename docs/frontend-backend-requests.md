@@ -385,6 +385,9 @@ The Tamil pack was machine-checked a second time on 2026-11-18 (docs/approval-pa
 
 **Note on 0095 (decision provenance, 2026-11-18):** no route exposes it and the frontend has nothing to build. The backend now records, for every triage proposal, the ids and versions of what it read (document, patient, cards, rule set); a later correction feature will read it.
 
+### 41. Portal sign-in by e-mail and password, DEMO ONLY (2026-11-20)
+No API or OpenAPI change: the backend only verifies the Supabase token, and the claim route (`POST /v1/portal/claims`) keeps its contract. For dev walks the portal sign-in needs ONE more method: **e-mail + password** (Supabase `signInWithPassword`), shown only when a build-time demo flag is on (for example `VITE_DEMO_EMAIL_SIGNIN=true`), never in a production build, with a visible "demo sign-in" label. The rest of the patient flow (register, consent, activate, claim, pending review) is unchanged and must not be skipped. The backend needs `CAREFLOW_DEMO_EMAIL_SIGNIN=on` and answers the same fixed 403 as for a token with no phone when it is off or the deployment is not the synthetic demo. Real patient sign-in stays phone code (needs an SMS provider: checklist row 96).
+
 ## Decisions recorded here for later readers
 
 - **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;

@@ -3029,11 +3029,13 @@ def portal_claim_cases(ids) -> list[tuple]:
     phone = "+919876543210"
     claimant = bearer(mint(ids.claimant, phone=phone))
     no_phone = bearer(mint(ids.claimant))
+    email_only = bearer(mint(ids.claimant, email="demo.claimant@example.test"))
     body = lambda **o: {"clinic_id": str(ids.clinic_a), "name": "DEMO Claimant", "dob": "1990-01-01", **o}
     cases = [
         _case(ids, "the claimant has not consented to the current notice (none is published in the test database)", claimant, 200, PORTAL_CLAIMS, json=body(), body=lambda b: b == {"outcome": "consent_required"}),
         _case(ids, "the same claim again gives the same word", claimant, 200, PORTAL_CLAIMS, json=body(), body=lambda b: b == {"outcome": "consent_required"}),
         _case(ids, "a token with no verified phone cannot claim", no_phone, 403, PORTAL_CLAIMS, json=body(), body=NOT_A_PATIENT),
+        _case(ids, "a token with only an e-mail address cannot claim while the demo e-mail sign-in is off (the default; it exists only in the synthetic demo)", email_only, 403, PORTAL_CLAIMS, json=body(), body=NOT_A_PATIENT),
         _case(ids, "an unknown clinic is refused the same way", claimant, 403, PORTAL_CLAIMS, json=body(clinic_id=str(uuid.uuid4())), body=NOT_A_PATIENT),
         _case(ids, "a date that is not a date is rejected", claimant, 422, PORTAL_CLAIMS, json=body(dob="soon"), body=_rejected),
         _case(ids, "an age is not a date of birth", claimant, 422, PORTAL_CLAIMS, json=body(dob="34"), body=_rejected),
@@ -3041,6 +3043,7 @@ def portal_claim_cases(ids) -> list[tuple]:
         _case(ids, "an extra field is rejected", claimant, 422, PORTAL_CLAIMS, json=body(extra=1), body=_fixed(422)),
         _case(ids, "missing X-Idempotency-Key is rejected", claimant, 422, PORTAL_CLAIMS, json=body(), key=None, body=_fixed(422)),
     ]
+    cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused with only an e-mail address too", bearer(mint(ids.people[p][0], email="staff@example.test")), 403, PORTAL_CLAIMS, json=body(), body=NOT_A_PATIENT) for p in _non_patients(ids)]  # a staff account cannot act as a patient by any sign-in
     cases += [_case(ids, f"{p} ({ids.people[p][2]}) is refused even with a phone", bearer(mint(ids.people[p][0], phone=phone)), 403, PORTAL_CLAIMS, json=body(), body=NOT_A_PATIENT) for p in _non_patients(ids)]
     return cases + _unauthenticated(ids, PORTAL_CLAIMS, body())
 

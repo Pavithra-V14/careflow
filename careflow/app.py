@@ -81,6 +81,7 @@ from careflow import (
     care_gaps,
     care_journey_sql,
     consent_settings,
+    demo_email_signin,
     demo_front_door,
     demo_phase3,
     demo_phase4,
@@ -4411,7 +4412,7 @@ async def portal_activate(idempotency_key: IdempotencyKey, conn: TxConnAllGrants
 async def portal_claim(body: ClaimIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> ClaimOut:
     """Claim the patient record that matches your VERIFIED phone and the name and date of birth you give. `claimed` binds your account; anything else is `pending_review` (a front-desk person decides; the same word whether nothing or several matched), `locked` after repeated failures, `already_bound`, or `consent_required` (grant the current care-delivery notice first). 403 unless you are an ACTIVE patient account or you have no verified phone; 422 if the date or name is unusable; 503 if encryption keys are not configured."""
     await _patient_account(conn, claims)
-    phone = claims.get("phone")
+    phone = demo_email_signin.contact_phone(claims, os.environ, demo_allowed=demo_allowed(resolve_profile(), _data_policy(os.environ)))  # the verified phone; ONLY in the synthetic demo with the switch on, the synthetic phone of the e-mail
     vault: DemographicVault | None = request.app.state.vault
     key_version = _active_key_version(request)
     if vault is None or key_version is None:
@@ -6721,6 +6722,7 @@ def create_app(
     mfa_off = (not settings.require_aal2) if settings is not None else (os.environ.get("CAREFLOW_REQUIRE_AAL2") or "").strip().lower() in {"0", "false", "no", "off"}
     if mfa_off and not demo_allowed(resolve_profile(), _data_policy(os.environ)):
         raise MfaSettingRefused("CAREFLOW_REQUIRE_AAL2 may be turned off only in profile=demo with data_policy=synthetic_only: refusing to start")
+    demo_email_signin.refuse_outside_demo(os.environ, demo_allowed=demo_allowed(resolve_profile(), _data_policy(os.environ)))  # the demo e-mail sign-in switch outside the synthetic demo: refuse to start
     refuse_demo_outside_demo(os.environ, resolve_profile())  # the demo Phase 3 placeholders may never be present outside profile=demo + data_policy=synthetic_only
     app.add_exception_handler(RequestValidationError, _validation_error_handler)  # type: ignore[arg-type]
 
