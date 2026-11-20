@@ -30,7 +30,7 @@
       "label": "Where your account is",
       "registered": "Created",
       "new_patient": "New patient",
-      "pending_activation": "Waiting to be activated",
+      "pending_activation": "Waiting for the hospital to confirm you.",
       "active": "Active"
     },
     "linked": {

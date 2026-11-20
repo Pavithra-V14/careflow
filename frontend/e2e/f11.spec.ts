@@ -68,6 +68,14 @@ for (const lang of LANGS) {
     await sweep(page, 'portal-no-open-times', lang);
   });
 
+  test(`a claim waiting for the hospital: the stage label and the claim section with its button off [${lang}]`, async ({ page }) => {
+    await open(page, lang, { start: 'pending_activation', granted: true });
+    await signIn(page);
+    await expect(page.locator('section[aria-labelledby=portal-claim] button[type=submit]')).toBeDisabled();
+    if (lang === 'en') await expect(page.locator('main dl.facts dd').first()).toHaveText('Waiting for the hospital to confirm you.');
+    await sweep(page, 'portal-claim-waiting', lang);
+  });
+
   test(`sign in: the demo email and password form, with its banner, beside the phone form [${lang}]`, async ({ page }) => {
     await open(page, lang);
     await expect(page.locator('input[type=tel]')).toBeVisible(); // the phone-code form stays the default

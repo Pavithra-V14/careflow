@@ -43,7 +43,7 @@
     "sentenceCountMismatches": 1,
     "sentenceCountMismatchesFixed": 1
   },
-  "candidatesReadSideBySide": 249,
+  "candidatesReadSideBySide": 250,
   "passes": [
     {
       "date": "2026-11-14",
@@ -95,6 +95,13 @@
       "backTranslated": 3,
       "fixed": 0,
       "flagged": 0
+    },
+    {
+      "date": "2026-11-20",
+      "checked": 1,
+      "backTranslated": 1,
+      "fixed": 0,
+      "flagged": 1
     }
   ]
 }

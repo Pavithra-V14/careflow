@@ -1579,7 +1579,7 @@ Terms standardised: proposal, resolve / resolved.
 | `portal.stage.active` | Active | செயலில் | ok |
 | `portal.stage.label` | Where your account is | உங்கள் கணக்கு இருக்கும் நிலை | ok |
 | `portal.stage.new_patient` | New patient | புதிய நோயாளி | ok |
-| `portal.stage.pending_activation` | Waiting to be activated | செயல்படுத்தக் காத்திருக்கிறது | ok |
+| `portal.stage.pending_activation` | Waiting for the hospital to confirm you. | மருத்துவமனை உங்களை உறுதிப்படுத்தக் காத்திருக்கிறது. | ok |
 | `portal.stage.registered` | Created | உருவாக்கப்பட்டது | ok |
 | `portal.title` | Your account | உங்கள் கணக்கு | ok |
 | `portal.unreadable` | Not readable | படிக்க இயலவில்லை | ok |

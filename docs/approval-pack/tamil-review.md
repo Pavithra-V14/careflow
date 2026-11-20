@@ -22,16 +22,16 @@ Notes: 71 grade A, 125 grade B, 58 grade C (254 rows with a note; some notes cov
 
 **Machine-checked on 2026-11-20; NOT human-reviewed; the Tamil reader must still approve.** This is a first pass by an AI model, not a native speaker, and not a substitute for the human reviewer. No string was marked reviewed.
 
-How it was done: every Tamil string was back-translated to English on its own, without the English original in view, and only then compared with the original. Strings that are identical in English and Tamil on purpose (Part 6) were not translated, so they were not back-translated. It was done in 7 pass(es): 2026-11-14: 1778 strings (1 fixed, 35 flagged); 2026-11-18: 239 strings (1 fixed, 8 flagged); 2026-11-20: 20 strings (3 fixed, 3 flagged); 2026-11-20: 1 strings (0 fixed, 0 flagged); 2026-11-20: 2 strings (0 fixed, 0 flagged); 2026-11-20: 1 strings (0 fixed, 0 flagged); 2026-11-20: 3 strings (0 fixed, 0 flagged). The second pass covered only the strings added or changed since the first. A script also checked every string for lost or reordered {{placeholders}}, changed numbers, a lost negation, informal pronouns and a different number of sentences.
+How it was done: every Tamil string was back-translated to English on its own, without the English original in view, and only then compared with the original. Strings that are identical in English and Tamil on purpose (Part 6) were not translated, so they were not back-translated. It was done in 8 pass(es): 2026-11-14: 1778 strings (1 fixed, 35 flagged); 2026-11-18: 239 strings (1 fixed, 8 flagged); 2026-11-20: 20 strings (3 fixed, 3 flagged); 2026-11-20: 1 strings (0 fixed, 0 flagged); 2026-11-20: 2 strings (0 fixed, 0 flagged); 2026-11-20: 1 strings (0 fixed, 0 flagged); 2026-11-20: 3 strings (0 fixed, 0 flagged); 2026-11-20: 1 strings (0 fixed, 1 flagged). The second pass covered only the strings added or changed since the first. A script also checked every string for lost or reordered {{placeholders}}, changed numbers, a lost negation, informal pronouns and a different number of sentences.
 
 | Count | Strings |
 |---|---|
 | Checked | 2042 (2011 back-translated, 31 left in English by design) |
 | Fixed (a clear defect) | 5 |
-| Flagged for the human reviewer | 46 (grade A: 5, B: 15, C: 26) |
+| Flagged for the human reviewer | 47 (grade A: 5, B: 16, C: 26) |
 | Strings added since this check, not covered | 0 |
 
-Automatic findings: 0 placeholder mismatches, 0 changed numbers, 0 lost negations, 0 informal pronouns, 1 string with a different number of sentences (fixed). 249 strings whose back-translation overlapped little with the English, or that the script flagged, were read side by side; the rest agreed. Most of the low-overlap ones were synonyms ("Expires" and "Expiry", "Phone" and "Telephone") and are not listed.
+Automatic findings: 0 placeholder mismatches, 0 changed numbers, 0 lost negations, 0 informal pronouns, 1 string with a different number of sentences (fixed). 250 strings whose back-translation overlapped little with the English, or that the script flagged, were read side by side; the rest agreed. Most of the low-overlap ones were synonyms ("Expires" and "Expiry", "Phone" and "Telephone") and are not listed.
 
 ### Fixed
 
@@ -95,6 +95,7 @@ Grade A: a safety, privacy or patient-rights meaning could be misread. B: a wron
 | `portal.demoSignIn.banner` | C | Demo sign-in. Email and password sign-in is for demonstrations with made-up patients only. It is not how patients sign in. | டெமோ உள்நுழைவு. மின்னஞ்சல் மற்றும் கடவுச்சொல் உள்நுழைவு கற்பனை நோயாளிகளுடன் செய்யும் செயல்விளக்கங்களுக்கு மட்டுமே. நோயாளிகள் இப்படி உள்நுழைவதில்லை. | "Demo" is written as the transliterated loanword டெமோ here and in the title, the button and the failure message (portal.demoSignIn.title, .submit, .failed). A reader may prefer a native word (for example செயல்விளக்க). The sentence itself back-translated correctly: "for demonstrations with imaginary patients only; patients do not sign in like this". | The reviewer decides whether to keep டெமோ or use a Tamil word, once, for all four strings. |
 | `familyStaff.revoke` | C | Revoke | திரும்பப் பெறு | Staff "Revoke" is திரும்பப் பெறு (take back), the same verb as the patient-facing "Withdraw" (consent, family link) and the rule "Withdrawn" status. It is consistent with what the patient sees for a revoked link ("Withdrawn"), but it is also the verb flagged in portal.consent.withdraw (grade A). | Keep it matching the patient wording, or give revoke its own word; the reviewer decides together with portal.consent.withdraw. |
 | `referrals.review.assessment.hint` | C | Leave this blank if you have no view. Blank means not recorded, not accurate. A recorded view cannot be changed later. | உங்களுக்குக் கருத்து இல்லையெனில் இதை வெறுமையாக விடுங்கள். வெறுமை என்றால் பதிவு செய்யப்படவில்லை என்று பொருள்; சரியானது என்று அல்ல. பதிவு செய்த கருத்தைப் பின்னர் மாற்ற முடியாது. | "Blank" is வெறுமை / வெறுமையாக (emptiness, void), which can carry a bleak sense; the everyday interface word for an empty field is காலி. The meaning back-translated correctly ("blank means not recorded, not correct"). | A reviewer may prefer காலியாக விடுங்கள் / காலி என்றால். |
+| `portal.stage.pending_activation` | B | Waiting for the hospital to confirm you. | மருத்துவமனை உங்களை உறுதிப்படுத்தக் காத்திருக்கிறது. | New wording (owner decision, 2026-11-20): "Waiting for the hospital to confirm you." The Tamil back-translated without the original as "The hospital is waiting to confirm you" (மருத்துவமனை உங்களை உறுதிப்படுத்தக் காத்திருக்கிறது). The meaning matches. It is a patient-facing sentence about identity, and உறுதிப்படுத்து (confirm) is the verb staff use for "Confirm identity"; the reviewer should check that to a patient it reads as the hospital checking and accepting their request, not as doubting who they are. The informal-polite register (உங்களை) matches the rest of the portal. | The reviewer decides the final wording and register; no change was made by the machine pass. |
 
 ## Part 1. Strings that most need a native speaker (safety first)
 
@@ -408,7 +409,7 @@ Grade A: a safety, privacy or patient-rights meaning could be misread. B: a wron
 | task / job | பணி (76) | A review task and a queued job share the word. |
 | approved (a status) and approve (a button) | அங்கீகரிக்கப்பட்டது (status) and ஒப்புக்கொள் (button) (14) | Two word families for one idea in the red-flag rule screens. |
 | patient | நோயாளி and நோயாளர் (104) | Two spellings. |
-| clinic / hospital | மருத்துவமனை (most strings), கிளினிக் (1) (92) | Check which is meant where. |
+| clinic / hospital | மருத்துவமனை (most strings), கிளினிக் (1) (93) | Check which is meant where. |
 | front desk | வரவேற்பு மேசை and முன்பணியாளர் (9) | Two renderings. |
 | confidence | நம்பிக்கை (2) | Means belief or hope; the strings mean how sure the system is. |
 | sample (a sampled decision) | மாதிரி (6) | Reads as a laboratory specimen. |
@@ -1984,7 +1985,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `portal.stage.active` | Active | செயலில் | no issue found | |
 | `portal.stage.label` | Where your account is | உங்கள் கணக்கு இருக்கும் நிலை | no issue found | |
 | `portal.stage.new_patient` | New patient | புதிய நோயாளி | no issue found | |
-| `portal.stage.pending_activation` | Waiting to be activated | செயல்படுத்தக் காத்திருக்கிறது | no issue found | |
+| `portal.stage.pending_activation` | Waiting for the hospital to confirm you. | மருத்துவமனை உங்களை உறுதிப்படுத்தக் காத்திருக்கிறது. | no issue found; machine back-translation check: flagged B (Part 0) | |
 | `portal.stage.registered` | Created | உருவாக்கப்பட்டது | no issue found | |
 | `portal.title` | Your account | உங்கள் கணக்கு | no issue found | |
 | `portal.unreadable` | Not readable | படிக்க இயலவில்லை | no issue found | |

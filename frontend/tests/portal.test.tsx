@@ -217,6 +217,24 @@ describe('the stages after activation', () => {
     expect(screen.queryByRole('button', { name: 'Activate my account' })).toBeNull();
   });
 
+  it('says "Waiting for the hospital to confirm you." while a claim waits, and leaves the other stage labels as they were', async () => {
+    const labels: [Stage, string][] = [
+      ['registered', 'Created'],
+      ['new_patient', 'New patient'],
+      ['pending_activation', 'Waiting for the hospital to confirm you.'],
+      ['active', 'Active'],
+    ];
+    for (const [stage, label] of labels) {
+      const { auth } = fakeAuth({ signedIn: true });
+      stubApi(backend({ stage, granted: true }));
+      const view = await mount(auth);
+      const line = await screen.findByText('Where your account is');
+      expect(line.nextElementSibling?.textContent, stage).toBe(label);
+      expect(document.body.textContent).not.toContain('Waiting to be activated');
+      view.unmount();
+    }
+  });
+
   it('a registered (invited) account is only asked to grant and activate', async () => {
     const { auth } = fakeAuth({ signedIn: true });
     stubApi(backend({ stage: 'registered' }));
