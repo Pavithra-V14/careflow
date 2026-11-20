@@ -130,7 +130,7 @@ async def test_front_desk_resolves_a_pending_claim_only_onto_a_confirmed_unbound
         assert await state_of(db, w[who], call, r=req, d="reject", p=None, k="k1") == "42501", who  # only front desk
     assert await state_of(db, w["front_desk"], call, claims=AAL1, r=req, d="reject", p=None, k="k1") == "42501"  # a verified second factor is needed
     assert await state_of(db, w["front_desk"], call, r=req, d="approve", p=None, k="k1") == "42501"  # an approval names a record
-    assert await state_of(db, w["front_desk"], call, r=req, d="approve", p=w["unconfirmed"], k="k2") == [("record_not_claimable",)]  # no identity event: stays unclaimable
+    assert await state_of(db, w["front_desk"], call, r=req, d="approve", p=w["unconfirmed"], k="k2") == [("identity_not_confirmed",)]  # no identity event: stays unclaimable, and says why (0098)
     assert await state_of(db, w["front_desk"], call, r=req, d="approve", p=w["other_patient"], k="k2") == [("record_not_claimable",)]
     assert await state_of(db, w["front_desk"], call, r=uuid.uuid4(), d="reject", p=None, k="k3") == "42501"
     assert await state_of(db, w["front_desk"], call, r=req, d="approve", p=w["patient"], k="k4") == [("approved",)]

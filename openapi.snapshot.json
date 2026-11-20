@@ -1932,7 +1932,8 @@
               "pending_review",
               "locked",
               "already_bound",
-              "consent_required"
+              "consent_required",
+              "activation_required"
             ],
             "title": "Outcome",
             "type": "string"
@@ -1983,6 +1984,7 @@
               "rejected",
               "already_resolved",
               "record_not_claimable",
+              "identity_not_confirmed",
               "claimant_already_bound",
               "consent_required"
             ],

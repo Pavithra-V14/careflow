@@ -211,7 +211,12 @@ CAREFLOW_DEMO_EMAIL_SIGNIN=on
 ```
 The script creates ONE synthetic patient named `DEMO Portal Patient`, born `1990-01-01`, in the dev clinic. It does not bind your account.
 
-**4. Walk the portal** (the portal sign-in must offer e-mail and password; see the frontend note below): sign in, register, grant the care-delivery consent shown, activate, then **claim** with the name `DEMO Portal Patient` and date of birth `1990-01-01`. The answer is `claimed`; any other answer is `pending_review` and a front-desk person resolves it in the console under portal claims, exactly as in the phone flow. If the consent notice is missing, run `seed_consent_notices.py` (section 14) first.
+**4. Walk the portal** (the portal sign-in must offer e-mail and password; see the frontend note below). The order matters, and each step has one closed answer:
+1. Sign in, then **register** (`POST /v1/portal/register`), grant the care-delivery **consent** shown (`/v1/portal/consents`), then **activate** (`/v1/portal/activate`). A claim before activation answers `activation_required`; before consent, `consent_required`.
+2. **The record must be identity-confirmed before it can be claimed.** The synthetic patient the script made has no confirmation (a confirmation is a front-desk act and the script does not fake one). So **as front desk, open the patient (search "DEMO Portal Patient") and confirm the identity** (`POST /v1/staff/patients/{id}/confirm-identity`). Do this before the claim if you want the claim to come back `claimed` at once.
+3. **Claim** with the name `DEMO Portal Patient` and date of birth `1990-01-01` (`POST /v1/portal/claims`). `claimed` binds the account. If the record was not confirmed yet, the answer is `pending_review`: a front-desk person resolves it (`GET /v1/staff/portal-claims`, then `POST .../resolve` approve naming the patient). **Do not press claim again while it is pending**: every repeat counts toward a lock after five tries (`locked`).
+4. **Approving needs a REAL second factor at the database** (`docs/mfa-live-pass.md`): a password-only front-desk session gets 403. An approval for a record that is not confirmed answers `identity_not_confirmed` (confirm it first, step 2); `record_not_claimable` means erased, merged away, already bound or another clinic's.
+5. After approval the portal reads work: `GET /v1/portal/me` shows `bound_to_a_patient_record: true` and the stage `active`.
 
 **5. Take it away again:** `--remove` with the same e-mail erases the synthetic record (identifying fields removed, row and audit trail kept); delete the auth user in the dashboard; remove the switch line.
 
