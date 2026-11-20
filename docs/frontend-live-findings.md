@@ -373,3 +373,31 @@ Portal screens as seen on that visit (stage "New patient", read-only; 24 calls o
 | Claim | not done | See above: blocked on the clinic code. |
 
 The two stage readings: the activation earlier said "Your account is active" for the result word `activated` (not for the HTTP 200; `consent_required` is also a 200).
+
+## Demo link completed (20 Nov 2026): identity confirmed, claim linked directly, portal walk
+
+The user typed every password and code. The demo clinic is public ("Demo Clinic"); the earlier 404 on `GET /public/clinic` was **a frontend dev-server gap, not the backend**: the dev proxy forwarded only `/v1` and `/readyz`, so `/public/*` never reached the backend. `/public` is now proxied in dev (vite.config.ts), and the claim form fills the clinic from the public read (no clinic code was typed).
+
+**The only writes, both on the synthetic patient, each with its status code:**
+
+1. Identity confirmation (front desk, second factor, exactly one record found for DEMO Portal Patient, 1990-01-01): `POST /v1/staff/patients/{patient_id}/confirm-identity` **200**. The record page said "Verified", "Registered via Front desk", "Latest identity event: None" before; no 403, no unanswered write.
+2. The claim (patient, one attempt, stage "New patient" on a fresh load): `POST /v1/portal/claims` **200**. The screen said **"Your record is linked."** (the outcome `claimed`: linked directly, not `pending_review`; no 403, no origin-mismatch refusal). The claim button was then off. Afterwards: "Linked to a record: Yes", "Name on your record: DEMO Portal Patient", and a fresh load said "Your account is linked to a record." The stage line still reads "New patient" (a record bound without a front-desk approval stays new_patient: backend pre-launch note 66).
+
+**Portal walk (read-only, after the claim): 49 calls over the whole run, 0 schema mismatches, no 403, no unanswered write.** Sections on the page: consent, claim, profile, notifications, requests, booking, messages, family, grievance, voice, my data.
+
+| Portal screen | Result | Exact screen text and calls |
+|---|---|---|
+| Home / account | pass | "Where your account is: New patient", "Linked to a record: Yes" after the claim. `GET /v1/portal/me` 200 (read after every write). |
+| Notices and decisions | pass | "DEMO ONLY - Care · version 1" already granted. `GET /v1/portal/consents` 200. |
+| Profile | pass | "Name on your record: DEMO Portal Patient" (after the claim; "Not available" before); "The hospital has not set up a list of choices yet." `GET /v1/portal/profile` 200. |
+| Notifications | pass on load | `GET /v1/portal/notifications` 200 (content not recorded). |
+| Requests | pass on load | `GET /v1/portal/requests` 200. |
+| Appointments and booking list | not tested live: the switch is still off | `GET /v1/portal/booking/bookings` 503 and `GET /v1/portal/booking/slots` 503; the screen said "Booking online is not turned on at this hospital yet." No 403, so no refusal reason. |
+| Messages | not tested live: the switch is still off | `GET /v1/portal/messages/threads` 503; "Messages are not turned on at this hospital yet." |
+| Visit preparation | not tested live | No appointment on the page to open it from (the booking list answered 503). |
+| Family section | pass on load | `GET /v1/portal/family-links` 200, section on the page; no request made (no write). |
+| Complaints | pass on load | `GET /v1/portal/grievance-categories` 200, `GET /v1/portal/grievances` 200. The public form's `GET /public/grievance-categories` answers 503 (not set up: the screen says nothing can be sent). |
+| Voice | pass on load | `GET /v1/portal/voice/preference` 200. |
+| Claim | pass | As above: one write, 200, "Your record is linked." |
+
+Earlier in this round the front desk family links page passed with the second factor (200, "There are no family link requests.").

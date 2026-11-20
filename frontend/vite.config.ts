@@ -72,7 +72,7 @@ export default defineConfig(({ mode, command }) => {
     server: {
       // Development only: same-origin calls to the API avoid CORS. Production CORS is a backend matter
       // (docs/frontend-backend-requests.md).
-      proxy: apiTarget ? { '/v1': apiTarget, '/readyz': apiTarget } : {},
+      proxy: apiTarget ? { '/v1': apiTarget, '/public': apiTarget, '/readyz': apiTarget } : {},
     },
   };
 });

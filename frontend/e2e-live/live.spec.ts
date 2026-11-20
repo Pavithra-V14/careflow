@@ -508,6 +508,34 @@ test('DEMO link, portal: check the stage on a fresh load, then claim (one write)
     // never repeated: report what the screen said, and whether the button is now off
     const button = page.locator('section[aria-labelledby=portal-claim] button[type=submit]');
     log.push(`## the claim button after the answer: ${(await button.count()) === 0 ? 'not on the screen' : (await button.first().isDisabled()) ? 'off' : 'on'}`, '', `## the claim was answered with: ${words.join(' / ')}`, '');
+    // The read-only portal walk, in the same session: a fresh load so every section reads again, then the two openers that only read
+    // (a visit's checklist and the first conversation). No further write is made. Each screen's own words are logged.
+    phase.current = 'portal walk: fresh load';
+    await page.reload();
+    await expect(page.locator('main dl.facts')).toBeVisible({ timeout: 60_000 });
+    await settle(page);
+    await page.waitForTimeout(4000);
+    await snap('portal walk: every section after a fresh load');
+    const sections = await page.locator('main section[aria-labelledby]').evaluateAll((els) => els.map((e) => e.getAttribute('aria-labelledby') ?? '')).catch(() => [] as string[]);
+    log.push(`## sections on the page: ${sections.join(', ')}`, '');
+    const prep = page.getByRole('button', { name: /What to prepare|தயாராக வேண்டியவை/ });
+    if ((await prep.count()) > 0) {
+      phase.current = 'portal walk: visit preparation';
+      await prep.first().click();
+      await settle(page);
+      await snap('portal walk: visit preparation');
+    } else {
+      log.push('## visit preparation: no appointment with a "What to prepare" button on the page', '');
+    }
+    const thread = page.locator('#portal-messages ul button');
+    if ((await thread.count()) > 0) {
+      phase.current = 'portal walk: messages (read a conversation)';
+      await thread.first().click();
+      await settle(page);
+      await snap('portal walk: first conversation');
+    } else {
+      log.push('## messages: no conversation to open', '');
+    }
   } finally {
     await finish('Demo link, portal: the claim');
   }
