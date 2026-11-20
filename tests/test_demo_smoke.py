@@ -50,7 +50,7 @@ def test_roles_need_every_required_role_live():
 
 def test_labels_pass_only_with_some_labelled_and_none_unlabelled():
     assert smoke.judge_labels({"a": (3, 0), "b": (1, 0)}) == ("demo placeholders carry their labels", True, "4 labelled row(s), 0 unlabelled")
-    assert not smoke.judge_labels({"a": (3, 1)})[1] and "no demo label" in smoke.judge_labels({"a": (3, 1)})[2]
+    assert smoke.judge_labels({"a": (3, 1)})[1] is False and "a (1)" in smoke.judge_labels({"a": (3, 1)})[2] and "no known seed script" in smoke.judge_labels({"a": (3, 1)})[2]  # a table no seed writes: FAIL, named
     assert not smoke.judge_labels({"a": (0, 0)})[1] and "seed_demo_placeholders" in smoke.judge_labels({"a": (0, 0)})[2]
 
 
@@ -59,9 +59,11 @@ def test_cards_and_search_judgements():
     assert smoke.judge_cards(expected | {"other"}, expected, {"fake"})[1] is True
     assert not smoke.judge_cards(set(list(expected)[:5]), expected, {"fake"})[1]
     assert smoke.judge_search(True, False, True)[1] is True
-    assert not smoke.judge_search(False, True, True)[1] and "abstained" in smoke.judge_search(False, True, True)[2]
-    assert not smoke.judge_search(False, False, True)[1]
-    assert not smoke.judge_search(True, False, False)[1] and "hosted model" in smoke.judge_search(True, False, False)[2]
+    assert smoke.judge_search(False, True, True)[1] is False and "abstained" in smoke.judge_search(False, True, True)[2]
+    assert smoke.judge_search(False, False, True)[1] is False
+    hosted = smoke.judge_search(True, False, False, {"gemini-embedding-001"})
+    assert hosted[1] == "skip" and "indexed under gemini-embedding-001; searched by hand (2026-11-14, 10 of 10" in hosted[2] and "re-index" not in hosted[2]  # never told to re-index
+    assert smoke.judge_search(False, False, False)[1] is False and "nothing to search" in smoke.judge_search(False, False, False)[2]
 
 
 def test_keys_and_ceilings_are_required_only_with_real_models_and_never_show_a_value():
@@ -100,7 +102,7 @@ def test_the_rules_before_models_check_passes_and_spends_nothing():
 def test_render_prints_only_pass_fail_lines_and_counts_and_sets_the_exit_status():
     lines: list[str] = []
     assert smoke.render([("a", True, "1 row"), ("b", False, "missing")], lines.append) == 1
-    assert lines == ["PASS a: 1 row", "FAIL b: missing", "  what to do: see docs/demo-runbook.md and fix the line above, then run this again", "1 passed, 1 failed"]
+    assert lines == ["PASS a: 1 row", "FAIL b: missing", "  what to do: see docs/demo-runbook.md and fix the line above, then run this again", "1 passed, 0 warned, 0 skipped, 1 failed"]
     assert smoke.render([("a", True, "x")], lines.append) == 0
 
 
@@ -174,15 +176,37 @@ def test_the_email_sign_in_needs_demo_origin_accounts():
     assert not result[1] and "2 patient account(s) have origin live" in result[2]
 
 
-def test_the_second_factor_must_match_the_screens_that_need_it_at_the_database():
+def test_the_second_factor_mismatch_is_a_warning_with_counts_by_role_and_the_patient_email_path_is_not_a_staff_screen():
     off = {"CAREFLOW_REQUIRE_AAL2": "false"}
     assert smoke.judge_second_factor({})[1] is True and smoke.judge_second_factor({"CAREFLOW_REQUIRE_AAL2": "true"})[1] is True
     assert smoke.judge_second_factor(off)[1] is True  # off and nothing that needs it
+    assert "CAREFLOW_DEMO_EMAIL_SIGNIN" not in smoke.AAL2_SCREENS and smoke.judge_second_factor({**off, "CAREFLOW_DEMO_EMAIL_SIGNIN": "on"})[1] is True
     for switch in smoke.AAL2_SCREENS:
         result = smoke.judge_second_factor({**off, switch: "on"})
-        assert not result[1] and switch in result[2], switch
+        assert result[1] == "warn" and switch in result[2] and "could not be read" in result[2], switch  # never a FAIL
+    counted = smoke.judge_second_factor({**off, "CAREFLOW_FAMILY_LINKS": "on"}, {"front_desk": (0, 1), "nurse": (1, 2), "doctor": (0, 1)})
+    assert counted[1] == "warn" and "doctor 0 of 1" in counted[2] and "front_desk 0 of 1" in counted[2] and "nurse 1 of 2" in counted[2]
     for spelling in ("0", "off", "no", "False"):
-        assert not smoke.judge_second_factor({"CAREFLOW_REQUIRE_AAL2": spelling, "CAREFLOW_FAMILY_LINKS": "on"})[1]
+        assert smoke.judge_second_factor({"CAREFLOW_REQUIRE_AAL2": spelling, "CAREFLOW_FAMILY_LINKS": "on"})[1] == "warn"
+
+
+def test_unlabelled_rows_are_a_warning_only_in_the_tables_earlier_seed_scripts_write_and_a_failure_anywhere_else():
+    known = {"iam.break_glass_reasons": (0, 1), "iam.break_glass_settings": (0, 1), "ops.spend_limits": (2, 0)}
+    result = smoke.judge_labels(known)
+    assert result[1] == "warn" and "iam.break_glass_reasons (1)" in result[2] and "iam.break_glass_settings (1)" in result[2] and "seed_break_glass_reasons.py" in result[2] and "earlier seeds" in result[2]
+    unknown = smoke.judge_labels({**known, "iam.public_grievance_limits": (0, 1)})
+    assert unknown[1] is False and "iam.public_grievance_limits (1)" in unknown[2] and "iam.break_glass_reasons" not in unknown[2]  # only the table nobody writes is named in the failure
+    assert smoke.judge_labels({"iam.break_glass_reasons": (0, 1)})[1] is False  # nothing of this pass entered at all: still a FAIL
+    for status_result in (result, unknown):
+        assert "@" not in status_result[2]
+
+
+def test_a_warning_or_a_skip_does_not_stop_the_start_only_a_fail_does_and_they_look_different():
+    lines: list[str] = []
+    assert smoke.render([("a", True, "x"), ("b", "warn", "y"), ("c", "skip", "z")], lines.append) == 0
+    assert lines[0].startswith("PASS a") and lines[1].startswith("WARN b") and lines[3].startswith("SKIP c")
+    assert lines[2].startswith("  what to do:") and lines[-1] == "1 passed, 1 warned, 1 skipped, 0 failed"  # a WARN keeps its fix line, a SKIP needs none
+    assert smoke.render([("a", True, "x"), ("b", "warn", "y"), ("c", False, "z")], [].append) == 1
 
 
 def test_the_three_screen_switches_must_be_on():
@@ -191,3 +215,10 @@ def test_the_three_screen_switches_must_be_on():
     result = smoke.judge_screen_switches({**all_on, "CAREFLOW_FAMILY_LINKS": "off"})
     assert not result[1] and "CAREFLOW_FAMILY_LINKS" in result[2] and "2 of 3" in result[2]
     assert not smoke.judge_screen_switches({})[1]
+
+
+def test_the_factor_query_reads_counts_by_role_only_and_the_failure_to_read_it_is_not_guessed():
+    code = SCRIPT.read_text(encoding="utf-8").split('"""', 2)[2]
+    assert "auth.mfa_factors" in code and "f.status = 'verified'" in code and "group by sr.role" in code
+    assert "select sr.account_id" not in code and "email" not in code.lower().split("auth.mfa_factors")[0][-400:]  # no ids or addresses leave the query
+    assert "factors = None" in code  # unreadable means "could not be read here", never a guess

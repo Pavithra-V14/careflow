@@ -184,7 +184,7 @@ The first enters the break-glass reasons and limits, the public-grievance cap, t
 | Public grievance form | none beyond the demo pack and the clinic being published (`scripts\dev_clinic.py publish --clinic-id <id>`) |
 | The checkpoint-retention report | optional line: `CAREFLOW_RETENTION_CHECKPOINT_DAYS=90` (the specification's starting value, **not approved**; report only, deletes nothing) |
 
-**3b. Check that everything is in place** (read-only, prints PASS or FAIL lines and counts only, never a value; asks you to TYPE the project host; exit status 0 only if every check passes):
+**3b. Check that everything is in place** (read-only, prints PASS, WARN, SKIP or FAIL lines and counts only, never a value; **only a FAIL stops `demo_up.ps1` from starting the backend**: a `WARN` (yellow) is something to know, for example unlabelled rows left by the older seed scripts or the second factor being off while a staff screen needs it, and a `SKIP` (grey) is a check that does not apply here, for example the knowledge search when the cards are indexed under the hosted model; asks you to TYPE the project host; exit status 0 only if every check passes):
 ```powershell
 .\.venv\Scripts\python.exe scripts\demo_smoke.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
 ```

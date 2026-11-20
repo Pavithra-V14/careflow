@@ -47,8 +47,16 @@ if ($LASTEXITCODE -ne 0) { Write-Host "FAIL migrations: the check stopped. What 
 if ($LASTEXITCODE -ne 0) { Write-Host "FAIL migrations: applying stopped. What to do: read the message above (it names the migration); do not continue until it is fixed."; exit 1 }
 Write-Host ""
 Write-Host "2. Smoke check"
-$typed | & .\.venv\Scripts\python.exe .\scripts\demo_smoke.py --clinic-id $ClinicId --port $Port
-if ($LASTEXITCODE -ne 0) { Write-Host ""; Write-Host "Not starting the backend: fix the FAIL lines above (each has a what-to-do line) and run this again."; exit 1 }
+$typed | & .\.venv\Scripts\python.exe .\scripts\demo_smoke.py --clinic-id $ClinicId --port $Port | ForEach-Object {
+    if ($_ -match '^FAIL') { Write-Host $_ -ForegroundColor Red }
+    elseif ($_ -match '^WARN') { Write-Host $_ -ForegroundColor Yellow }
+    elseif ($_ -match '^SKIP') { Write-Host $_ -ForegroundColor DarkGray }
+    elseif ($_ -match '^PASS') { Write-Host $_ -ForegroundColor Green }
+    else { Write-Host $_ }
+}
+$smokeExit = $LASTEXITCODE
+# only a FAIL stops the start (the smoke check exits 1 only for a FAIL): a WARN is shown in yellow and the backend still starts; a SKIP is shown in grey
+if ($smokeExit -ne 0) { Write-Host ""; Write-Host "Not starting the backend: fix the FAIL lines above (each has a what-to-do line) and run this again."; exit 1 }
 Write-Host ""
 Write-Host "3. Backend"
 $listening = $false
