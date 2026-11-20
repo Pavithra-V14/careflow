@@ -5,6 +5,8 @@ import mock from './mock-env.json' with { type: 'json' };
 // It proves this app's behaviour, not the backend's. Every error body carries LEAK so a test can prove backend text never reaches the page.
 
 export const LEAK = 'LEAK-SENTINEL-backend-text';
+export const DEMO_EMAIL = 'demo@example.test';
+export const DEMO_PASSWORD = 'mock-demo-password';
 export const GOOD_PHONE = '+910000000000';
 export const GOOD_PHONE_CODE = '123456';
 const ORIGIN = 'http://127.0.0.1:4173';
@@ -53,7 +55,11 @@ export async function installPortalMock(page: Page, scenario: PortalScenario = {
     const body = req.postData() ? (JSON.parse(req.postData() as string) as Record<string, string>) : {};
     if (req.method() === 'POST' && path === '/otp') return body.phone === GOOD_PHONE ? reply(route, 200, {}) : reply(route, 400, { code: 400, msg: LEAK });
     if (req.method() === 'POST' && path === '/verify') return body.token === GOOD_PHONE_CODE ? reply(route, 200, session()) : reply(route, 400, { code: 400, error_code: 'otp_expired', msg: LEAK });
-    if (req.method() === 'POST' && path === '/token') return reply(route, 200, session());
+    if (req.method() === 'POST' && path === '/token') {
+      // The demo email+password grant opens a session only for the one demo pair; a refresh grant is always accepted.
+      if (new URL(req.url()).searchParams.get('grant_type') === 'password') return body.email === DEMO_EMAIL && body.password === DEMO_PASSWORD ? reply(route, 200, session()) : reply(route, 400, { code: 400, error_code: 'invalid_credentials', msg: LEAK });
+      return reply(route, 200, session());
+    }
     if (req.method() === 'GET' && path === '/user') return reply(route, 200, session().user);
     if (req.method() === 'POST' && path === '/logout') return route.fulfill({ status: 204, headers: cors(route) });
     return reply(route, 404, { msg: 'mock: unhandled' });

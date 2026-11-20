@@ -8,7 +8,7 @@
  */
 export const SEND_ACTIVE_ROLE_HEADER = false;
 
-declare const __CAREFLOW_FLAGS__: { mergeActions: boolean; erasureActions?: boolean; devSkipStaffMfa?: boolean } | undefined;
+declare const __CAREFLOW_FLAGS__: { mergeActions: boolean; erasureActions?: boolean; devSkipStaffMfa?: boolean; devPatientPasswordLogin?: boolean } | undefined;
 
 /**
  * DEV ONLY. Lets a staff member reach the console with the password alone (no authenticator enrolment, challenge or step-up
@@ -40,4 +40,14 @@ export function mergeActionsEnabled(): boolean {
  */
 export function erasureActionsEnabled(): boolean {
   return typeof __CAREFLOW_FLAGS__ !== 'undefined' && __CAREFLOW_FLAGS__.erasureActions === true;
+}
+
+/**
+ * DEMO ONLY. Adds an email + password form to the patient portal sign-in, beside the normal phone-code sign-in (which stays the default),
+ * for demo walks with synthetic data while phone codes have no approved SMS provider. Compile-time constant set by vite.config.ts only for
+ * the dev server (`vite serve`, mode "development") when the starting shell set VITE_DEV_PATIENT_PASSWORD_LOGIN=1, and for the mock-backed
+ * `--mode e2e` build; never in a production, staging or development build. It is a compile-time constant, so it is false in a production bundle by construction (tests/flags.test.ts compiles every mode). While on, the sign-in page shows a "demo sign-in" banner. Pinned by tests/flags.test.ts.
+ */
+export function devPatientPasswordLogin(): boolean {
+  return typeof __CAREFLOW_FLAGS__ !== 'undefined' && __CAREFLOW_FLAGS__.devPatientPasswordLogin === true;
 }

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { devPatientPasswordLogin } from '../../staff/featureFlags';
 
 /**
  * Patient sign-in with a one-time code sent to the patient's mobile number (Supabase Auth, phone OTP: BUILD-SPEC section 15).
@@ -13,6 +14,8 @@ export interface PortalAuth {
   requestCode(phone: string): Promise<boolean>;
   /** True only if the code opened a session. */
   verifyCode(phone: string, code: string): Promise<boolean>;
+  /** DEMO ONLY (see devPatientPasswordLogin): true only if the email and password opened a session. Absent from a build that does not offer the form. */
+  signInWithPassword?(email: string, password: string): Promise<boolean>;
   getAccessToken(): Promise<string | null>;
   signOut(): Promise<void>;
   /** Called when the session ends elsewhere (another tab, a failed refresh). */
@@ -36,6 +39,15 @@ export function createPortalAuth(url: string, publishableKey: string): PortalAut
     async verifyCode(phone, code) {
       try {
         const { data, error } = await auth.verifyOtp({ phone, token: code, type: 'sms' });
+        return !error && data.session !== null;
+      } catch {
+        return false;
+      }
+    },
+    async signInWithPassword(email, password) {
+      if (!devPatientPasswordLogin()) return false; // belt and braces: refused unless this is a demo build with the switch on
+      try {
+        const { data, error } = await auth.signInWithPassword({ email, password });
         return !error && data.session !== null;
       } catch {
         return false;

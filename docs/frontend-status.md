@@ -118,6 +118,12 @@ The console's menu and buttons are conveniences; the backend decides. Compared w
 | Break-glass open: front desk, nurse, doctor; review: admin who did not open it | same | matches |
 | Notes, visit readiness: nurse, doctor | same | matches |
 
+## Added 2026-11-20
+
+- **Escalation assessment on a referral review** (backend migration 0094, request 40): an optional select under the decision, "Was this escalation right? (optional)", blank ("Not recorded") by default, two closed choices from the backend's wording. Sent only when chosen. A repeat that differs only in its assessment gets the backend's refusal said exactly: "The first decision stands and cannot be changed."
+- **Demo patient email + password sign-in** behind the build-time switch `VITE_DEV_PATIENT_PASSWORD_LOGIN` (dev server, or the mock-backed e2e build; never any real build), with a "Demo sign-in" banner. The phone-code form stays the default.
+- **Live walk tool** now stores the reason sentence of every 403 (ids, e-mail addresses and long digit runs removed).
+
 ## 8. Last full run
 
 The counts for the last full run are given in the report that accompanies each push.

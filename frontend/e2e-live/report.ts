@@ -17,6 +17,8 @@ export interface Call {
   queryNames: string[];
   activeRoleHeaderSent: boolean;
   issues: Issue[];
+  /** For a 403 only: the response's own reason sentence (its `detail`), with ids, emails and long digit runs removed and cut to 160 characters. Never shown in the console; kept here so a refusal's cause is on record. */
+  reason?: string;
   /** Number of rows when the response is a list (`items`); undefined for anything else. A count, never a value. */
   itemCount?: number;
   /** Field paths present in the response (names only). */
@@ -37,6 +39,26 @@ export const CONSOLE_READS_BEYOND_SCHEMA: { template: string; path: string }[] =
 ];
 
 /** Lists that came back with no rows: their item shape was NOT checked, so a clean result for them proves nothing about rows. */
+/**
+ * Makes a refusal's reason sentence safe to store: UUIDs, e-mail addresses and runs of four or more digits are replaced, anything that is not
+ * plain printable text is dropped, and it is cut to 160 characters. Returns undefined when nothing readable is left.
+ */
+export function refusalReason(detail: unknown): string | undefined {
+  if (typeof detail !== 'string') return undefined;
+  const clean = detail
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>')
+    .replace(/[\w.+-]+@[\w.-]+/g, '<email>')
+    .replace(/\d{4,}/g, '<digits>')
+    .replace(/[^\x20-\x7e]/g, '')
+    .trim()
+    .slice(0, 160);
+  return clean === '' ? undefined : clean;
+}
+
+export function refusals(calls: Call[]): { where: string; phase: string; reason: string }[] {
+  return calls.filter((c) => c.status === 403).map((c) => ({ where: `${c.method} ${c.template}`, phase: c.phase, reason: c.reason ?? '(no reason sentence in the response)' }));
+}
+
 export function emptyLists(calls: Call[]): string[] {
   return [...new Set(calls.filter((c) => c.itemCount === 0 && c.status === 200).map((c) => `${c.method} ${c.template}`))];
 }
@@ -108,6 +130,12 @@ export function renderReport(spec: Spec, calls: Call[], mode: string): string {
     '## Findings',
     '',
     ...(f.length === 0 ? ['None.'] : ['| Kind | Where | Detail |', '|---|---|---|', ...f.map((x) => `| ${x.kind} | \`${x.where}\` | ${x.detail.replaceAll('|', '/')} |`)]),
+    '',
+    '## Refusals (403) and the reason each gave',
+    '',
+    'The response\'s own sentence, with ids, e-mail addresses and long digit runs removed. It is kept here only so the cause is on record; the console never shows it.',
+    '',
+    ...(refusals(calls).length === 0 ? ['None.'] : ['| Route | Step | Reason |', '|---|---|---|', ...refusals(calls).map((r) => `| \`${r.where}\` | ${r.phase} | ${r.reason.replaceAll('|', '/')} |`)]),
     '',
     '## Coverage: lists that came back EMPTY',
     '',

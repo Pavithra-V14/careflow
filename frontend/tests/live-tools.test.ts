@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { checkAgainst, fieldPaths, matchTemplate, responseSchema, type Spec } from '../e2e-live/schemaCheck';
-import { beyondSchema, emptyLists, findings, notExercised, renderReport, type Call } from '../e2e-live/report';
+import { beyondSchema, emptyLists, findings, notExercised, refusalReason, refusals, renderReport, type Call } from '../e2e-live/report';
 import { OPERATIONS } from '../src/shared/api/client';
 
 // Tests of the LIVE-run tooling itself (e2e-live/). The live run is manual and never in CI, so what it relies on must be
@@ -154,5 +154,32 @@ describe('the live run cannot run from CI or by accident', () => {
     const ignore = read('.gitignore');
     expect(ignore).toContain('live-report/');
     expect(ignore).toContain('test-results-live/');
+  });
+});
+
+describe('refusal reasons (403)', () => {
+  it('keeps the reason sentence but never an id, an e-mail address or a long digit run, and cuts it short', () => {
+    expect(refusalReason('a recent second factor is required')).toBe('a recent second factor is required');
+    expect(refusalReason(`not allowed for ${ID} (x@example.test) ticket 123456`)).toBe('not allowed for <id> (<email>) ticket <digits>');
+    expect(refusalReason('x'.repeat(500))?.length).toBe(160);
+    expect(refusalReason(undefined)).toBeUndefined();
+    expect(refusalReason({ a: 1 })).toBeUndefined();
+    expect(refusalReason('   ')).toBeUndefined();
+  });
+
+  it('lists every 403 with its reason in the report, and says so when the response gave none', () => {
+    const base = { phase: 'family link requests', method: 'GET', hasIdempotencyKey: false, queryNames: [], activeRoleHeaderSent: false, issues: [] };
+    const calls: Call[] = [
+      { ...base, template: '/v1/staff/family-links', status: 403, reason: 'a recent second factor is required' },
+      { ...base, template: '/v1/staff/knowledge/drafts', status: 403 },
+      { ...base, template: '/v1/staff/messages/threads', status: 200 },
+    ];
+    expect(refusals(calls)).toEqual([
+      { where: 'GET /v1/staff/family-links', phase: 'family link requests', reason: 'a recent second factor is required' },
+      { where: 'GET /v1/staff/knowledge/drafts', phase: 'family link requests', reason: '(no reason sentence in the response)' },
+    ]);
+    const text = renderReport(spec, calls, 'test');
+    expect(text).toContain('## Refusals (403) and the reason each gave');
+    expect(text).toContain('a recent second factor is required');
   });
 });

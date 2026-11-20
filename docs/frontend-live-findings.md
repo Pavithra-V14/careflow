@@ -307,11 +307,15 @@ Backend `127.0.0.1:8000` with migrations 0089-0093, the three switches on, `CARE
 |---|---|---|
 | Messages (list, a conversation's headers, one message read after its confirmation) | pass | Front desk, nurse and doctor: `GET /v1/staff/messages/threads`, `.../threads/{id}/messages`, `/v1/staff/messages/{id}` all 200, 0 mismatches. |
 | Patient labels (Show names) | pass | `POST /v1/staff/patients/labels` 200 after the confirmation, in all three walks. |
-| Family links, front desk page | not tested live | `GET /v1/staff/family-links` answered 403 to the front desk. The call record keeps no reason, so whether this is the second factor or something else is not known; the most likely cause is the second factor. Nurse and doctor 403 is expected (front desk only). |
-| /knowledge, nurse and doctor | not tested live | `GET /v1/staff/knowledge/drafts` and `/items` answered 403 to both the nurse and the doctor (front desk 403 is expected). Same cause as above is likely: needs second factor. No frontend fault is indicated. |
-| Visit preparation, staff view | not tested live | `GET /v1/staff/visits/upcoming` 200 for nurse and doctor (403 for front desk), but no visit was opened, so `GET /v1/staff/visits/{id}/prep` was never called. |
+| Family links, front desk page | not tested live: needs second factor (the database checks for it; password-only dev sessions are refused) | `GET /v1/staff/family-links` answered 403 to the front desk. Recorded by the owner's decision (20 Nov 2026). The walk tool now stores the response's reason sentence for every 403 (report section "Refusals (403) and the reason each gave"), so the cause is on record next time. |
+| /knowledge, nurse and doctor | not tested live: needs second factor (the database checks for it; password-only dev sessions are refused) | `GET /v1/staff/knowledge/drafts` and `/items` answered 403 to both the nurse and the doctor (front desk 403 is expected). Recorded by the owner's decision (20 Nov 2026). |
+| Visit preparation, staff view | not tested live: needs second factor (the database checks for it; password-only dev sessions are refused) | `GET /v1/staff/visits/upcoming` answered 200 for nurse and doctor (403 for front desk), but no visit was opened, so `GET /v1/staff/visits/{id}/prep` was never called; its write-side checks need the same second factor. Recorded by the owner's decision (20 Nov 2026). |
 | Visit preparation, patient view; family section; profile; notices; requests; appointments; messages (portal) | not tested live | Phone sign-in could not send a code (the portal showed its fixed "The code could not be sent" message), so no portal screen was reached and no portal call was made. Likely cause is on the hosted Supabase side (phone sign-in or an SMS provider not set up for the dev project); not confirmed. |
 
 Walk-tool fixes in this pass: the patient-labels read is no longer reported as "write without key" (it takes no key by design); the front desk, nurse and doctor walks open the new screens and wait for them to settle.
 
 To finish: a second-factor-capable pass (or a backend with the second-factor check relaxed for these routes) for family links, /knowledge and the staff prep view, and a patient test number for portal phone sign-in.
+
+### Patient portal walk: waiting on a demo sign-in (20 Nov 2026)
+
+Phone codes need a paid SMS provider that is not approved, so the patient portal walk is waiting for the demo email and password sign-in (build-time switch `VITE_DEV_PATIENT_PASSWORD_LOGIN=1`, dev server only, banner "Demo sign-in"; see the checklist). It runs once the backend has linked a synthetic patient and the user has created the sign-in. Until then every portal screen stays "not tested live: phone sign-in could not send a code".

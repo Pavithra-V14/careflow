@@ -1,7 +1,7 @@
 import { useId, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import type { ReviewDecision } from '../../shared/api/client';
+import type { EscalationAssessment, ReviewDecision } from '../../shared/api/client';
 import { unwrap } from '../apiState';
 import { useAuth } from '../auth/AuthProvider';
 import { useApiQuery, useIdempotentWrite } from '../hooks';
@@ -19,6 +19,11 @@ export const DECISIONS: readonly ReviewDecision[] = ['approve', 'edit', 'reject'
  */
 export const OFFERED_DECISIONS: readonly ReviewDecision[] = ['approve', 'reject'];
 
+/** The two views a reviewer may record about an escalation (ReviewIn.escalation_assessment); pinned to the schema by a test. Blank means not recorded. */
+export const ASSESSMENTS: readonly EscalationAssessment[] = ['unnecessary_escalation', 'missed_by_system'];
+/** The backend's own sentence when a repeat decision differs only in its assessment; said in this screen's fixed words, never reworded. */
+const FIRST_STANDS = 'the first decision stands and cannot be changed';
+
 /**
  * A reviewer's decision on a triage proposal (nurse and doctor). Nothing is chosen for the person, nothing is written
  * until they confirm, and the reasons the clinician will eventually define appear only as a marked placeholder: the
@@ -35,13 +40,14 @@ export function ReferralReview({ documentId, onDone }: { documentId: string; onD
   const [choice, setChoice] = useState<ReviewDecision | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [reason, setReason] = useState('');
+  const [assessment, setAssessment] = useState<EscalationAssessment | ''>('');
   // The clinic's picklist of reasons (a setting). While it is not set, or the read fails, no reason is asked for or sent.
   const reasons = useApiQuery(['reason-codes'], () => unwrap(api.reasonCodes()));
   const codes = reasons.data?.configured === true ? reasons.data.codes : [];
   const needsReason = codes.length > 0 && choice === 'reject';
 
   const record = useIdempotentWrite(
-    (decision: ReviewDecision, key) => unwrap(api.reviewReferral(documentId, decision, { idempotencyKey: key }, codes.length > 0 && reason ? reason : null)),
+    (decision: ReviewDecision, key) => unwrap(api.reviewReferral(documentId, decision, { idempotencyKey: key }, codes.length > 0 && reason ? reason : null, assessment || null)),
     () => {
       setConfirming(false);
       onDone();
@@ -109,6 +115,27 @@ export function ReferralReview({ documentId, onDone }: { documentId: string; onD
         ) : (
           <PlaceholderNote>{t('placeholder.reviewReasons')}</PlaceholderNote>
         )}
+        <label htmlFor={`${id}-assess`}>{t('referrals.review.assessment.label')}</label>
+        {/* Optional and blank by default: nothing is chosen for the reviewer, and no choice means "not recorded". */}
+        <select
+          id={`${id}-assess`}
+          value={assessment}
+          aria-describedby={`${id}-assess-hint`}
+          onChange={(e) => {
+            setAssessment(e.target.value as EscalationAssessment | '');
+            record.reset();
+          }}
+        >
+          <option value="">{t('referrals.review.assessment.none')}</option>
+          {ASSESSMENTS.map((a) => (
+            <option key={a} value={a}>
+              {t(`referrals.review.assessment.choice.${a}`)}
+            </option>
+          ))}
+        </select>
+        <p id={`${id}-assess-hint`} className="hint">
+          {t('referrals.review.assessment.hint')}
+        </p>
         <button type="submit" className="primary" disabled={choice === null || (needsReason && reason === '')}>
           {t('referrals.review.record')}
         </button>
@@ -129,7 +156,9 @@ export function ReferralReview({ documentId, onDone }: { documentId: string; onD
             (problem.kind === 'forbidden' ? (
               <NotAvailableToRole />
             ) : (
-              <p role="alert">{problem.kind === 'conflict' ? t('referrals.review.conflict') : <ProblemText kind={problem.kind} />}</p>
+              <p role="alert">
+                {problem.kind === 'conflict' ? (problem.detail?.trim().toLowerCase() === FIRST_STANDS ? t('referrals.review.firstStands') : t('referrals.review.conflict')) : <ProblemText kind={problem.kind} />}
+              </p>
             ))
           }
         >

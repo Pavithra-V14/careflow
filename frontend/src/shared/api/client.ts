@@ -36,6 +36,7 @@ export type KnowledgeDraftIn = components['schemas']['KnowledgeDraftIn'];
 export type KnowledgeDraftEditIn = components['schemas']['KnowledgeDraftEditIn'];
 export type KnowledgeDecisionIn = components['schemas']['KnowledgeDecisionIn'];
 export type FamilyLinkRequestIn = components['schemas']['FamilyLinkRequestIn'];
+export type EscalationAssessment = NonNullable<components['schemas']['ReviewIn']['escalation_assessment']>;
 export type FamilyLinkStaffRevokeIn = components['schemas']['FamilyLinkStaffRevokeIn'];
 export type FamilyLinkDecisionIn = components['schemas']['FamilyLinkDecisionIn'];
 type PatientRequestStatus = components['schemas']['PatientRequestStatusIn']['status'];
@@ -410,10 +411,11 @@ export function createApi(options: ApiOptions) {
       client.GET('/v1/staff/scheduling/offers/draft', { params: { query: { clinic_id: clinicId, visit_type_id: visitTypeId } } }),
 
     // ---- F4: referral decisions, identity revoke, merge and duplicate lists ---------------------------------------
-    reviewReferral: (documentId: string, decision: ReviewDecision, o?: WriteOptions, reasonCode?: string | null) =>
+    reviewReferral: (documentId: string, decision: ReviewDecision, o?: WriteOptions, reasonCode?: string | null, assessment?: EscalationAssessment | null) =>
       client.POST('/v1/staff/referrals/{document_id}/review', {
         params: { path: { document_id: documentId }, header: { 'X-Idempotency-Key': key(o) } },
-        body: reasonCode ? { decision, reason_code: reasonCode } : { decision },
+        // An assessment is sent only when the reviewer chose one; leaving it out means "not recorded", never "accurate".
+        body: { decision, ...(reasonCode ? { reason_code: reasonCode } : {}), ...(assessment ? { escalation_assessment: assessment } : {}) },
       }),
     revokeIdentity: (patientId: string, reason: RevokeReason, o?: WriteOptions) =>
       client.POST('/v1/staff/patients/{patient_id}/revoke-identity', {

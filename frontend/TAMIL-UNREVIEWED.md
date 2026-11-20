@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-2024 of 2024 strings are unreviewed.
+2036 of 2036 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -1382,6 +1382,12 @@ Terms standardised: proposal, resolve / resolved.
 | `portal.consent.withdraw` | Withdraw | திரும்பப் பெறு | ok |
 | `portal.consent.withdrawn` | Withdrawn | திரும்பப் பெறப்பட்டது | ok |
 | `portal.consent.withdrawnDone` | Your consent was withdrawn. You can grant it again at any time. | உங்கள் ஒப்புதல் திரும்பப் பெறப்பட்டது. எப்போது வேண்டுமானாலும் மீண்டும் வழங்கலாம். | ok |
+| `portal.demoSignIn.banner` | Demo sign-in. Email and password sign-in is for demonstrations with made-up patients only. It is not how patients sign in. | டெமோ உள்நுழைவு. மின்னஞ்சல் மற்றும் கடவுச்சொல் உள்நுழைவு கற்பனை நோயாளிகளுடன் செய்யும் செயல்விளக்கங்களுக்கு மட்டுமே. நோயாளிகள் இப்படி உள்நுழைவதில்லை. | ok |
+| `portal.demoSignIn.email` | Email | மின்னஞ்சல் | ok |
+| `portal.demoSignIn.failed` | The demo sign-in did not work. Check the email and password and try again. | டெமோ உள்நுழைவு வேலை செய்யவில்லை. மின்னஞ்சலையும் கடவுச்சொல்லையும் சரிபார்த்து மீண்டும் முயற்சிக்கவும். | ok |
+| `portal.demoSignIn.password` | Password | கடவுச்சொல் | ok |
+| `portal.demoSignIn.submit` | Sign in (demo) | உள்நுழை (டெமோ) | ok |
+| `portal.demoSignIn.title` | Demo sign-in | டெமோ உள்நுழைவு | ok |
 | `portal.erased` | Erased | அழிக்கப்பட்டது | ok |
 | `portal.family.ask` | Ask for this link | இந்த இணைப்புக்குக் கேளுங்கள் | ok |
 | `portal.family.body` | You can ask to be linked as the guardian of a child or as the carer of an adult at a hospital. A member of the hospital staff checks the request afterwards. | ஒரு மருத்துவமனையில் ஒரு குழந்தையின் பாதுகாவலராக அல்லது ஒரு வயது வந்தவரின் பராமரிப்பாளராக இணைக்கப்படக் கேட்கலாம். மருத்துவமனைப் பணியாளர் ஒருவர் பிறகு கோரிக்கையைச் சரிபார்ப்பார். | ok |
@@ -1727,11 +1733,17 @@ Terms standardised: proposal, resolve / resolved.
 | `referrals.proposalAbstained` | Abstained | முன்மொழிவு அளிக்கவில்லை | corrected after AI review (meaning problem); blind re-check: minor-drift |
 | `referrals.proposalMode` | Mode | முறை | ok |
 | `referrals.registeredBy` | Registered by | பதிவு செய்தவர் | ok |
+| `referrals.review.assessment.choice.missed_by_system` | The system should have escalated this and did not | இதைக் கணினி உயர்த்தியிருக்க வேண்டும்; ஆனால் உயர்த்தவில்லை | ok |
+| `referrals.review.assessment.choice.unnecessary_escalation` | This escalation was unnecessary | இந்த உயர்த்தல் தேவையற்றது | ok |
+| `referrals.review.assessment.hint` | Leave this blank if you have no view. Blank means not recorded, not accurate. A recorded view cannot be changed later. | உங்களுக்குக் கருத்து இல்லையெனில் இதை வெறுமையாக விடுங்கள். வெறுமை என்றால் பதிவு செய்யப்படவில்லை என்று பொருள்; சரியானது என்று அல்ல. பதிவு செய்த கருத்தைப் பின்னர் மாற்ற முடியாது. | ok |
+| `referrals.review.assessment.label` | Was this escalation right? (optional) | இந்த உயர்த்தல் சரியானதா? (விருப்பம்) | ok |
+| `referrals.review.assessment.none` | Not recorded | பதிவு செய்யப்படவில்லை | ok |
 | `referrals.review.confirmBody` | You are about to record the decision "{{decision}}" for this referral. It is kept under your name. | இந்தப் பரிந்துரைக்கு "{{decision}}" என்ற முடிவை நீங்கள் பதிவு செய்யப் போகிறீர்கள். அது உங்கள் பெயரில் வைக்கப்படும். | minor drift |
 | `referrals.review.confirmTitle` | Record this decision? | இந்த முடிவைப் பதிவு செய்யவா? | ok |
 | `referrals.review.conflict` | The referral is not waiting for a decision, or a different decision is already recorded. Refresh and try again. | பரிந்துரை முடிவுக்காகக் காத்திருக்கவில்லை, அல்லது வேறொரு முடிவு ஏற்கனவே பதிவாகியுள்ளது. புதுப்பித்து மீண்டும் முயற்சிக்கவும். | ok |
 | `referrals.review.decidedNote` | A decision has already been recorded. | ஒரு முடிவு ஏற்கனவே பதிவு செய்யப்பட்டுள்ளது. | ok |
 | `referrals.review.done` | The decision was recorded. | முடிவு பதிவு செய்யப்பட்டது. | ok |
+| `referrals.review.firstStands` | The first decision stands and cannot be changed. | முதல் முடிவே நிலைக்கும்; அதை மாற்ற முடியாது. | ok |
 | `referrals.review.help` | Choose a decision for this referral. Nothing is chosen for you. | இந்தப் பரிந்துரைக்கு ஒரு முடிவைத் தேர்ந்தெடுங்கள். உங்களுக்காக எதுவும் தேர்ந்தெடுக்கப்படவில்லை. | minor drift |
 | `referrals.review.legend` | Decision | முடிவு | ok |
 | `referrals.review.reasons` | Reasons | காரணங்கள் | ok |

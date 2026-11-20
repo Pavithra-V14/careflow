@@ -6,6 +6,7 @@ import { createApi } from '../../shared/api/client';
 import { IdleWarning } from '../../shared/IdleWarning';
 import { idleMinutes, useIdleSignOut } from '../../shared/idle';
 import { ApiProblem, toProblem, unwrap } from '../../staff/apiState';
+import { devPatientPasswordLogin } from '../../staff/featureFlags';
 import { ProblemText } from '../../staff/ui/states';
 import { PATHS } from '../paths';
 import { normalisePhone, type PortalAuth } from './auth';
@@ -85,6 +86,15 @@ export function PortalApp({ auth, apiBaseUrl }: { auth: PortalAuth | null; apiBa
               setPhase('signed-in');
             }}
           />
+          {devPatientPasswordLogin() && auth.signInWithPassword && (
+            <DemoPasswordSignIn
+              signIn={auth.signInWithPassword}
+              onDone={() => {
+                setIdleEnded(false);
+                setPhase('signed-in');
+              }}
+            />
+          )}
           <QueryClientProvider client={queryClient}>
             <PublicGrievanceSection api={publicApi} />
           </QueryClientProvider>
@@ -177,6 +187,49 @@ function SignIn({ auth, onDone }: { auth: PortalAuth; onDone: () => void }) {
         </form>
       )}
     </div>
+  );
+}
+
+// ---- DEMO ONLY: email and password -------------------------------------------------------------------------------------------------
+// Shown only in a demo build with the switch on (devPatientPasswordLogin). The normal phone-code form above stays the default. Nothing typed here is
+// kept: the password is cleared after every try, and the failure message is one fixed sentence that does not say which part was wrong.
+
+function DemoPasswordSignIn({ signIn, onDone }: { signIn: (email: string, password: string) => Promise<boolean>; onDone: () => void }) {
+  const { t } = useTranslation();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (email.trim() === '' || password === '') return;
+    setBusy(true);
+    setFailed(false);
+    const ok = await signIn(email.trim(), password);
+    setBusy(false);
+    setPassword('');
+    if (ok) onDone();
+    else setFailed(true);
+  }
+
+  return (
+    <section aria-labelledby="portal-demo-title" data-demo-sign-in>
+      <p role="status" className="demo-banner">
+        {t('portal.demoSignIn.banner')}
+      </p>
+      <h2 id="portal-demo-title">{t('portal.demoSignIn.title')}</h2>
+      <form onSubmit={(e) => void submit(e)} noValidate>
+        <label htmlFor="portal-demo-email">{t('portal.demoSignIn.email')}</label>
+        <input id="portal-demo-email" type="email" inputMode="email" autoComplete="username" spellCheck={false} value={email} onChange={(e) => setEmail(e.target.value)} />
+        <label htmlFor="portal-demo-password">{t('portal.demoSignIn.password')}</label>
+        <input id="portal-demo-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        {failed && <p role="alert">{t('portal.demoSignIn.failed')}</p>}
+        <button type="submit" className="button button-primary" disabled={busy || email.trim() === '' || password === ''}>
+          {busy ? t('common.working') : t('portal.demoSignIn.submit')}
+        </button>
+      </form>
+    </section>
   );
 }
 

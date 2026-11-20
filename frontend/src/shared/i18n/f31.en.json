@@ -57,6 +57,14 @@
       "off": "Family links are not turned on at this hospital yet. Nothing was sent.",
       "invalid": "That request was not accepted. Check your choices. Nothing was sent.",
       "gone": "This was not found. Nothing was changed."
+    },
+    "demoSignIn": {
+      "banner": "Demo sign-in. Email and password sign-in is for demonstrations with made-up patients only. It is not how patients sign in.",
+      "title": "Demo sign-in",
+      "email": "Email",
+      "password": "Password",
+      "submit": "Sign in (demo)",
+      "failed": "The demo sign-in did not work. Check the email and password and try again."
     }
   },
   "visitPrep": {

@@ -84,6 +84,7 @@ server (`/v1` and `/readyz`), so there is no CORS to configure.
 Other names that appear in scripts (set in the shell, never in a file):
 
 - `VITE_DEV_SKIP_STAFF_MFA`: the dev-only skip switch, described next.
+- `VITE_DEV_PATIENT_PASSWORD_LOGIN`: the demo-only patient email and password sign-in (dev server only, shell only, never any real build); see docs/frontend-live-checklist.md.
 - `LIVE_BASE_URL`: optional, where the live pass looks for the dev server (default `http://127.0.0.1:5173`).
 
 ## Feature switches and the dev-only skip switch

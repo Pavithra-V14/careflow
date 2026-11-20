@@ -13,7 +13,17 @@
       "reasons": "Reasons",
       "conflict": "The referral is not waiting for a decision, or a different decision is already recorded. Refresh and try again.",
       "done": "The decision was recorded.",
-      "decidedNote": "A decision has already been recorded."
+      "decidedNote": "A decision has already been recorded.",
+      "assessment": {
+        "label": "Was this escalation right? (optional)",
+        "none": "Not recorded",
+        "hint": "Leave this blank if you have no view. Blank means not recorded, not accurate. A recorded view cannot be changed later.",
+        "choice": {
+          "unnecessary_escalation": "This escalation was unnecessary",
+          "missed_by_system": "The system should have escalated this and did not"
+        }
+      },
+      "firstStands": "The first decision stands and cannot be changed."
     },
     "decision": {
       "approve": "Approve",

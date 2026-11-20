@@ -92,12 +92,63 @@ describe('referral review decision (nurse, doctor)', () => {
     const placeholder = await screen.findByText('PLACEHOLDER - clinician to define');
     expect(placeholder).toHaveAttribute('data-placeholder');
     expect(screen.queryByRole('textbox')).toBeNull();
-    expect(document.querySelectorAll('main textarea, main select')).toHaveLength(0);
+    expect(document.querySelectorAll('main textarea')).toHaveLength(0);
+    // The only choice list left is the optional escalation question (two closed words); no reason list is shown while the clinic has none.
+    expect([...document.querySelectorAll('main select')].map((el) => el.id.endsWith('-assess'))).toEqual([true]);
     await user.click(screen.getByRole('radio', { name: 'Approve' }));
     await user.click(screen.getByRole('button', { name: 'Record decision' }));
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Record decision' }));
     await waitFor(() => expect(writes(calls)).toHaveLength(1));
     expect(Object.keys(writes(calls)[0]?.body as object)).toEqual(['decision']);
+  });
+
+  it('asks an optional escalation question, blank by default: nothing chosen sends no assessment, a choice sends exactly that word', async () => {
+    const user = userEvent.setup();
+    const { calls } = await openConsole({ role: 'nurse', hash: `/referrals/${ID.doc}`, routes: [detailRoute(), viewRoute, review([])] });
+    const select = await screen.findByRole('combobox', { name: 'Was this escalation right? (optional)' });
+    expect(select).toHaveValue(''); // nothing is chosen for the reviewer
+    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['Not recorded', 'This escalation was unnecessary', 'The system should have escalated this and did not']);
+    const go = () => within(screen.getByRole('dialog')).getByRole('button', { name: 'Record decision' });
+
+    await user.click(screen.getByRole('radio', { name: 'Approve' }));
+    await user.click(screen.getByRole('button', { name: 'Record decision' }));
+    await user.click(go());
+    await waitFor(() => expect(writes(calls)).toHaveLength(1));
+    expect(writes(calls)[0]?.body).toEqual({ decision: 'approve' }); // blank means not recorded: the field is not sent at all
+  });
+
+  it('sends the chosen assessment word, and a changed assessment is a new request with a new key', async () => {
+    const user = userEvent.setup();
+    const { calls } = await openConsole({ role: 'doctor', hash: `/referrals/${ID.doc}`, routes: [detailRoute(), viewRoute, review([503, 200, 503])] });
+    await user.click(await screen.findByRole('radio', { name: 'Approve' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Was this escalation right? (optional)' }), 'missed_by_system');
+    await user.click(screen.getByRole('button', { name: 'Record decision' }));
+    const go = () => within(screen.getByRole('dialog')).getByRole('button', { name: 'Record decision' });
+    await user.click(go());
+    await waitFor(() => expect(writes(calls)).toHaveLength(1));
+    expect(writes(calls)[0]?.body).toEqual({ decision: 'approve', escalation_assessment: 'missed_by_system' });
+    await user.click(go()); // retry, nothing changed: same key
+    await waitFor(() => expect(writes(calls)).toHaveLength(2));
+    expect(writes(calls)[1]?.key).toBe(writes(calls)[0]?.key);
+  });
+
+  it('says exactly "the first decision stands and cannot be changed" for that refusal, and the ordinary conflict text for any other 409', async () => {
+    const user = userEvent.setup();
+    const answers = [
+      () => json({ detail: 'the first decision stands and cannot be changed' }, 409),
+      () => json({ detail: LEAK }, 409),
+    ];
+    const post: Routes[number] = ['post', reviewPath, () => (answers.shift() ?? (() => json({ decision: 'approve', document_id: ID.doc, replayed: false })))()];
+    await openConsole({ role: 'nurse', hash: `/referrals/${ID.doc}`, routes: [detailRoute(), viewRoute, post] });
+    await user.click(await screen.findByRole('radio', { name: 'Approve' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Was this escalation right? (optional)' }), 'unnecessary_escalation');
+    await user.click(screen.getByRole('button', { name: 'Record decision' }));
+    const go = () => within(screen.getByRole('dialog')).getByRole('button', { name: 'Record decision' });
+    await user.click(go());
+    expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent('The first decision stands and cannot be changed.');
+    await user.click(go());
+    await waitFor(() => expect(within(screen.getByRole('dialog')).getByRole('alert')).toHaveTextContent('The referral is not waiting for a decision'));
+    expect(document.body.textContent).not.toContain(LEAK);
   });
 
   it('keeps the success message after the referral refreshes to decided and the form disappears (regression)', async () => {

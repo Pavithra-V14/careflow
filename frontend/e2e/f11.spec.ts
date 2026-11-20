@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { GOOD_PHONE, GOOD_PHONE_CODE, LEAK, installPortalMock, type PortalScenario } from './portalMock';
+import { DEMO_EMAIL, DEMO_PASSWORD, GOOD_PHONE, GOOD_PHONE_CODE, LEAK, installPortalMock, type PortalScenario } from './portalMock';
 
 // The patient portal in a real browser against a fake phone-code sign-in and fake portal routes (e2e/portalMock.ts, MOCK ONLY).
 // Mobile first: every screen is checked with axe (WCAG 2.2 AA is the goal we test toward) at 320, 768 and 1280, in English and Tamil, with no
@@ -57,6 +57,31 @@ for (const lang of LANGS) {
     await open(page, lang);
     await expect(page.locator('input[type=tel]')).toBeVisible();
     await sweep(page, 'portal-phone', lang);
+  });
+
+  test(`sign in: the demo email and password form, with its banner, beside the phone form [${lang}]`, async ({ page }) => {
+    await open(page, lang);
+    await expect(page.locator('input[type=tel]')).toBeVisible(); // the phone-code form stays the default
+    await expect(page.locator('[data-demo-sign-in] .demo-banner')).toBeVisible();
+    await expect(page.locator('#portal-demo-email')).toBeVisible();
+    await sweep(page, 'portal-demo-sign-in', lang);
+    // a wrong pair says one fixed sentence and clears the password
+    await page.locator('#portal-demo-email').fill(DEMO_EMAIL);
+    await page.locator('#portal-demo-password').fill('not-the-password');
+    await page.locator('[data-demo-sign-in] button[type=submit]').click();
+    await expect(page.locator('[data-demo-sign-in] [role=alert]')).toBeVisible();
+    await expect(page.locator('#portal-demo-password')).toHaveValue('');
+    expect(await page.locator('body').innerText()).not.toContain(LEAK);
+    await sweep(page, 'portal-demo-sign-in-failed', lang);
+  });
+
+  test(`sign in: the right demo pair opens the account [${lang}]`, async ({ page }) => {
+    await open(page, lang, { start: 'active', granted: true });
+    await page.locator('#portal-demo-email').fill(DEMO_EMAIL);
+    await page.locator('#portal-demo-password').fill(DEMO_PASSWORD);
+    await page.locator('[data-demo-sign-in] button[type=submit]').click();
+    await expect(page.locator('#portal-demo-email')).toHaveCount(0);
+    await expect(page.locator('#portal-consent, #portal-claim').first()).toBeVisible();
   });
 
   test(`sign in: the code form [${lang}]`, async ({ page }) => {

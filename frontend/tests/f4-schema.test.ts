@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { DECISIONS, OFFERED_DECISIONS } from '../src/staff/pages/ReferralReview';
+import { ASSESSMENTS, DECISIONS, OFFERED_DECISIONS } from '../src/staff/pages/ReferralReview';
 import { REVOKE_REASONS } from '../src/staff/pages/IdentityRevoke';
 import { DUPLICATE_STATUSES, MERGE_STATUSES } from '../src/staff/pages/IdentityPage';
 
@@ -21,6 +21,12 @@ describe('word lists mirrored from the schema', () => {
     expect([...DECISIONS]).toEqual(prop('ReviewIn', 'decision'));
     expect(DECISIONS.length).toBeGreaterThan(0);
   });
+  it('escalation assessments are exactly the words ReviewIn.escalation_assessment accepts, in order, and the field is optional', () => {
+    const field = (schemas.ReviewIn as unknown as { properties: Record<string, { anyOf?: { enum?: string[] }[] }>; required?: string[] }).properties.escalation_assessment;
+    expect([...ASSESSMENTS]).toEqual(field?.anyOf?.find((a) => a.enum)?.enum);
+    expect(ASSESSMENTS.length).toBe(2);
+    expect((schemas.ReviewIn as unknown as { required?: string[] }).required ?? []).not.toContain('escalation_assessment');
+  });
   it('offers only decisions the API accepts, and edit is not offered (clinician item 26)', () => {
     for (const d of OFFERED_DECISIONS) expect(DECISIONS).toContain(d);
     expect([...OFFERED_DECISIONS]).toEqual(['approve', 'reject']);
@@ -33,9 +39,9 @@ describe('word lists mirrored from the schema', () => {
     expect([...MERGE_STATUSES]).toEqual(queryEnum('/v1/staff/identity/merges', 'status'));
     expect([...DUPLICATE_STATUSES]).toEqual(queryEnum('/v1/staff/identity/possible-duplicates', 'status'));
   });
-  it('the review and revoke routes take exactly one body field each, so no reason or free text can be sent by mistake', () => {
-    // The review route takes the decision and an optional reason CODE from the clinic's picklist (a closed word, never free text).
-    expect(Object.keys(schemas.ReviewIn?.properties ?? {})).toEqual(['decision', 'reason_code']);
+  it('the review and revoke routes take only closed words, so no free text can be sent by mistake', () => {
+    // The review route takes the decision, an optional reason CODE from the clinic's picklist and an optional escalation assessment (two closed words): never free text.
+    expect(Object.keys(schemas.ReviewIn?.properties ?? {}).sort()).toEqual(['decision', 'escalation_assessment', 'reason_code']);
     expect(Object.keys(schemas.RevokeIdentityIn?.properties ?? {})).toEqual(['reason']);
   });
 });

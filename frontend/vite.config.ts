@@ -52,6 +52,9 @@ export default defineConfig(({ mode, command }) => {
       [FLAGS_GLOBAL]: JSON.stringify({
         mergeActions: mode === 'e2e',
         erasureActions: mode === 'e2e',
+        // DEMO walks only: patient email+password sign-in. On for the dev server when the shell set VITE_DEV_PATIENT_PASSWORD_LOGIN=1, and in `--mode e2e`
+        // (the mock-backed browser build, which has no real sign-in service). False in every production, staging or development BUILD.
+        devPatientPasswordLogin: mode === 'e2e' || (command === 'serve' && mode === 'development' && process.env.VITE_DEV_PATIENT_PASSWORD_LOGIN === '1'),
         devSkipStaffMfa: command === 'serve' && mode === 'development' && process.env.VITE_DEV_SKIP_STAFF_MFA === '1',
       }),
     },

@@ -6527,6 +6527,8 @@ export interface components {
              * @enum {string}
              */
             decision: "approve" | "edit" | "reject";
+            /** Escalation Assessment */
+            escalation_assessment?: ("unnecessary_escalation" | "missed_by_system") | null;
             /** Reason Code */
             reason_code?: string | null;
         };

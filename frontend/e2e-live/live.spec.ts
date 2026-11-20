@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { checkAgainst, fieldPaths, matchTemplate, responseSchema, type Spec } from './schemaCheck';
-import { renderReport, type Call } from './report';
+import { refusalReason, renderReport, type Call } from './report';
 
 // LIVE integration pass against a RUNNING backend. Run by hand with `npm run e2e:live`; never in CI (the isolation test
 // tests/live-run-isolation.test.ts pins that). It does not type a credential: you sign in yourself in the window it opens
@@ -39,6 +39,8 @@ function watch(page: Page, calls: Call[], phase: { current: string }) {
       let issues: Call['issues'] = [];
       let itemCount: number | undefined;
       let fields: string[] | undefined;
+      let reason: string | undefined;
+      if (res.status() === 403) reason = refusalReason(((await res.json().catch(() => undefined)) as { detail?: unknown } | undefined)?.detail);
       if (res.ok() && template !== '?') {
         const schema = responseSchema(spec, method, template);
         const body: unknown = await res.json().catch(() => undefined);
@@ -59,6 +61,7 @@ function watch(page: Page, calls: Call[], phase: { current: string }) {
         queryNames: [...url.searchParams.keys()],
         activeRoleHeaderSent: Boolean(headers['x-careflow-active-role']),
         issues,
+        ...(reason ? { reason } : {}),
         ...(itemCount !== undefined ? { itemCount } : {}),
         ...(fields ? { fields } : {}),
       });

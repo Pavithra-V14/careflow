@@ -55,3 +55,13 @@
   min-height: var(--target-min);
   margin-top: var(--space-2);
 }
+
+/* DEMO sign-in banner: text on a plain surface with a border, never colour alone. */
+.demo-banner {
+  margin: var(--space-3) 0 var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 2px solid var(--color-border);
+  font-weight: 700;
+}

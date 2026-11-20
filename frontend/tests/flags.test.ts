@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { resolveConfig } from 'vite';
 import { FLAGS_GLOBAL } from '../env-allowlist';
-import { SEND_ACTIVE_ROLE_HEADER, devSkipStaffMfa, erasureActionsEnabled, mergeActionsEnabled } from '../src/staff/featureFlags';
+import { SEND_ACTIVE_ROLE_HEADER, devPatientPasswordLogin, devSkipStaffMfa, erasureActionsEnabled, mergeActionsEnabled } from '../src/staff/featureFlags';
 
 // The merge approve / unmerge buttons stay OFF until the step-up claim spike is recorded. These tests pin that.
 
@@ -79,6 +79,52 @@ describe('feature flags', () => {
         expect(await devSkip('serve', 'production')).toBe(false);
         expect(await devSkip('serve', 'e2e')).toBe(false);
       });
+    });
+  });
+
+  // DEMO ONLY switch that adds the patient email+password sign-in (VITE_DEV_PATIENT_PASSWORD_LOGIN). Never in a production, staging or development build.
+  describe('demo patient password sign-in', () => {
+    async function demo(command: 'build' | 'serve', mode: string): Promise<boolean> {
+      const cfg = await resolveConfig({ configFile: 'vite.config.ts', root: process.cwd(), mode }, command, mode);
+      return (JSON.parse(String(cfg.define?.[FLAGS_GLOBAL])) as { devPatientPasswordLogin: boolean }).devPatientPasswordLogin;
+    }
+    const withVar = async (value: string | undefined, run: () => Promise<void>) => {
+      const before = process.env.VITE_DEV_PATIENT_PASSWORD_LOGIN;
+      if (value === undefined) delete process.env.VITE_DEV_PATIENT_PASSWORD_LOGIN;
+      else process.env.VITE_DEV_PATIENT_PASSWORD_LOGIN = value;
+      try {
+        await run();
+      } finally {
+        if (before === undefined) delete process.env.VITE_DEV_PATIENT_PASSWORD_LOGIN;
+        else process.env.VITE_DEV_PATIENT_PASSWORD_LOGIN = before;
+      }
+    };
+
+    it('is off in the unit-test build', () => {
+      expect(devPatientPasswordLogin()).toBe(false);
+    });
+
+    it('is off by default in the dev server and in every real build', async () => {
+      await withVar(undefined, async () => {
+        expect(await demo('serve', 'development')).toBe(false);
+        for (const mode of ['production', 'development', 'staging']) expect(await demo('build', mode)).toBe(false);
+      });
+    });
+
+    it('is on for the dev server only when the shell variable is exactly 1', async () => {
+      await withVar('1', async () => expect(await demo('serve', 'development')).toBe(true));
+      for (const v of ['0', 'true', 'yes', '']) await withVar(v, async () => expect(await demo('serve', 'development')).toBe(false));
+    });
+
+    it('is NEVER on in a production, staging or development build, or a production-mode server, even with the variable set', async () => {
+      await withVar('1', async () => {
+        for (const mode of ['production', 'development', 'staging', 'test']) expect(await demo('build', mode)).toBe(false);
+        expect(await demo('serve', 'production')).toBe(false);
+      });
+    });
+
+    it('is on in the mock-backed e2e build (which has no real sign-in service) and nowhere else', async () => {
+      await withVar(undefined, async () => expect(await demo('build', 'e2e')).toBe(true));
     });
   });
 
