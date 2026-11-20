@@ -1,7 +1,7 @@
 {
   "date": "2026-11-20",
-  "checked": 2037,
-  "backTranslated": 2006,
+  "checked": 2040,
+  "backTranslated": 2009,
   "keptInEnglish": 31,
   "fixed": [
     {
@@ -43,7 +43,7 @@
     "sentenceCountMismatches": 1,
     "sentenceCountMismatchesFixed": 1
   },
-  "candidatesReadSideBySide": 243,
+  "candidatesReadSideBySide": 246,
   "passes": [
     {
       "date": "2026-11-14",
@@ -67,6 +67,20 @@
       "backTranslated": 20,
       "fixed": 3,
       "flagged": 3
+    },
+    {
+      "date": "2026-11-20",
+      "checked": 1,
+      "backTranslated": 1,
+      "fixed": 0,
+      "flagged": 0
+    },
+    {
+      "date": "2026-11-20",
+      "checked": 2,
+      "backTranslated": 2,
+      "fixed": 0,
+      "flagged": 0
     },
     {
       "date": "2026-11-20",

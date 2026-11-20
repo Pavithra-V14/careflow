@@ -1,6 +1,6 @@
 # Tamil review pack (AI-prepared, NOT reviewed by a native speaker)
 
-Prepared 2026-11-20. Machine-checked on 2026-11-20; NOT human-reviewed; the Tamil reader must still approve (Part 0). Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 2037 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
+Prepared 2026-11-20. Machine-checked on 2026-11-20; NOT human-reviewed; the Tamil reader must still approve (Part 0). Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 2040 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
 
 **Regenerated 2026-11-20** by `npm run i18n:pack` from the strings as they are now, so it covers every current string, including the newest screens (patient voice setting, consent withdrawal and history, activating a staff account, withdrawing and retiring a red-flag rule). Each is written and second-passed in the same way and is just as unreviewed.
 
@@ -12,9 +12,9 @@ Meaning errors, register for patients, medical or safety terms, unsafe ambiguity
 - **B** wrong or odd meaning, wrong register, or an inconsistent term. Needs a native speaker.
 - **C** minor wording, or an administrator-only technical label.
 
-How it was done, honestly: all 2037 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and the strings that carry meaning (sentences of four words or more, and short strings that differ from their English) were read by an AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
+How it was done, honestly: all 2040 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and the strings that carry meaning (sentences of four words or more, and short strings that differ from their English) were read by an AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
 
-Automatic checks: 2037 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
+Automatic checks: 2040 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
 
 Notes: 71 grade A, 125 grade B, 58 grade C (254 rows with a note; some notes cover a group of similar strings, named in the note).
 
@@ -22,16 +22,16 @@ Notes: 71 grade A, 125 grade B, 58 grade C (254 rows with a note; some notes cov
 
 **Machine-checked on 2026-11-20; NOT human-reviewed; the Tamil reader must still approve.** This is a first pass by an AI model, not a native speaker, and not a substitute for the human reviewer. No string was marked reviewed.
 
-How it was done: every Tamil string was back-translated to English on its own, without the English original in view, and only then compared with the original. Strings that are identical in English and Tamil on purpose (Part 6) were not translated, so they were not back-translated. It was done in 4 pass(es): 2026-11-14: 1778 strings (1 fixed, 35 flagged); 2026-11-18: 239 strings (1 fixed, 8 flagged); 2026-11-20: 20 strings (3 fixed, 3 flagged); 2026-11-20: 1 strings (0 fixed, 0 flagged). The second pass covered only the strings added or changed since the first. A script also checked every string for lost or reordered {{placeholders}}, changed numbers, a lost negation, informal pronouns and a different number of sentences.
+How it was done: every Tamil string was back-translated to English on its own, without the English original in view, and only then compared with the original. Strings that are identical in English and Tamil on purpose (Part 6) were not translated, so they were not back-translated. It was done in 6 pass(es): 2026-11-14: 1778 strings (1 fixed, 35 flagged); 2026-11-18: 239 strings (1 fixed, 8 flagged); 2026-11-20: 20 strings (3 fixed, 3 flagged); 2026-11-20: 1 strings (0 fixed, 0 flagged); 2026-11-20: 2 strings (0 fixed, 0 flagged); 2026-11-20: 1 strings (0 fixed, 0 flagged). The second pass covered only the strings added or changed since the first. A script also checked every string for lost or reordered {{placeholders}}, changed numbers, a lost negation, informal pronouns and a different number of sentences.
 
 | Count | Strings |
 |---|---|
-| Checked | 2037 (2006 back-translated, 31 left in English by design) |
+| Checked | 2040 (2009 back-translated, 31 left in English by design) |
 | Fixed (a clear defect) | 5 |
 | Flagged for the human reviewer | 46 (grade A: 5, B: 15, C: 26) |
 | Strings added since this check, not covered | 0 |
 
-Automatic findings: 0 placeholder mismatches, 0 changed numbers, 0 lost negations, 0 informal pronouns, 1 string with a different number of sentences (fixed). 243 strings whose back-translation overlapped little with the English, or that the script flagged, were read side by side; the rest agreed. Most of the low-overlap ones were synonyms ("Expires" and "Expiry", "Phone" and "Telephone") and are not listed.
+Automatic findings: 0 placeholder mismatches, 0 changed numbers, 0 lost negations, 0 informal pronouns, 1 string with a different number of sentences (fixed). 246 strings whose back-translation overlapped little with the English, or that the script flagged, were read side by side; the rest agreed. Most of the low-overlap ones were synonyms ("Expires" and "Expiry", "Phone" and "Telephone") and are not listed.
 
 ### Fixed
 
@@ -398,10 +398,10 @@ Grade A: a safety, privacy or patient-rights meaning could be misread. B: a wron
 |---|---|---|
 | approve | ஒப்புக்கொள் (verb), ஒப்புதல் (noun) (72) | The verb also means "admit/agree"; some places use ஒப்புதல் அளி. |
 | acknowledge | ஏற்றுக்கொள் ("accept") (15) | Same verb as approve; the action only records that you have seen something. |
-| record / log / transcript / register | பதிவு everywhere (182) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
+| record / log / transcript / register | பதிவு everywhere (184) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
 | result / decision / end | முடிவு everywhere (78) | One word for a clinical result, a person's decision and an end time. |
 | role | பங்கு (15) | Also means "share"; பணி is used for "task". |
-| merge / link / connect / attach | இணை / இணைப்பு (84) | Merging two patient records, linking a portal account, attaching a note: one word. |
+| merge / link / connect / attach | இணை / இணைப்பு (86) | Merging two patient records, linking a portal account, attaching a note: one word. |
 | red flag | சிவப்புக் கொடி (literal) (26) | Check the wording clinicians use. |
 | hold (a slot or a referral) | நிறுத்து / நிறுத்தம் (stop) and ஒதுக்கீடு (allocation) (53) | Two or three words for one idea. |
 | retire (a rule version) and withdraw (a draft) | நிறுத்து (retire) and திரும்பப் பெறு (withdraw) (75) | The rule screens need two different words; "withdraw" shares its Tamil with "revoke" and "cannot be undone". |
@@ -414,7 +414,7 @@ Grade A: a safety, privacy or patient-rights meaning could be misread. B: a wron
 | sample (a sampled decision) | மாதிரி (6) | Reads as a laboratory specimen. |
 | revoke / take back, and "cannot be undone" | திரும்பப் பெறு for both (33) | The same verb for "revoke" and "cannot be reversed". |
 | grant / withdraw (a consent) | வழங்கு (grant) and திரும்பப் பெறு (withdraw) (28) | Consent withdrawal is one click in the portal, so the word must be unmistakable. |
-| fresh (code) | புதிய ("new") (35) | Means a recently entered code, not a new one. |
+| fresh (code) | புதிய ("new") (36) | Means a recently entered code, not a new one. |
 | screen (the rules read text) | பரிசோதனை (12) | The word for a medical examination or test. |
 | escalate | உயர்நிலைக்கு அனுப்பு ("send to a higher level") (8) | Loses the sense of raising urgency. |
 | authenticator | அங்கீகார செயலி (app) / அங்கீகார குறியீடு (code) (16) | Consistent; check it is the word staff use. |
@@ -459,7 +459,7 @@ These are the same in English and Tamil by design, and a Tamil-speaking patient 
 - `tasks.kind.screening_unassessable`
 - `tasks.kind.triage_proposal`
 
-## Part 7. All 2037 strings
+## Part 7. All 2040 strings
 
 Fill in the last column. Write **OK**, or write the full corrected Tamil (keep every {{placeholder}} exactly as it is). Leave a row empty if you have not looked at it.
 
@@ -1115,6 +1115,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `claims.result.approved` | Approved. The person is linked to the record. | ஒப்புக்கொள்ளப்பட்டது. அந்த நபர் பதிவுடன் இணைக்கப்பட்டார். | no issue found | |
 | `claims.result.claimant_already_bound` | This person is already linked to a record. Nothing was changed. | இந்த நபர் ஏற்கனவே ஒரு பதிவுடன் இணைந்துள்ளார். எதுவும் மாற்றப்படவில்லை. | no issue found | |
 | `claims.result.consent_required` | The person has not given the required consent yet. Nothing was linked. | தேவையான சம்மதத்தை அந்த நபர் இன்னும் வழங்கவில்லை. யாரும் இணைக்கப்படவில்லை. | no issue found | |
+| `claims.result.identity_not_confirmed` | That record's identity has not been confirmed yet. Confirm it first. Nothing was linked. | அந்தப் பதிவின் அடையாளம் இன்னும் உறுதிப்படுத்தப்படவில்லை. முதலில் அதை உறுதிப்படுத்துங்கள். எதுவும் இணைக்கப்படவில்லை. | no issue found | |
 | `claims.result.record_not_claimable` | That record cannot be claimed. Nothing was linked. | அந்தப் பதிவைக் கோர முடியாது. யாரும் இணைக்கப்படவில்லை. | no issue found | |
 | `claims.result.rejected` | Rejected. | நிராகரிக்கப்பட்டது. | no issue found | |
 | `claims.title` | Portal claims | வலைவாசல் கோரிக்கைகள் | no issue found | |
@@ -1763,6 +1764,8 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `portal.claim.dob` | Date of birth | பிறந்த தேதி | no issue found | |
 | `portal.claim.invalid` | Check the name and date of birth. Nothing was recorded. | பெயரையும் பிறந்த தேதியையும் சரிபார்க்கவும். எதுவும் பதிவாகவில்லை. | no issue found | |
 | `portal.claim.name` | Full name | முழுப் பெயர் | no issue found | |
+| `portal.claim.originMismatch` | This account was created under a different environment than this server. Register a new account while the server runs as the demo. Nothing was recorded. | இந்தக் கணக்கு இந்தச் சேவையகத்தை விட வேறு சூழலில் உருவாக்கப்பட்டது. சேவையகம் டெமோவாக இயங்கும்போது புதிய கணக்கைப் பதிவு செய்யுங்கள். எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
+| `portal.claim.outcome.activation_required` | Your account must be active before it can be linked to a record. Activate it first. Nothing was recorded. | உங்கள் கணக்கை ஒரு பதிவுடன் இணைப்பதற்கு முன் அது செயலில் இருக்க வேண்டும். முதலில் அதைச் செயல்படுத்துங்கள். எதுவும் பதிவு செய்யப்படவில்லை. | no issue found | |
 | `portal.claim.outcome.already_bound` | Your account is already linked to a record. | உங்கள் கணக்கு ஏற்கனவே ஒரு பதிவுடன் இணைக்கப்பட்டுள்ளது. | no issue found | |
 | `portal.claim.outcome.claimed` | Your record is linked. | உங்கள் பதிவு இணைக்கப்பட்டது. | no issue found | |
 | `portal.claim.outcome.consent_required` | Grant the care-delivery notice first. | முதலில் பராமரிப்பு வழங்கல் அறிவிப்பை வழங்குங்கள். | no issue found | |

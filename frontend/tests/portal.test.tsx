@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { initI18n, setLanguage } from '../src/shared/i18n';
 import { normalisePhone, type PortalAuth } from '../src/patient/portal/auth';
 import { PortalApp } from '../src/patient/portal/PortalApp';
+import { CLAIM_ORIGIN_MISMATCH } from '../src/patient/portal/PortalSections';
 import { CLINIC_A, fakeJwt, json, stubApi, type FakeApiRequest } from './helpers/fakes';
 
 // MOCK-ONLY: a fake sign-in service and a fake portal API written from openapi.snapshot.json. They prove this app's behaviour, not the
@@ -176,7 +177,7 @@ describe('the account', () => {
   it('activates only after a confirmation, and says plainly when the notice has not been granted', async () => {
     const user = userEvent.setup();
     const { auth } = fakeAuth({ signedIn: true });
-    const calls = stubApi(backend({ stage: 'pending_activation' }, (req) => (req.path === '/v1/portal/activate' ? json({ result: 'consent_required' }) : undefined)));
+    const calls = stubApi(backend({ stage: 'registered' }, (req) => (req.path === '/v1/portal/activate' ? json({ result: 'consent_required' }) : undefined)));
     await mount(auth);
     await user.click(await screen.findByRole('button', { name: 'Activate my account' }));
     expect(calls.some((c) => c.path === '/v1/portal/activate')).toBe(false);
@@ -192,6 +193,36 @@ describe('the account', () => {
     expect(screen.queryByText('Link your record')).toBeNull();
     expect(screen.queryByText('Download my data')).toBeNull();
     expect(screen.getByText(/become available once your account is active/)).toBeInTheDocument();
+  });
+});
+
+describe('the stages after activation', () => {
+  it('a new_patient account (activated, no claim yet) can claim a record and is not asked to activate again', async () => {
+    const { auth } = fakeAuth({ signedIn: true });
+    stubApi(backend({ stage: 'new_patient', granted: true }));
+    await mount(auth);
+    expect(await screen.findByRole('button', { name: 'Link my record' })).toBeInTheDocument();
+    expect(screen.getAllByText('New patient').length).toBeGreaterThan(0); // the stage line (and its screen-reader copy)
+    expect(screen.queryByRole('button', { name: 'Activate my account' })).toBeNull();
+    expect(screen.queryByText(/become available once your account is active/)).toBeNull();
+    expect(screen.getByText('Your details')).toBeInTheDocument(); // the rest of the portal is there too
+  });
+
+  it('a pending_activation account (a claim is waiting for a person) shows the claim section with its button off, even on a fresh load', async () => {
+    const { auth } = fakeAuth({ signedIn: true });
+    stubApi(backend({ stage: 'pending_activation', granted: true }));
+    await mount(auth);
+    expect(await screen.findByText(/waiting for a person at the hospital to decide/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Link my record' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Activate my account' })).toBeNull();
+  });
+
+  it('a registered (invited) account is only asked to grant and activate', async () => {
+    const { auth } = fakeAuth({ signedIn: true });
+    stubApi(backend({ stage: 'registered' }));
+    await mount(auth);
+    expect(await screen.findByRole('button', { name: 'Activate my account' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Link my record' })).toBeNull();
   });
 });
 
@@ -220,6 +251,32 @@ describe('an active account', () => {
     await user.type(screen.getByLabelText('Full name'), 'Test Person');
     await user.type(screen.getByLabelText('Date of birth'), '1990-02-03');
     expect(screen.getByRole('button', { name: 'Link my record' })).toBeDisabled();
+  });
+
+  it('says in its own words that the account was made under a different environment, and never repeats the backend sentence (backend request 43)', async () => {
+    const user = userEvent.setup();
+    const { auth } = fakeAuth({ signedIn: true });
+    stubApi(backend({ stage: 'active', granted: true }, (req) => (req.method === 'post' && req.path === '/v1/portal/claims' ? json({ detail: CLAIM_ORIGIN_MISMATCH }, 403) : undefined)));
+    await mount(auth);
+    await user.type(await screen.findByLabelText('Full name'), 'Test Person');
+    await user.type(screen.getByLabelText('Date of birth'), '1990-02-03');
+    await user.click(screen.getByRole('button', { name: 'Link my record' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Link my record' }));
+    expect(await within(screen.getByRole('dialog')).findByText(/created under a different environment than this server/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('origin mismatch');
+  });
+
+  it('says to activate first when the claim answers activation_required, and nothing is shown as linked', async () => {
+    const user = userEvent.setup();
+    const { auth } = fakeAuth({ signedIn: true });
+    stubApi(backend({ stage: 'active', granted: true }, (req) => (req.method === 'post' && req.path === '/v1/portal/claims' ? json({ outcome: 'activation_required' }) : undefined)));
+    await mount(auth);
+    await user.type(await screen.findByLabelText('Full name'), 'Test Person');
+    await user.type(screen.getByLabelText('Date of birth'), '1990-02-03');
+    await user.click(screen.getByRole('button', { name: 'Link my record' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Link my record' }));
+    expect(await screen.findByText(/must be active before it can be linked to a record/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Link my record' })).toBeDisabled(); // nothing typed any more: the form is empty again
   });
 
   it('files a grievance with a category code and text, and drops the text once it is sent; a category not on the list is refused plainly', async () => {

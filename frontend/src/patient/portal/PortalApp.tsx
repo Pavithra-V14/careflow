@@ -304,7 +304,10 @@ function Account({ auth, apiBaseUrl, onSignedOut }: { auth: PortalAuth; apiBaseU
   }
 
   const account = me.data;
-  const active = account.stage === 'active';
+  // The stages are derived by the backend: registered (invited, not activated), new_patient (activated, no claim yet), pending_activation (a claim is waiting for a
+  // person) and active (a record is linked). Only a `registered` account is still to be activated; the rest of the portal is for every later stage, and what each
+  // stage may do is enforced by the backend, which answers a fixed refusal for anything not yet open to it.
+  const activated = account.stage !== 'registered';
   return (
     <div>
       {header}
@@ -315,9 +318,9 @@ function Account({ auth, apiBaseUrl, onSignedOut }: { auth: PortalAuth; apiBaseU
         <dd>{account.bound_to_a_patient_record ? t('common.yes') : t('common.no')}</dd>
       </dl>
       <ConsentSection api={api} stage={account.stage} />
-      {active ? (
+      {activated ? (
         <>
-          <ClaimSection api={api} bound={account.bound_to_a_patient_record} />
+          <ClaimSection api={api} bound={account.bound_to_a_patient_record} pending={account.stage === 'pending_activation'} />
           <ProfileSection api={api} />
           <NotificationsSection api={api} />
           <RequestsSection api={api} />

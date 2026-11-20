@@ -137,7 +137,7 @@ export function ConsentSection({ api, stage }: { api: Api; stage: Stage }) {
           <p>{t('portal.consent.confirmBody')}</p>
         </ConfirmDialog>
       )}
-      {stage !== 'active' && <Activate api={api} />}
+      {stage === 'registered' && <Activate api={api} />}
       <span className="visually-hidden">{word('portal.stage', stage)}</span>
     </section>
   );
@@ -206,7 +206,10 @@ export function useClinicField(api: Api, idPrefix: string, typed: string, setTyp
 
 // ---- claim a record: your verified phone, plus name and date of birth ---------------------------------------------------------------
 
-export function ClaimSection({ api, bound }: { api: Api; bound: boolean }) {
+/** The backend's own sentence when the account was made under another profile than the server runs as; matched here and said in this screen's fixed words. */
+export const CLAIM_ORIGIN_MISMATCH = 'this account was created under a different environment than this server (origin mismatch): register a new account while the server runs as the demo';
+
+export function ClaimSection({ api, bound, pending = false }: { api: Api; bound: boolean; pending?: boolean }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [clinic, setClinic] = useState('');
@@ -215,7 +218,7 @@ export function ClaimSection({ api, bound }: { api: Api; bound: boolean }) {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   // Once a claim is waiting for a person (pending_review) the button is off: sending it again cannot help, and repeated claims count against the account.
-  const [waiting, setWaiting] = useState(false);
+  const [waiting, setWaiting] = useState(pending); // also true on a fresh load while the account's stage says a claim is already waiting
   const claim = useIdempotentWrite(
     (clinicId: string, key) => unwrap(api.portalClaim({ clinic_id: clinicId, name: name.trim(), dob }, { idempotencyKey: key })),
     (r) => {
@@ -273,7 +276,7 @@ export function ClaimSection({ api, bound }: { api: Api; bound: boolean }) {
             claim.reset();
             setOpen(false);
           }}
-          status={<WriteProblem problem={claim.error} forbidden={t('portal.claim.refused')} calm={{ unavailable: t('portal.claim.unavailable'), invalid: t('portal.claim.invalid') }} />}
+          status={<WriteProblem problem={claim.error} forbidden={t('portal.claim.refused')} calm={{ unavailable: t('portal.claim.unavailable'), invalid: t('portal.claim.invalid') }} details={{ [CLAIM_ORIGIN_MISMATCH]: t('portal.claim.originMismatch') }} />}
         >
           <p>{t('portal.claim.confirmBody')}</p>
         </ConfirmDialog>

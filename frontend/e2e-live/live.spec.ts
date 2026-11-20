@@ -25,13 +25,33 @@ const SUFFIX = LABEL ? `-${LABEL}` : '';
 
 test.skip(!LIVE, 'live run: use `npm run e2e:live` (never in CI)');
 
+// Every write that was SENT is remembered until its answer arrives (or the request fails). A write whose answer never came while the walk was
+// running is listed in the report as "sent, no answer received": a status code is never lost because the run ended first.
+const unanswered = new Map<unknown, string>();
+const failedWrites: string[] = [];
+const isWrite = (method: string) => !['GET', 'HEAD', 'OPTIONS'].includes(method);
+function unansweredLines(): string[] {
+  return [...unanswered.values(), ...failedWrites].map((x) => `- ${x}`);
+}
+
 function watch(page: Page, calls: Call[], phase: { current: string }) {
   // The step a request belongs to is the one showing when it was SENT; a response can arrive after the walk has moved on.
   const sentDuring = new Map<unknown, string>();
   page.on('request', (req) => {
     sentDuring.set(req, phase.current);
+    const url = new URL(req.url());
+    if (isWrite(req.method()) && (url.pathname.startsWith('/v1/') || url.pathname.startsWith('/public/'))) {
+      unanswered.set(req, `${req.method()} ${matchTemplate(spec, url.pathname) ?? '?'}: sent during "${phase.current}", no answer received yet`);
+    }
+  });
+  page.on('requestfailed', (req) => {
+    if (unanswered.delete(req)) {
+      const url = new URL(req.url());
+      failedWrites.push(`${req.method()} ${matchTemplate(spec, url.pathname) ?? '?'}: the request failed before an answer (${req.failure()?.errorText ?? 'no reason given'}); it may or may not have reached the backend`);
+    }
   });
   page.on('response', (res) => {
+    unanswered.delete(res.request());
     void (async () => {
       const url = new URL(res.url());
       if (!url.pathname.startsWith('/v1/') && !url.pathname.startsWith('/public/') && url.pathname !== '/readyz') return;
@@ -83,6 +103,8 @@ function save(calls: Call[], mode: string) {
   mkdirSync(REPORT_DIR, { recursive: true });
   writeFileSync(resolve(REPORT_DIR, `live-report${SUFFIX}.md`), renderReport(spec, calls, mode));
   writeFileSync(resolve(REPORT_DIR, `live-calls${SUFFIX}.json`), JSON.stringify(calls, null, 2));
+  const lost = unansweredLines();
+  if (lost.length) writeFileSync(resolve(REPORT_DIR, `unanswered-writes${SUFFIX}.md`), ['# Writes sent with no answer received (status unknown)', '', ...lost, ''].join('\n'));
   console.log(`\n>>> Report written to frontend/live-report/live-report.md (${calls.length} calls). It contains no values.\n`);
 }
 
@@ -408,7 +430,7 @@ function linkTools(page: Page, calls: Call[], name: string) {
     mkdirSync(REPORT_DIR, { recursive: true });
     const writes = calls.filter((c) => !['GET', 'HEAD'].includes(c.method) && c.template !== '/v1/staff/patients/search').map((c) => `- ${c.method} ${c.template} -> ${c.status}${c.reason ? ` (reason given: ${c.reason})` : ''}`);
     const refused = calls.filter((c) => c.status === 403).map((c) => `- ${c.method} ${c.template} -> 403 (${c.reason ?? 'no reason sentence in the response'})`);
-    writeFileSync(resolve(REPORT_DIR, `${name}${SUFFIX}.md`), [`# ${title}: what each screen said`, '', ...log, '## Writes made (a patient search is a read)', '', ...(writes.length ? writes : ['- none']), '', '## Refusals (403) and their reasons', '', ...(refused.length ? refused : ['- none']), ''].join('\n'));
+    writeFileSync(resolve(REPORT_DIR, `${name}${SUFFIX}.md`), [`# ${title}: what each screen said`, '', ...log, '## Writes made (a patient search is a read)', '', ...(writes.length ? writes : ['- none']), '', '## Refusals (403) and their reasons', '', ...(refused.length ? refused : ['- none']), '', '## Writes sent with no answer received (status unknown)', '', ...(unansweredLines().length ? unansweredLines() : ['- none']), ''].join('\n'));
     save(calls, `${title} (writes: see ${name} file)`);
   };
   return { log, snap, stop, confirmAndWait, finish };
@@ -472,7 +494,9 @@ test('DEMO link, portal: check the stage on a fresh load, then claim (one write)
     const stage = ((await page.locator('main dl.facts dd').first().innerText().catch(() => '')) || '').trim();
     await snap('fresh page load');
     log.push(`## stage on a fresh load: "${stage}"`, '');
-    if (!/^Active$|^செயலில்/i.test(stage)) await stop(`the stage reads "${stage}" on a fresh load, not Active; no claim was made (a backend finding)`);
+    // "New patient" means the account is active and has no claim yet: the right stage to claim from (the backend's explanation, 20 Nov 2026). "Created" (invited) and
+    // "Waiting to be activated" mean it is not active yet: stop with no write.
+    if (/^Created$|^Waiting to be activated$|^உருவாக்கப்பட்டது|^செயல்படுத்தக் காத்திருக்கிறது/i.test(stage) || stage === '') await stop(`the stage reads "${stage}" on a fresh load: the account is not active yet; no claim was made (a backend finding)`);
     phase.current = 'claim a record';
     await page.locator('#claim-name').waitFor({ state: 'visible', timeout: 30_000 }).catch(() => undefined);
     if ((await page.locator('#claim-name').count()) === 0) await stop('the claim form is not on the screen (the account may be linked already); no claim was made');

@@ -3971,7 +3971,7 @@ export interface components {
              * Outcome
              * @enum {string}
              */
-            outcome: "claimed" | "pending_review" | "locked" | "already_bound" | "consent_required";
+            outcome: "claimed" | "pending_review" | "locked" | "already_bound" | "consent_required" | "activation_required";
         };
         /** ClaimResolveIn */
         ClaimResolveIn: {
@@ -3989,7 +3989,7 @@ export interface components {
              * Result
              * @enum {string}
              */
-            result: "approved" | "rejected" | "already_resolved" | "record_not_claimable" | "claimant_already_bound" | "consent_required";
+            result: "approved" | "rejected" | "already_resolved" | "record_not_claimable" | "identity_not_confirmed" | "claimant_already_bound" | "consent_required";
         };
         /**
          * ConfirmIdentityOut

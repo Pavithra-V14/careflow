@@ -44,6 +44,17 @@ for (const lang of LANGS) {
     await expect(page.getByRole('radio')).toHaveCount(3);
     await sweep(page, 'revoke-dialog', lang);
   });
+
+  test(`front desk, a verified record with no confirmation on record still offers Confirm identity [${lang}]`, async ({ page }) => {
+    await openConsole(page, 'front_desk', lang, { console: { patientVerified: true, patientNoIdentityEvent: true } });
+    await go(page, `#/patients/${ID.patient}`, ID.patient);
+    const confirm = page.getByRole('button', { name: lang === 'en' ? 'Confirm identity' : /அடையாளத்தை உறுதிப்படுத்து/ });
+    await expect(confirm).toBeVisible(); // verified, but no confirmation on record
+    await sweep(page, 'patient-record-verified-unconfirmed', lang);
+    await confirm.click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await sweep(page, 'confirm-identity-dialog-verified', lang);
+  });
 }
 
 test('keyboard only: record a referral decision (nothing chosen for you, nothing written before the confirmation)', async ({ page }) => {

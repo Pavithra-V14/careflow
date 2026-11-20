@@ -81,7 +81,8 @@ function RecordView({ patientId }: { patientId: string }) {
               </p>
             )}
 
-            {hasRole(CAN_CONFIRM_IDENTITY) && !p.verified && !p.merged_into && (
+            {/* Offered unless the latest identity event IS a confirmation: a record that is verified (for example registered by front desk) but has no confirmation on record can still be confirmed (backend request 44). */}
+            {hasRole(CAN_CONFIRM_IDENTITY) && p.latest_identity_event !== 'confirm' && !p.merged_into && (
               <div className="toolbar">
                 <button type="button" onClick={() => setConfirming(true)}>
                   {t('patients.confirm')}

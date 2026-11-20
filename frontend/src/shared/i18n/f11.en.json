@@ -76,7 +76,8 @@
         "pending_review": "Your request was received. A person at the hospital will decide.",
         "locked": "Too many attempts. Please try again later or contact the hospital.",
         "already_bound": "Your account is already linked to a record.",
-        "consent_required": "Grant the care-delivery notice first."
+        "consent_required": "Grant the care-delivery notice first.",
+        "activation_required": "Your account must be active before it can be linked to a record. Activate it first. Nothing was recorded."
       }
     },
     "grievance": {

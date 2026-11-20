@@ -146,7 +146,12 @@ describe('the live run cannot run from CI or by accident', () => {
 
   it('the live run never types a credential and the read-only walk makes no write', () => {
     const spec = read('e2e-live/live.spec.ts');
-    expect(spec).not.toMatch(/\.fill\(|keyboard\.type|process\.env\.(LIVE_)?(PASSWORD|EMAIL|TOTP)/i);
+    expect(spec).not.toMatch(/keyboard\.type|process\.env\.(LIVE_)?(PASSWORD|EMAIL|TOTP)/i);
+    // The demo link steps fill in exactly two fixed, non-secret values (the synthetic patient's name and date of birth) and nothing else.
+    const fills = spec.split('\n').filter((l) => /\.fill\(/.test(l));
+    expect(fills.length).toBeGreaterThan(0);
+    for (const l of fills) expect(l, 'a fill() of anything but the two fixed demo values').toMatch(/'DEMO Portal Patient'|'1990-01-01'/);
+    expect(fills.join('\n')).not.toMatch(/password|email|one-time-code|numeric/i);
     expect(spec).toContain('the read-only walk made a write');
   });
 

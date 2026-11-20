@@ -30,6 +30,8 @@ export interface ConsoleOptions {
   uploadsOff?: boolean;
   /** Start with the patient record already verified (so identity revoke is offered). */
   patientVerified?: boolean;
+  /** With patientVerified: the record is verified but no identity event is on record (registered by front desk), so Confirm identity is still offered. */
+  patientNoIdentityEvent?: boolean;
   /** The clinic has set its list of review reasons (default: not set). */
   reasonCodes?: boolean;
   /** Who proposed the merge: someone else (default), or the signed-in account. */
@@ -141,7 +143,7 @@ export function createConsoleApi(role: string, options: ConsoleOptions = {}, ses
     const patient = m(/^\/v1\/staff\/patients\/([^/]+)(\/confirm-identity|\/revoke-identity)?$/);
     if (patient) {
       if (!READERS.includes(role)) return no(403);
-      if (method === 'GET' && !patient[2]) return ok({ clinic_id: ID.clinic, latest_identity_event: verified ? 'confirm' : null, latest_identity_event_at: verified ? '2026-10-30T05:30:00Z' : null, merged_into: null, patient_id: patient[1], registered_via: 'referral_worker', verified });
+      if (method === 'GET' && !patient[2]) return ok({ clinic_id: ID.clinic, latest_identity_event: verified && !options.patientNoIdentityEvent ? 'confirm' : null, latest_identity_event_at: verified && !options.patientNoIdentityEvent ? '2026-10-30T05:30:00Z' : null, merged_into: null, patient_id: patient[1], registered_via: 'referral_worker', verified });
       if (method === 'POST' && patient[2] === '/confirm-identity') {
         if (role !== 'front_desk') return no(403);
         verified = true;

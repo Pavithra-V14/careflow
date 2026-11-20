@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-2037 of 2037 strings are unreviewed.
+2040 of 2040 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -710,6 +710,7 @@ Terms standardised: proposal, resolve / resolved.
 | `claims.result.approved` | Approved. The person is linked to the record. | ஒப்புக்கொள்ளப்பட்டது. அந்த நபர் பதிவுடன் இணைக்கப்பட்டார். | ok |
 | `claims.result.claimant_already_bound` | This person is already linked to a record. Nothing was changed. | இந்த நபர் ஏற்கனவே ஒரு பதிவுடன் இணைந்துள்ளார். எதுவும் மாற்றப்படவில்லை. | ok |
 | `claims.result.consent_required` | The person has not given the required consent yet. Nothing was linked. | தேவையான சம்மதத்தை அந்த நபர் இன்னும் வழங்கவில்லை. யாரும் இணைக்கப்படவில்லை. | ok |
+| `claims.result.identity_not_confirmed` | That record's identity has not been confirmed yet. Confirm it first. Nothing was linked. | அந்தப் பதிவின் அடையாளம் இன்னும் உறுதிப்படுத்தப்படவில்லை. முதலில் அதை உறுதிப்படுத்துங்கள். எதுவும் இணைக்கப்படவில்லை. | ok |
 | `claims.result.record_not_claimable` | That record cannot be claimed. Nothing was linked. | அந்தப் பதிவைக் கோர முடியாது. யாரும் இணைக்கப்படவில்லை. | ok |
 | `claims.result.rejected` | Rejected. | நிராகரிக்கப்பட்டது. | ok |
 | `claims.title` | Portal claims | வலைவாசல் கோரிக்கைகள் | ok |
@@ -1358,6 +1359,8 @@ Terms standardised: proposal, resolve / resolved.
 | `portal.claim.dob` | Date of birth | பிறந்த தேதி | ok |
 | `portal.claim.invalid` | Check the name and date of birth. Nothing was recorded. | பெயரையும் பிறந்த தேதியையும் சரிபார்க்கவும். எதுவும் பதிவாகவில்லை. | ok |
 | `portal.claim.name` | Full name | முழுப் பெயர் | ok |
+| `portal.claim.originMismatch` | This account was created under a different environment than this server. Register a new account while the server runs as the demo. Nothing was recorded. | இந்தக் கணக்கு இந்தச் சேவையகத்தை விட வேறு சூழலில் உருவாக்கப்பட்டது. சேவையகம் டெமோவாக இயங்கும்போது புதிய கணக்கைப் பதிவு செய்யுங்கள். எதுவும் பதிவு செய்யப்படவில்லை. | ok |
+| `portal.claim.outcome.activation_required` | Your account must be active before it can be linked to a record. Activate it first. Nothing was recorded. | உங்கள் கணக்கை ஒரு பதிவுடன் இணைப்பதற்கு முன் அது செயலில் இருக்க வேண்டும். முதலில் அதைச் செயல்படுத்துங்கள். எதுவும் பதிவு செய்யப்படவில்லை. | ok |
 | `portal.claim.outcome.already_bound` | Your account is already linked to a record. | உங்கள் கணக்கு ஏற்கனவே ஒரு பதிவுடன் இணைக்கப்பட்டுள்ளது. | ok |
 | `portal.claim.outcome.claimed` | Your record is linked. | உங்கள் பதிவு இணைக்கப்பட்டது. | ok |
 | `portal.claim.outcome.consent_required` | Grant the care-delivery notice first. | முதலில் பராமரிப்பு வழங்கல் அறிவிப்பை வழங்குங்கள். | ok |

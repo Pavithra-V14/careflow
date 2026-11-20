@@ -157,7 +157,7 @@ describe('patient record', () => {
     }];
     const { calls } = await openConsole({
       hash: `/patients/${ID.patient}`,
-      routes: [['get', `/v1/staff/patients/${ID.patient}`, () => json(status({ verified: confirmed }))], confirm],
+      routes: [['get', `/v1/staff/patients/${ID.patient}`, () => json(status(confirmed ? { verified: true, latest_identity_event: 'confirm', latest_identity_event_at: '2026-10-30T05:30:00Z' } : {}))], confirm],
     });
     await user.click(await screen.findByRole('button', { name: 'Confirm identity' }));
     const dialog = screen.getByRole('dialog', { name: 'Confirm this identity?' });
@@ -171,6 +171,23 @@ describe('patient record', () => {
     // The record refreshes and no longer offers the action.
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Confirm identity' })).toBeNull());
     expect(await screen.findByText('Verified', { selector: '.pill' })).toBeInTheDocument();
+  });
+
+  it('offers "Confirm identity" whenever the latest identity event is not a confirmation, even on a verified record (backend request 44)', async () => {
+    const a = await openConsole({ hash: `/patients/${ID.patient}`, routes: [statusRoute({ verified: true, latest_identity_event: null })] });
+    expect(await screen.findByText('Verified', { selector: '.pill' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirm identity' })).toBeInTheDocument(); // verified, nothing confirmed on record
+    a.unmount();
+    const b = await openConsole({ hash: `/patients/${ID.patient}`, routes: [statusRoute({ verified: true, latest_identity_event: 'confirm', latest_identity_event_at: '2026-10-30T05:00:00Z' })] });
+    expect(await screen.findByText('Verified', { selector: '.pill' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Confirm identity' })).toBeNull(); // already confirmed: no second one
+    b.unmount();
+    const c = await openConsole({ hash: `/patients/${ID.patient}`, routes: [statusRoute({ verified: false, latest_identity_event: 'revoke', latest_identity_event_at: '2026-10-30T05:00:00Z' })] });
+    expect(await screen.findByRole('button', { name: 'Confirm identity' })).toBeInTheDocument();
+    c.unmount();
+    await openConsole({ hash: `/patients/${ID.patient}`, routes: [statusRoute({ verified: true, latest_identity_event: null, merged_into: ID.patient2 })] });
+    expect(await screen.findByText(/merged into another/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Confirm identity' })).toBeNull(); // a merged-away record is never confirmed
   });
 
   it('can be cancelled without writing anything', async () => {
@@ -215,7 +232,7 @@ describe('patient record', () => {
   });
 
   it.each([
-    ['a verified record', { verified: true }, 'front_desk'],
+    ['a record whose latest identity event is a confirmation', { verified: true, latest_identity_event: 'confirm', latest_identity_event_at: '2026-10-30T05:30:00Z' }, 'front_desk'],
     ['a merged record', { merged_into: ID.patient2 }, 'front_desk'],
     ['a nurse', {}, 'nurse'],
     ['a doctor', {}, 'doctor'],

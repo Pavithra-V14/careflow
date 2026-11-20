@@ -83,7 +83,8 @@
       "already_resolved": "This claim was already resolved.",
       "record_not_claimable": "That record cannot be claimed. Nothing was linked.",
       "claimant_already_bound": "This person is already linked to a record. Nothing was changed.",
-      "consent_required": "The person has not given the required consent yet. Nothing was linked."
+      "consent_required": "The person has not given the required consent yet. Nothing was linked.",
+      "identity_not_confirmed": "That record's identity has not been confirmed yet. Confirm it first. Nothing was linked."
     }
   },
   "access": {
