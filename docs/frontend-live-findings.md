@@ -425,3 +425,17 @@ Backend restarted through demo_up.ps1 with booking and messaging on, slots and b
 | Nurse and doctor: visit readiness, visit preparation (staff view), cards and templates | not tested live: needs second factor | Nurse and doctor have no authenticator yet; the database check refuses a password-only session. |
 
 The patient walk of this round: 27 calls, 0 schema mismatches, no 403, no write. The front desk walk: 8 calls, 0 schema mismatches, one 403 (visit readiness, above), no write.
+
+## Booking walk after backend 0099 and 0100 (20 Nov 2026): still no open time offered, reason word shown
+
+The user typed the demo password. Read-only: **no write was made, so no booking** (the one authorised booking needs an open time to book).
+
+| Screen | Result | Exact screen text and calls |
+|---|---|---|
+| Portal: open times | **finding: none offered, reason word shown** | `GET /v1/portal/booking/slots` **200** with an empty list. The screen (new fixed-wording state) said **"No open times at the moment. Please check again later."** with "Check again" and "Back to the top of the page": the sentence for the reason word `no_open_times` (booking is set up, but no open time exists for this patient right now). Not "Online booking is not set up for this clinic yet." and not "Booking online is not turned on at this hospital yet." Booking is therefore not tested live. |
+| Portal: appointments list | pass (empty) | `GET /v1/portal/booking/bookings` 200, no appointments. |
+| Portal: messages | pass (empty) | `GET /v1/portal/messages/threads` 200, no conversations. Opening one and sending: not tested live (no write authorised). |
+| Portal: visit preparation | not tested live | No appointment to open it from. Nothing was marked. |
+| Staff view of the same visit (front desk, second factor) | not tested live | There is no booking, so there is no visit to look at; this step was not run. (The front desk scheduling lists, run earlier, showed 12 slots in the clinic; why none is offered to this patient is the backend's to check.) |
+
+27 calls, 0 schema mismatches, no 403, no write, no unanswered write. The `empty_reason` handling built from backend item 48 is therefore also seen working against the real backend: the screen showed the fixed sentence for the word, never backend text.
