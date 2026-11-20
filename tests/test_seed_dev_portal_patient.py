@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "scripts" / "seed_dev_portal_patient.py"
 spec = importlib.util.spec_from_file_location("seed_dev_portal_patient", SCRIPT)
@@ -60,3 +62,30 @@ def test_it_binds_nothing_calls_no_service_and_only_prepares_the_synthetic_recor
     assert code.count("insert into") == 0 and "patientingestionpipeline" in code and "origin=\"test\"" in code and "refuse_unless_dev_demo_synthetic" in code
     assert mod.NAME.startswith("DEMO") and mod.DOB == "1990-01-01"
     assert "where id = :i and origin = 'test' and account_id is null and erased_at is null" in code  # the clean-up touches an unbound record of origin test only
+
+
+def test_a_second_record_with_the_same_name_and_birth_date_is_refused_in_plain_words_with_both_ways_out():
+    assert mod.duplicate_words(0, 0) is None
+    for unbound, bound in ((1, 0), (0, 1), (2, 3)):
+        words = mod.duplicate_words(unbound, bound)
+        assert words and words.startswith("refusing:") and f"{unbound} unbound and {bound} bound" in words
+        assert "--remove-legacy" in words and "--name" in words and "search" in words and "ambiguous" in words
+
+
+def test_the_demo_name_must_say_demo_and_stay_plain():
+    assert mod.check_name("  DEMO   Portal   Patient Two ") == "DEMO Portal Patient Two"
+    for bad in ("Portal Patient", "DEMO", "DEMO " + "x" * 60, "DEMO O'Brien", "demo lower", "DEMO <script>"):
+        with pytest.raises(mod.Refused):
+            mod.check_name(bad)
+    assert mod.NAME == "DEMO Portal Patient"
+
+
+def test_remove_legacy_blanks_only_older_unbound_records_this_script_made_and_the_duplicate_check_runs_before_any_record_is_created():
+    code = SCRIPT.read_text(encoding="utf-8").split('"""', 2)[2]
+    legacy = code[code.index("if remove_legacy:") : code.index("token = vault.identity_token")]
+    for clause in ("origin = 'test'", "account_id is null", "erased_at is null", "idempotency_key like :p", "idempotency_key <> :k"):
+        assert clause in legacy  # unbound, live, origin test, made by this script (its key prefix), and never the record of this very account
+    assert "KEY_PREFIX}{clinic}:%" in legacy
+    start = code.index("if remove_legacy:")
+    assert start < code.index("raise Refused(words)", start) < code.index("pipeline.ingest(")
+    assert 'result.outcome != "created"' in code  # a matched or flagged-as-duplicate registration is never kept

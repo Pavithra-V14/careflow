@@ -217,7 +217,18 @@ CAREFLOW_DEMO_EMAIL_SIGNIN=on
 .\.venv\Scripts\python.exe scripts\seed_dev_portal_patient.py --account-id <THE-USER-UID> --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2 --dry-run
 .\.venv\Scripts\python.exe scripts\seed_dev_portal_patient.py --account-id <THE-USER-UID> --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
 ```
-*If you seeded an earlier record by e-mail address (the older form of this script): that record can no longer be claimed by anyone; leave it (it is synthetic) and seed again with the UID.*
+**If you seeded an earlier record by e-mail address (the older form of this script).** That record can no longer be claimed by anyone, but it still has the same name and date of birth, and two such records would break the front desk's search (it needs exactly one match) and make the claim ambiguous. The script now refuses to create the second one and says so. Two ways out; the first is recommended because the name you search for stays `DEMO Portal Patient`:
+1. **Replace the old record** (it blanks only older UNBOUND records this script made itself, never a bound record, never anything append-only; the old record's row, its identity tokens and its audit rows stay, as with any erasure; it then no longer matches a search):
+```powershell
+.\.venv\Scripts\python.exe scripts\seed_dev_portal_patient.py --account-id <THE-USER-UID> --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2 --remove-legacy --dry-run
+.\.venv\Scripts\python.exe scripts\seed_dev_portal_patient.py --account-id <THE-USER-UID> --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2 --remove-legacy
+```
+The dry run should print "older unbound records this script made, blanked: 1" and "records created: 1".
+2. **Keep the old record and use another name** (nothing removed; the front desk then searches for that name, born 1990-01-01):
+```powershell
+.\.venv\Scripts\python.exe scripts\seed_dev_portal_patient.py --account-id <THE-USER-UID> --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2 --name "DEMO Portal Patient Two"
+```
+Then claim with that name. After either way, check with the front-desk search that exactly ONE record is found for the name you use. **Then the account:** if your portal account was registered before the backend ran through the script and the claim answers the 403 "origin mismatch", run `scripts\reset_dev_portal_account.py --account-id <THE-USER-UID> --dry-run` and then without `--dry-run` (it refuses an account that already has other records of its own: then use a new auth user); if the claim answers `pending_review` or `claimed`, no reset is needed.
 The script creates ONE synthetic patient named `DEMO Portal Patient`, born `1990-01-01`, in the dev clinic. It does not bind your account.
 
 **4. Walk the portal** (the portal sign-in must offer e-mail and password; see the frontend note below). The order matters, and each step has one closed answer:
