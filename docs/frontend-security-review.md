@@ -68,6 +68,19 @@ Test runs for this pass (from the uppercase `E:\` path): unit suite 1278 tests i
 | 7.3 | Step-up and second factor | pass | Built earlier: a mandatory authenticator code, enrolment at first sign-in, and a step-up prompt that shares one dialog among concurrent requests. |
 | 7.4 | Warning before an idle sign-out | fixed | A "still there?" dialog shows for the last minute: one button, "Stay signed in", which starts the whole period again. Escape and stray clicks or keys do not dismiss it, so staying is a deliberate act. Axe-checked at 320, 768 and 1280 px in both languages. |
 
+## 8a. Production-build proof (20 Nov 2026)
+
+`npm run verify:production` (script: `scripts/verify-production-build.mjs`) builds the PRODUCTION bundle into a temporary folder with the worst-case environment: both demo switches set (`VITE_DEV_SKIP_STAFF_MFA=1`, `VITE_DEV_PATIENT_PASSWORD_LOGIN=1`) and four canary "secrets" planted (a database URL, a secret key, an encryption secret and a private token), then checks what shipped. `tests/production-build-proof.test.ts` runs the same static checks on fixtures (each failure mode is shown to fail) and on a real production build, so the unit suite proves it on every run.
+
+| Check | Result |
+|---|---|
+| Both demo flags compiled to false although set at build time | **pass**: `devSkipStaffMfa:!1` and `devPatientPasswordLogin:!1` in the bundle; the check fails if either is true or cannot be found |
+| No keys or secrets in the bundle | **pass**: the four agreed forbidden markers, key-shaped values, private-key blocks, database connection strings, signed-token-shaped values, and none of the four planted canaries reached any file; a failure names the file and never echoes the text |
+| CSP intact | **pass** on all five pages: the same policy is the first head element of each page and equals `dist/csp-policy.txt`; `default-src 'none'`, `script-src 'self'`, `object-src 'none'`; no unsafe-inline, unsafe-eval or wildcard; `connect-src` allows only 'self' and the two configured origins; no inline script or style on any page |
+| The demo form and banners are not on screen (real browser, `--browser`) | **pass**: the production bundle served as static files shows the normal phone-code form and **no** "Demo sign-in" form or banner on the patient sign-in page, and the normal staff sign-in with **no** "development only" banner on the staff page |
+
+Two honest notes. (1) The words "Demo sign-in" are physically in the production bundle's translation tables (all strings ship together) and the small demo-form component is in the bundle; nothing renders either, because the flag that gates them is compiled to false. The browser check above is the proof that they are not reachable. (2) The proof set `NODE_ENV=production` explicitly: a parent process that sets another value (a test runner sets `test`) changes what Vite bundles, and with `NODE_ENV=test` the development-only claim panel is included. A real build must not run with another `NODE_ENV`.
+
 ## 8. Other
 
 | # | Check | Result | Detail |

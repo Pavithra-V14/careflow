@@ -59,6 +59,15 @@ for (const lang of LANGS) {
     await sweep(page, 'portal-phone', lang);
   });
 
+  test(`booking: an empty list of open times is a calm state, distinct from booking being off [${lang}]`, async ({ page }) => {
+    await open(page, lang, { start: 'active', granted: true, noSlots: true });
+    await signIn(page);
+    await expect(page.locator('#portal-booking')).toBeVisible();
+    const empty = page.locator('section[aria-labelledby=portal-booking] [role=status]').filter({ has: page.locator('a[href="#portal-title"]') });
+    await expect(empty).toBeVisible();
+    await sweep(page, 'portal-no-open-times', lang);
+  });
+
   test(`sign in: the demo email and password form, with its banner, beside the phone form [${lang}]`, async ({ page }) => {
     await open(page, lang);
     await expect(page.locator('input[type=tel]')).toBeVisible(); // the phone-code form stays the default

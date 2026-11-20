@@ -4,7 +4,7 @@ This guide describes what the patient portal screens do, as built on 20 November
 
 **How to read the labels in this guide**
 
-- **Not tested live** means the screen has been tried only against the portal's own made-up test data (unit tests and browser tests), not against the real hospital system. **No patient portal screen has been walked live yet**; a live walk is planned with a demo sign-in. Treat every section below as not tested live.
+- **Not tested live** means the screen has been tried only against the portal's own made-up test data (unit tests and browser tests), not against the real hospital system. Where a section says **Walked live**, it was tried against the real (demonstration) backend on 20 November 2026 with a made-up patient; anything without that line is **not tested live**. The summary table below says exactly which.
 - **Tamil:** the portal can be shown in English or Tamil. The Tamil wording has been checked by a machine only. **No Tamil string has been reviewed by a person**, and the Tamil reader must still approve all of it before real use.
 - Some wording shown on the screens (notices you agree to, for example) is written by the hospital and its lawyers, not by this software. This guide does not repeat it.
 
@@ -29,7 +29,7 @@ Every page carries an emergency banner. The portal is not for emergencies: if yo
 
 If you are signed in but have no patient account yet, the screen says so and offers **Create my account**. Creating it does not link you to any record. If it is refused: "This sign-in cannot be used for a patient account."
 
-Your account has a stage, shown as **Where your account is**: Created, New patient, Waiting to be activated, or Active. Some things (claiming a record, sending a complaint, downloading your data) only become available once your account is active.
+Your account has a stage, shown as **Where your account is**: Created, New patient, Waiting to be activated, or Active. As the system works them out: **Created** is an invited account that has not been activated yet (only the notice and the activation are shown); **New patient** is an activated account with no record linked yet (the whole portal is shown, including linking a record); **Waiting to be activated** is the stage while a request to link a record is waiting for a person at the hospital (the label's wording may read oddly for that meaning; it is awaiting the Tamil and wording review); **Active** is an account with a record linked after a person at the hospital approved it. What each stage may do is enforced by the system, which answers with a fixed refusal for anything not open yet.
 
 ## 3. Notices and your decisions
 
@@ -41,7 +41,9 @@ You can **Activate my account** once you have granted the care-delivery notice. 
 
 ## 5. Linking your record
 
-**Link your record:** give the full name and date of birth the hospital has for you. This also needs a verified mobile number and an active account. The result is one of: your record is linked; your request was received and a person at the hospital will decide; too many attempts (try again later or contact the hospital); already linked; or grant the care-delivery notice first.
+**Walked live:** from the stage "New patient", one claim for a made-up patient came back "Your record is linked." and the page then showed "Linked to a record: Yes" and the name on the record. The hospital's name is filled in from the hospital's public details; if those are not published the form asks for a hospital code instead. Once a claim is waiting for a person, the button is turned off and says there is no need to send it again.
+
+**Link your record:** give the full name and date of birth the hospital has for you. This also needs a verified mobile number and an activated account. The hospital's front desk must have confirmed the record's identity first. The result is one of: your record is linked; your request was received and a person at the hospital will decide; too many attempts (try again later or contact the hospital); already linked; or grant the care-delivery notice first.
 
 ## 6. Your details
 
@@ -49,7 +51,7 @@ You can **Activate my account** once you have granted the care-delivery notice. 
 
 ## 7. Appointments
 
-*Not tested live.* **Appointments** lists your appointments and, if the hospital has turned online booking on, the open times it lets patients book (enter the hospital code to see them).
+*Reads walked live (empty); booking not tested live.* On the demonstration system the appointment list and the open-times list loaded without error, but **no open time was offered**, so no appointment was booked. When there are no open times the screen says "There are no open times at the moment." with a "Check again" button and a link back to the top of the page; that is different from "Booking online is not turned on at this hospital yet." **Appointments** lists your appointments and, if the hospital has turned online booking on, the open times it lets patients book (enter the hospital code to see them).
 
 - **Book** books a time after a confirmation. Results: booked; already booked for you; "This time cannot be booked by this account"; "This time is no longer open, or you have reached the hospital's limit of future appointments."
 - **Cancel appointment** frees the time and contacts nobody. "This appointment cannot be cancelled any more: it was already cancelled or it has started."
@@ -93,6 +95,21 @@ You can withdraw a request or a link yourself. If the section does not appear, f
 ## 15. Voice
 
 *Not tested live; the audio connection is not set up.* **Voice** is optional and off until you turn it on. It lets you say a reply out loud instead of typing it, for three narrow purposes only: replying to an appointment offer, answering a question before a visit, or answering an item on a visit checklist. You must read the notice and agree before a session opens. In this build the screen **does not record or play sound**: opening a session only creates the session. Voice is never for an emergency.
+
+## What has and has not been walked live (20 November 2026)
+
+| Portal part | Status |
+|---|---|
+| Demo sign-in (email and password, demonstrations only) | walked live |
+| Notice and consent (granting the care-delivery notice) | walked live |
+| Activating the account | walked live |
+| Linking a record (claim) | walked live: linked directly |
+| Your details (profile), notices, requests lists, complaints categories, family section (loading), voice setting (loading) | walked live, read-only |
+| Appointments list, open times, messages list | reads walked live (empty); **no open time was offered, so booking is not tested live**; opening a conversation and sending a message not tested live |
+| What to prepare for a visit | not tested live (no appointment to open it from) |
+| Sending a request, a complaint, a family-link request, withdrawing consent, downloading my data, a voice session | not tested live |
+| Complaint without signing in | the category list loaded (eight categories, read-only); sending not tested live |
+| Phone-code sign-in | not tested live (no approved SMS provider) |
 
 ## Fixed messages you may see
 

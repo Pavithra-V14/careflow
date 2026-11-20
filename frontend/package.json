@@ -54,6 +54,7 @@
     "gen:api": "node scripts/gen-api.mjs",
     "check:api": "node scripts/gen-api.mjs --check",
     "check:bundle": "node scripts/check-bundle-secrets.mjs dist",
+    "verify:production": "node scripts/verify-production-build.mjs --browser",
     "e2e": "playwright test",
     "visual:check": "playwright test -c playwright.visual.config.ts",
     "visual:update": "playwright test -c playwright.visual.config.ts --update-snapshots",

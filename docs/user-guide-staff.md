@@ -5,6 +5,7 @@ This guide describes what the staff console screens do, as built on 20 November 
 **How to read the labels in this guide**
 
 - **Not tested live** means the screen has only been tried against the console's own fake data (unit tests and browser tests), or was refused when walked against the real backend. Where it says "needs second factor", the backend's database checks for a recently verified second factor, and a password-only development session is refused. This is recorded as not tested live, not as a failure.
+- **Walked live** means a screen was tried against the real (demonstration) backend with a made-up patient, the user typing every password and authenticator code. The summary table "What has and has not been walked live" below says exactly which screens, for which role, and which writes. Anything not in that table as walked is **not tested live**.
 - **Tamil:** every screen can be switched to Tamil. The Tamil wording has been checked by a machine only. **No Tamil string has been reviewed by a human reader**, and the Tamil reader must still approve all of it before real use.
 - The console only hides links a role cannot use. The backend decides what each role may do. If you open something your role may not use, the screen says "This is not available to your role."
 
@@ -16,6 +17,26 @@ This guide describes what the staff console screens do, as built on 20 November 
 4. **Signing out for being idle.** If the page is not used for a while, a box asks "Are you still there?" with a countdown. The only way to stay signed in is the button "Stay signed in". If the time runs out you are signed out and the screen is cleared. How long the wait is, is a setting the privacy owner chooses; a demo build uses labelled placeholders.
 5. **Going offline.** A banner says "You are offline. Changes cannot be saved until the connection is back." What you typed stays on the screen; send it again when the connection returns.
 6. **Every change asks first.** Nothing is saved until you confirm in a box. The box says what will be recorded and that it is kept under your name.
+
+## What has and has not been walked live (20 November 2026)
+
+| Role and screen | Status |
+|---|---|
+| Front desk: sign-in with a second factor | walked live |
+| Front desk: patient search, open a record, confirm identity | walked live (the confirmation is a write on the made-up patient: 200) |
+| Front desk: scheduling lists (locations, visit types, providers, slots) | walked live, read-only; no scheduling action walked |
+| Front desk: message screen list, "Show names" | walked live, read-only |
+| Front desk: family link requests page | walked live with the second factor: loads, empty list; verify, reject and revoke not tested live |
+| Front desk: referrals, tasks, alerts, patient requests, identity lists | walked live earlier, read-only, on a password-only session; actions not walked |
+| Front desk: portal claims (approve), break-glass, erasure | not tested live (needs second factor) |
+| Front desk: visit readiness | the backend refused it ("your role may not do this"): it is a nurse and doctor section |
+| Supervisor (also holding front desk) | walked live earlier, read-only |
+| Nurse and doctor: referral review (read), tasks, patients, messages, scheduling and care reads | walked live earlier, read-only, on a password-only session |
+| Nurse and doctor: visit readiness, the staff view of a visit's preparation, cards and templates | **not tested live: needs second factor** (these two accounts have no authenticator yet; walks are prepared) |
+| Nurse and doctor: recording a referral decision, writing a draft, approving or rejecting | not tested live |
+| Admin: the plain lists | walked live earlier, read-only |
+| Admin: accounts, voice, recovery, grievances, break-glass review, autonomy changes | not tested live (needs second factor) |
+| Auditor: audit log | not tested live |
 
 ## Messages you may see (in every role)
 
@@ -61,7 +82,7 @@ Front desk does not decide referrals; see Nurse and Doctor.
 
 1. **Patients → Search:** type a full name and date of birth (phone is optional). A match is shown only for exactly those details. Nothing typed is saved. If nothing is found, "No matching record was found."
 2. **Open a record by id** if you already have it.
-3. A record shows its latest identity event. **Confirm identity** records, under your name, that you confirmed this patient's identity. **Revoke confirmation** (reason: Wrong person, Planted or suspect, or Mistaken click) moves the record back to unverified so a person reviews any match; nothing already linked is undone. The screen then says whether an administrator alert or a review task was raised, or why not.
+3. A record shows its latest identity event. **Confirm identity** records, under your name, that you confirmed this patient's identity. It is offered whenever the latest identity event is not a confirmation, **even on a record that says "Verified"** (for example one registered by the front desk, whose latest event is "None"); it is not offered once the latest event is a confirmation, or for a merged-away record. *Walked live: found exactly one demo record, confirmed it (the confirm call answered 200).* **Revoke confirmation** (reason: Wrong person, Planted or suspect, or Mistaken click) moves the record back to unverified so a person reviews any match; nothing already linked is undone. The screen then says whether an administrator alert or a review task was raised, or why not.
 4. **Open the full details** shows the name, date of birth and phone, and is recorded in the audit log (who, role, which record; never the contents).
 5. **Register a patient:** search first. Register only when the person is not found. The result is one of: matched an existing record, a new record created, possible matches found (nothing is linked automatically; a person decides), or the request was already saved.
 6. **Identity** lists possible duplicates and merges. **Approve** and **Unmerge** buttons are **switched off** in this build (the second-factor check they need has not been confirmed).

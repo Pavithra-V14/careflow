@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-2040 of 2040 strings are unreviewed.
+2042 of 2042 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -1331,6 +1331,7 @@ Terms standardised: proposal, resolve / resolved.
 | `portal.activate.title` | Activate your account | உங்கள் கணக்கைச் செயல்படுத்துங்கள் | ok |
 | `portal.afterActivation` | Claiming a record, filing a grievance and downloading your data become available once your account is active. | உங்கள் கணக்கு செயலில் வந்த பிறகு பதிவை இணைத்தல், குறை தெரிவித்தல், உங்கள் தரவைப் பதிவிறக்குதல் கிடைக்கும். | ok |
 | `portal.booking.alreadyBooked` | This appointment was already booked for you. | இந்தச் சந்திப்பு ஏற்கெனவே உங்களுக்குப் பதிவு செய்யப்பட்டுள்ளது. | ok |
+| `portal.booking.backToTop` | Back to the top of the page | பக்கத்தின் மேலே திரும்பு | ok |
 | `portal.booking.book` | Book | பதிவு செய் | ok |
 | `portal.booking.bookConflict` | This time is no longer open, or you have reached the hospital's limit of future appointments. Nothing was booked. | இந்த நேரம் இனி காலியாக இல்லை, அல்லது எதிர்காலச் சந்திப்புகளுக்கான மருத்துவமனையின் வரம்பை அடைந்துவிட்டீர்கள். எதுவும் பதிவு செய்யப்படவில்லை. | ok |
 | `portal.booking.bookRefused` | This time cannot be booked by this account. Nothing was booked. | இந்தக் கணக்கால் இந்த நேரத்தைப் பதிவு செய்ய முடியாது. எதுவும் பதிவு செய்யப்படவில்லை. | ok |
@@ -1342,9 +1343,10 @@ Terms standardised: proposal, resolve / resolved.
 | `portal.booking.cancelGone` | This appointment was not found. | இந்தச் சந்திப்பு கிடைக்கவில்லை. | ok |
 | `portal.booking.cancelTitle` | Cancel this appointment? | இந்தச் சந்திப்பை ரத்து செய்யவா? | ok |
 | `portal.booking.cancelled` | Your appointment was cancelled. | உங்கள் சந்திப்பு ரத்து செய்யப்பட்டது. | ok |
+| `portal.booking.checkAgain` | Check again | மீண்டும் சரிபார் | ok |
 | `portal.booking.mine` | Your appointments | உங்கள் சந்திப்புகள் | ok |
 | `portal.booking.needClinic` | Enter the hospital code above to see open times. | காலி நேரங்களைக் காண மேலே மருத்துவமனைக் குறியீட்டை உள்ளிடவும். | ok |
-| `portal.booking.noSlots` | There are no open times right now. | இப்போது காலி நேரங்கள் எதுவும் இல்லை. | ok |
+| `portal.booking.noSlots` | There are no open times at the moment. | இப்போது காலி நேரங்கள் எதுவும் இல்லை. | ok |
 | `portal.booking.none` | You have no appointments. | உங்களுக்குச் சந்திப்புகள் எதுவும் இல்லை. | ok |
 | `portal.booking.off` | Booking online is not turned on at this hospital yet. | இந்த மருத்துவமனையில் இணையம் வழியாகப் பதிவு செய்தல் இன்னும் இயக்கப்படவில்லை. | ok |
 | `portal.booking.open` | Book an appointment | ஒரு சந்திப்பைப் பதிவு செய்யுங்கள் | ok |

@@ -22,6 +22,8 @@ export interface PortalScenario {
   voiceOn?: boolean;
   /** Opening a voice session answers 503 (voice not set up) instead of opening one. */
   voiceUnavailable?: boolean;
+  /** The open-times list is empty (the booking switch is on, nothing is offered). */
+  noSlots?: boolean;
 }
 
 const b64url = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
@@ -117,7 +119,7 @@ export async function installPortalMock(page: Page, scenario: PortalScenario = {
     if (method === 'GET' && path === '/v1/portal/requests') return reply(route, 200, { requests: [{ clinic_id: '3f2b8c1e-6a4d-4e1b-9d0a-1c2d3e4f5a6b', created_at: '2026-11-09T05:00:00Z', field: 'phone', kind: 'correction', request_id: '88888888-8888-4888-8888-888888888888', status: 'open', updated_at: '2026-11-09T05:00:00Z' }] });
     if (method === 'POST' && path === '/v1/portal/requests') return reply(route, 201, { created: true, request_id: '88888888-8888-4888-8888-888888888888' });
     if (method === 'GET' && path === '/v1/portal/booking/bookings') return reply(route, 200, { bookings: [{ booking_id: '11111111-1111-4111-8111-aaaaaaaaaaaa', cancellable: true, clinic_id: '3f2b8c1e-6a4d-4e1b-9d0a-1c2d3e4f5a6b', ends_at: '2026-12-01T05:30:00Z', location_name: 'Room 1', slot_id: '22222222-2222-4222-8222-bbbbbbbbbbbb', starts_at: '2026-12-01T05:00:00Z', status: 'confirmed', visit_type_name: 'Placeholder Visit' }] });
-    if (method === 'GET' && path === '/v1/portal/booking/slots') return reply(route, 200, { slots: [{ ends_at: '2026-12-02T05:30:00Z', location_name: 'Room 2', slot_id: '22222222-2222-4222-8222-bbbbbbbbbbbb', starts_at: '2026-12-02T05:00:00Z', visit_type_id: '3f2b8c1e-6a4d-4e1b-9d0a-1c2d3e4f5a6b', visit_type_name: 'Other Visit' }] });
+    if (method === 'GET' && path === '/v1/portal/booking/slots') return reply(route, 200, scenario.noSlots ? { slots: [] } : { slots: [{ ends_at: '2026-12-02T05:30:00Z', location_name: 'Room 2', slot_id: '22222222-2222-4222-8222-bbbbbbbbbbbb', starts_at: '2026-12-02T05:00:00Z', visit_type_id: '3f2b8c1e-6a4d-4e1b-9d0a-1c2d3e4f5a6b', visit_type_name: 'Other Visit' }] });
     if (method === 'POST' && /\/booking\/bookings\/[^/]+\/cancel$/.test(path)) return reply(route, 200, { booking_id: '11111111-1111-4111-8111-aaaaaaaaaaaa', changed: true });
     if (method === 'POST' && /\/booking\/slots\/[^/]+\/book$/.test(path)) return reply(route, 201, { booking_id: '11111111-1111-4111-8111-aaaaaaaaaaaa', created: true, slot_id: '22222222-2222-4222-8222-bbbbbbbbbbbb' });
     if (method === 'GET' && path === '/v1/portal/messages/threads') return reply(route, 200, { threads: [{ clinic_id: '3f2b8c1e-6a4d-4e1b-9d0a-1c2d3e4f5a6b', last_message_at: '2026-11-09T05:00:00Z', message_count: 1, thread_id: '33333333-3333-4333-8333-cccccccccccc', topic: 'appointments' }] });

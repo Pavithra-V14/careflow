@@ -641,6 +641,81 @@ test('DEMO booking, front desk: the same visit on the staff side, and the messag
   }
 });
 
+// Nurse and doctor second-factor walks (PREPARED, not run until the two accounts have an authenticator): visit readiness with the staff view of a visit's
+// preparation, and the cards and templates editor. Read-only. The one exception is a single demo draft by the NURSE, made only when LIVE_DRAFT=yes (the user
+// says so): a template (no clinical card) with plainly marked placeholder text. The doctor only LOOKS at a draft and opens the Approve dialog and cancels it.
+// Every screen's words, every 403 and its reason, and every write with its status code go to live-report/link-<role>-<label>.md.
+for (const role of ['nurse', 'doctor'] as const) {
+  test(`DEMO second-factor walk, ${role}: visit readiness, visit preparation (staff view) and cards and templates`, async ({ page }) => {
+    test.skip(LINK !== role, `start with LIVE_LINK=${role}`);
+    test.setTimeout(25 * 60_000);
+    const calls: Call[] = [];
+    const phase = { current: 'sign-in' };
+    watch(page, calls, phase);
+    const { log, snap, confirmAndWait, finish } = linkTools(page, calls, `link-${role}`);
+    const visit = async (name: string, hash: string) => {
+      phase.current = name;
+      await page.evaluate((h) => (window.location.hash = h), hash);
+      await settle(page);
+      await page.waitForTimeout(2000);
+      await snap(name);
+    };
+    try {
+      await signInByHand(page);
+      await settle(page);
+      await visit('visit readiness (upcoming visits)', '#/readiness');
+      const open = page.locator('main tbody tr').first().getByRole('button');
+      if ((await open.count()) > 0) {
+        phase.current = 'visit readiness (open the first visit)';
+        await open.first().click();
+        await settle(page);
+        const show = page.getByRole('button', { name: /show what the patient marked|நோயாளி குறித்தவற்றைக் காட்டு/i });
+        if ((await show.count()) > 0) {
+          phase.current = 'visit preparation (staff view, read-only)';
+          await show.first().click();
+          await settle(page);
+          await snap('visit preparation, staff view');
+        } else log.push('## no "Show what the patient marked" button on the page', '');
+      } else log.push('## no upcoming visit row to open', '');
+
+      await visit('cards and templates (lists)', '#/knowledge');
+      log.push(`## drafts and approved items on the page: ${await page.locator('main tbody tr').count()} table rows`, '');
+      if (role === 'doctor') {
+        // Read-only: look at the first draft, open the Approve dialog (it shows the exact text), and cancel it.
+        const row = page.locator('main tbody tr').first();
+        if ((await row.count()) > 0) {
+          phase.current = 'cards and templates (look at the first draft)';
+          await row.getByRole('button').first().click();
+          await settle(page);
+          await snap('a draft, looked at');
+          const approve = page.locator('main tbody tr').first().getByRole('button', { name: /^Approve/ });
+          if ((await approve.count()) > 0) {
+            phase.current = 'cards and templates (the Approve dialog, then Cancel)';
+            await approve.first().click();
+            await snap('the Approve dialog (nothing is approved)');
+            await page.getByRole('dialog').locator('.dialog-actions button').first().click();
+            await settle(page);
+          } else log.push('## no Approve button on the first row (it may be your own draft, or already decided)', '');
+        } else log.push('## no draft to look at', '');
+      }
+      if (role === 'nurse' && process.env.LIVE_DRAFT === 'yes') {
+        phase.current = 'cards and templates (ONE demo draft, write)';
+        await page.locator('main .toolbar button').first().click();
+        await page.locator('#kn-kind').selectOption('template');
+        await page.locator('#kn-code').fill('demo.walk.draft');
+        await page.locator('#kn-title-in').fill('DEMO ONLY draft');
+        await page.locator('#kn-body').fill('DEMO ONLY - placeholder text for a walk, not clinical content, not for use.');
+        await page.getByRole('button', { name: /^Save the draft$/ }).click();
+        await confirmAndWait('"Save the draft"');
+      } else if (role === 'nurse') {
+        log.push('## no draft was written (LIVE_DRAFT is not "yes")', '');
+      }
+    } finally {
+      await finish(`Demo second-factor walk, ${role}`);
+    }
+  });
+}
+
 test('DEMO link, front desk: the family links page, read-only (second factor)', async ({ page }) => {
   test.skip(LINK !== 'family', 'start with LIVE_LINK=family');
   test.setTimeout(20 * 60_000);

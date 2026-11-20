@@ -137,6 +137,29 @@ Screenshots of ten main screens (staff sign-in, referral review, scheduling, pat
 
 `docs/user-guide-staff.md` (one section per role: front desk, supervisor, nurse, doctor, admin, and the auditor) and `docs/user-guide-patient.md`, written from the screens as built. They describe only what the screens do, say "not tested live" where a screen has not been walked against the real backend, and mark the Tamil as machine-checked and not human-reviewed. They carry no clinical content.
 
+## Live status of the screens (20 Nov 2026)
+
+What has been **walked against the real backend** (with the user typing every password and code), and what has not. Nothing below is claimed as live-verified unless it says so.
+
+| Area | Live result |
+|---|---|
+| Staff sign-in with a second factor (front desk) | walked: enrolled, fresh code, role picker |
+| Front desk: patient search, open a record, **confirm identity** (write) | walked: search 200, `confirm-identity` 200 on the synthetic patient; the button is also offered on a verified record with no confirmation (request 44) |
+| Front desk: scheduling lists (locations, visit types, providers, slots) | walked (read-only): 200, 12 slots listed; no scheduling write walked |
+| Front desk: message screen and "Show names" | walked (read-only; one audited read and the names read earlier): 200 |
+| Front desk: family links page | walked with the second factor: 200, empty list (the earlier password-only visit was refused with 403); verify, reject and revoke **not tested live** |
+| Front desk: patient requests, alerts, identity lists, referrals, tasks | walked read-only earlier (password-only session): 200; writes not walked |
+| Front desk: portal claims approval, break-glass, erasure | **not tested live** (needs second factor / not walked) |
+| Front desk: visit readiness | refused 403 "your role may not do this" (a nurse and doctor section) |
+| Nurse and doctor: referral review (read), tasks, patients, messages, scheduling, care reads | walked read-only earlier (password-only session, backend check relaxed): 200 |
+| Nurse and doctor: visit readiness and staff visit view, cards and templates | **not tested live: needs second factor** (no authenticator yet; walk scripts are prepared) |
+| Admin: all admin tabs needing a second factor | **not tested live: needs second factor** (the plain lists walked earlier passed) |
+| Patient portal: demo sign-in, consent, activation, **claim** (write, linked directly) | walked: consent granted, `activate` 200, `claims` 200 "Your record is linked." |
+| Patient portal: home, profile, notices, requests, complaints, voice setting, family section (loads) | walked read-only: 200 |
+| Patient portal: appointments, booking list, messages | reads walked: 200 but empty; **no open time was offered** so no booking was made; opening a conversation and sending **not tested live** |
+| Patient portal: visit preparation, marking items, family requests, grievance send, data download, voice session | **not tested live** |
+| Public complaint form | categories read 200 with eight categories (read-only; nothing sent) |
+
 ## 8. Last full run
 
 The counts for the last full run are given in the report that accompanies each push.

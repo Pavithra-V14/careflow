@@ -18,13 +18,15 @@
       "open": "Book an appointment",
       "openBody": "These are the open times the hospital lets patients book.",
       "needClinic": "Enter the hospital code above to see open times.",
-      "noSlots": "There are no open times right now.",
+      "noSlots": "There are no open times at the moment.",
       "book": "Book",
       "bookTitle": "Book this appointment?",
       "booked": "Your appointment was booked.",
       "alreadyBooked": "This appointment was already booked for you.",
       "bookRefused": "This time cannot be booked by this account. Nothing was booked.",
-      "bookConflict": "This time is no longer open, or you have reached the hospital's limit of future appointments. Nothing was booked."
+      "bookConflict": "This time is no longer open, or you have reached the hospital's limit of future appointments. Nothing was booked.",
+      "checkAgain": "Check again",
+      "backToTop": "Back to the top of the page"
     },
     "messages": {
       "title": "Messages to the hospital",

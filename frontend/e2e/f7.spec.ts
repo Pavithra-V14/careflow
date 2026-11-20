@@ -59,7 +59,7 @@ for (const lang of LANGS) {
   test(`nurse, referral detail with the reviewer view and a reason list [${lang}]`, async ({ page }) => {
     await openConsole(page, 'nurse', lang, { console: { reasonCodes: true } });
     await go(page, `#/referrals/${ID.doc}`, ID.doc);
-    await expect(page.locator('main select')).toBeVisible();
+    await expect(page.locator('main select[id$="-reason"]')).toBeVisible(); // the reason list (the optional escalation question is a second list)
     await sweep(page, 'f7-reviewer-view', lang);
   });
 }

@@ -117,7 +117,18 @@ export function BookingSection({ api }: { api: Api }) {
           {!slotsEnabled && clinicField.ready && <p className="hint">{t('portal.booking.needClinic')}</p>}
           {slotsEnabled && slots.isPending && <Loading />}
           {slotsEnabled && slots.isError && <ReadProblem problem={slots.error} off={t('portal.booking.off')} />}
-          {slotsEnabled && slots.isSuccess && slots.data !== null && slots.data.slots.length === 0 && <p>{t('portal.booking.noSlots')}</p>}
+          {slotsEnabled && slots.isSuccess && slots.data !== null && slots.data.slots.length === 0 && (
+            // An empty list is a normal answer, not "booking is off" (that one is the 503 above): say so calmly, and give a way to look again and a way back.
+            <div role="status">
+              <p>{t('portal.booking.noSlots')}</p>
+              <p>
+                <button type="button" className="button button-secondary" disabled={slots.isFetching} onClick={() => void slots.refetch()}>
+                  {t('portal.booking.checkAgain')}
+                </button>{' '}
+                <a href="#portal-title">{t('portal.booking.backToTop')}</a>
+              </p>
+            </div>
+          )}
           {slotsEnabled && slots.isSuccess && slots.data !== null && slots.data.slots.length > 0 && (
             <ul className="plain-list">
               {slots.data.slots.map((s) => (

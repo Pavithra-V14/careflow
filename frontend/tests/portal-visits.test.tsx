@@ -138,7 +138,22 @@ describe('appointments', () => {
     stubApi(backend({ bookings: json({ bookings: [] }), slots: json({ slots: [] }) }));
     await mount();
     expect(await screen.findByText('You have no appointments.')).toBeInTheDocument();
-    expect(await screen.findByText('There are no open times right now.')).toBeInTheDocument();
+    expect(await screen.findByText('There are no open times at the moment.')).toBeInTheDocument();
+    // Distinct from "booking is off", with a way to look again and a way back.
+    expect(screen.queryByText('Booking online is not turned on at this hospital yet.')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Check again' })).toBeEnabled();
+    expect(screen.getByRole('link', { name: 'Back to the top of the page' })).toHaveAttribute('href', '#portal-title');
+  });
+
+  it('looks again for open times when asked, and shows them if some have appeared', async () => {
+    const user = userEvent.setup();
+    let calls = 0;
+    const base = backend({ bookings: json({ bookings: [] }) });
+    stubApi((req) => (req.method === 'get' && req.path === '/v1/portal/booking/slots' ? (calls++ === 0 ? json({ slots: [] }) : json({ slots: [slot] })) : base(req)));
+    await mount();
+    await user.click(await screen.findByRole('button', { name: 'Check again' }));
+    expect(await screen.findByRole('button', { name: 'Book: Other Visit' })).toBeInTheDocument();
+    expect(screen.queryByText('There are no open times at the moment.')).toBeNull();
   });
 });
 
