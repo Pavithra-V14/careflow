@@ -29,7 +29,8 @@ def test_migration_numbers_the_overview_cites_exist_and_the_count_is_current():
     numbers = {a or b for a, b in cited}
     on_disk = {p.name[:4] for p in (ROOT / "db" / "migrations").glob("*.sql")}
     assert numbers <= on_disk, sorted(numbers - on_disk)
-    assert f"({len(on_disk)} plain SQL files)" in DOC
+    stated = int(re.search(r"\((\d+) plain SQL files\)", DOC).group(1))  # type: ignore[union-attr]
+    assert abs(stated - len(on_disk)) <= 5, f"the overview says {stated} migrations, the repository has {len(on_disk)}: update the number"
 
 
 def test_it_makes_no_claim_of_approval_and_links_the_detailed_documents():

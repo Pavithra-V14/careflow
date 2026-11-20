@@ -298,4 +298,5 @@ async def test_the_translation_role_is_accepted_for_the_worker_and_other_unknown
         assert await as_app(db, w.people[who] if who else None, ledger_sql(w.a, role="translation")) == "42501", who  # still the queue worker of the clinic only
     assert await outcome(db, ledger_sql(w.a, role="translation_x")) == "23514"
     assert await outcome(db, ledger_sql(w.a, role="llm_huge")) == "23514"
+    assert await outcome(db, ledger_sql(w.a, role="translation")) is None  # a row of our own, so the update below has something to refuse (an update of no rows fires no row guard)
     assert await outcome(db, "update ops.spend_ledger set usd_actual = 0") == "23001"  # still append-only

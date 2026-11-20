@@ -11,7 +11,7 @@ A backend for one outpatient clinic (many clinics are isolated by the database, 
 | Part | Where | Notes |
 |---|---|---|
 | API | `careflow/app.py` (FastAPI, async, Pydantic v2) | Verifies the Supabase token per request (`careflow/auth.py`, key chosen by `kid`), sets the verified claims in the transaction (`careflow/db.py`), then runs hand-written SQL. Routes are grouped `/v1/staff/*`, `/v1/portal/*`, `/public/*`, `/readyz` |
-| Database | `db/migrations/` (96 plain SQL files), `careflow/migrate.py` | Hosted Supabase Postgres. Checksummed ledger, advisory lock, append-only. The application connects as the restricted role `careflow_app` through the transaction-mode pooler; the owner role is for migrations and owner-run scripts only |
+| Database | `db/migrations/` (98 plain SQL files), `careflow/migrate.py` | Hosted Supabase Postgres. Checksummed ledger, advisory lock, append-only. The application connects as the restricted role `careflow_app` through the transaction-mode pooler; the owner role is for migrations and owner-run scripts only |
 | Identity and auth | Supabase Auth; `iam.*` tables | Staff: invitation only, second factor (aal2) on every staff route and in the database. Patients: phone code (needs an SMS provider that is not approved); e-mail + password exists as a demo shortcut only |
 | Queue and worker | `careflow/queue.py`, `tick.py`, `producers_sql.py` | Postgres tables, a minute tick plus an immediate poke, 5 attempts then dead letter. A second adapter stub exists and is not wired (`queue_broker_stub.py`) |
 | Agents (graphs) | `front_door.py`, `scheduling_graph.py`, `care_journey.py` (flag), `visit_readiness.py` (flag) | LangGraph with our own Postgres checkpointer (`checkpointer.py`). Voice is a channel, not an agent (`voice.py`) |
