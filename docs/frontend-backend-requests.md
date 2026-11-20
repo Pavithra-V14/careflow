@@ -388,6 +388,9 @@ The Tamil pack was machine-checked a second time on 2026-11-18 (docs/approval-pa
 ### 41. Portal sign-in by e-mail and password, DEMO ONLY (2026-11-20)
 No API or OpenAPI change: the backend only verifies the Supabase token, and the claim route (`POST /v1/portal/claims`) keeps its contract. For dev walks the portal sign-in needs ONE more method: **e-mail + password** (Supabase `signInWithPassword`), shown only when a build-time demo flag is on (for example `VITE_DEMO_EMAIL_SIGNIN=true`), never in a production build, with a visible "demo sign-in" label. The rest of the patient flow (register, consent, activate, claim, pending review) is unchanged and must not be skipped. The backend needs `CAREFLOW_DEMO_EMAIL_SIGNIN=on` and answers the same fixed 403 as for a token with no phone when it is off or the deployment is not the synthetic demo. Real patient sign-in stays phone code (needs an SMS provider: checklist row 96).
 
+### 42. Two clearer answers on the portal claim path (2026-11-20, migration 0098)
+(a) `POST /v1/portal/claims` can now answer `outcome: "activation_required"` (registered but not yet activated): show "Activate your account first" (consent, then activate, then claim). It used to be a bare 403. (b) `POST /v1/staff/portal-claims/{id}/resolve` can now answer `result: "identity_not_confirmed"`: show "Confirm this person's identity first (patient screen, confirm identity), then approve again". `record_not_claimable` now means only erased, merged away, already bound or another clinic's. Also: a claim repeated while one is pending counts toward the lock (`locked` after five), so the button must be disabled once `pending_review` came back. Approving a claim needs a REAL second factor at the database (`docs/mfa-live-pass.md`).
+
 ## Decisions recorded here for later readers
 
 - **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;

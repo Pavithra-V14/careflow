@@ -138,6 +138,8 @@ async def _seed() -> Identities:
         await _seed_scheduling(ids, conn)
         ids.claimant = uuid.uuid4()  # an ACTIVE patient account for the portal claim cases: its claim rows are append-only and are left behind with it
         await conn.execute("insert into iam.accounts (id, account_type, status, origin) values ($1, 'patient', 'active', 'test')", ids.claimant)
+        ids.invited_claimant = uuid.uuid4()  # an INVITED patient account (registered, not yet activated): the claim answers `activation_required`, not a bare 403
+        await conn.execute("insert into iam.accounts (id, account_type, status, origin) values ($1, 'patient', 'invited', 'test')", ids.invited_claimant)
         rule, episode, ids.episode_rule = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
         await conn.execute("insert into ops.care_recurrence_rules (id, clinic_id, origin, rule_code, interval_days, overdue_after_days, idempotency_key) values ($1, $2, 'test', 'matrix_seed_rule', 30, 5, $3)", rule, ids.clinic_a, f"mx-r-{rule}")
         await conn.execute("insert into ops.care_episodes (id, clinic_id, origin, patient_id, episode_code, started_on, idempotency_key) values ($1, $2, 'test', $3, 'matrix_seed_episode', current_date - 60, $4)", episode, ids.clinic_a, ids.patients_a[42], f"mx-e-{episode}")
@@ -3030,11 +3032,13 @@ def portal_claim_cases(ids) -> list[tuple]:
     claimant = bearer(mint(ids.claimant, phone=phone))
     no_phone = bearer(mint(ids.claimant))
     email_only = bearer(mint(ids.claimant, email="demo.claimant@example.test"))
+    not_yet_active = bearer(mint(ids.invited_claimant, phone=phone))
     body = lambda **o: {"clinic_id": str(ids.clinic_a), "name": "DEMO Claimant", "dob": "1990-01-01", **o}
     cases = [
         _case(ids, "the claimant has not consented to the current notice (none is published in the test database)", claimant, 200, PORTAL_CLAIMS, json=body(), body=lambda b: b == {"outcome": "consent_required"}),
         _case(ids, "the same claim again gives the same word", claimant, 200, PORTAL_CLAIMS, json=body(), body=lambda b: b == {"outcome": "consent_required"}),
         _case(ids, "a token with no verified phone cannot claim", no_phone, 403, PORTAL_CLAIMS, json=body(), body=NOT_A_PATIENT),
+        _case(ids, "a registered but not yet activated patient is told to activate first (their own state, said plainly)", not_yet_active, 200, PORTAL_CLAIMS, json=body(), body=lambda b: b == {"outcome": "activation_required"}),
         _case(ids, "a token with only an e-mail address cannot claim while the demo e-mail sign-in is off (the default; it exists only in the synthetic demo)", email_only, 403, PORTAL_CLAIMS, json=body(), body=NOT_A_PATIENT),
         _case(ids, "an unknown clinic is refused the same way", claimant, 403, PORTAL_CLAIMS, json=body(clinic_id=str(uuid.uuid4())), body=NOT_A_PATIENT),
         _case(ids, "a date that is not a date is rejected", claimant, 422, PORTAL_CLAIMS, json=body(dob="soon"), body=_rejected),

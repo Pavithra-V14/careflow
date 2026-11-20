@@ -4356,7 +4356,7 @@ class ClaimIn(_Body):
 
 
 class ClaimOut(_Out):
-    outcome: Literal["claimed", "pending_review", "locked", "already_bound", "consent_required"]
+    outcome: Literal["claimed", "pending_review", "locked", "already_bound", "consent_required", "activation_required"]
 
 
 @portal.post("/register", response_model=PortalRegisterOut, status_code=201)
@@ -4411,6 +4411,9 @@ async def portal_activate(idempotency_key: IdempotencyKey, conn: TxConnAllGrants
 @portal.post("/claims", response_model=ClaimOut)
 async def portal_claim(body: ClaimIn, idempotency_key: IdempotencyKey, request: Request, conn: TxConnAllGrants, claims: dict[str, Any] = Depends(verified_claims)) -> ClaimOut:
     """Claim the patient record that matches your VERIFIED phone and the name and date of birth you give. `claimed` binds your account; anything else is `pending_review` (a front-desk person decides; the same word whether nothing or several matched), `locked` after repeated failures, `already_bound`, or `consent_required` (grant the current care-delivery notice first). 403 unless you are an ACTIVE patient account or you have no verified phone; 422 if the date or name is unusable; 503 if encryption keys are not configured."""
+    invited = (await conn.execute(text("select 1 from iam.accounts where id = :i and account_type = 'patient' and status = 'invited'"), {"i": uuid.UUID(claims["sub"])})).first()
+    if invited is not None:
+        return ClaimOut(outcome="activation_required")  # your own account state, said plainly instead of the fixed 403: consent, then activate, then claim
     await _patient_account(conn, claims)
     phone = demo_email_signin.contact_phone(claims, os.environ, demo_allowed=demo_allowed(resolve_profile(), _data_policy(os.environ)))  # the verified phone; ONLY in the synthetic demo with the switch on, the synthetic phone of the e-mail
     vault: DemographicVault | None = request.app.state.vault
@@ -5177,7 +5180,7 @@ class ClaimResolveIn(_Body):
 
 
 class ClaimResolveOut(_Out):
-    result: Literal["approved", "rejected", "already_resolved", "record_not_claimable", "claimant_already_bound", "consent_required"]
+    result: Literal["approved", "rejected", "already_resolved", "record_not_claimable", "identity_not_confirmed", "claimant_already_bound", "consent_required"]
 
 
 @staff_portal_claims.get("", response_model=PendingClaimList)
