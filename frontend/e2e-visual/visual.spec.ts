@@ -94,6 +94,16 @@ for (const lang of LANGS) {
     await shoot(page, 'messages', lang);
   });
 
+  test(`public home [${lang}]`, async ({ page }) => {
+    await page.clock.setFixedTime(NOW);
+    await page.addInitScript((l) => localStorage.setItem('careflow.language', l), lang);
+    await installPortalMock(page, { profile: true });
+    await page.goto('/patient/');
+    await expect(page.locator('.brand-name')).toHaveText('Demo Clinic');
+    await page.waitForLoadState('networkidle');
+    await shoot(page, 'public-home', lang);
+  });
+
   test(`portal home [${lang}]`, async ({ page }) => {
     await portal(page, lang);
     await shoot(page, 'portal-home', lang);

@@ -24,6 +24,8 @@ export interface PortalScenario {
   voiceUnavailable?: boolean;
   /** The open-times list is empty (the booking switch is on, nothing is offered). */
   noSlots?: boolean;
+  /** The hospital's public profile is published (GET /public/clinic/profile answers 200 instead of 404): name, some text, some features on, demo content. */
+  profile?: boolean;
 }
 
 const b64url = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
@@ -77,9 +79,14 @@ export async function installPortalMock(page: Page, scenario: PortalScenario = {
     // The public routes need no sign-in (a grievance without signing in, MOCK ONLY).
     if (method === 'GET' && path === '/public/grievance-categories') return reply(route, 200, { categories: ['access', 'service_quality'] });
     if (method === 'POST' && path === '/public/grievances') return reply(route, 201, { created: true, grievance_id: '33333333-3333-4333-8333-333333333333' });
+    if (method === 'GET' && path === '/public/clinic/profile') {
+      return scenario.profile
+        ? reply(route, 200, { name: 'Demo Clinic', about: 'A plain line about the hospital, entered by its admin.', departments: [{ name: 'General medicine', doctors: ['Dr Demo One', 'Dr Demo Two'] }, { name: 'Eye care', doctors: [] }], address: null, opening_hours: 'Monday to Friday, 9 am to 5 pm', phone: null, privacy_promise: null, placeholder: true, features: { booking: true, messaging: false, offers: false, records: false, visit_preparation: false, family_links: true }, languages: ['en', 'ta'] })
+        : refuse(route, 404);
+    }
+    if (method === 'GET' && path === '/public/clinic') return reply(route, 200, { clinic_id: '3f2b8c1e-6a4d-4e1b-9d0a-1c2d3e4f5a6b', name: scenario.profile ? 'Demo Clinic' : 'Placeholder Hospital' });
     if (!req.headers()['authorization']?.startsWith('Bearer ')) return reply(route, 401, { detail: 'not authenticated' });
 
-    if (method === 'GET' && path === '/public/clinic') return reply(route, 200, { clinic_id: '3f2b8c1e-6a4d-4e1b-9d0a-1c2d3e4f5a6b', name: 'Placeholder Hospital' });
     if (method === 'GET' && path === '/v1/portal/grievance-categories') return reply(route, 200, { categories: ['access', 'service_quality'] });
     if (method === 'GET' && path === '/v1/portal/me') {
       if (stage === 'none') return refuse(route, 403);

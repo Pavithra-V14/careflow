@@ -26,7 +26,11 @@
       "bookRefused": "This time cannot be booked by this account. Nothing was booked.",
       "bookConflict": "This time is no longer open, or you have reached the hospital's limit of future appointments. Nothing was booked.",
       "checkAgain": "Check again",
-      "backToTop": "Back to the top of the page"
+      "backToTop": "Back to the top of the page",
+      "emptyReason": {
+        "no_open_times": "No open times at the moment. Please check again later.",
+        "not_set_up": "Online booking is not set up for this clinic yet."
+      }
     },
     "messages": {
       "title": "Messages to the hospital",

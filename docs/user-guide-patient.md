@@ -12,6 +12,10 @@ This guide describes what the patient portal screens do, as built on 20 November
 
 Every page carries an emergency banner. The portal is not for emergencies: if you need urgent help, follow the banner's instructions and contact emergency services instead of using the portal.
 
+## The public home page
+
+Before you sign in, the home page shows the hospital's own details, read from the hospital's public profile: its name (in the header and the browser tab), a short description, its departments and doctors, its address, opening hours and phone, and its privacy promise. Anything the hospital has not supplied stays as a clearly marked placeholder box. The list of features shows "Coming soon" beside each one the hospital has not switched on; a feature is shown as available only when the profile says it is on. If the hospital is still showing demonstration values, the page says "Demo content". The home page never says the privacy promise is approved; that wording comes from the hospital and its lawyers. *Not tested live.*
+
 ## 1. Signing in
 
 1. Open the sign-in page. Enter your **mobile number** with the plus sign and country code, digits only (for example +91 followed by your number). If the number is not in that shape the screen says "Enter the number with a plus sign and the country code, using digits only." and sends nothing.
@@ -51,7 +55,7 @@ You can **Activate my account** once you have granted the care-delivery notice. 
 
 ## 7. Appointments
 
-*Reads walked live (empty); booking not tested live.* On the demonstration system the appointment list and the open-times list loaded without error, but **no open time was offered**, so no appointment was booked. When there are no open times the screen says "There are no open times at the moment." with a "Check again" button and a link back to the top of the page; that is different from "Booking online is not turned on at this hospital yet." **Appointments** lists your appointments and, if the hospital has turned online booking on, the open times it lets patients book (enter the hospital code to see them).
+*Reads walked live (empty); booking not tested live.* On the demonstration system the appointment list and the open-times list loaded without error, but **no open time was offered**, so no appointment was booked. When there are no open times the screen says why in one fixed sentence: "No open times at the moment. Please check again later." (booking is set up but nothing is open) or "Online booking is not set up for this clinic yet." (the hospital has not set it up); with no reason from the system it says "There are no open times at the moment." Each has a "Check again" button and a link back to the top of the page, and each is different from "Booking online is not turned on at this hospital yet." **Appointments** lists your appointments and, if the hospital has turned online booking on, the open times it lets patients book (enter the hospital code to see them).
 
 - **Book** books a time after a confirmation. Results: booked; already booked for you; "This time cannot be booked by this account"; "This time is no longer open, or you have reached the hospital's limit of future appointments."
 - **Cancel appointment** frees the time and contacts nobody. "This appointment cannot be cancelled any more: it was already cancelled or it has started."

@@ -1,6 +1,6 @@
 # Tamil review pack (AI-prepared, NOT reviewed by a native speaker)
 
-Prepared 2026-11-20. Machine-checked on 2026-11-20; NOT human-reviewed; the Tamil reader must still approve (Part 0). Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 2042 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
+Prepared 2026-11-20. Machine-checked on 2026-11-20; NOT human-reviewed; the Tamil reader must still approve (Part 0). Every Tamil string in the staff console and the patient portal, next to its English, with a second-pass check by an AI model (not a native speaker) and a column for a native reviewer. **No string in this file is marked as reviewed.** The sign-off list (`frontend/src/shared/i18n/ta-reviewed.json`) is still empty, and every one of the 2045 Tamil strings stays on the unreviewed list (`frontend/TAMIL-UNREVIEWED.md`) until a native reviewer signs it off. Read the README first: [tamil-review-README.md](tamil-review-README.md).
 
 **Regenerated 2026-11-20** by `npm run i18n:pack` from the strings as they are now, so it covers every current string, including the newest screens (patient voice setting, consent withdrawal and history, activating a staff account, withdrawing and retiring a red-flag rule). Each is written and second-passed in the same way and is just as unreviewed.
 
@@ -12,9 +12,9 @@ Meaning errors, register for patients, medical or safety terms, unsafe ambiguity
 - **B** wrong or odd meaning, wrong register, or an inconsistent term. Needs a native speaker.
 - **C** minor wording, or an administrator-only technical label.
 
-How it was done, honestly: all 2042 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and the strings that carry meaning (sentences of four words or more, and short strings that differ from their English) were read by an AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
+How it was done, honestly: all 2045 pairs were checked by script (placeholders, empty strings, untranslated Latin words, informal pronouns), and the strings that carry meaning (sentences of four words or more, and short strings that differ from their English) were read by an AI model. The AI model is not a native speaker, so the lists below are the places where it was unsure or found a likely problem; a string marked "no issue found" has not been cleared by a person.
 
-Automatic checks: 2042 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
+Automatic checks: 2045 strings; 0 empty; the {{placeholders}} are identical in English and Tamil in every string; 0 informal pronouns (நீ, உன்) found; 31 Tamil strings equal their English on purpose (Part 6).
 
 Notes: 71 grade A, 125 grade B, 58 grade C (254 rows with a note; some notes cover a group of similar strings, named in the note).
 
@@ -22,16 +22,16 @@ Notes: 71 grade A, 125 grade B, 58 grade C (254 rows with a note; some notes cov
 
 **Machine-checked on 2026-11-20; NOT human-reviewed; the Tamil reader must still approve.** This is a first pass by an AI model, not a native speaker, and not a substitute for the human reviewer. No string was marked reviewed.
 
-How it was done: every Tamil string was back-translated to English on its own, without the English original in view, and only then compared with the original. Strings that are identical in English and Tamil on purpose (Part 6) were not translated, so they were not back-translated. It was done in 8 pass(es): 2026-11-14: 1778 strings (1 fixed, 35 flagged); 2026-11-18: 239 strings (1 fixed, 8 flagged); 2026-11-20: 20 strings (3 fixed, 3 flagged); 2026-11-20: 1 strings (0 fixed, 0 flagged); 2026-11-20: 2 strings (0 fixed, 0 flagged); 2026-11-20: 1 strings (0 fixed, 0 flagged); 2026-11-20: 3 strings (0 fixed, 0 flagged); 2026-11-20: 1 strings (0 fixed, 1 flagged). The second pass covered only the strings added or changed since the first. A script also checked every string for lost or reordered {{placeholders}}, changed numbers, a lost negation, informal pronouns and a different number of sentences.
+How it was done: every Tamil string was back-translated to English on its own, without the English original in view, and only then compared with the original. Strings that are identical in English and Tamil on purpose (Part 6) were not translated, so they were not back-translated. It was done in 9 pass(es): 2026-11-14: 1778 strings (1 fixed, 35 flagged); 2026-11-18: 239 strings (1 fixed, 8 flagged); 2026-11-20: 20 strings (3 fixed, 3 flagged); 2026-11-20: 1 strings (0 fixed, 0 flagged); 2026-11-20: 2 strings (0 fixed, 0 flagged); 2026-11-20: 1 strings (0 fixed, 0 flagged); 2026-11-20: 3 strings (0 fixed, 0 flagged); 2026-11-20: 1 strings (0 fixed, 1 flagged); 2026-11-20: 3 strings (0 fixed, 0 flagged). The second pass covered only the strings added or changed since the first. A script also checked every string for lost or reordered {{placeholders}}, changed numbers, a lost negation, informal pronouns and a different number of sentences.
 
 | Count | Strings |
 |---|---|
-| Checked | 2042 (2011 back-translated, 31 left in English by design) |
+| Checked | 2045 (2014 back-translated, 31 left in English by design) |
 | Fixed (a clear defect) | 5 |
 | Flagged for the human reviewer | 47 (grade A: 5, B: 16, C: 26) |
 | Strings added since this check, not covered | 0 |
 
-Automatic findings: 0 placeholder mismatches, 0 changed numbers, 0 lost negations, 0 informal pronouns, 1 string with a different number of sentences (fixed). 250 strings whose back-translation overlapped little with the English, or that the script flagged, were read side by side; the rest agreed. Most of the low-overlap ones were synonyms ("Expires" and "Expiry", "Phone" and "Telephone") and are not listed.
+Automatic findings: 0 placeholder mismatches, 0 changed numbers, 0 lost negations, 0 informal pronouns, 1 string with a different number of sentences (fixed). 253 strings whose back-translation overlapped little with the English, or that the script flagged, were read side by side; the rest agreed. Most of the low-overlap ones were synonyms ("Expires" and "Expiry", "Phone" and "Telephone") and are not listed.
 
 ### Fixed
 
@@ -399,17 +399,17 @@ Grade A: a safety, privacy or patient-rights meaning could be misread. B: a wron
 |---|---|---|
 | approve | ஒப்புக்கொள் (verb), ஒப்புதல் (noun) (72) | The verb also means "admit/agree"; some places use ஒப்புதல் அளி. |
 | acknowledge | ஏற்றுக்கொள் ("accept") (15) | Same verb as approve; the action only records that you have seen something. |
-| record / log / transcript / register | பதிவு everywhere (184) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
+| record / log / transcript / register | பதிவு everywhere (185) | One word for a patient record, the audit log, a voice transcript, "recorded" and "register". |
 | result / decision / end | முடிவு everywhere (78) | One word for a clinical result, a person's decision and an end time. |
 | role | பங்கு (15) | Also means "share"; பணி is used for "task". |
-| merge / link / connect / attach | இணை / இணைப்பு (86) | Merging two patient records, linking a portal account, attaching a note: one word. |
+| merge / link / connect / attach | இணை / இணைப்பு (87) | Merging two patient records, linking a portal account, attaching a note: one word. |
 | red flag | சிவப்புக் கொடி (literal) (26) | Check the wording clinicians use. |
 | hold (a slot or a referral) | நிறுத்து / நிறுத்தம் (stop) and ஒதுக்கீடு (allocation) (53) | Two or three words for one idea. |
 | retire (a rule version) and withdraw (a draft) | நிறுத்து (retire) and திரும்பப் பெறு (withdraw) (75) | The rule screens need two different words; "withdraw" shares its Tamil with "revoke" and "cannot be undone". |
 | task / job | பணி (76) | A review task and a queued job share the word. |
 | approved (a status) and approve (a button) | அங்கீகரிக்கப்பட்டது (status) and ஒப்புக்கொள் (button) (14) | Two word families for one idea in the red-flag rule screens. |
 | patient | நோயாளி and நோயாளர் (104) | Two spellings. |
-| clinic / hospital | மருத்துவமனை (most strings), கிளினிக் (1) (93) | Check which is meant where. |
+| clinic / hospital | மருத்துவமனை (most strings), கிளினிக் (1) (94) | Check which is meant where. |
 | front desk | வரவேற்பு மேசை and முன்பணியாளர் (9) | Two renderings. |
 | confidence | நம்பிக்கை (2) | Means belief or hope; the strings mean how sure the system is. |
 | sample (a sampled decision) | மாதிரி (6) | Reads as a laboratory specimen. |
@@ -460,7 +460,7 @@ These are the same in English and Tamil by design, and a Tamil-speaking patient 
 - `tasks.kind.screening_unassessable`
 - `tasks.kind.triage_proposal`
 
-## Part 7. All 2042 strings
+## Part 7. All 2045 strings
 
 Fill in the last column. Write **OK**, or write the full corrected Tamil (keep every {{placeholder}} exactly as it is). Leave a row empty if you have not looked at it.
 
@@ -1460,6 +1460,7 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `labels.unavailable` | Names cannot be shown in this environment. Nothing was shown. | இந்தச் சூழலில் பெயர்களைக் காட்ட முடியாது. எதுவும் காட்டப்படவில்லை. | no issue found | |
 | `landing.about.heading` | About the hospital | மருத்துவமனை பற்றி | no issue found | |
 | `landing.account` | Account | கணக்கு | no issue found | |
+| `landing.demoContent` | Demo content | டெமோ உள்ளடக்கம் | no issue found | |
 | `landing.departments.heading` | Departments and doctors | துறைகள் மற்றும் மருத்துவர்கள் | no issue found | |
 | `landing.emergencyLabel` | Emergency information | அவசரகாலத் தகவல் | no issue found | |
 | `landing.faq.a1` | Choose Sign up, enter your mobile number, and we will send a one-time code to confirm it. | பதிவு செய்க என்பதைத் தேர்ந்தெடுத்து உங்கள் கைபேசி எண்ணை உள்ளிடுங்கள்; அதை உறுதிப்படுத்த ஒருமுறைக் குறியீடு அனுப்புவோம். | no issue found | |
@@ -1750,6 +1751,8 @@ Fill in the last column. Write **OK**, or write the full corrected Tamil (keep e
 | `portal.booking.cancelTitle` | Cancel this appointment? | இந்தச் சந்திப்பை ரத்து செய்யவா? | no issue found | |
 | `portal.booking.cancelled` | Your appointment was cancelled. | உங்கள் சந்திப்பு ரத்து செய்யப்பட்டது. | no issue found | |
 | `portal.booking.checkAgain` | Check again | மீண்டும் சரிபார் | no issue found | |
+| `portal.booking.emptyReason.no_open_times` | No open times at the moment. Please check again later. | இப்போது காலி நேரங்கள் இல்லை. பிறகு மீண்டும் பார்க்கவும். | no issue found | |
+| `portal.booking.emptyReason.not_set_up` | Online booking is not set up for this clinic yet. | இந்த மருத்துவமனைக்கு இணையவழி முன்பதிவு இன்னும் அமைக்கப்படவில்லை. | no issue found | |
 | `portal.booking.mine` | Your appointments | உங்கள் சந்திப்புகள் | no issue found | |
 | `portal.booking.needClinic` | Enter the hospital code above to see open times. | காலி நேரங்களைக் காண மேலே மருத்துவமனைக் குறியீட்டை உள்ளிடவும். | no issue found | |
 | `portal.booking.noSlots` | There are no open times at the moment. | இப்போது காலி நேரங்கள் எதுவும் இல்லை. | no issue found | |

@@ -145,6 +145,29 @@ describe('appointments', () => {
     expect(screen.getByRole('link', { name: 'Back to the top of the page' })).toHaveAttribute('href', '#portal-title');
   });
 
+  it.each([
+    ['no_open_times', 'No open times at the moment. Please check again later.'],
+    ['not_set_up', 'Online booking is not set up for this clinic yet.'],
+  ])('says one fixed sentence for the reason word "%s", never the backend text, and keeps a way to look again and a way back', async (word, sentence) => {
+    stubApi(backend({ bookings: json({ bookings: [] }), slots: json({ slots: [], empty_reason: word, detail: LEAK }) }));
+    await mount();
+    expect(await screen.findByText(sentence)).toBeInTheDocument();
+    expect(screen.queryByText('Booking online is not turned on at this hospital yet.')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Check again' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to the top of the page' })).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain(LEAK);
+  });
+
+  it('keeps the general sentence when no reason word comes (an older backend), and ignores a word it does not know', async () => {
+    stubApi(backend({ bookings: json({ bookings: [] }), slots: json({ slots: [], empty_reason: null }) }));
+    const { unmount } = await mount();
+    expect(await screen.findByText('There are no open times at the moment.')).toBeInTheDocument();
+    unmount();
+    stubApi(backend({ bookings: json({ bookings: [] }), slots: json({ slots: [] }) }));
+    await mount();
+    expect(await screen.findByText('There are no open times at the moment.')).toBeInTheDocument();
+  });
+
   it('looks again for open times when asked, and shows them if some have appeared', async () => {
     const user = userEvent.setup();
     let calls = 0;

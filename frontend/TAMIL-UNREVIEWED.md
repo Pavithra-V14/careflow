@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-2042 of 2042 strings are unreviewed.
+2045 of 2045 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -1054,6 +1054,7 @@ Terms standardised: proposal, resolve / resolved.
 | `labels.unavailable` | Names cannot be shown in this environment. Nothing was shown. | இந்தச் சூழலில் பெயர்களைக் காட்ட முடியாது. எதுவும் காட்டப்படவில்லை. | ok |
 | `landing.about.heading` | About the hospital | மருத்துவமனை பற்றி | ok |
 | `landing.account` | Account | கணக்கு | ok |
+| `landing.demoContent` | Demo content | டெமோ உள்ளடக்கம் | ok |
 | `landing.departments.heading` | Departments and doctors | துறைகள் மற்றும் மருத்துவர்கள் | ok |
 | `landing.emergencyLabel` | Emergency information | அவசரகாலத் தகவல் | ok |
 | `landing.faq.a1` | Choose Sign up, enter your mobile number, and we will send a one-time code to confirm it. | பதிவு செய்க என்பதைத் தேர்ந்தெடுத்து உங்கள் கைபேசி எண்ணை உள்ளிடுங்கள்; அதை உறுதிப்படுத்த ஒருமுறைக் குறியீடு அனுப்புவோம். | ok |
@@ -1344,6 +1345,8 @@ Terms standardised: proposal, resolve / resolved.
 | `portal.booking.cancelTitle` | Cancel this appointment? | இந்தச் சந்திப்பை ரத்து செய்யவா? | ok |
 | `portal.booking.cancelled` | Your appointment was cancelled. | உங்கள் சந்திப்பு ரத்து செய்யப்பட்டது. | ok |
 | `portal.booking.checkAgain` | Check again | மீண்டும் சரிபார் | ok |
+| `portal.booking.emptyReason.no_open_times` | No open times at the moment. Please check again later. | இப்போது காலி நேரங்கள் இல்லை. பிறகு மீண்டும் பார்க்கவும். | ok |
+| `portal.booking.emptyReason.not_set_up` | Online booking is not set up for this clinic yet. | இந்த மருத்துவமனைக்கு இணையவழி முன்பதிவு இன்னும் அமைக்கப்படவில்லை. | ok |
 | `portal.booking.mine` | Your appointments | உங்கள் சந்திப்புகள் | ok |
 | `portal.booking.needClinic` | Enter the hospital code above to see open times. | காலி நேரங்களைக் காண மேலே மருத்துவமனைக் குறியீட்டை உள்ளிடவும். | ok |
 | `portal.booking.noSlots` | There are no open times at the moment. | இப்போது காலி நேரங்கள் எதுவும் இல்லை. | ok |

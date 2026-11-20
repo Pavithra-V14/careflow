@@ -240,5 +240,8 @@
     "reasonHint": "One word: lowercase letters, digits and underscores, starting with a letter (at most 60 characters).",
     "decideRefused": "You may not decide this: only a doctor who did not write the draft may, and it needs a recent second factor. Nothing was recorded.",
     "approvedAs": "Approved as version {{version}}."
+  },
+  "landing": {
+    "demoContent": "Demo content"
   }
 }

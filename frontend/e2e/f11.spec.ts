@@ -76,6 +76,28 @@ for (const lang of LANGS) {
     await sweep(page, 'portal-claim-waiting', lang);
   });
 
+  test(`public home page from the hospital's public profile: its name, text, features and the demo mark [${lang}]`, async ({ page }) => {
+    await open(page, lang, { profile: true }, '/patient/');
+    await expect(page.locator('.brand-name')).toHaveText('Demo Clinic');
+    await expect(page).toHaveTitle('Demo Clinic');
+    await expect(page.getByText('A plain line about the hospital, entered by its admin.')).toBeVisible();
+    await expect(page.locator('main [role=status] .badge')).toBeVisible(); // Demo content
+    // booking and family links are on, the rest still say Coming soon
+    const items = page.locator('.feature-list li');
+    await expect(items).toHaveCount(6);
+    await expect(items.nth(0).locator('.badge')).toHaveCount(0); // booking
+    await expect(items.nth(1).locator('.badge')).toHaveCount(1); // offers
+    await expect(items.nth(4).locator('.badge')).toHaveCount(0); // family
+    await sweep(page, 'public-home-profile', lang);
+  });
+
+  test(`public home page with no published profile keeps its placeholders [${lang}]`, async ({ page }) => {
+    await open(page, lang, {}, '/patient/');
+    await expect(page.locator('.feature-list li .badge')).toHaveCount(5);
+    await expect(page.locator('.placeholder').first()).toBeVisible();
+    await sweep(page, 'public-home-static', lang);
+  });
+
   test(`sign in: the demo email and password form, with its banner, beside the phone form [${lang}]`, async ({ page }) => {
     await open(page, lang);
     await expect(page.locator('input[type=tel]')).toBeVisible(); // the phone-code form stays the default

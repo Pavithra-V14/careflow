@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useClinicInfo } from './clinicInfo';
 import { EmergencyBanner } from './components/EmergencyBanner';
 import { SiteFooter } from './components/SiteFooter';
 import { SiteHeader } from './components/SiteHeader';
@@ -17,16 +19,23 @@ interface PortalProps {
 
 export function App({ page = 'landing', portal = { auth: null, apiBaseUrl: '' } }: { page?: PatientPage; portal?: PortalProps }) {
   const { t } = useTranslation();
+  // Only the home page reads the hospital's public details; every other page is exactly as before.
+  const info = useClinicInfo(portal.apiBaseUrl, page === 'landing');
+  const name = page === 'landing' ? info.name : null;
+  // The home page's title is the hospital's name when there is one, else the placeholder (and follows the language).
+  useEffect(() => {
+    if (page === 'landing') document.title = name ?? t('app.hospitalName');
+  }, [page, name, t]);
   return (
     <>
       <a className="skip-link" href="#main">
         {t('common.skipToContent')}
       </a>
       {/* Only the landing page's h1 is the hospital name; other pages' h1 is their own title. */}
-      <SiteHeader heading={page === 'landing' ? 'h1' : 'p'} />
+      <SiteHeader heading={page === 'landing' ? 'h1' : 'p'} name={name} />
       <EmergencyBanner />
       <main id="main" tabIndex={-1}>
-        {page === 'landing' ? <Landing /> : page === 'privacy' ? <NoticePage kind={page} /> : <PortalApp auth={portal.auth} apiBaseUrl={portal.apiBaseUrl} />}
+        {page === 'landing' ? <Landing info={info} /> : page === 'privacy' ? <NoticePage kind={page} /> : <PortalApp auth={portal.auth} apiBaseUrl={portal.apiBaseUrl} />}
       </main>
       <SiteFooter />
     </>

@@ -12,14 +12,14 @@ function LogoMark() {
   );
 }
 
-export function SiteHeader({ heading = 'h1' }: { heading?: 'h1' | 'p' }) {
+export function SiteHeader({ heading = 'h1', name = null }: { heading?: 'h1' | 'p'; name?: string | null }) {
   const { t } = useTranslation();
   const Name = heading;
   return (
     <header className="site-header">
       <a className="brand" href={PATHS.home}>
         <LogoMark />
-        <Name className="brand-name">{t('app.hospitalName')}</Name>
+        <Name className="brand-name">{name ?? t('app.hospitalName')}</Name>
       </a>
       <div className="header-tools">
         <LanguageSwitcher />

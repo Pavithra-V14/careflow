@@ -120,7 +120,8 @@ export function BookingSection({ api }: { api: Api }) {
           {slotsEnabled && slots.isSuccess && slots.data !== null && slots.data.slots.length === 0 && (
             // An empty list is a normal answer, not "booking is off" (that one is the 503 above): say so calmly, and give a way to look again and a way back.
             <div role="status">
-              <p>{t('portal.booking.noSlots')}</p>
+              {/* The backend's closed reason word for an empty list, one fixed sentence each; no word (an older backend) keeps the general sentence. */}
+              <p>{slots.data.empty_reason ? t(`portal.booking.emptyReason.${slots.data.empty_reason}`) : t('portal.booking.noSlots')}</p>
               <p>
                 <button type="button" className="button button-secondary" disabled={slots.isFetching} onClick={() => void slots.refetch()}>
                   {t('portal.booking.checkAgain')}

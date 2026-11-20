@@ -36,6 +36,8 @@ export type KnowledgeDraftIn = components['schemas']['KnowledgeDraftIn'];
 export type KnowledgeDraftEditIn = components['schemas']['KnowledgeDraftEditIn'];
 export type KnowledgeDecisionIn = components['schemas']['KnowledgeDecisionIn'];
 export type FamilyLinkRequestIn = components['schemas']['FamilyLinkRequestIn'];
+export type ClinicPublicProfileIn = components['schemas']['ClinicPublicProfileIn'];
+export type PublicClinicProfile = components['schemas']['PublicClinicProfileOut'];
 export type EscalationAssessment = NonNullable<components['schemas']['ReviewIn']['escalation_assessment']>;
 export type FamilyLinkStaffRevokeIn = components['schemas']['FamilyLinkStaffRevokeIn'];
 export type FamilyLinkDecisionIn = components['schemas']['FamilyLinkDecisionIn'];
@@ -175,6 +177,8 @@ export const OPERATIONS = {
   patientLabels: { method: 'post', path: '/v1/staff/patients/labels' },
   // ---- lists that replace typing: clinic, grievance categories, break-glass reasons and grants, upcoming visits ----
   publicClinic: { method: 'get', path: '/public/clinic' },
+  publicClinicProfile: { method: 'get', path: '/public/clinic/profile' },
+  setClinicPublicProfile: { method: 'put', path: '/v1/staff/clinic/public-profile' },
   grievanceCategories: { method: 'get', path: '/v1/portal/grievance-categories' },
   breakGlassReasons: { method: 'get', path: '/v1/staff/break-glass/reasons' },
   breakGlassMine: { method: 'get', path: '/v1/staff/break-glass/mine' },
@@ -538,6 +542,10 @@ export function createApi(options: ApiOptions) {
 
     // ---- lists that replace typing ------------------------------------------------------------------------------------------------
     publicClinic: () => client.GET('/public/clinic'),
+    publicClinicProfile: () => client.GET('/public/clinic/profile'),
+    // Admin with a recent second factor. No staff screen uses it yet (the backend asked for none); it exists so the contract is pinned.
+    setClinicPublicProfile: (body: ClinicPublicProfileIn, o?: WriteOptions) =>
+      client.PUT('/v1/staff/clinic/public-profile', { params: { header: { 'X-Idempotency-Key': key(o) } }, body }),
     grievanceCategories: () => client.GET('/v1/portal/grievance-categories'),
     breakGlassReasons: (clinicId: string) => client.GET('/v1/staff/break-glass/reasons', { params: { query: { clinic_id: clinicId } } }),
     breakGlassMine: (clinicId: string) => client.GET('/v1/staff/break-glass/mine', { params: { query: { clinic_id: clinicId } } }),

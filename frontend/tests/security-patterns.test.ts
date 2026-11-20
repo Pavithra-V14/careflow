@@ -45,7 +45,13 @@ describe('frontend security patterns', () => {
 
   it('never puts text in the page title other than a fixed translated name', () => {
     const titles = all.flatMap((f) => [...f.text.matchAll(/document\.title\s*=\s*([^;\n]+)/g)].map((m) => `${f.path}: ${m[1]}`));
-    expect(titles.every((t) => /i18n\.t\(/.test(t))).toBe(true);
+    // Allowed: a fixed translated name, or - on the signed-out home page only - the hospital's own name from the public clinic read (GET /public/clinic),
+    // which is trimmed and checked to be a non-empty string in clinicInfo.ts, with the placeholder name kept when it is missing.
+    const allowed = (t: string) => /i18n\.t\(/.test(t) || /^patient\/App\.tsx: name \?\? t\('app\.hospitalName'\)$/.test(t.trim());
+    expect(titles.filter((t) => !allowed(t))).toEqual([]);
+    const app = all.find((f) => f.path === 'patient/App.tsx')?.text ?? '';
+    expect(app).toContain("if (page === 'landing') document.title");
+    expect(all.find((f) => f.path === 'patient/clinicInfo.ts')?.text ?? '').toContain("typeof r.data.name === 'string' && r.data.name.trim() !== ''");
   });
 
   it('shows an error only through its fixed wording: no screen reads a backend message or stack', () => {

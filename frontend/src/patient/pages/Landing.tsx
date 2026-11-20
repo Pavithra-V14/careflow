@@ -2,23 +2,55 @@ import { useTranslation } from 'react-i18next';
 import { PATHS } from '../paths';
 import { FAQ_ITEMS, FEATURES, HOW_STEPS } from '../features';
 import { Placeholder } from '../components/Placeholder';
+import type { ClinicInfo } from '../clinicInfo';
+
+// Which switch of the hospital's public profile each feature on this page follows. The language switcher is on every page, so it has none.
+const PROFILE_FLAG = { book: 'booking', offers: 'offers', messages: 'messaging', records: 'records', family: 'family_links' } as const;
 
 
 // Section order follows BUILD-SPEC 19.2. The emergency banner and header are rendered by the page frame.
 // Every section here is static: there is no data to load, so "empty" is a visible placeholder, and there
 // is nothing that can fail.
-export function Landing() {
+export function Landing({ info }: { info?: ClinicInfo } = {}) {
   const { t } = useTranslation();
+  // The hospital's public profile, when it could be read. Without it the page is exactly the static one: placeholders, and "Coming soon" on every unbuilt feature.
+  const profile = info?.profile ?? null;
+  const available = (f: (typeof FEATURES)[number]): boolean => (f.status === 'live' ? true : profile !== null && f.key in PROFILE_FLAG && profile.features[PROFILE_FLAG[f.key as keyof typeof PROFILE_FLAG]] === true);
+  // A text the hospital supplied is shown as plain text, one line; a missing one (null) keeps the placeholder box. Nothing here ever says it is approved.
+  const text = (value: string | null | undefined, placeholder: string) => (value ? <p className="profile-text">{value}</p> : <Placeholder>{t(`placeholder.${placeholder}`)}</Placeholder>);
+  const departments = profile?.departments ?? null;
   return (
     <>
+      {profile?.placeholder === true && (
+        <p role="status">
+          <span className="badge">{t('landing.demoContent')}</span>
+        </p>
+      )}
       <section aria-labelledby="about-heading">
         <h2 id="about-heading">{t('landing.about.heading')}</h2>
-        <Placeholder>{t('placeholder.about')}</Placeholder>
+        {text(profile?.about, 'about')}
       </section>
 
       <section aria-labelledby="departments-heading">
         <h2 id="departments-heading">{t('landing.departments.heading')}</h2>
-        <Placeholder>{t('placeholder.departments')}</Placeholder>
+        {departments && departments.length > 0 ? (
+          <ul className="plain-list">
+            {departments.map((d) => (
+              <li key={d.name}>
+                {d.name}
+                {d.doctors.length > 0 && (
+                  <ul className="plain-list">
+                    {d.doctors.map((doc) => (
+                      <li key={doc}>{doc}</li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <Placeholder>{t('placeholder.departments')}</Placeholder>
+        )}
       </section>
 
       <section aria-labelledby="features-heading">
@@ -27,7 +59,7 @@ export function Landing() {
           {FEATURES.map((f) => (
             <li key={f.key}>
               <span>{t(`landing.features.${f.key}`)}</span>
-              {f.status === 'soon' && <span className="badge">{t('common.comingSoon')}</span>}
+              {!available(f) && <span className="badge">{t('common.comingSoon')}</span>}
             </li>
           ))}
         </ul>
@@ -52,7 +84,7 @@ export function Landing() {
 
       <section aria-labelledby="privacy-heading">
         <h2 id="privacy-heading">{t('landing.privacy.heading')}</h2>
-        <Placeholder>{t('placeholder.privacyPromise')}</Placeholder>
+        {text(profile?.privacy_promise, 'privacyPromise')}
         <p>
           <a href={PATHS.privacy}>{t('landing.privacy.readNotice')}</a>
         </p>
@@ -62,17 +94,11 @@ export function Landing() {
         <h2 id="location-heading">{t('landing.location.heading')}</h2>
         <dl className="facts">
           <dt>{t('landing.location.address')}</dt>
-          <dd>
-            <Placeholder>{t('placeholder.address')}</Placeholder>
-          </dd>
+          <dd>{text(profile?.address, 'address')}</dd>
           <dt>{t('landing.location.hours')}</dt>
-          <dd>
-            <Placeholder>{t('placeholder.hours')}</Placeholder>
-          </dd>
+          <dd>{text(profile?.opening_hours, 'hours')}</dd>
           <dt>{t('landing.location.phone')}</dt>
-          <dd>
-            <Placeholder>{t('placeholder.phone')}</Placeholder>
-          </dd>
+          <dd>{text(profile?.phone, 'phone')}</dd>
         </dl>
       </section>
 

@@ -24,6 +24,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/public/clinic/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public Clinic Profile
+         * @description The published clinic's public profile for the signed-out home page: optional text fields (null = not supplied), the departments (and doctors' display names the clinic chose to publish), and which features are really on. No sign-in, never PHI,
+         *     never another clinic, no counts. 404 while no clinic is published, 503 until the per-address limit is set (never an unlimited door), 429 over it. Cached for a minute.
+         */
+        get: operations["public_clinic_profile_public_clinic_profile_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/public/grievance-categories": {
         parameters: {
             query?: never;
@@ -1060,6 +1081,27 @@ export interface paths {
          * @description A doctor approves or rejects the proposed plan; nothing runs before this. 404 if you cannot see the plan, 403 unless you are a doctor there, 409 if the plan is not waiting for a confirmation, 503 while care plans are not configured.
          */
         post: operations["confirm_care_plan_v1_staff_care_plans__plan_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/clinic/public-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Clinic Public Profile
+         * @description Set the public profile of the clinic (the WHOLE profile: a field left out or null is "not supplied"), as an ADMIN of the clinic with a recent second factor. The hospital supplies every field; the privacy promise is counsel's wording. Audited by the
+         *     database (the names of the fields set, never their text). Idempotent on the key: a repeat is a `replay`, the same key with other content is a 409. 404 if the clinic is not visible to you, 403 unless you are an admin there, 422 for a field that is not allowed.
+         */
+        put: operations["set_clinic_public_profile_v1_staff_clinic_public_profile_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3991,6 +4033,34 @@ export interface components {
              */
             result: "approved" | "rejected" | "already_resolved" | "record_not_claimable" | "identity_not_confirmed" | "claimant_already_bound" | "consent_required";
         };
+        /** ClinicProfileSetOut */
+        ClinicProfileSetOut: {
+            /**
+             * Result
+             * @enum {string}
+             */
+            result: "recorded" | "replay";
+        };
+        /** ClinicPublicProfileIn */
+        ClinicPublicProfileIn: {
+            /** About */
+            about?: string | null;
+            /** Address */
+            address?: string | null;
+            /**
+             * Clinic Id
+             * Format: uuid
+             */
+            clinic_id: string;
+            /** Departments */
+            departments?: components["schemas"]["DepartmentIn"][] | null;
+            /** Opening Hours */
+            opening_hours?: string | null;
+            /** Phone */
+            phone?: string | null;
+            /** Privacy Promise */
+            privacy_promise?: string | null;
+        };
         /**
          * ConfirmIdentityOut
          * @description Ids and a flag only.
@@ -4109,6 +4179,13 @@ export interface components {
             metrics: components["schemas"]["DashboardMetricOut"][];
             /** Not Measured */
             not_measured: ("grounding_rate" | "context_recall" | "answer_relevancy" | "latency_p95_machine" | "latency_human_wait" | "latency_external_wait" | "cost_per_query" | "task_completion_rate" | "tool_call_accuracy" | "cost_per_completed_task" | "loop_failure_rate" | "escalation_rate_and_accuracy" | "golden_set_vs_variance_band" | "guardrail_trigger_accuracy" | "audit_log_completeness" | "red_flag_recall" | "urgent_case_recall" | "red_flag_task_overdue" | "safety_net_fail_closed_rate" | "canary_catch_rate" | "after_the_fact_review_error_rate" | "wrong_merge_rate" | "card_recall_at_3" | "correct_abstention_rate" | "priority_accuracy" | "false_routing_rate" | "index_freshness_lag" | "engine_agreement" | "uptime" | "error_rate" | "step_efficiency" | "tool_status_mix" | "queue_depth_and_oldest_age" | "review_queue_age" | "dead_letter_count" | "rollback_frequency" | "model_dependency_health" | "fallback_and_abstention_spike" | "cost_per_successful_workflow" | "first_pass_success_rate" | "cache_hit_rate" | "failure_multiplier" | "cost_tail_top_5_percent" | "evaluation_spend" | "referral_to_appointment_time" | "urgent_cases_seen_within_target" | "backfill_fill_rate" | "followups_closed_vs_lost" | "no_show_rate" | "intake_completion_rate" | "readiness_escalation_rate" | "barrier_resolution_rate" | "voice_safety_escalation_rate" | "voice_scope_adherence_rate" | "care_gap_open_count" | "care_gap_median_age" | "adoption_rate" | "automation_rate")[];
+        };
+        /** DepartmentIn */
+        DepartmentIn: {
+            /** Doctors */
+            doctors?: string[];
+            /** Name */
+            name: string;
         };
         /** DuplicateList */
         DuplicateList: {
@@ -5821,6 +5898,8 @@ export interface components {
         };
         /** PatientSlotList */
         PatientSlotList: {
+            /** Empty Reason */
+            empty_reason?: ("no_open_times" | "not_set_up") | null;
             /** Slots */
             slots: components["schemas"]["PatientSlotOut"][];
         };
@@ -6143,6 +6222,50 @@ export interface components {
             clinic_id: string;
             /** Name */
             name: string;
+        };
+        /** PublicClinicProfileOut */
+        PublicClinicProfileOut: {
+            /** About */
+            about: string | null;
+            /** Address */
+            address: string | null;
+            /** Departments */
+            departments: components["schemas"]["PublicDepartmentOut"][] | null;
+            features: components["schemas"]["PublicFeaturesOut"];
+            /** Languages */
+            languages: ("en" | "ta")[];
+            /** Name */
+            name: string;
+            /** Opening Hours */
+            opening_hours: string | null;
+            /** Phone */
+            phone: string | null;
+            /** Placeholder */
+            placeholder: boolean;
+            /** Privacy Promise */
+            privacy_promise: string | null;
+        };
+        /** PublicDepartmentOut */
+        PublicDepartmentOut: {
+            /** Doctors */
+            doctors: string[];
+            /** Name */
+            name: string;
+        };
+        /** PublicFeaturesOut */
+        PublicFeaturesOut: {
+            /** Booking */
+            booking: boolean;
+            /** Family Links */
+            family_links: boolean;
+            /** Messaging */
+            messaging: boolean;
+            /** Offers */
+            offers: boolean;
+            /** Records */
+            records: boolean;
+            /** Visit Preparation */
+            visit_preparation: boolean;
         };
         /** PublicGrievanceIn */
         PublicGrievanceIn: {
@@ -7634,6 +7757,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicClinicOut"];
+                };
+            };
+        };
+    };
+    public_clinic_profile_public_clinic_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicClinicProfileOut"];
                 };
             };
         };
@@ -10967,6 +11110,78 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_clinic_public_profile_v1_staff_clinic_public_profile_put: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every write. */
+                "X-Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClinicPublicProfileIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClinicProfileSetOut"];
+                };
+            };
+            /** @description Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Authenticated, but this role may not do this. Fixed body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request: a list of {type, loc, msg}; the offending input is never echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorBody"];
                 };
             };
         };

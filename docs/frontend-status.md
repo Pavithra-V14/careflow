@@ -137,6 +137,10 @@ Screenshots of ten main screens (staff sign-in, referral review, scheduling, pat
 
 `docs/user-guide-staff.md` (one section per role: front desk, supervisor, nurse, doctor, admin, and the auditor) and `docs/user-guide-patient.md`, written from the screens as built. They describe only what the screens do, say "not tested live" where a screen has not been walked against the real backend, and mark the Tamil as machine-checked and not human-reviewed. They carry no clinical content.
 
+## Public home page and booking empty reason (20 Nov 2026; backend items 48 and 49)
+
+The signed-out home page reads the hospital's public profile (`GET /public/clinic/profile`) and name (`GET /public/clinic`) once. The header and the page title show the clinic name when there is one (else the placeholder); each feature is available only when its profile flag is true (else "Coming soon"); every supplied text is shown as plain text and each missing one keeps the placeholder box; "Demo content" shows while the profile says it is placeholder values; nothing says the privacy promise is approved; any failure leaves the static page. The booking page says why an empty list is empty, one fixed sentence per reason word (`no_open_times`, `not_set_up`). Unit tests, axe at 320, 768 and 1280 in English and Tamil, and visual baselines (public home, six pictures) cover it. **Not tested live.**
+
 ## Live status of the screens (20 Nov 2026)
 
 What has been **walked against the real backend** (with the user typing every password and code), and what has not. Nothing below is claimed as live-verified unless it says so.
