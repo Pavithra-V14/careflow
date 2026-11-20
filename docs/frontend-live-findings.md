@@ -405,3 +405,23 @@ Earlier in this round the front desk family links page passed with the second fa
 ### Public complaint form: what the screen shows while its category read answers 503 (20 Nov 2026)
 
 Read on the signed-out portal page against the live backend (a read only; nothing typed, nothing sent). `GET /public/grievance-categories` answers **503**. The "Send a complaint without signing in" section then shows: its heading, "This goes to the hospital without signing in. A person at the hospital reads it.", the Category label, and in place of the category list the fixed sentence **"Complaints without signing in are not set up at this hospital yet. Nothing can be sent."**, followed by the text box and the Send button, which has no category to send. No backend text is shown. Nothing was changed in the frontend; the backend is checking why the read answers 503.
+
+## Booking and messages switched on (20 Nov 2026): no open time offered to the patient, so no booking
+
+Backend restarted through demo_up.ps1 with booking and messaging on, slots and bookable visit types seeded, and the complaint fix. The user typed every password and code. **No new write was made: the one authorised booking was not made, because the patient was offered no open time.** (The writes of this whole demo remain the identity confirmation, 200, and the claim, 200, recorded above.)
+
+**Public complaint form (signed-out page, read only, nothing sent):** `GET /public/grievance-categories` now answers **200**. The Category list shows "Choose a category" and eight categories: access to my data, complaint about care, complaint about staff, complaint about the system, correction of my data, erasure of my data, nominee, other. The Send button is off until a category is chosen and text is typed. Before the fix it answered 503 and the screen said "Complaints without signing in are not set up at this hospital yet. Nothing can be sent."
+
+| Screen | Result | Exact screen text and calls |
+|---|---|---|
+| Portal: appointments and booking list | pass (empty) | `GET /v1/portal/booking/bookings` **200**, no appointments for DEMO Portal Patient. 0 schema mismatches. |
+| Portal: open times to book | **finding, no booking made** | `GET /v1/portal/booking/slots` **200** but the list is **empty**: the response had `$.slots` with no entries, so no "Book" button was offered. The patient screen therefore says there are no open times. Not tested live: booking. The staff side (below) lists 12 slots for the clinic, so the seeded slots exist but are not offered to this patient. The call record keeps no slot statuses, so which filter hides them (patient-bookable visit type, time window, status) is not known from here. For the backend to check. |
+| Portal: messages | pass (empty) | `GET /v1/portal/messages/threads` **200**, no conversations for this patient. Not tested live: opening a conversation, sending (no write was authorised). |
+| Portal: visit preparation | not tested live | There is no appointment to open it from (no booking was made). Marking items was not attempted. |
+| Front desk: scheduling | pass | Second factor: `GET /v1/staff/scheduling/locations` 200 (2), `visit-types` 200 (2), `providers` 200 (2), `slots` 200 (**12 rows**). 0 schema mismatches. |
+| Front desk: visit readiness | refused, as expected for the role | `GET /v1/staff/visits/upcoming` **403**, reason given: "your role may not do this". The screen said "This is not available to your role." (a nurse and doctor section). No retry. |
+| Front desk: staff view of the visit | not tested live | The upcoming-visits list was refused (403, above), and there is no booking to look at. |
+| Front desk: messages | pass | `GET /v1/staff/messages/threads` **200**, 1 conversation listed (none of them opened). |
+| Nurse and doctor: visit readiness, visit preparation (staff view), cards and templates | not tested live: needs second factor | Nurse and doctor have no authenticator yet; the database check refuses a password-only session. |
+
+The patient walk of this round: 27 calls, 0 schema mismatches, no 403, no write. The front desk walk: 8 calls, 0 schema mismatches, one 403 (visit readiness, above), no write.
