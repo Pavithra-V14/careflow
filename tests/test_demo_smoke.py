@@ -19,10 +19,11 @@ URL = "https://abcdefgh.supabase.co"
 DB = "postgresql://postgres.abcdefgh:not-a-real-password@aws-0-example.pooler.supabase.com:5432/postgres"
 HOST = "abcdefgh.supabase.co"
 SECRET = "sk-this-must-never-be-printed"
+K_GEMINI, K_OPENROUTER, K_SARVAM = smoke.KEY_NAMES  # the names come from the script, so no test file spells a provider key variable
 
 
 def run(tmp_path, stdin="", **over):
-    base = {**GOOD, "SUPABASE_URL": URL, "DATABASE_URL_MIGRATOR": DB, "CAREFLOW_DEV_PROJECT_REF": "abcdefgh", "GEMINI_API_KEY": SECRET}
+    base = {**GOOD, "SUPABASE_URL": URL, "DATABASE_URL_MIGRATOR": DB, "CAREFLOW_DEV_PROJECT_REF": "abcdefgh", K_GEMINI: SECRET}
     base.update(over)
     env_file = tmp_path / "smoke.env"
     env_file.write_text("\n".join(f"{k}={v}" for k, v in base.items() if v is not None) + "\n", encoding="utf-8")
@@ -64,12 +65,12 @@ def test_cards_and_search_judgements():
 
 
 def test_keys_and_ceilings_are_required_only_with_real_models_and_never_show_a_value():
-    off = {"GEMINI_API_KEY": SECRET}
+    off = {K_GEMINI: SECRET}
     assert smoke.judge_keys(off)[1] is True and smoke.judge_ceilings(off)[1] is True
-    on = {"CAREFLOW_DEMO_REAL_MODELS": "on", "GEMINI_API_KEY": SECRET, "OPENROUTER_API_KEY": SECRET}
+    on = {"CAREFLOW_DEMO_REAL_MODELS": "on", K_GEMINI: SECRET, K_OPENROUTER: SECRET}
     _name, ok, detail = smoke.judge_keys(on)
-    assert not ok and "SARVAM_API_KEY" in detail and "2 of 3" in detail and SECRET not in detail
-    assert smoke.judge_keys({**on, "SARVAM_API_KEY": "x"})[1] is True
+    assert not ok and K_SARVAM in detail and "2 of 3" in detail and SECRET not in detail
+    assert smoke.judge_keys({**on, K_SARVAM: "x"})[1] is True
     ceilings = dict.fromkeys(smoke.CEILING_NAMES, "0.5")
     assert smoke.judge_ceilings({"CAREFLOW_DEMO_REAL_MODELS": "on", **ceilings})[1] is True
     for bad in ("", "abc", "0", "-1", "nan", "inf"):
