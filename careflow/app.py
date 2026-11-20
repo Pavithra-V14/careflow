@@ -4414,7 +4414,9 @@ async def portal_claim(body: ClaimIn, idempotency_key: IdempotencyKey, request: 
     invited = (await conn.execute(text("select 1 from iam.accounts where id = :i and account_type = 'patient' and status = 'invited'"), {"i": uuid.UUID(claims["sub"])})).first()
     if invited is not None:
         return ClaimOut(outcome="activation_required")  # your own account state, said plainly instead of the fixed 403: consent, then activate, then claim
-    await _patient_account(conn, claims)
+    _, account_origin = await _patient_account(conn, claims)
+    if portal_sql.origin_mismatch(account_origin, resolve_profile()):
+        raise HTTPException(status_code=403, detail=portal_sql.ORIGIN_MISMATCH)  # a fixed cause about YOUR account only: register a new account while this server runs as the demo
     phone = demo_email_signin.contact_phone(claims, os.environ, demo_allowed=demo_allowed(resolve_profile(), _data_policy(os.environ)))  # the verified phone; ONLY in the synthetic demo with the switch on, the synthetic phone of the e-mail
     vault: DemographicVault | None = request.app.state.vault
     key_version = _active_key_version(request)

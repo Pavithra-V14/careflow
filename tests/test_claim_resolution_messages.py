@@ -37,3 +37,15 @@ def test_the_route_words_are_in_the_response_types_and_the_claim_route_names_an_
     assert '"identity_not_confirmed"' in source and '"activation_required"' in source
     route = source[source.index("async def portal_claim") : source.index("# ---- Care Journey: plans")]
     assert route.index("activation_required") < route.index("await _patient_account(conn, claims)") < route.index("demo_email_signin.contact_phone")
+
+
+def test_a_wrongly_originated_account_is_told_the_fixed_cause_not_a_bare_403():
+    from careflow import portal_sql
+
+    assert portal_sql.origin_mismatch("live", "demo") and portal_sql.origin_mismatch("test", "clinical") and portal_sql.origin_mismatch("test", "anything")
+    assert not portal_sql.origin_mismatch("test", "demo") and not portal_sql.origin_mismatch("live", "clinical")
+    message = portal_sql.ORIGIN_MISMATCH
+    assert "origin mismatch" in message and "register a new account" in message and not any(ch.isdigit() for ch in message)  # fixed words, no id, no value
+    source = (ROOT / "careflow" / "app.py").read_text(encoding="utf-8")
+    route = source[source.index("async def portal_claim") : source.index("# ---- Care Journey: plans")]
+    assert "portal_sql.origin_mismatch(account_origin, resolve_profile())" in route and route.index("origin_mismatch") < route.index("contact_phone")
