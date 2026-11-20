@@ -195,6 +195,8 @@ Consent notices cannot be removed. **What you should see:** the screens above op
 
 ## 15. Patient portal sign-in by e-mail and password (demo only)
 
+**Start the demo backend ONLY with the script, from the run folder:** `cd E:\Claude\careflow-run` then `.\scripts\run_demo_backend.ps1` (port 8000; `-Port 8010` if 8000 is taken, and then the frontend proxy must follow). The script reads the `.env` of the folder you are in, prints names only (never a value), and REFUSES to start unless `CAREFLOW_PROFILE` (if set) is `demo`, `CAREFLOW_DATA_POLICY` (if set) is `synthetic_only` and `CAREFLOW_ENV` (if set) is `dev`. It sets these names: `CAREFLOW_PROFILE=demo`, `CAREFLOW_DATA_POLICY=synthetic_only`, `CAREFLOW_DEMO_PHASE3=1`, `CAREFLOW_DEMO_PHASE4=1`, `CAREFLOW_RUN_WORKER=true` and, only if unset, `CAREFLOW_CLINIC_TIME_ZONE`. **Why it matters here:** a patient account's origin tag comes from the profile (demo means `test`), so a backend started any other way (for example plain `uvicorn`) registers accounts under the wrong origin and the claim then answers 403 "origin mismatch": register a new account after starting it with the script.
+
 Phone codes need a paid SMS provider, which is a new external service and is not approved. For dev walks a patient can sign in with an e-mail address and password instead. It is a **demo convenience**: the backend refuses to start with it on outside the synthetic demo, and the claim route refuses it there too. It reuses the portal's real flow (register, consent, activate, **claim**, front-desk verification); nothing is shortcut.
 
 **1. Create the sign-in yourself** in the Supabase dashboard of the DEV project: Authentication, Users, Add user, tick auto-confirm, choose a password. Never paste the password anywhere.
