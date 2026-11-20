@@ -65,6 +65,9 @@
       "password": "Password",
       "submit": "Sign in (demo)",
       "failed": "The demo sign-in did not work. Check the email and password and try again."
+    },
+    "claim": {
+      "pendingLocked": "Your request has been sent and is waiting for a person at the hospital to decide. There is no need to send it again."
     }
   },
   "visitPrep": {

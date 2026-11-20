@@ -14,6 +14,9 @@ const LIVE = process.env.CAREFLOW_LIVE === '1';
 const RECORD = process.env.CAREFLOW_LIVE_RECORD === '1';
 // LIVE_PORTAL=1 walks the PATIENT portal instead (phone sign-in by hand), read-only.
 const PORTAL = process.env.LIVE_PORTAL === '1';
+// LIVE_LINK=portal makes the DEMO claim for the synthetic portal patient (writes: create account if asked, the care-delivery consent, activation, the claim);
+// LIVE_LINK=approve then approves that one pending claim as front desk (one write). Both stop at the first failure and never retry. The user signs in by hand.
+const LINK = process.env.LIVE_LINK ?? '';
 const spec = JSON.parse(readFileSync(resolve(import.meta.dirname, '../../openapi.snapshot.json'), 'utf8')) as Spec;
 const REPORT_DIR = resolve(import.meta.dirname, '../live-report');
 // One report per role signed in as: start with LIVE_LABEL=front_desk (or nurse, doctor). Letters, digits and underscores only.
@@ -92,7 +95,7 @@ async function settle(page: Page) {
 }
 
 test('walk every screen, read-only, and record each call', async ({ page }) => {
-  test.skip(RECORD || PORTAL, 'record mode or the portal walk is on');
+  test.skip(RECORD || PORTAL || LINK !== '', 'record mode, the portal walk or a link step is on');
   test.setTimeout(20 * 60_000);
   const calls: Call[] = [];
   const phase = { current: 'sign-in' };
@@ -323,7 +326,7 @@ test('walk every screen, read-only, and record each call', async ({ page }) => {
 });
 
 test('walk the patient portal, read-only (phone sign-in by hand), and record each call', async ({ page }) => {
-  test.skip(!PORTAL, 'start with LIVE_PORTAL=1');
+  test.skip(!PORTAL || LINK !== '', 'start with LIVE_PORTAL=1');
   test.setTimeout(20 * 60_000);
   const calls: Call[] = [];
   const phase = { current: 'sign-in' };
@@ -371,6 +374,191 @@ test('walk the patient portal, read-only (phone sign-in by hand), and record eac
   }
   const writes = calls.filter((c) => !['GET', 'HEAD'].includes(c.method));
   expect(writes.map((c) => `${c.method} ${c.template}`), 'the read-only portal walk made a write').toEqual([]);
+});
+
+// What a screen says right now, as the fixed wording on it: status and alert lines, dialogs and the account facts. Nothing typed is read back.
+async function screenWords(page: Page): Promise<string[]> {
+  const lines = await page.locator('main [role=status], main [role=alert], dialog [role=status], dialog [role=alert], main dl.facts, main .notice h3, main .badge').allInnerTexts().catch(() => [] as string[]);
+  return lines.map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+}
+
+// Shared by the link steps: log what a screen says, stop on the first failure, and write what was said and every write made.
+function linkTools(page: Page, calls: Call[], name: string) {
+  const log: string[] = [];
+  const snap = async (title: string) => {
+    const words = await screenWords(page);
+    log.push(`## ${title}`, '', ...(words.length ? words.map((w) => `- ${w}`) : ['- (nothing said on screen)']), '');
+    return words;
+  };
+  const stop = async (why: string): Promise<never> => {
+    log.push(`## STOPPED: ${why}`, '');
+    throw new Error(why);
+  };
+  // Each write waits for its own answer: its dialog must close within 30 s, or the step stops with what the screen says.
+  const confirmAndWait = async (what: string) => {
+    await page.getByRole('dialog').locator('.dialog-actions button').nth(1).click();
+    const closed = await page.getByRole('dialog').waitFor({ state: 'detached', timeout: 30_000 }).then(() => true).catch(() => false);
+    await settle(page);
+    const words = await snap(`after ${what}`);
+    if (!closed) await stop(`the dialog for "${what}" did not close within 30 seconds: ${words.join(' / ')}`);
+    return words;
+  };
+  const finish = async (title: string) => {
+    await page.waitForTimeout(1500).catch(() => undefined);
+    mkdirSync(REPORT_DIR, { recursive: true });
+    const writes = calls.filter((c) => !['GET', 'HEAD'].includes(c.method) && c.template !== '/v1/staff/patients/search').map((c) => `- ${c.method} ${c.template} -> ${c.status}${c.reason ? ` (reason given: ${c.reason})` : ''}`);
+    const refused = calls.filter((c) => c.status === 403).map((c) => `- ${c.method} ${c.template} -> 403 (${c.reason ?? 'no reason sentence in the response'})`);
+    writeFileSync(resolve(REPORT_DIR, `${name}${SUFFIX}.md`), [`# ${title}: what each screen said`, '', ...log, '## Writes made (a patient search is a read)', '', ...(writes.length ? writes : ['- none']), '', '## Refusals (403) and their reasons', '', ...(refused.length ? refused : ['- none']), ''].join('\n'));
+    save(calls, `${title} (writes: see ${name} file)`);
+  };
+  return { log, snap, stop, confirmAndWait, finish };
+}
+
+test('DEMO link, front desk: find the demo patient and confirm identity (one write, synthetic patient only)', async ({ page }) => {
+  test.skip(LINK !== 'confirm', 'start with LIVE_LINK=confirm');
+  test.setTimeout(20 * 60_000);
+  const calls: Call[] = [];
+  const phase = { current: 'sign-in' };
+  watch(page, calls, phase);
+  const { log, snap, stop, confirmAndWait, finish } = linkTools(page, calls, 'link-confirm');
+  try {
+    await signInByHand(page);
+    await settle(page);
+    phase.current = 'patients (search)';
+    await page.evaluate(() => (window.location.hash = '#/patients'));
+    await settle(page);
+    await page.locator('main input[type=text]').first().fill('DEMO Portal Patient');
+    await page.locator('main input[type=date]').first().fill('1990-01-01');
+    await page.locator('main form button[type=submit]').first().click();
+    await settle(page);
+    await snap('after the search');
+    const hits = page.locator('main tbody tr');
+    const n = await hits.count();
+    log.push(`## records found for the demo patient: ${n}`, '');
+    if (n !== 1) await stop(`the search found ${n} records for the demo patient, not exactly one; nothing was confirmed`);
+    phase.current = 'patient record';
+    await hits.first().locator('a').first().click();
+    await settle(page);
+    await snap('the record');
+    const confirm = page.getByRole('button', { name: /^Confirm identity$|அடையாளத்தை உறுதிப்படுத்து/ });
+    if ((await confirm.count()) === 0) await stop('there is no "Confirm identity" button on the record (it may already be confirmed, or this role may not confirm); nothing was confirmed');
+    phase.current = 'confirm identity (write)';
+    await confirm.first().click();
+    await confirmAndWait('"Confirm identity"');
+  } finally {
+    await finish('Demo link, front desk: identity confirmation');
+  }
+});
+
+test('DEMO link, portal: check the stage on a fresh load, then claim (one write)', async ({ page }) => {
+  test.skip(LINK !== 'portal', 'start with LIVE_LINK=portal');
+  test.setTimeout(20 * 60_000);
+  const calls: Call[] = [];
+  const phase = { current: 'sign-in' };
+  watch(page, calls, phase);
+  const { log, snap, stop, confirmAndWait, finish } = linkTools(page, calls, 'link-portal');
+  try {
+    await page.goto('/patient/sign-in/');
+    console.log('\n>>> Sign in yourself with the "Demo sign-in" form (email and password). Nothing is typed for you and no credential reaches this script.');
+    console.log('>>> Waiting up to 10 minutes.\n');
+    await expect(page.locator('main dl.facts')).toBeVisible({ timeout: 10 * 60_000 });
+    await settle(page);
+    await snap('after sign-in');
+    // A fresh page load, so the stage is read again from the backend and not from anything kept on the page.
+    phase.current = 'fresh page load';
+    await page.reload();
+    await expect(page.locator('main dl.facts')).toBeVisible({ timeout: 60_000 });
+    await settle(page);
+    const stage = ((await page.locator('main dl.facts dd').first().innerText().catch(() => '')) || '').trim();
+    await snap('fresh page load');
+    log.push(`## stage on a fresh load: "${stage}"`, '');
+    if (!/^Active$|^செயலில்/i.test(stage)) await stop(`the stage reads "${stage}" on a fresh load, not Active; no claim was made (a backend finding)`);
+    phase.current = 'claim a record';
+    await page.locator('#claim-name').waitFor({ state: 'visible', timeout: 30_000 }).catch(() => undefined);
+    if ((await page.locator('#claim-name').count()) === 0) await stop('the claim form is not on the screen (the account may be linked already); no claim was made');
+    if ((await page.locator('#claim-clinic').count()) > 0) await stop('the claim form asks for a clinic code, which this walk was not given');
+    await page.locator('#claim-name').fill('DEMO Portal Patient');
+    await page.locator('#claim-dob').fill('1990-01-01');
+    await page.locator('section[aria-labelledby=portal-claim] button[type=submit]').first().click();
+    const words = await confirmAndWait('"Link my record"');
+    // never repeated: report what the screen said, and whether the button is now off
+    const button = page.locator('section[aria-labelledby=portal-claim] button[type=submit]');
+    log.push(`## the claim button after the answer: ${(await button.count()) === 0 ? 'not on the screen' : (await button.first().isDisabled()) ? 'off' : 'on'}`, '', `## the claim was answered with: ${words.join(' / ')}`, '');
+  } finally {
+    await finish('Demo link, portal: the claim');
+  }
+});
+
+test('DEMO link, front desk: the family links page, read-only (second factor)', async ({ page }) => {
+  test.skip(LINK !== 'family', 'start with LIVE_LINK=family');
+  test.setTimeout(20 * 60_000);
+  const calls: Call[] = [];
+  const phase = { current: 'sign-in' };
+  watch(page, calls, phase);
+  const { snap, finish } = linkTools(page, calls, 'link-family');
+  try {
+    await signInByHand(page);
+    await settle(page);
+    phase.current = 'family link requests';
+    await page.evaluate(() => (window.location.hash = '#/family'));
+    await settle(page);
+    await page.waitForTimeout(2000);
+    await snap('the family links page');
+  } finally {
+    await finish('Demo walk, front desk: family links');
+  }
+});
+
+test('DEMO link, step 2: front desk approves the one pending claim (one write)', async ({ page }) => {
+  test.skip(LINK !== 'approve', 'start with LIVE_LINK=approve');
+  test.setTimeout(20 * 60_000);
+  const calls: Call[] = [];
+  const phase = { current: 'sign-in' };
+  const log: string[] = [];
+  const snap = async (name: string) => {
+    const words = await screenWords(page);
+    log.push(`## ${name}`, '', ...(words.length ? words.map((w) => `- ${w}`) : ['- (nothing said on screen)']), '');
+    return words;
+  };
+  const stop = async (why: string) => {
+    log.push(`## STOPPED: ${why}`, '');
+    throw new Error(why);
+  };
+  watch(page, calls, phase);
+  try {
+    await signInByHand(page);
+    await settle(page);
+    phase.current = 'portal claims (list)';
+    await page.evaluate(() => (window.location.hash = '#/claims'));
+    await settle(page);
+    await snap('portal claims list');
+    const rows = page.locator('main tbody tr');
+    const n = await rows.count();
+    log.push(`## pending claims on the list: ${n}`, '');
+    if (n !== 1) await stop(`there are ${n} pending claims, not exactly one; the list shows only an id and a time, so nothing was approved`);
+    phase.current = 'approve the claim (choose the record)';
+    await rows.first().getByRole('button').first().click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await dialog.locator('input[type=text]').first().fill('DEMO Portal Patient');
+    await dialog.locator('input[type=date]').first().fill('1990-01-01');
+    await dialog.locator('input[type=date] ~ button[type=button]').first().click();
+    await settle(page);
+    const hits = dialog.getByRole('radio');
+    const hitCount = await hits.count();
+    log.push(`## records found for the demo patient: ${hitCount}`, '', ...(await screenWords(page)).map((w) => `- ${w}`), '');
+    if (hitCount !== 1) await stop(`the search found ${hitCount} records for the demo patient, not exactly one; nothing was approved`);
+    await hits.first().check();
+    await dialog.locator('.dialog-actions button').nth(1).click();
+    await settle(page);
+    await snap('after approving');
+  } finally {
+    await page.waitForTimeout(1500).catch(() => undefined);
+    mkdirSync(REPORT_DIR, { recursive: true });
+    const writes = calls.filter((c) => !['GET', 'HEAD'].includes(c.method) && c.template !== '/v1/staff/patients/search').map((c) => `- ${c.method} ${c.template} -> ${c.status}`);
+    writeFileSync(resolve(REPORT_DIR, `link-approve${SUFFIX}.md`), ['# Demo link, step 2: what each screen said', '', ...log, '## Writes made (the patient search is a read)', '', ...(writes.length ? writes : ['- none']), ''].join('\n'));
+    save(calls, 'demo link step 2 (one write: see link-approve file)');
+  }
 });
 
 test('record while you use the console yourself (writes included)', async ({ page }) => {

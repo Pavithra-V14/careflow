@@ -215,6 +215,11 @@ describe('an active account', () => {
     expect(claim?.body).toEqual({ clinic_id: CLINIC_A, name: 'Test Person', dob: '1990-02-03' });
     expect(claim?.key).toBeTruthy();
     expect((screen.getByLabelText('Full name') as HTMLInputElement).value).toBe(''); // what was typed is dropped
+    // A claim that is waiting for a person is not repeated: the button is off and says why.
+    expect(screen.getByText(/waiting for a person at the hospital to decide/)).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Full name'), 'Test Person');
+    await user.type(screen.getByLabelText('Date of birth'), '1990-02-03');
+    expect(screen.getByRole('button', { name: 'Link my record' })).toBeDisabled();
   });
 
   it('files a grievance with a category code and text, and drops the text once it is sent; a category not on the list is refused plainly', async () => {

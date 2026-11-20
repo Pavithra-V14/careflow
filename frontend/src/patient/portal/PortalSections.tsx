@@ -214,11 +214,14 @@ export function ClaimSection({ api, bound }: { api: Api; bound: boolean }) {
   const [dob, setDob] = useState('');
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  // Once a claim is waiting for a person (pending_review) the button is off: sending it again cannot help, and repeated claims count against the account.
+  const [waiting, setWaiting] = useState(false);
   const claim = useIdempotentWrite(
     (clinicId: string, key) => unwrap(api.portalClaim({ clinic_id: clinicId, name: name.trim(), dob }, { idempotencyKey: key })),
     (r) => {
       setOpen(false);
       setNote(t(`portal.claim.outcome.${r.outcome}`));
+      if (r.outcome === 'pending_review') setWaiting(true);
       setName('');
       setDob('');
       void queryClient.invalidateQueries();
@@ -254,7 +257,8 @@ export function ClaimSection({ api, bound }: { api: Api; bound: boolean }) {
           <input id="claim-name" type="text" autoComplete="off" value={name} onChange={(e) => touch(setName)(e.target.value)} />
           <label htmlFor="claim-dob">{t('portal.claim.dob')}</label>
           <input id="claim-dob" type="date" autoComplete="off" value={dob} onChange={(e) => touch(setDob)(e.target.value)} />
-          <button type="submit" className="button button-primary" disabled={!valid}>
+          {waiting && <p className="hint">{t('portal.claim.pendingLocked')}</p>}
+          <button type="submit" className="button button-primary" disabled={!valid || waiting}>
             {t('portal.claim.button')}
           </button>
         </form>

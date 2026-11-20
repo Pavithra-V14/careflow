@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-2036 of 2036 strings are unreviewed.
+2037 of 2037 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -1363,6 +1363,7 @@ Terms standardised: proposal, resolve / resolved.
 | `portal.claim.outcome.consent_required` | Grant the care-delivery notice first. | முதலில் பராமரிப்பு வழங்கல் அறிவிப்பை வழங்குங்கள். | ok |
 | `portal.claim.outcome.locked` | Too many attempts. Please try again later or contact the hospital. | பல முயற்சிகள். பிறகு முயற்சிக்கவும் அல்லது மருத்துவமனையைத் தொடர்பு கொள்ளவும். | ok |
 | `portal.claim.outcome.pending_review` | Your request was received. A person at the hospital will decide. | உங்கள் கோரிக்கை பெறப்பட்டது. மருத்துவமனையில் ஒருவர் முடிவு செய்வார். | ok |
+| `portal.claim.pendingLocked` | Your request has been sent and is waiting for a person at the hospital to decide. There is no need to send it again. | உங்கள் கோரிக்கை அனுப்பப்பட்டுள்ளது; மருத்துவமனையில் ஒருவர் முடிவு செய்யக் காத்திருக்கிறது. அதை மீண்டும் அனுப்பத் தேவையில்லை. | ok |
 | `portal.claim.refused` | This cannot be done for this account: it must be active and have a verified mobile number. | இந்தக் கணக்கிற்கு இதைச் செய்ய முடியாது: அது செயலில் இருக்க வேண்டும், சரிபார்க்கப்பட்ட கைபேசி எண்ணும் இருக்க வேண்டும். | ok |
 | `portal.claim.title` | Link your record | உங்கள் பதிவை இணையுங்கள் | ok |
 | `portal.claim.unavailable` | This is not available right now. Nothing was recorded. | இது இப்போது கிடைக்கவில்லை. எதுவும் பதிவாகவில்லை. | ok |
