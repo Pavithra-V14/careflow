@@ -81,7 +81,7 @@ Still open: the decisions that belong to others (clinician sheet items, counsel,
 |---|---|---|---|---|
 | 3.1 | FastAPI async, Pydantic v2, OpenAPI feeds contract test; snapshot staleness check | built and tested |  | test_openapi_snapshot.py; frontend check:api |
 | 3.2 | SQLAlchemy Core async + asyncpg, hand-written SQL | built and tested |  | db.py |
-| 3.3 | Plain SQL migrations, checksummed ledger, advisory lock, append-only | built and tested |  | migrate.py; 93 migrations; CI migrate job |
+| 3.3 | Plain SQL migrations, checksummed ledger, advisory lock, append-only | built and tested |  | migrate.py; 98 migrations; CI migrate job |
 | 3.4 | FHIR R4-shaped JSON validated by a FHIR library | not built | needs an external service | New dependency (fhir.resources) and a modelling decision; results/medications are typed rows |
 | 3.5 | LangGraph with durable Postgres checkpointing | built and tested |  | own asyncpg checkpointer, 0021; resume tests |
 | 3.6 | Two MCP servers in process (scheduling read+write, clinical read-only) | built, offline test only |  | mcp_kit.py, clinical_server.py; the clinical server has little chart data |
@@ -303,7 +303,7 @@ Still open: the decisions that belong to others (clinician sheet items, counsel,
 | Req | Requirement | Status | Reason | Evidence or note |
 |---|---|---|---|---|
 | 21.1 | GitHub Actions; hosted Supabase for CI; restricted role | built and tested |  | ci.yml shards |
-| 21.2 | Unit/graph tests with fakes for every port | built, offline test only |  | about 2,580 offline tests |
+| 21.2 | Unit/graph tests with fakes for every port | built, offline test only |  | 2,700 offline tests passed locally on 2026-11-20 |
 | 21.3 | Integration tests listed (200 concurrent bookings, isolation, audit immutability, resume, dead-letter) | built and tested |  | test_scheduling_concurrency_live, test_rls_child_tables_live, test_dead_letters_live |
 | 21.4 | End-to-end flows over HTTP | partial | deliberate decision | Referral to review, cancel to booking and red-flag are covered. The care-plan flow now runs over HTTP (create, confirm, result, audit: test_care_plan_http_live, in the live shards); the wake-up and the conditional referral are the WORKER's step and stay in test_care_journey_db_live |
 | 21.5 | Contract test + stale snapshot check | built and tested |  | test_openapi_snapshot.py; frontend check:api (it currently fails until the frontend regenerates types) |

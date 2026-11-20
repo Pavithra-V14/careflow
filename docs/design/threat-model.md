@@ -175,10 +175,7 @@ The reviewer could not verify that the function owner bypasses row-level securit
 ## 14. Dependencies
 `pip-audit` was re-run on 2026-11-14 over the exported lock (pip-audit 2.9.0): no known vulnerabilities. Earlier, on 2026-11-13, it found one advisory, `opentelemetry-api` 1.45.1 (GHSA-mf5v-w3w3-f6cg, fixed in 1.45.2); the lock was raised to 1.45.2. The job is still report-only (checklist 69).
 
-## What this note does NOT claim
-That the system is secure against a compromised API process, a stolen database password or a hostile operator. Those depend on hosting, secrets management and monitoring that do not exist yet (items 26 to 28). The review of all migrations (`rls-security-reviewer`) and the spec review are separate passes; their findings are recorded where they are reported, not here.
-
-## 14. The demo e-mail sign-in, the placeholder labels and the portal claim path: adversarial review (2026-11-20)
+## 15. The demo e-mail sign-in, the placeholder labels and the portal claim path: adversarial review (2026-11-20)
 
 Scope: `careflow/demo_email_signin.py` and its use in the claim route, migrations 0096, 0097 and 0098, `scripts/seed_demo_placeholders.py`, `seed_dev_portal_patient.py`, `reset_dev_portal_account.py`, the origin-mismatch 403. Reviewer: the read-only security agent; every finding below was re-read against the code by the author.
 
@@ -192,3 +189,6 @@ Scope: `careflow/demo_email_signin.py` and its use in the claim route, migration
 | 6 | 0096: the counts function sees every row only if the migrating role bypasses row-level security | **Already guarded** in 0096 (the migration refuses a role that cannot); 0098 differs from 0051 only in the confirmation branch (compared line by line); 0097 is a clean fix-forward |
 
 Not found: any way the e-mail path works in the clinical profile or with the switch off (three independent gates: the switch, profile + data policy per request, the startup refusal), an e-mail-only token reaching staff routes or another patient's data, a secret or an address in a printed line, or a leak about another account in the origin or activation answers. Open decision recorded for the owner: whether the dev project should keep open sign-up switched off while the e-mail path is used.
+
+## What this note does NOT claim
+That the system is secure against a compromised API process, a stolen database password or a hostile operator. Those depend on hosting, secrets management and monitoring that do not exist yet (items 26 to 28). The review of all migrations (`rls-security-reviewer`) and the spec review are separate passes; their findings are recorded where they are reported, not here.
