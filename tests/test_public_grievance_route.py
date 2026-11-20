@@ -185,3 +185,45 @@ def test_the_route_is_public_and_the_demo_pack_supplies_a_labelled_limit():
     assert demo_phase4.VARIABLES["public_read_ip_per_minute"] == portal_extras_sql.PUBLIC_READ_SETTING
     pack = yaml.safe_load((Path(__file__).resolve().parent.parent / "config" / "demo-phase4.yaml").read_text(encoding="utf-8"))
     assert pack["settings"]["public_read_ip_per_minute"]["label"] == "DEMO ONLY - NOT A CLINICAL DECISION"
+
+
+# ---- the demo pack must reach these settings too (found live 2026-11-20: the public categories answered 503 through the demo backend) ---------------------------------------------------------------------
+
+
+def demo_environment():
+    from careflow import demo_phase4
+
+    return demo_phase4.effective_environ({"CAREFLOW_PROFILE": "demo", "CAREFLOW_DATA_POLICY": "synthetic_only", "CAREFLOW_DEMO_PHASE4": "1"}, "demo")
+
+
+async def test_the_demo_pack_supplies_the_public_read_limit_and_the_public_filing_limit_without_a_line_in_the_environment(monkeypatch, _read_fresh):
+    for name in (portal_extras_sql.PUBLIC_READ_SETTING, portal_extras_sql.PUBLIC_IP_SETTING):
+        monkeypatch.delenv(name, raising=False)
+    pack = demo_environment()
+    assert pack.get(portal_extras_sql.PUBLIC_READ_SETTING) and pack.get(portal_extras_sql.PUBLIC_IP_SETTING)  # the labelled demo pack carries both
+    state = SimpleNamespace(grievance_categories=frozenset({"demo_category"}), p4env=pack)
+    req = SimpleNamespace(app=SimpleNamespace(state=state), client=SimpleNamespace(host="203.0.113.9"))
+    assert (await app_module.public_grievance_categories(req)).categories == ["demo_category"]  # type: ignore[arg-type]
+    assert app_module._public_limiter(pack) is not None
+
+
+async def test_without_the_pack_and_without_the_setting_the_read_is_still_a_503_not_an_unlimited_door(monkeypatch, _read_fresh):
+    monkeypatch.delenv(portal_extras_sql.PUBLIC_READ_SETTING, raising=False)
+    state = SimpleNamespace(grievance_categories=frozenset({"demo_category"}), p4env={})
+    req = SimpleNamespace(app=SimpleNamespace(state=state), client=SimpleNamespace(host="203.0.113.9"))
+    with pytest.raises(HTTPException) as e:
+        await app_module.public_grievance_categories(req)  # type: ignore[arg-type]
+    assert e.value.status_code == 503
+
+
+def test_the_profile_words_and_the_message_limit_also_come_from_the_demo_environment(monkeypatch):
+    for name in ("CAREFLOW_SEX_WORDS", "CAREFLOW_MESSAGE_MAX_PER_MINUTE"):
+        monkeypatch.delenv(name, raising=False)
+    app_module._message_limit_cache.clear()
+    pack = demo_environment()
+    assert portal_extras_sql.sex_words(pack) == frozenset({"demo_word_a", "demo_word_b"})
+    request_with_pack = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(p4env=pack)))
+    assert app_module.message_limiter(request_with_pack) is not None  # type: ignore[arg-type]
+    app_module._message_limit_cache.clear()
+    assert app_module.message_limiter(SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(p4env={})))) is None  # type: ignore[arg-type]
+    app_module._message_limit_cache.clear()

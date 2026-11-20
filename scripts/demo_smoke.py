@@ -54,6 +54,7 @@ SWITCHES = (
 )
 
 
+PATIENT_SWITCHES = ("CAREFLOW_PATIENT_BOOKING", "CAREFLOW_PATIENT_MESSAGING")  # section 14 of docs/demo-runbook.md: what a patient can do in the portal
 SCREEN_SWITCHES = ("CAREFLOW_PATIENT_VISIT_PREP", "CAREFLOW_FAMILY_LINKS", "CAREFLOW_KNOWLEDGE_EDITOR")  # section 13 of docs/demo-runbook.md
 AAL2_SCREENS = ("CAREFLOW_FAMILY_LINKS", "CAREFLOW_KNOWLEDGE_EDITOR", "CAREFLOW_PATIENT_VISIT_PREP")  # staff screens whose database functions need a real second factor (the patient e-mail sign-in is not one)
 
@@ -72,6 +73,7 @@ FIXES = {
     "no backend runs without the demo profile": "stop that backend (Ctrl+C in its window) and start it only with scripts/run_demo_backend.ps1, then run this again",
     "portal accounts have the demo origin": "run scripts/reset_dev_portal_account.py --account-id <the user's UID> --dry-run, then without --dry-run (demo runbook section 15)",
     "the second factor matches the screens switched on": "for the real second-factor pass turn CAREFLOW_REQUIRE_AAL2 back on and enrol the accounts (docs/mfa-live-pass.md); for password-only demo walks leave it and expect a 403 on those screens",
+    "patient booking and messaging are on": "add the switch named above as NAME=on to .env and run this again; for booking also run scripts/seed_dev_demo_data.py (fresh open slots) and scripts/seed_demo_placeholders.py (the bookable visit types) with --clinic-id <the clinic id>",
     "the three screen switches are on": "add the switch named above as NAME=on to .env and run this again",
 }
 
@@ -198,6 +200,15 @@ def judge_second_factor(env: Mapping[str, str | None], factors: "Mapping[str, tu
     else:
         have = "staff accounts with a verified authenticator: " + ", ".join(f"{role} {with_factor} of {total}" for role, (with_factor, total) in sorted(factors.items()))
     return (name, "warn", f"CAREFLOW_REQUIRE_AAL2 is off but the database still needs a real second factor for: {', '.join(needing)}; {have}")
+
+
+def judge_patient_switches(env: Mapping[str, str | None]) -> Result:
+    """WARN, never FAIL: patient booking and messaging are optional parts of the demo."""
+    name = "patient booking and messaging are on"
+    off = [n for n in PATIENT_SWITCHES if not is_on(env, n)]
+    if not off:
+        return (name, True, f"{len(PATIENT_SWITCHES)} of {len(PATIENT_SWITCHES)} on")
+    return (name, "warn", f"{len(PATIENT_SWITCHES) - len(off)} of {len(PATIENT_SWITCHES)} on; off: {', '.join(off)}")
 
 
 def judge_screen_switches(env: Mapping[str, str | None]) -> Result:
@@ -353,7 +364,7 @@ async def main() -> int:
             raise Refused("refusing: no host was typed") from None
         seed.confirm_target(typed, host)
         checked, factors = await read_checks(env, args.clinic_id)
-        results = [*checked, judge_keys(env), judge_ceilings(env), judge_rules_before_models(), judge_switches(env), judge_backend(*probe_backend(args.port)), judge_second_factor(env, factors), judge_screen_switches(env)]
+        results = [*checked, judge_keys(env), judge_ceilings(env), judge_rules_before_models(), judge_switches(env), judge_backend(*probe_backend(args.port)), judge_second_factor(env, factors), judge_screen_switches(env), judge_patient_switches(env)]
         return render(results)
     except Refused as exc:
         print(str(exc))

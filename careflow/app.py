@@ -36,7 +36,7 @@ import os
 import re
 import time
 import uuid
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from contextlib import asynccontextmanager, contextmanager
 from datetime import UTC, date, datetime
 from typing import Annotated, Any, Final, Literal
@@ -1489,10 +1489,17 @@ async def draft_offer(
 _message_limit_cache: dict[str, Any] = {}
 
 
-def message_limiter() -> "patient_view.OpenRateLimiter | None":
+def _effective_environ(request: Any = None) -> "Mapping[str, str]":
+    """The environment the deployment actually runs on: the process environment plus, ONLY in the synthetic demo with the demo switch on, the labelled demo-pack values (`app.state.p4env`, built once at startup). A setting that only the demo pack supplies (for example the public read limit, the profile words, the message limit) must be read from here, not from the raw process environment, or the demo pack never reaches it."""
+    state = getattr(getattr(request, "app", None), "state", None)
+    pack = getattr(state, "p4env", None)
+    return pack if pack is not None else os.environ
+
+
+def message_limiter(request: Request = None) -> "patient_view.OpenRateLimiter | None":  # type: ignore[assignment]
     """Per-account message rate limit (BUILD-SPEC.md 11.5): at most CAREFLOW_MESSAGE_MAX_PER_MINUTE patient-facing messages written by one account in any 60 seconds. A required setting with NO default: unset or not a whole number from 1 to 10000 means NO limit is enforced (stated here, never guessed). One limiter per process, in memory."""
     if "limiter" not in _message_limit_cache:
-        raw = (os.environ.get("CAREFLOW_MESSAGE_MAX_PER_MINUTE") or "").strip()
+        raw = (_effective_environ(request).get("CAREFLOW_MESSAGE_MAX_PER_MINUTE") or "").strip()
         limit = int(raw) if raw.isdigit() and 1 <= int(raw) <= 10_000 else None
         _message_limit_cache["limiter"] = patient_view.OpenRateLimiter(limit) if limit is not None else None
     return _message_limit_cache["limiter"]
@@ -5997,7 +6004,7 @@ async def get_profile(request: Request, conn: TxConnAllGrants, claims: dict[str,
             except CryptoError:
                 name = None
     row = await portal_extras_sql.get_profile(conn, account_id)
-    words = portal_extras_sql.sex_words()
+    words = portal_extras_sql.sex_words(_effective_environ(request))
     return ProfileOut(
         display_name=name, sex=row.sex if row else None, preferred_language=row.preferred_language if row else None,
         sex_words=sorted(words) if words else [], languages=["en", "ta"],
@@ -6009,7 +6016,7 @@ async def put_profile(body: ProfileIn, request: Request, idempotency_key: Idempo
     """Set your sex word and preferred language (it sets values, so a repeat is the same). For EACH field (`sex`, `preferred_language`): left OUT means the stored value is left as it is; an explicit null CLEARS it (a person may clear either one; clearing needs no word from the clinic's list, an unset value is simply no value); a value sets it (a sex word must be on the clinic's list). 403 unless you are an active patient account, 422 for a sex word that is not on the clinic's list, 503 for a sex word while the clinic has not set its list."""
     account_id, _ = await _patient_account(conn, claims)
     if body.sex is not None:
-        words = portal_extras_sql.sex_words()
+        words = portal_extras_sql.sex_words(_effective_environ(request))
         if words is None:
             raise HTTPException(status_code=503, detail="the profile is unavailable: the list of words is not configured")
         if body.sex not in words:
@@ -6382,9 +6389,9 @@ class PublicGrievanceIn(_Body):
     text: str = Field(min_length=1, max_length=GRIEVANCE_TEXT_MAX)
 
 
-def _public_limiter() -> "portal_extras_sql.HourlyLimiter | None":
+def _public_limiter(environ: "Mapping[str, str] | None" = None) -> "portal_extras_sql.HourlyLimiter | None":
     if "limiter" not in _public_limiter_cache:
-        limit = portal_extras_sql.public_ip_limit()
+        limit = portal_extras_sql.public_ip_limit(environ)
         _public_limiter_cache["limiter"] = portal_extras_sql.HourlyLimiter(limit) if limit is not None else None
     return _public_limiter_cache["limiter"]
 
@@ -6396,7 +6403,7 @@ async def file_public_grievance(body: PublicGrievanceIn, request: Request, idemp
     categories = request.app.state.grievance_categories
     vault: DemographicVault | None = request.app.state.vault
     key_version = _active_key_version(request)
-    limiter = _public_limiter()
+    limiter = _public_limiter(_effective_environ(request))
     if categories is None or vault is None or key_version is None or limiter is None:
         raise HTTPException(status_code=503, detail="grievances are unavailable: the category list, the limits or the encryption keys are not configured")
     if body.category not in categories or not 32 <= len(idempotency_key) <= 300:  # an anonymous caller's key must be unguessable (a random uuid): see migration 0080
@@ -6425,9 +6432,9 @@ class GrievanceCategoriesOut(_Out):
     categories: list[str]
 
 
-def _public_read_limiter() -> "portal_extras_sql.HourlyLimiter | None":
+def _public_read_limiter(environ: "Mapping[str, str] | None" = None) -> "portal_extras_sql.HourlyLimiter | None":
     if "read_limiter" not in _public_limiter_cache:
-        limit = portal_extras_sql.public_read_limit()
+        limit = portal_extras_sql.public_read_limit(environ)
         _public_limiter_cache["read_limiter"] = portal_extras_sql.HourlyLimiter(limit, window=60.0) if limit is not None else None
     return _public_limiter_cache["read_limiter"]
 
@@ -6437,7 +6444,7 @@ async def public_grievance_categories(request: Request) -> GrievanceCategoriesOu
     """The closed list of category words a grievance may use, with NO sign-in, so the public grievance form can show them (the required setting CAREFLOW_GRIEVANCE_CATEGORIES, sorted; the same list the filing route checks). Nothing about any person is
     read or returned and the database is not touched. 503 until the list AND the per-address limit (CAREFLOW_PUBLIC_READ_IP_PER_MINUTE, a required setting, no default) are set: never an unlimited door. 429 over the per-address limit in any 60 seconds."""
     categories = request.app.state.grievance_categories
-    limiter = _public_read_limiter()
+    limiter = _public_read_limiter(_effective_environ(request))
     if categories is None or limiter is None:
         raise HTTPException(status_code=503, detail="grievance categories are unavailable: the list or the limit is not configured")
     if not limiter.allow(request.client.host if request.client else "unknown"):
