@@ -4,6 +4,12 @@ For a person who is not a programmer. **Everything here is made-up data in the d
 
 **Rules for the demo.** Never type, paste or read out a key, a password or the contents of `.env`. Nothing is ever sent to a patient: every "send" in the product is a person copying text by hand. Every model output is a suggestion; a person decides.
 
+**The one command (start here).** After you have brought the run folder up to date (section 0, step 1: `git fetch`, `git checkout --detach origin/main`; the next script does NOT run git), run:
+```powershell
+cd E:\Claude\careflow-run ; .\scripts\demo_up.ps1
+```
+It asks you once to type the project host, runs the migration check and the migrations, runs the smoke check (`PASS` or `FAIL` lines; every `FAIL` has a plain "what to do" line under it, for example "add the switch as NAME=on to .env and run this again"), and **only if everything passed** starts the demo backend on `127.0.0.1:8000` through `scripts\run_demo_backend.ps1`. If a demo backend is already running and ready it says so and does not start a second one. It never prints a secret value, refuses unless the environment is the synthetic dev demo, and is **for the demo only: never use it, or the e-mail sign-in, anywhere else.** The steps below are what it does for you, and what to do when you want one part alone.
+
 **Where things are (used in every command below).** Run folder `E:\Claude\careflow-run`; the demo clinic `b230e20e-655f-410d-8398-d2eadcb44dd2`; website folder `E:\Claude\careflow-frontend\frontend`. Three PowerShell windows: **A** (one-off commands), **B** (the backend), **C** (the website).
 
 ---
