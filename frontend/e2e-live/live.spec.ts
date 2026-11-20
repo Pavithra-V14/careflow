@@ -541,6 +541,106 @@ test('DEMO link, portal: check the stage on a fresh load, then claim (one write)
   }
 });
 
+test('DEMO booking, portal: read the booking list and messages, make ONE booking, open the visit preparation (read-only)', async ({ page }) => {
+  test.skip(LINK !== 'booking', 'start with LIVE_LINK=booking');
+  test.setTimeout(20 * 60_000);
+  const calls: Call[] = [];
+  const phase = { current: 'sign-in' };
+  watch(page, calls, phase);
+  const { log, snap, confirmAndWait, finish } = linkTools(page, calls, 'link-booking');
+  try {
+    await page.goto('/patient/sign-in/');
+    console.log('\n>>> Sign in yourself with the "Demo sign-in" form (email and password). Nothing is typed for you and no credential reaches this script.');
+    console.log('>>> Waiting up to 10 minutes.\n');
+    await expect(page.locator('main dl.facts')).toBeVisible({ timeout: 10 * 60_000 });
+    await settle(page);
+    await page.reload();
+    await expect(page.locator('main dl.facts')).toBeVisible({ timeout: 60_000 });
+    phase.current = 'portal: appointments, booking list and messages (read)';
+    await settle(page);
+    await page.waitForTimeout(4000);
+    await snap('appointments, booking list and messages after a fresh load');
+    const mine = page.getByRole('button', { name: /^What to prepare: / });
+    const slots = page.getByRole('button', { name: /^Book: / });
+    log.push(`## appointments already on the page: ${await mine.count()}; open times offered: ${await slots.count()}`, '');
+    if ((await mine.count()) === 0) {
+      if ((await slots.count()) === 0) {
+        log.push('## NOT TESTED LIVE: no open time (slot) is offered to book, so no booking was made and there is no visit to open', '');
+      } else {
+        phase.current = 'ONE booking (write)';
+        await slots.first().click();
+        await confirmAndWait('booking the first open time');
+        await page.waitForTimeout(2000);
+        await snap('after the booking');
+      }
+    } else {
+      log.push('## an appointment already exists: no booking was made', '');
+    }
+    if ((await mine.count()) > 0) {
+      phase.current = 'portal: visit preparation (read-only; nothing is marked)';
+      await mine.first().click();
+      await settle(page);
+      await snap('visit preparation (nothing marked)');
+    }
+    const thread = page.locator('#portal-messages ul button');
+    if ((await thread.count()) > 0) {
+      phase.current = 'portal: messages (read a conversation)';
+      await thread.first().click();
+      await settle(page);
+      await snap('first conversation');
+    } else {
+      log.push('## messages: no conversation to open', '');
+    }
+  } finally {
+    await finish('Demo booking, portal');
+  }
+});
+
+test('DEMO booking, front desk: the same visit on the staff side, and the message screen (read-only, second factor)', async ({ page }) => {
+  test.skip(LINK !== 'staffvisit', 'start with LIVE_LINK=staffvisit');
+  test.setTimeout(20 * 60_000);
+  const calls: Call[] = [];
+  const phase = { current: 'sign-in' };
+  watch(page, calls, phase);
+  const { log, snap, finish } = linkTools(page, calls, 'link-staffvisit');
+  try {
+    await signInByHand(page);
+    await settle(page);
+    phase.current = 'scheduling (bookings)';
+    await page.evaluate(() => (window.location.hash = '#/scheduling'));
+    await settle(page);
+    await page.waitForTimeout(2000);
+    await snap('scheduling');
+    phase.current = 'visit readiness (upcoming visits)';
+    await page.evaluate(() => (window.location.hash = '#/readiness'));
+    await settle(page);
+    await page.waitForTimeout(2000);
+    await snap('visit readiness');
+    const open = page.locator('main tbody tr').first().getByRole('button');
+    if ((await open.count()) > 0) {
+      phase.current = 'visit readiness (open the first visit)';
+      await open.first().click();
+      await settle(page);
+      const show = page.getByRole('button', { name: /show what the patient marked|நோயாளி குறித்தவற்றைக் காட்டு/i });
+      if ((await show.count()) > 0) {
+        phase.current = 'visit preparation (staff view, read-only)';
+        await show.first().click();
+        await settle(page);
+        await snap('visit preparation, staff view');
+      } else log.push('## no "Show what the patient marked" button on the page', '');
+    } else {
+      log.push('## no upcoming visit row to open', '');
+    }
+    phase.current = 'staff messages (list)';
+    await page.evaluate(() => (window.location.hash = '#/messages'));
+    await settle(page);
+    await page.waitForTimeout(2000);
+    await snap('messages');
+  } finally {
+    await finish('Demo booking, front desk: the staff side');
+  }
+});
+
 test('DEMO link, front desk: the family links page, read-only (second factor)', async ({ page }) => {
   test.skip(LINK !== 'family', 'start with LIVE_LINK=family');
   test.setTimeout(20 * 60_000);

@@ -401,3 +401,7 @@ The user typed every password and code. The demo clinic is public ("Demo Clinic"
 | Claim | pass | As above: one write, 200, "Your record is linked." |
 
 Earlier in this round the front desk family links page passed with the second factor (200, "There are no family link requests.").
+
+### Public complaint form: what the screen shows while its category read answers 503 (20 Nov 2026)
+
+Read on the signed-out portal page against the live backend (a read only; nothing typed, nothing sent). `GET /public/grievance-categories` answers **503**. The "Send a complaint without signing in" section then shows: its heading, "This goes to the hospital without signing in. A person at the hospital reads it.", the Category label, and in place of the category list the fixed sentence **"Complaints without signing in are not set up at this hospital yet. Nothing can be sent."**, followed by the text box and the Send button, which has no category to send. No backend text is shown. Nothing was changed in the frontend; the backend is checking why the read answers 503.
