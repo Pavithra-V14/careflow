@@ -39,9 +39,9 @@ def test_it_refuses_before_any_connection_outside_dev_demo_synthetic_and_without
 
 def test_the_decision_rules():
     patient = {"account_type": "patient", "status": "active", "origin": "live"}
-    assert mod.decide(patient, 0, 0, 0)[0] == "fix"
+    assert mod.decide(patient, 0, 0, 0)[0] == "fix" and mod.decide(patient, 0, 0, 0, 0)[0] == "fix"
     assert mod.decide({**patient, "origin": "test"}, 0, 0, 0)[0] == "nothing"
-    for case in (mod.decide(None, 0, 0, 0), mod.decide({**patient, "account_type": "staff"}, 0, 0, 0), mod.decide(patient, 1, 0, 0), mod.decide(patient, 0, 1, 0), mod.decide(patient, 0, 0, 1)):
+    for case in (mod.decide(None, 0, 0, 0), mod.decide({**patient, "account_type": "staff"}, 0, 0, 0), mod.decide(patient, 1, 0, 0), mod.decide(patient, 0, 1, 0), mod.decide(patient, 0, 0, 1), mod.decide(patient, 0, 0, 0, 2)):  # the last: it already has records of its own tagged with the old origin
         assert case[0] == "refuse" and case[1].startswith("refusing:")
 
 

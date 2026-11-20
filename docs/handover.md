@@ -52,7 +52,12 @@ git checkout --detach origin/main
 .\.venv\Scripts\python.exe -m careflow.migrate
 ```
 
-**Start the demo backend** (window B; port 8000; refuses unless the synthetic dev demo):
+**The one command (demo only).** After the update above: migrates, runs the smoke check with a fix line under every FAIL, and starts the backend only if everything passed. It runs no git and asks for the host once:
+```powershell
+cd E:\Claude\careflow-run ; .\scripts\demo_up.ps1
+```
+
+**Start the demo backend alone** (window B; port 8000; refuses unless the synthetic dev demo):
 ```powershell
 cd E:\Claude\careflow-run ; .\scripts\run_demo_backend.ps1
 ```
@@ -72,7 +77,7 @@ cd E:\Claude\careflow-run
 .\.venv\Scripts\python.exe scripts\seed_break_glass_reasons.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
 .\.venv\Scripts\python.exe scripts\seed_demo_placeholders.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
 .\.venv\Scripts\python.exe scripts\seed_demo_family_rules.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
-.\.venv\Scripts\python.exe scripts\seed_dev_portal_patient.py --email you@example.test --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
+.\.venv\Scripts\python.exe scripts\seed_dev_portal_patient.py --account-id <THE-USER-UID> --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
 .\.venv\Scripts\python.exe scripts\reset_dev_portal_account.py --account-id <THE-USER-UID> --dry-run
 .\.venv\Scripts\python.exe scripts\index_demo_cards.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
 .\.venv\Scripts\python.exe scripts\dev_clinic.py publish --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2

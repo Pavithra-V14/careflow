@@ -9,7 +9,7 @@ or a password and never prints one.
 
 What it touches: ONE row of `iam.accounts` (its `origin`), and nothing else. It never writes a patient record, a consent, a claim, an audit row or anything append-only (the consent decisions already given stay as
 they are and still count). It refuses, with fixed words, unless: the env file says CAREFLOW_ENV=dev, CAREFLOW_PROFILE=demo and CAREFLOW_DATA_POLICY=synthetic_only; the env names the DEV project; YOU TYPE THE PROJECT
-HOST; the id is a PATIENT account (not staff, no staff role at all); it is not yet bound to a patient record; and it has no claim request pending or resolved (a bound or claiming account is left alone). It prints
+HOST; the id is a PATIENT account (not staff, no staff role at all); it is not yet bound to a patient record; and it has no claim request pending or resolved and no profile, notification, request or voice-preference row of its own (a bound, claiming or already-used account is left alone: flipping its origin would split its records). It prints
 counts and the origin word only. `--dry-run` shows what it would do and rolls back.
 """
 
@@ -33,7 +33,7 @@ Refused = seed.Refused
 TARGET_ORIGIN = "test"
 
 
-def decide(account: dict | None, staff_roles: int, bound: int, claim_requests: int) -> tuple[str, str]:
+def decide(account: dict | None, staff_roles: int, bound: int, claim_requests: int, other_rows: int = 0) -> tuple[str, str]:
     """(action, fixed words): action is `refuse`, `nothing` or `fix`. Pure, so the rules are tested without a database."""
     if account is None or account["account_type"] != "patient":
         return "refuse", "refusing: that id is not a patient account here"
@@ -43,6 +43,8 @@ def decide(account: dict | None, staff_roles: int, bound: int, claim_requests: i
         return "refuse", "refusing: that account is already bound to a patient record; it is left alone"
     if claim_requests:
         return "refuse", "refusing: that account already has a claim request; it is left alone"
+    if other_rows:
+        return "refuse", "refusing: that account already has other records tagged with its origin (profile, notifications, requests or voice preference); flipping the origin would split them: use a new auth user"
     if account["origin"] == TARGET_ORIGIN:
         return "nothing", f"nothing to do: the account's origin is already {TARGET_ORIGIN}"
     return "fix", f"the account's origin is {account['origin']}; it will be set to {TARGET_ORIGIN}"
@@ -59,7 +61,10 @@ async def run(env: dict[str, str], account_id: uuid.UUID, *, dry_run: bool, say=
                 roles = (await conn.execute(text("select count(*) from iam.staff_roles where account_id = :a"), {"a": account_id})).scalar_one()
                 bound = (await conn.execute(text("select count(*) from mpi.patients where account_id = :a"), {"a": account_id})).scalar_one()
                 requests = (await conn.execute(text("select count(*) from mpi.claim_requests where account_id = :a"), {"a": account_id})).scalar_one()
-                action, words = decide(account, roles, bound, requests)
+                other = 0
+                for table in ("msg.voice_preferences", "iam.patient_profiles", "iam.notifications", "iam.patient_requests"):
+                    other += (await conn.execute(text(f"select count(*) from {table} where account_id = :a"), {"a": account_id})).scalar_one()
+                action, words = decide(account, roles, bound, requests, other)
                 if action == "refuse":
                     raise Refused(words)
                 say(words)

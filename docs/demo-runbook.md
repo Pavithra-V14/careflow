@@ -4,6 +4,12 @@ For a person who is not a programmer. **Everything here is made-up data in the d
 
 **Rules for the demo.** Never type, paste or read out a key, a password or the contents of `.env`. Nothing is ever sent to a patient: every "send" in the product is a person copying text by hand. Every model output is a suggestion; a person decides.
 
+**The one command (start here).** After you have brought the run folder up to date (section 0, step 1: `git fetch`, `git checkout --detach origin/main`; the next script does NOT run git), run:
+```powershell
+cd E:\Claude\careflow-run ; .\scripts\demo_up.ps1
+```
+It asks you once to type the project host, runs the migration check and the migrations, runs the smoke check (`PASS` or `FAIL` lines; every `FAIL` has a plain "what to do" line under it, for example "add the switch as NAME=on to .env and run this again"), and **only if everything passed** starts the demo backend on `127.0.0.1:8000` through `scripts\run_demo_backend.ps1`. If a demo backend is already running and ready it says so and does not start a second one. It never prints a secret value, refuses unless the environment is the synthetic dev demo, and is **for the demo only: never use it, or the e-mail sign-in, anywhere else.** The steps below are what it does for you, and what to do when you want one part alone.
+
 **Where things are (used in every command below).** Run folder `E:\Claude\careflow-run`; the demo clinic `b230e20e-655f-410d-8398-d2eadcb44dd2`; website folder `E:\Claude\careflow-frontend\frontend`. Three PowerShell windows: **A** (one-off commands), **B** (the backend), **C** (the website).
 
 ---
@@ -206,11 +212,12 @@ Phone codes need a paid SMS provider, which is a new external service and is not
 CAREFLOW_DEMO_EMAIL_SIGNIN=on
 ```
 
-**3. Prepare the synthetic patient record** (it asks you to TYPE the project host; use the same e-mail as the auth user; rehearse with `--dry-run`; prints counts only):
+**3. Prepare the synthetic patient record** (it asks you to TYPE the project host; it needs the auth user's **User UID** from the dashboard (Authentication, Users), not the e-mail and never the password; the record is prepared for that account id, so nobody who signs up with the same address first can claim it; rehearse with `--dry-run`; prints counts only):
 ```powershell
-.\.venv\Scripts\python.exe scripts\seed_dev_portal_patient.py --email you@example.test --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2 --dry-run
-.\.venv\Scripts\python.exe scripts\seed_dev_portal_patient.py --email you@example.test --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
+.\.venv\Scripts\python.exe scripts\seed_dev_portal_patient.py --account-id <THE-USER-UID> --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2 --dry-run
+.\.venv\Scripts\python.exe scripts\seed_dev_portal_patient.py --account-id <THE-USER-UID> --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
 ```
+*If you seeded an earlier record by e-mail address (the older form of this script): that record can no longer be claimed by anyone; leave it (it is synthetic) and seed again with the UID.*
 The script creates ONE synthetic patient named `DEMO Portal Patient`, born `1990-01-01`, in the dev clinic. It does not bind your account.
 
 **4. Walk the portal** (the portal sign-in must offer e-mail and password; see the frontend note below). The order matters, and each step has one closed answer:
@@ -220,7 +227,7 @@ The script creates ONE synthetic patient named `DEMO Portal Patient`, born `1990
 4. **Approving needs a REAL second factor at the database** (`docs/mfa-live-pass.md`): a password-only front-desk session gets 403. An approval for a record that is not confirmed answers `identity_not_confirmed` (confirm it first, step 2); `record_not_claimable` means erased, merged away, already bound or another clinic's.
 5. After approval the portal reads work: `GET /v1/portal/me` shows `bound_to_a_patient_record: true` and the stage `active`.
 
-**5. Take it away again:** `--remove` with the same e-mail erases the synthetic record (identifying fields removed, row and audit trail kept); delete the auth user in the dashboard; remove the switch line.
+**5. Take it away again:** `--remove` with the same `--account-id` blanks the identifying fields of the synthetic record (a dev clean-up, not the audited two-person erasure; it refuses a record that is already bound to a portal account); delete the auth user in the dashboard; remove the switch line. A record that was removed cannot be seeded again for the same account: use a new auth user.
 
 *If the claim answers 403:* the switch is not on (restart the backend), the token has no e-mail, or the project marks the address unconfirmed. *If it answers `pending_review`:* the name or date of birth was typed differently from step 3, or the e-mail differs from the one the script was given. **Say out loud when showing it that this sign-in is a demo shortcut for the SMS provider that is not approved.**
 

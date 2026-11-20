@@ -1,20 +1,23 @@
 """Prepare ONE SYNTHETIC patient record in the DEV clinic for a patient who signs in to the portal by e-mail and password. A person runs it by hand; nothing runs it.
 
-    uv run python scripts/seed_dev_portal_patient.py --email <the auth user's e-mail> --clinic-id <uuid> [--env-file .env] [--dry-run]
-    uv run python scripts/seed_dev_portal_patient.py --email <the same e-mail> --clinic-id <uuid> --remove
+    uv run python scripts/seed_dev_portal_patient.py --account-id <the auth user's UID> --clinic-id <uuid> [--env-file .env] [--dry-run]
+    uv run python scripts/seed_dev_portal_patient.py --account-id <the same UID> --clinic-id <uuid> --remove
 
 DEMO CONVENIENCE ONLY (docs/demo-runbook.md section 15). Phone-code sign-in needs a paid SMS provider, which is a new external service and is not approved. Create the auth user yourself in the Supabase dashboard
-(Authentication, Users, add user, auto-confirm), set `CAREFLOW_DEMO_EMAIL_SIGNIN=on`, then run this once. It does NOT bind the account: it creates the synthetic patient record whose contact is the synthetic phone
-derived from the e-mail (careflow/demo_email_signin.py), so that the patient's own claim in the portal (consent, then name and date of birth, exactly as the phone flow) finds it. The binding is made by the
-portal's real claim function, with the same checks, and a front-desk person verifies it as usual if it is not an exact match. Nothing here writes an account, a consent, a claim or a role.
+(Authentication, Users, add user, auto-confirm), copy its **User UID** (not the e-mail, never the password), set `CAREFLOW_DEMO_EMAIL_SIGNIN=on`, then run this once. It does NOT bind the account: it creates the
+synthetic patient record whose contact is the synthetic phone derived from that account id (careflow/demo_email_signin.py), so that the patient's own claim in the portal (consent, then name and date of birth, exactly
+as the phone flow) finds it. The id, not the e-mail address, is used on purpose: an address can be signed up first by someone else, an account id is assigned by the auth service and cannot be chosen. The binding is
+made by the portal's real claim function, with the same checks, and a front-desk person confirms the identity and resolves it as usual. Nothing here writes an account, a consent, a claim or a role.
 
 The record is marked as a demo placeholder the way the other seeded patients are: origin `test`, and the name starts with "DEMO" (the name is encrypted; the console shows it). The name to type at the claim step
 is `DEMO Portal Patient` and the date of birth `1990-01-01`: synthetic, not secret.
 
 What it refuses, before any connection is opened (the rules of scripts/seed_dev_demo_data.py): unless the env file says CAREFLOW_ENV=dev, CAREFLOW_PROFILE=demo and CAREFLOW_DATA_POLICY=synthetic_only; unless the env
-names the DEV project; unless YOU TYPE THE PROJECT HOST; unless the clinic is a `test` clinic; unless the encryption keys are in the env file. It prints COUNTS ONLY: never the e-mail, a phone, a key or a password. It
-does not call the Supabase Auth admin API, so it cannot tell whether the e-mail you typed is a real user: a typo makes a record nobody can claim (run it again with the right address; --remove takes the other away).
---remove ERASES the synthetic record the way erasure does (identifying fields removed, the row and its audit trail kept).
+names the DEV project; unless YOU TYPE THE PROJECT HOST; unless the clinic is a `test` clinic; unless the encryption keys are in the env file. It prints COUNTS ONLY: never an id of yours, a phone, a key or a password. It
+does not call the Supabase Auth admin API, so it cannot tell whether the id you typed is a real user: a wrong id makes a record nobody can claim (--remove takes it away).
+
+--remove is a DEV CLEAN-UP, not the audited two-person erasure: it blanks the identifying fields of the synthetic record this script made (the row, its identity tokens and the audit trail stay, as with any erasure), and
+only for a record of origin `test` that is NOT bound to a portal account. A record that was already removed cannot be seeded again for the same account: the script says so and stops (use a new auth user).
 """
 
 import argparse
@@ -35,7 +38,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from careflow.crypto import DemographicVault
-from careflow.demo_email_signin import phone_for_email
+from careflow.demo_email_signin import phone_for_account
 from careflow.mpi import PatientIngestionPipeline
 
 Refused = seed.Refused
@@ -43,21 +46,31 @@ NAME = "DEMO Portal Patient"
 DOB = "1990-01-01"
 
 
-def check_email(value: str) -> str:
-    email = value.strip()
-    if not (3 <= len(email) <= 254) or email.count("@") != 1 or any(c.isspace() for c in email) or email.startswith("@") or email.endswith("@"):
-        raise Refused("refusing: --email must be the e-mail address of the auth user you created")
-    return email
+def key_for(account_id: uuid.UUID, clinic: uuid.UUID) -> str:
+    """The idempotency key of the record: a hash of the account id, so a second run is the same record and no id of the person is stored in the key."""
+    return f"demo-portal-patient:{clinic}:{hashlib.sha256(str(account_id).lower().encode('utf-8')).hexdigest()[:24]}"
 
 
-def key_for(email: str, clinic: uuid.UUID) -> str:
-    """The idempotency key of the record: a hash of the address, so a second run is the same record and nothing identifying is stored in the key."""
-    return f"demo-portal-patient:{clinic}:{hashlib.sha256(email.strip().lower().encode('utf-8')).hexdigest()[:24]}"
+def decide(existing: dict | None, *, remove: bool) -> tuple[str, str]:
+    """(action, fixed words): `create`, `exists`, `erase`, `nothing` or `refuse`. Pure, so the rules are tested without a database."""
+    if remove:
+        if existing is None or existing["erased"]:
+            return "nothing", "nothing to remove: no live synthetic record for that account"
+        if existing["origin"] != "test":
+            return "refuse", "refusing: that record is not of origin test"
+        if existing["bound"]:
+            return "refuse", "refusing: that record is bound to a portal account; it is left alone"
+        return "erase", "the synthetic record will be blanked"
+    if existing is None:
+        return "create", "a synthetic record will be created"
+    if existing["erased"]:
+        return "refuse", "refusing: a record for that account was removed earlier and cannot be seeded again; use a new auth user"
+    return "exists", "the synthetic record is already there"
 
 
-async def run(env: dict[str, str], email: str, clinic: uuid.UUID, vault: DemographicVault, key_version: int, *, remove: bool, dry_run: bool, say=print) -> int:
+async def run(env: dict[str, str], account_id: uuid.UUID, clinic: uuid.UUID, vault: DemographicVault, key_version: int, *, remove: bool, dry_run: bool, say=print) -> int:
     engine = create_async_engine(make_url(env["DATABASE_URL_MIGRATOR"].replace("postgresql://", "postgresql+asyncpg://", 1)), connect_args={"statement_cache_size": 0})
-    key = key_for(email, clinic)
+    key = key_for(account_id, clinic)
     try:
         async with engine.connect() as conn:
             tx = await conn.begin()
@@ -65,23 +78,29 @@ async def run(env: dict[str, str], email: str, clinic: uuid.UUID, vault: Demogra
                 row = (await conn.execute(text("select origin from iam.clinics where id = :c"), {"c": clinic})).first()
                 if row is None or row.origin != "test":
                     raise Refused("refusing: that clinic does not exist here or is not a test clinic")
-                if remove:
+                found = (await conn.execute(text("select id, origin, erased_at, account_id from mpi.patients where clinic_id = :c and idempotency_key = :k"), {"c": clinic, "k": key})).first()
+                existing = None if found is None else {"origin": found.origin, "erased": found.erased_at is not None, "bound": found.account_id is not None}
+                action, words = decide(existing, remove=remove)
+                if action == "refuse":
+                    raise Refused(words)
+                say(words)
+                if action == "erase":
                     gone = (
                         await conn.execute(
                             text(
                                 "update mpi.patients set erased_at = clock_timestamp(), name_ct = null, dob_ct = null, phone_ct = null, name_key_version = null, dob_key_version = null, phone_key_version = null "
-                                "where clinic_id = :c and idempotency_key = :k and erased_at is null"
+                                "where id = :i and origin = 'test' and account_id is null and erased_at is null"
                             ),
-                            {"c": clinic, "k": key},
+                            {"i": found.id},
                         )
                     ).rowcount
-                    say(f"erased {gone} synthetic portal patient record(s)")
-                else:
-                    before = (await conn.execute(text("select count(*) from mpi.patients where clinic_id = :c and idempotency_key = :k"), {"c": clinic, "k": key})).scalar_one()
+                    say(f"records blanked: {gone}")
+                elif action == "create":
                     pipeline = PatientIngestionPipeline(vault, key_version=key_version, registrar="direct")
-                    await pipeline.ingest(conn, clinic_id=clinic, origin="test", name=NAME, dob=DOB, phone=phone_for_email(email), idempotency_key=key)
-                    say(f"synthetic portal patient records: {0 if before else 1} created, {1 if before else 0} already there")
-                    say("the account is bound by the patient's own claim in the portal (consent, then name and date of birth); nothing was bound here")
+                    await pipeline.ingest(conn, clinic_id=clinic, origin="test", name=NAME, dob=DOB, phone=phone_for_account(account_id), idempotency_key=key)
+                    say("records created: 1")
+                if action in ("create", "exists"):
+                    say("the account is bound by the patient's own claim in the portal (consent, then name and date of birth), after front desk confirms the identity; nothing was bound here")
                 if dry_run:
                     await tx.rollback()
                     say("dry run: everything was rolled back, nothing was kept")
@@ -99,15 +118,14 @@ async def run(env: dict[str, str], email: str, clinic: uuid.UUID, vault: Demogra
 
 async def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--email", required=True)
+    ap.add_argument("--account-id", required=True, type=uuid.UUID, help="the auth user's UID (Supabase dashboard, Authentication, Users)")
     ap.add_argument("--clinic-id", required=True, type=uuid.UUID)
     ap.add_argument("--env-file", default=".env")
-    ap.add_argument("--remove", action="store_true", help="erase the synthetic record this script made for that address")
+    ap.add_argument("--remove", action="store_true", help="blank the synthetic record this script made for that account (dev clean-up, not the audited erasure)")
     ap.add_argument("--dry-run", action="store_true", help="do everything, then roll it back")
     args = ap.parse_args()
     env = {k: v for k, v in dotenv_values(Path(args.env_file)).items() if v is not None}
     try:
-        email = check_email(args.email)
         seed.refuse_unless_dev_demo_synthetic(env)
         if not (env.get("DATABASE_URL_MIGRATOR") or "").strip():
             raise Refused("refusing: DATABASE_URL_MIGRATOR is not set in the env file")
@@ -123,7 +141,7 @@ async def main() -> int:
             key_version = int(env.get("CAREFLOW_ACTIVE_KEY_VERSION") or max(vault.key_versions))
         except Exception:  # noqa: BLE001 - fixed words, never the key material
             raise Refused("refusing: the encryption keys (CAREFLOW_ENC_SECRET_V1 / CAREFLOW_HMAC_SECRET_V1) or CAREFLOW_ACTIVE_KEY_VERSION are missing or malformed in the env file") from None
-        return await run(env, email, args.clinic_id, vault, key_version, remove=args.remove, dry_run=args.dry_run)
+        return await run(env, args.account_id, args.clinic_id, vault, key_version, remove=args.remove, dry_run=args.dry_run)
     except Refused as exc:
         print(str(exc))
         return 1

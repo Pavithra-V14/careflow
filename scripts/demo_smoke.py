@@ -49,6 +49,28 @@ SWITCHES = (
 )
 
 
+SCREEN_SWITCHES = ("CAREFLOW_PATIENT_VISIT_PREP", "CAREFLOW_FAMILY_LINKS", "CAREFLOW_KNOWLEDGE_EDITOR")  # section 13 of docs/demo-runbook.md
+AAL2_SCREENS = ("CAREFLOW_FAMILY_LINKS", "CAREFLOW_KNOWLEDGE_EDITOR", "CAREFLOW_PATIENT_VISIT_PREP", "CAREFLOW_DEMO_EMAIL_SIGNIN")  # their database functions (or the claim approval) need a real second factor
+
+# One plain-language "what to do" line per check, in fixed words, printed under every FAIL (never a value).
+FIXES = {
+    "migrations are applied": "run the migrations (python -m careflow.migrate), then run this again",
+    "the clinic is published": "publish it (scripts/dev_clinic.py publish --clinic-id <the clinic id>), then run this again",
+    "staff roles exist": "create the missing staff accounts with scripts/seed_dev_staff.py (demo runbook section 3), then run this again",
+    "demo placeholders carry their labels": "run scripts/seed_demo_placeholders.py (demo runbook section 14); an unlabelled row is a real value or an unlabelled seed: leave it and tell the owner",
+    "the six demo cards are indexed": "run scripts/index_demo_cards.py --clinic-id <the clinic id>, then run this again",
+    "a knowledge search returns a card": "set CAREFLOW_KNOWLEDGE_SEARCH=on, check the retrieval settings come from the demo pack, and re-index the demo cards without --real",
+    "provider keys are present": "run scripts/set_provider_keys.ps1 (it never shows a key), or turn CAREFLOW_DEMO_REAL_MODELS off in .env",
+    "spend ceilings are set": "run scripts/set_provider_keys.ps1 to set the ceilings, or turn CAREFLOW_DEMO_REAL_MODELS off in .env",
+    "rules run before any model": "stop: this is a code fault, not a setting; tell the engineer and do not run the demo",
+    "the .env switches are consistent with section 14": "fix the .env line named above (exactly on or off, profile demo, data policy synthetic_only) and run this again",
+    "no backend runs without the demo profile": "stop that backend (Ctrl+C in its window) and start it only with scripts/run_demo_backend.ps1, then run this again",
+    "portal accounts have the demo origin": "run scripts/reset_dev_portal_account.py --account-id <the user's UID> --dry-run, then without --dry-run (demo runbook section 15)",
+    "the second factor matches the screens switched on": "turn CAREFLOW_REQUIRE_AAL2 back on and enrol the accounts (docs/mfa-live-pass.md), or switch those screens off",
+    "the three screen switches are on": "add the switch named above as NAME=on to .env and run this again",
+}
+
+
 def is_on(env: Mapping[str, str | None], name: str) -> bool:
     return (env.get(name) or "").strip().lower() == "on"
 
@@ -126,6 +148,66 @@ def judge_switches(env: Mapping[str, str | None]) -> Result:
     return ("the .env switches are consistent with section 14", not problems, f"{len(on)} switch(es) on" if not problems else "; ".join(problems))
 
 
+def judge_backend(listening: bool, ready: bool | None) -> Result:
+    """A backend already listening on the port must be the demo one: `GET /readyz` is ready in the demo profile and NOT ready in the clinical profile, which is what a plain uvicorn start gives (and that start registers
+    patient accounts under the wrong origin). Nothing listening is fine: the start script will start it."""
+    name = "no backend runs without the demo profile"
+    if not listening:
+        return (name, True, "no backend is listening yet")
+    if ready is None:
+        return (name, False, "something is listening on the port but it is not answering as this backend")
+    if not ready:
+        return (name, False, "a backend is already running and reports NOT ready: it was started without the demo profile (plain uvicorn), so it gives new accounts the wrong origin")
+    return (name, True, "a demo backend is already running and ready")
+
+
+def judge_live_accounts(env: Mapping[str, str | None], live_patient_accounts: int) -> Result:
+    name = "portal accounts have the demo origin"
+    if not is_on(env, "CAREFLOW_DEMO_EMAIL_SIGNIN"):
+        return (name, True, "not applicable: the e-mail sign-in is off")
+    if live_patient_accounts:
+        return (name, False, f"{live_patient_accounts} patient account(s) have origin live (registered by a backend without the demo profile): they cannot claim a demo record")
+    return (name, True, "0 patient accounts have origin live")
+
+
+def judge_second_factor(env: Mapping[str, str | None]) -> Result:
+    name = "the second factor matches the screens switched on"
+    if (env.get("CAREFLOW_REQUIRE_AAL2") or "").strip().lower() not in ("false", "0", "off", "no"):
+        return (name, True, "the second factor is required")
+    needing = [n for n in AAL2_SCREENS if is_on(env, n)]
+    if needing:
+        return (name, False, f"CAREFLOW_REQUIRE_AAL2 is off but the database still needs a real second factor for: {', '.join(needing)}")
+    return (name, True, "the second factor is off and no switched-on screen needs it at the database")
+
+
+def judge_screen_switches(env: Mapping[str, str | None]) -> Result:
+    name = "the three screen switches are on"
+    off = [n for n in SCREEN_SWITCHES if not is_on(env, n)]
+    return (name, not off, f"{len(SCREEN_SWITCHES) - len(off)} of {len(SCREEN_SWITCHES)} on" + (f"; off: {', '.join(off)}" if off else ""))
+
+
+def probe_backend(port: int, timeout: float = 2.0) -> tuple[bool, bool | None]:
+    """(listening, ready): GET /readyz on 127.0.0.1, no credentials. ready is None when something answers that is not this backend."""
+    import json
+    import urllib.error
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/readyz", timeout=timeout) as response:
+            body = json.loads(response.read(2000).decode("utf-8", "replace"))
+    except urllib.error.HTTPError as exc:  # answered, but not 2xx: a backend that is not ready may say 503
+        try:
+            body = json.loads(exc.read(2000).decode("utf-8", "replace"))
+        except ValueError:
+            return True, None
+    except (urllib.error.URLError, OSError, TimeoutError):
+        return False, None
+    except ValueError:
+        return True, None
+    ready = body.get("ready") if isinstance(body, dict) else None
+    return True, ready if isinstance(ready, bool) else None
+
+
 def judge_rules_before_models() -> Result:
     """No database, no model, no spend: the structural facts that make 'rules before models' true on the Front Door path."""
     from careflow import referral, rules
@@ -147,6 +229,7 @@ def judge_rules_before_models() -> Result:
 
 
 async def read_checks(env: Mapping[str, str], clinic: uuid.UUID) -> list[Result]:
+    live_accounts = 0
     from careflow import demo_cards, demo_phase4, knowledge, schema_check
     from careflow.db import make_app_engine
     from careflow.embeddings import FAKE_MODEL_ID, HashingEmbedding
@@ -168,6 +251,7 @@ async def read_checks(env: Mapping[str, str], clinic: uuid.UUID) -> list[Result]
             out.append(("the clinic is published", published == 1, "published as the public clinic" if published == 1 else "not the published clinic (scripts/dev_clinic.py publish)"))
             roles = {r.role: r.n for r in (await conn.execute(text("select role, count(*) as n from iam.staff_roles where clinic_id = :c and revoked_at is null group by role"), {"c": clinic})).all()}
             out.append(judge_roles(roles))
+            live_accounts = (await conn.execute(text("select count(*) from iam.accounts where account_type = 'patient' and origin = 'live'"))).scalar_one()
             per_table: dict[str, tuple[int, int]] = {}
             for table in LABELLED_TABLES:
                 r = (await conn.execute(text(f"select count(*) filter (where provenance like 'DEMO PLACEHOLDER%') as l, count(*) filter (where provenance is null or provenance not like 'DEMO PLACEHOLDER%') as u from {table} where clinic_id = :c"), {"c": clinic})).one()
@@ -197,6 +281,7 @@ async def read_checks(env: Mapping[str, str], clinic: uuid.UUID) -> list[Result]
             out.append(judge_search(False, False, False))
     finally:
         await admin.dispose()
+    out.append(judge_live_accounts(env, live_accounts))
     return out
 
 
@@ -204,6 +289,8 @@ def render(results: Sequence[Result], say=print) -> int:
     failed = 0
     for name, ok, detail in results:
         say(f"{'PASS' if ok else 'FAIL'} {name}: {detail}")
+        if not ok:
+            say(f"  what to do: {FIXES.get(name, 'see docs/demo-runbook.md and fix the line above, then run this again')}")
         failed += 0 if ok else 1
     say(f"{len(results) - failed} passed, {failed} failed")
     return 1 if failed else 0
@@ -213,6 +300,7 @@ async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--clinic-id", required=True, type=uuid.UUID)
     ap.add_argument("--env-file", default=".env")
+    ap.add_argument("--port", type=int, default=8000, help="the port the demo backend uses (default 8000)")
     args = ap.parse_args()
     env = {k: v for k, v in dotenv_values(Path(args.env_file)).items() if v is not None}
     try:
@@ -226,7 +314,7 @@ async def main() -> int:
         except EOFError:
             raise Refused("refusing: no host was typed") from None
         seed.confirm_target(typed, host)
-        results = [*await read_checks(env, args.clinic_id), judge_keys(env), judge_ceilings(env), judge_rules_before_models(), judge_switches(env)]
+        results = [*await read_checks(env, args.clinic_id), judge_keys(env), judge_ceilings(env), judge_rules_before_models(), judge_switches(env), judge_backend(*probe_backend(args.port)), judge_second_factor(env), judge_screen_switches(env)]
         return render(results)
     except Refused as exc:
         print(str(exc))

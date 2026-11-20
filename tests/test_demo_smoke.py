@@ -100,7 +100,7 @@ def test_the_rules_before_models_check_passes_and_spends_nothing():
 def test_render_prints_only_pass_fail_lines_and_counts_and_sets_the_exit_status():
     lines: list[str] = []
     assert smoke.render([("a", True, "1 row"), ("b", False, "missing")], lines.append) == 1
-    assert lines == ["PASS a: 1 row", "FAIL b: missing", "1 passed, 1 failed"]
+    assert lines == ["PASS a: 1 row", "FAIL b: missing", "  what to do: see docs/demo-runbook.md and fix the line above, then run this again", "1 passed, 1 failed"]
     assert smoke.render([("a", True, "x")], lines.append) == 0
 
 
@@ -110,3 +110,84 @@ def test_the_script_only_reads_and_never_prints_an_environment_value():
     assert sql and not re.search(r"\b(insert|update|delete|create|alter|drop|truncate|grant)\b", sql)
     assert "env[" not in "".join(line for line in code.splitlines() if "say(" in line or "print(" in line and "host" not in line)
     assert "knowledge.KnowledgeSearch" in code and "HashingEmbedding" in code and "provider_setup" not in code  # the search uses the local embedder: no provider is called
+
+
+def test_every_check_has_a_fixed_words_fix_line_that_names_a_command_or_a_setting_and_never_a_value():
+    names = {
+        "migrations are applied", "the clinic is published", "staff roles exist", "demo placeholders carry their labels", "the six demo cards are indexed", "a knowledge search returns a card",
+        "provider keys are present", "spend ceilings are set", "rules run before any model", "the .env switches are consistent with section 14", "no backend runs without the demo profile",
+        "portal accounts have the demo origin", "the second factor matches the screens switched on", "the three screen switches are on",
+    }
+    assert set(smoke.FIXES) == names
+    for name, fix in smoke.FIXES.items():
+        assert fix and "=" not in fix.replace("NAME=on", "").replace("CAREFLOW_REQUIRE_AAL2", "").replace("CAREFLOW_KNOWLEDGE_SEARCH=on", "").replace("CAREFLOW_DEMO_REAL_MODELS", ""), name
+
+
+def test_a_backend_already_listening_must_be_the_demo_one():
+    assert smoke.judge_backend(False, None)[1] is True
+    assert smoke.judge_backend(True, True)[1] is True
+    wrong = smoke.judge_backend(True, False)
+    assert not wrong[1] and "plain uvicorn" in wrong[2] and "wrong origin" in wrong[2]
+    assert not smoke.judge_backend(True, None)[1]
+
+
+def test_probe_backend_reads_readyz_without_credentials_from_a_local_server():
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    def serve(status, payload):
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                assert "Authorization" not in self.headers  # no credential is ever sent
+                assert self.path == "/readyz"
+                body = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
+                self.send_response(status)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        return server
+
+    for status, payload, expected in ((200, {"ready": True}, (True, True)), (503, {"ready": False}, (True, False)), (200, {"ready": "yes"}, (True, None)), (200, b"not json", (True, None)), (404, b"nope", (True, None))):
+        server = serve(status, payload)
+        try:
+            assert smoke.probe_backend(server.server_port) == expected, (status, payload)
+        finally:
+            server.shutdown()
+    free = HTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
+    port = free.server_port
+    free.server_close()
+    assert smoke.probe_backend(port) == (False, None)  # nothing listening
+
+
+def test_the_email_sign_in_needs_demo_origin_accounts():
+    on = {"CAREFLOW_DEMO_EMAIL_SIGNIN": "on"}
+    assert smoke.judge_live_accounts({}, 5)[1] is True  # not applicable while the sign-in is off
+    assert smoke.judge_live_accounts(on, 0)[1] is True
+    result = smoke.judge_live_accounts(on, 2)
+    assert not result[1] and "2 patient account(s) have origin live" in result[2]
+
+
+def test_the_second_factor_must_match_the_screens_that_need_it_at_the_database():
+    off = {"CAREFLOW_REQUIRE_AAL2": "false"}
+    assert smoke.judge_second_factor({})[1] is True and smoke.judge_second_factor({"CAREFLOW_REQUIRE_AAL2": "true"})[1] is True
+    assert smoke.judge_second_factor(off)[1] is True  # off and nothing that needs it
+    for switch in smoke.AAL2_SCREENS:
+        result = smoke.judge_second_factor({**off, switch: "on"})
+        assert not result[1] and switch in result[2], switch
+    for spelling in ("0", "off", "no", "False"):
+        assert not smoke.judge_second_factor({"CAREFLOW_REQUIRE_AAL2": spelling, "CAREFLOW_FAMILY_LINKS": "on"})[1]
+
+
+def test_the_three_screen_switches_must_be_on():
+    all_on = dict.fromkeys(smoke.SCREEN_SWITCHES, "on")
+    assert smoke.judge_screen_switches(all_on) == ("the three screen switches are on", True, "3 of 3 on")
+    result = smoke.judge_screen_switches({**all_on, "CAREFLOW_FAMILY_LINKS": "off"})
+    assert not result[1] and "CAREFLOW_FAMILY_LINKS" in result[2] and "2 of 3" in result[2]
+    assert not smoke.judge_screen_switches({})[1]
