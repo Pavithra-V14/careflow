@@ -27,6 +27,7 @@ REQUIRED: Final = (
     ("0091", "iam.family_link_decide(uuid,uuid,text,uuid,integer,boolean,text,text)", "proc"),
     ("0096", "ops.demo_placeholder_rows()", "proc"),
     ("0099", "sched.patient_booking_state(uuid)", "proc"),
+    ("0100", "iam.set_clinic_public_profile(uuid,text,jsonb,text,text,text,text,text)", "proc"),
 )
 
 

@@ -58,12 +58,15 @@ def test_the_label_says_demo_and_not_approved_and_never_claims_an_approval():
 def test_every_insert_in_the_script_writes_the_label_and_nothing_is_written_to_a_migration():
     source = SCRIPT.read_text(encoding="utf-8").split('"""', 2)[2]
     inserts = re.findall(r"insert into [a-z_.]+ \([^)]*\)", source)
-    assert len(inserts) == 6 and all("provenance" in i for i in inserts)  # one insert per table, each with the label column
-    assert source.count(":l") + source.count(":i") >= 6 and "write_text" not in source and "db/migrations" not in source and "delete from" in source
+    assert len(inserts) == 7 and all("provenance" in i for i in inserts)  # one insert per table, each with the label column
+    assert source.count(":l") + source.count(":i") >= 7 and "write_text" not in source and "db/migrations" not in source and "delete from" in source
     assert "provenance like 'DEMO PLACEHOLDER%'" in source  # --remove touches labelled rows only
     for migration in (ROOT / "db" / "migrations").glob("*.sql"):  # and no migration seeds any of these tables
         code = "\n".join(line for line in migration.read_text(encoding="utf-8").splitlines() if not line.lstrip().startswith("--"))
         for table in seed_mod.TABLES:
+            if table == "iam.clinic_public_profile" and migration.name.startswith("0100_"):
+                assert code.index(f"insert into {table}") > code.index("create function iam.set_clinic_public_profile"), "only the admin function may write the profile, never a seed"
+                continue
             assert f"insert into {table}" not in code, f"{migration.name} seeds {table}"
 
 
@@ -171,8 +174,26 @@ async def test_an_empty_or_partial_answer_is_not_clean_because_absence_is_not_a_
 
 
 def test_the_expected_sources_are_exactly_the_ones_the_migration_counts_and_it_guards_against_a_role_that_cannot_see_the_rows():
+    latest = (ROOT / "db" / "migrations" / "0100_clinic_public_profile.sql").read_text(encoding="utf-8")  # the latest definition (0096 created the function, 0100 re-issued it with the public profile)
+    latest_code = "\n".join(line for line in latest.splitlines() if not line.lstrip().startswith("--"))
+    func = latest_code[latest_code.index("create or replace function ops.demo_placeholder_rows") :]
+    func = func[: func.index("\n$$;")]
+    assert set(re.findall(r"select '([a-z_.]+)'", func)) == set(pc.EXPECTED_SOURCES)
     sql = (ROOT / "db" / "migrations" / "0096_demo_placeholder_labels.sql").read_text(encoding="utf-8")
     code = "\n".join(line for line in sql.splitlines() if not line.lstrip().startswith("--"))
-    func = code[code.index("create function ops.demo_placeholder_rows") : code.index("revoke all on function")]
-    assert set(re.findall(r"select '([a-z_.]+)'", func)) == set(pc.EXPECTED_SOURCES)
-    assert "rolsuper or rolbypassrls" in code  # the function sees every row only if the owner bypasses row-level security
+    assert set(re.findall(r"select '([a-z_.]+)'", code[code.index("create function ops.demo_placeholder_rows") : code.index("revoke all on function")])) <= set(pc.EXPECTED_SOURCES)
+    assert "rolsuper or rolbypassrls" in code and "rolsuper or rolbypassrls" in latest_code  # the function sees every row only if the owner bypasses row-level security
+
+
+def test_the_public_profile_values_are_obviously_fake_claim_nothing_and_leave_the_privacy_promise_empty():
+    values = [seed_mod.PROFILE_ABOUT, seed_mod.PROFILE_ADDRESS, seed_mod.PROFILE_OPENING_HOURS, seed_mod.PROFILE_PHONE]
+    for department in seed_mod.PROFILE_DEPARTMENTS:
+        values.append(department["name"])
+        values.extend(department["doctors"])
+    assert values and all(v.startswith("DEMO") for v in values), values  # every value says it is a demo
+    joined = " ".join(values).lower()
+    assert not re.search(r"\d{5,}", joined) and "+91" not in joined and "@" not in joined and "http" not in joined  # no dialable number, no real address of any kind, no link
+    assert not re.search(r"(?<!not )\b(approved|certified|accredited|licensed|best|leading|top|award|guarantee|cure|expert|specialist)", joined.replace("not a real", "")), joined  # no approval, no superlative, no medical claim
+    assert "dr." not in joined and "doctor one" in joined  # a fictional placeholder, never a real name
+    source = SCRIPT.read_text(encoding="utf-8").split('"""', 2)[2]
+    assert "privacy_promise" not in source.split("insert into iam.clinic_public_profile")[1].split("on conflict")[0]  # counsel's text is never entered by a script

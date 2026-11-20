@@ -407,6 +407,18 @@ The seed script now refuses to create a second record with the same name and dat
 ### 46. Why the booking list is empty (2026-11-20, migration 0099)
 `GET /v1/portal/booking/slots` now also returns `empty_reason`, only when `slots` is empty: `"no_open_times"` (booking is set up, but no open time exists right now: show "No open times at the moment. Please check again later.") or `"not_set_up"` (the clinic has not set booking up: show "Online booking is not set up for this clinic yet."). The words are fixed; show those sentences, nothing more (no count, no name). When `slots` is not empty `empty_reason` is null and the Book button is offered as before. No change for the booking call itself.
 
+### 47. The signed-out home page: the clinic's public profile and what is really on (2026-11-20, migration 0100)
+`GET /public/clinic/profile` (new; `GET /public/clinic` is unchanged). No sign-in, no PHI, read-only, rate limited per address (429 over the limit, 503 until the limit setting exists, never an unlimited door). **404** while no clinic is published (show your own "not available" state). Cached one minute (`Cache-Control: public, max-age=60`; the 404 is `no-store`). Response:
+```json
+{"name": "…", "about": null, "departments": [{"name": "…", "doctors": ["…"]}], "address": null, "opening_hours": null, "phone": null, "privacy_promise": null,
+ "placeholder": false, "features": {"booking": false, "messaging": false, "offers": false, "records": false, "visit_preparation": false, "family_links": false}, "languages": ["en", "ta"]}
+```
+- Every text field is `null` when the hospital has not supplied it, **never an empty string**. For a `null` field show your own neutral "not available yet" line (not the old `[PLACEHOLDER: …]` text). `departments` is `null` or a non-empty list; `doctors` may be empty. Show text as plain text (one line each, entered by the hospital's admin).
+- `privacy_promise` is counsel's wording and stays `null` until counsel's text is entered: until then show the page's own "not available yet" line, never a made-up promise.
+- `placeholder` is `true` while the values are labelled demo placeholders (demo environment only): show a visible "Demo content" badge. Nothing in the response says "approved".
+- `features` replaces every "Coming soon" label: a feature is `true` only when its switch is on AND the route would really work now (booking needs a bookable visit type; messaging needs the message limit and the encryption keys; offers follow messaging; visit preparation needs checklist content; family links need the family rule). Show the feature when `true`; when `false` hide it or show your own "not available at this clinic" line. `records` is always `false`: the portal offers a download of your own data, not a records view. `languages` is the list of reader languages (`en`, `ta`), not a boolean.
+- Written by a clinic **admin** with a recent second factor: `PUT /v1/staff/clinic/public-profile` (body `clinic_id`, optional `about`, `departments` `[{name, doctors[]}]`, `address`, `opening_hours`, `phone`, `privacy_promise`; the WHOLE profile each time, a field left out is "not supplied"; header `Idempotency-Key`; answers `{"result": "recorded" | "replay"}`; 403 not an admin there, 404 clinic not visible, 409 key reused with other content, 422 for an empty or multi-line string). No staff screen is requested yet.
+
 ## Decisions recorded here for later readers
 
 - **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;

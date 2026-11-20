@@ -65,9 +65,20 @@ class HourlyLimiter:
     def __init__(self, limit: int, clock: Callable[[], float] = time.monotonic, window: float = 3600.0) -> None:
         self._limit, self._clock, self._window = limit, clock, window
         self._events: dict[str, deque[float]] = defaultdict(deque)
+        self._swept = clock()
+
+    def _sweep(self, now: float) -> None:
+        """Once per window, forget every key whose newest event has expired: an address that never asks again must not stay in memory forever."""
+        if now - self._swept < self._window:
+            return
+        self._swept = now
+        for key in [k for k, events in self._events.items() if not events or now - events[-1] >= self._window]:
+            del self._events[key]
 
     def allow(self, key: str) -> bool:
-        now, window = self._clock(), self._events[key]
+        now = self._clock()
+        self._sweep(now)
+        window = self._events[key]
         while window and now - window[0] >= self._window:
             window.popleft()
         if len(window) >= self._limit:

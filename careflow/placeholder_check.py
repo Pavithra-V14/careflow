@@ -14,7 +14,7 @@ LABEL_PREFIX: Final = "DEMO PLACEHOLDER"
 # Every source `ops.demo_placeholder_rows()` must report (migration 0096). A missing source is NOT a clean source: the check refuses if the answer is not complete.
 EXPECTED_SOURCES: Final = (
     "iam.break_glass_reasons", "iam.break_glass_settings", "iam.public_grievance_limits", "docs.canary_settings", "ops.spend_limits", "sched.patient_bookable_visit_types", "iam.family_link_rules",
-    "iam.consent_notices",
+    "iam.clinic_public_profile", "iam.consent_notices",
 )
 
 

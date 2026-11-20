@@ -1998,6 +1998,125 @@
         "title": "ClaimResolveOut",
         "type": "object"
       },
+      "ClinicProfileSetOut": {
+        "additionalProperties": false,
+        "properties": {
+          "result": {
+            "enum": [
+              "recorded",
+              "replay"
+            ],
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "ClinicProfileSetOut",
+        "type": "object"
+      },
+      "ClinicPublicProfileIn": {
+        "additionalProperties": false,
+        "properties": {
+          "about": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 1,
+                "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "About"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "minLength": 1,
+                "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "clinic_id": {
+            "format": "uuid",
+            "title": "Clinic Id",
+            "type": "string"
+          },
+          "departments": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DepartmentIn"
+                },
+                "maxItems": 30,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Departments"
+          },
+          "opening_hours": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opening Hours"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "minLength": 1,
+                "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "privacy_promise": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "minLength": 1,
+                "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Privacy Promise"
+          }
+        },
+        "required": [
+          "clinic_id"
+        ],
+        "title": "ClinicPublicProfileIn",
+        "type": "object"
+      },
       "ConfirmIdentityOut": {
         "additionalProperties": false,
         "description": "Ids and a flag only.",
@@ -2439,6 +2558,34 @@
           "not_measured"
         ],
         "title": "DashboardOut",
+        "type": "object"
+      },
+      "DepartmentIn": {
+        "additionalProperties": false,
+        "properties": {
+          "doctors": {
+            "items": {
+              "maxLength": 80,
+              "minLength": 1,
+              "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Doctors",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "DepartmentIn",
         "type": "object"
       },
       "DuplicateList": {
@@ -7298,6 +7445,177 @@
         "title": "PublicClinicOut",
         "type": "object"
       },
+      "PublicClinicProfileOut": {
+        "additionalProperties": false,
+        "properties": {
+          "about": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "About"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "departments": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PublicDepartmentOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Departments"
+          },
+          "features": {
+            "$ref": "#/components/schemas/PublicFeaturesOut"
+          },
+          "languages": {
+            "items": {
+              "enum": [
+                "en",
+                "ta"
+              ],
+              "type": "string"
+            },
+            "title": "Languages",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "opening_hours": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opening Hours"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "placeholder": {
+            "title": "Placeholder",
+            "type": "boolean"
+          },
+          "privacy_promise": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Privacy Promise"
+          }
+        },
+        "required": [
+          "name",
+          "about",
+          "departments",
+          "address",
+          "opening_hours",
+          "phone",
+          "privacy_promise",
+          "placeholder",
+          "features",
+          "languages"
+        ],
+        "title": "PublicClinicProfileOut",
+        "type": "object"
+      },
+      "PublicDepartmentOut": {
+        "additionalProperties": false,
+        "properties": {
+          "doctors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Doctors",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "doctors"
+        ],
+        "title": "PublicDepartmentOut",
+        "type": "object"
+      },
+      "PublicFeaturesOut": {
+        "additionalProperties": false,
+        "properties": {
+          "booking": {
+            "title": "Booking",
+            "type": "boolean"
+          },
+          "family_links": {
+            "title": "Family Links",
+            "type": "boolean"
+          },
+          "messaging": {
+            "title": "Messaging",
+            "type": "boolean"
+          },
+          "offers": {
+            "title": "Offers",
+            "type": "boolean"
+          },
+          "records": {
+            "title": "Records",
+            "type": "boolean"
+          },
+          "visit_preparation": {
+            "title": "Visit Preparation",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "booking",
+          "messaging",
+          "offers",
+          "records",
+          "visit_preparation",
+          "family_links"
+        ],
+        "title": "PublicFeaturesOut",
+        "type": "object"
+      },
       "PublicGrievanceIn": {
         "additionalProperties": false,
         "properties": {
@@ -10634,6 +10952,28 @@
           }
         },
         "summary": "Public Clinic",
+        "tags": [
+          "public"
+        ]
+      }
+    },
+    "/public/clinic/profile": {
+      "get": {
+        "description": "The published clinic's public profile for the signed-out home page: optional text fields (null = not supplied), the departments (and doctors' display names the clinic chose to publish), and which features are really on. No sign-in, never PHI,\nnever another clinic, no counts. 404 while no clinic is published, 503 until the per-address limit is set (never an unlimited door), 429 over it. Cached for a minute.",
+        "operationId": "public_clinic_profile_public_clinic_profile_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicClinicProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Public Clinic Profile",
         "tags": [
           "public"
         ]
@@ -15537,6 +15877,109 @@
         "summary": "Confirm Care Plan",
         "tags": [
           "staff care plans"
+        ]
+      }
+    },
+    "/v1/staff/clinic/public-profile": {
+      "put": {
+        "description": "Set the public profile of the clinic (the WHOLE profile: a field left out or null is \"not supplied\"), as an ADMIN of the clinic with a recent second factor. The hospital supplies every field; the privacy promise is counsel's wording. Audited by the\ndatabase (the names of the fields set, never their text). Idempotent on the key: a repeat is a `replay`, the same key with other content is a 409. 404 if the clinic is not visible to you, 403 unless you are an admin there, 422 for a field that is not allowed.",
+        "operationId": "set_clinic_public_profile_v1_staff_clinic_public_profile_put",
+        "parameters": [
+          {
+            "description": "Required on every write.",
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Required on every write.",
+              "maxLength": 173,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "X-Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClinicPublicProfileIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClinicProfileSetOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired credentials (or, on the merge routes, a second factor is required). Fixed body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Authenticated, but this role may not do this. Fixed body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found. Also returned for a record in another clinic: invisible and missing are one answer. Fixed body."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict: the idempotency key was used for a different request, or the record is in a state that does not allow this. Fixed body."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request: a list of {type, loc, msg}; the offending input is never echoed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Clinic Public Profile",
+        "tags": [
+          "staff clinic profile"
         ]
       }
     },

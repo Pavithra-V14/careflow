@@ -107,3 +107,113 @@ async def test_the_reason_list_is_for_the_clinics_own_roles_with_a_second_factor
                 await _as_app(_conn, who, "select code from iam.break_glass_reason_codes(:c)", {"c": clinic}, aal2=aal2)
         finally:
             await sp.rollback()
+
+
+# ---- migration 0100: the public profile ----
+
+SET_PROFILE = "select iam.set_clinic_public_profile(:c, :a, cast(:d as jsonb), :ad, :o, :p, :pp, :k) as r"
+
+
+def _args(clinic, key, **over):
+    base = {"c": clinic, "a": None, "d": None, "ad": None, "o": None, "p": None, "pp": None, "k": key}
+    base.update(over)
+    return base
+
+
+async def _publish(conn, clinic):
+    await conn.execute(text("delete from iam.public_clinics"))
+    await conn.execute(text("insert into iam.public_clinics (clinic_id) values (:c)"), {"c": clinic})
+
+
+async def _profile_as_app(conn):
+    sp = await conn.begin_nested()
+    try:
+        await conn.execute(text("set local role careflow_app"))
+        return (await conn.execute(text("select * from iam.public_clinic_profile()"))).all()
+    finally:
+        await sp.rollback()
+
+
+async def test_the_profile_function_answers_nothing_for_an_unpublished_clinic_and_never_names_another(_conn):
+    await _conn.execute(text("delete from iam.public_clinics"))
+    other = await _clinic(_conn, "Hidden clinic")
+    await _conn.execute(
+        text("insert into iam.clinic_public_profile (clinic_id, about) values (:c, 'secret about')"), {"c": other}
+    )
+    assert await _profile_as_app(_conn) == []  # nothing published: no row, whatever profiles exist
+    shown = await _clinic(_conn, "Shown clinic")
+    await _publish(_conn, shown)
+    rows = await _profile_as_app(_conn)
+    assert len(rows) == 1 and rows[0].o_name == "Shown clinic" and rows[0].o_about is None  # the published clinic has no profile: nulls, not the other clinic's text
+    assert (rows[0].o_departments, rows[0].o_address, rows[0].o_opening_hours, rows[0].o_phone, rows[0].o_privacy_promise) == (None, None, None, None, None)
+    assert rows[0].o_placeholder is False and rows[0].o_has_bookable_type is False and rows[0].o_has_family_rule is False
+    assert "secret about" not in str(rows[0])
+
+
+async def test_the_application_role_has_no_grant_on_the_profile_table(_conn):
+    sp = await _conn.begin_nested()
+    try:
+        await _conn.execute(text("set local role careflow_app"))
+        with pytest.raises(DBAPIError, match="permission denied"):
+            await _conn.execute(text("select * from iam.clinic_public_profile"))
+    finally:
+        await sp.rollback()
+
+
+async def test_an_admin_with_a_second_factor_sets_the_profile_it_is_read_back_audited_and_idempotent(_conn):
+    clinic = await _clinic(_conn)
+    admin = await _staff(_conn, clinic, "admin")
+    await _publish(_conn, clinic)
+    deps = json.dumps([{"name": "Dept", "doctors": ["Dr Name"]}, {"name": "Other"}])
+    args = _args(clinic, "k-1", a="About text", d=deps, ad="1 Street", o="9 to 5", p="000")
+    assert (await _as_app(_conn, admin, SET_PROFILE, args))[0].r == "recorded"
+    assert (await _as_app(_conn, admin, SET_PROFILE, args))[0].r == "replay"
+    sp = await _conn.begin_nested()
+    try:
+        with pytest.raises(DBAPIError, match="reused"):
+            await _as_app(_conn, admin, SET_PROFILE, _args(clinic, "k-1", a="Different"))
+    finally:
+        await sp.rollback()
+    rows = await _profile_as_app(_conn)
+    assert rows[0].o_about == "About text" and rows[0].o_address == "1 Street" and rows[0].o_phone == "000" and rows[0].o_privacy_promise is None
+    assert rows[0].o_departments == [{"name": "Dept", "doctors": ["Dr Name"]}, {"name": "Other"}]
+    audit = (await _conn.execute(text("select details::text as d from audit.log where clinic_id = :c and action = 'clinic.public_profile.set'"), {"c": clinic})).all()
+    assert len(audit) == 1  # the replay wrote no second row
+    assert "About text" not in audit[0].d and "1 Street" not in audit[0].d and "about" in audit[0].d  # names the fields, never their text
+
+
+async def test_a_real_write_clears_the_demo_label_and_the_startup_count_sees_a_labelled_row(_conn):
+    clinic = await _clinic(_conn)
+    admin = await _staff(_conn, clinic, "admin")
+    await _publish(_conn, clinic)
+    await _conn.execute(text("insert into iam.clinic_public_profile (clinic_id, about, provenance) values (:c, 'DEMO about', 'DEMO PLACEHOLDER, not approved by the clinic owner')"), {"c": clinic})
+    assert (await _profile_as_app(_conn))[0].o_placeholder is True
+    sources = {r.o_source: r.o_rows for r in (await _conn.execute(text("select o_source, o_rows from ops.demo_placeholder_rows()"))).all()}
+    assert sources["iam.clinic_public_profile"] >= 1
+    await _as_app(_conn, admin, SET_PROFILE, _args(clinic, "k-2", a="Real text from the hospital"))
+    assert (await _profile_as_app(_conn))[0].o_placeholder is False
+
+
+async def test_only_an_admin_of_that_clinic_with_a_second_factor_may_set_it_and_bad_fields_are_refused(_conn):
+    clinic, other = await _clinic(_conn), await _clinic(_conn)
+    admin, nurse, outsider = await _staff(_conn, clinic, "admin"), await _staff(_conn, clinic, "nurse"), await _staff(_conn, other, "admin")
+    for who, aal2 in ((nurse, True), (outsider, True), (admin, False)):
+        sp = await _conn.begin_nested()
+        try:
+            with pytest.raises(DBAPIError, match="refused"):
+                await _as_app(_conn, who, SET_PROFILE, _args(clinic, "k-3", a="x"), aal2=aal2)
+        finally:
+            await sp.rollback()
+    for bad in ({"a": ""}, {"a": "   "}, {"a": "two\nlines"}, {"a": "x" * 2001}, {"d": json.dumps([])}, {"d": json.dumps([{"name": "d", "extra": 1}])}, {"d": json.dumps([{"doctors": ["x"]}])}, {"d": json.dumps({"name": "d"})}):
+        sp = await _conn.begin_nested()
+        try:
+            with pytest.raises(DBAPIError, match="refused"):
+                await _as_app(_conn, admin, SET_PROFILE, _args(clinic, "k-4", **bad))
+        finally:
+            await sp.rollback()
+    sp = await _conn.begin_nested()
+    try:
+        with pytest.raises(DBAPIError, match="refused"):
+            await _as_app(_conn, admin, SET_PROFILE, _args(clinic, ""))  # no idempotency key
+    finally:
+        await sp.rollback()
