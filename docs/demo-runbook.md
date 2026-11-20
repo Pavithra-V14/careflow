@@ -190,6 +190,16 @@ The first enters the break-glass reasons and limits, the public-grievance cap, t
 ```
 It checks: migrations applied, the clinic is published, staff roles exist, every demo placeholder is labelled, the six demo cards are indexed, a search returns a card (with the local embedder: nothing is spent), provider keys and spend ceilings present when `CAREFLOW_DEMO_REAL_MODELS=on` (names only), the rules-before-models guarantees, and that the switches in `.env` match this section. A FAIL line says in plain words what to run.
 
+**3c. Patient booking and messaging, and the public complaint form.**
+- **Switches** (two lines in `.env`, exactly `on`, then restart the backend): `CAREFLOW_PATIENT_BOOKING=on` and `CAREFLOW_PATIENT_MESSAGING=on`. The smoke check shows a yellow WARN naming whichever is off. The message limit and the public-form limits come from the demo pack (`CAREFLOW_DEMO_PHASE4=1`, which the start script sets); they used to be read only from the raw environment and the public category list answered 503 through the demo backend: fixed.
+- **What a patient booking needs in the dev clinic:** a portal account bound to a record (the claim), at least one **bookable visit type** and open **future slots** of that type. Both come from the seeds, in this order (each is idempotent; the first adds fresh open slots from tomorrow if the earlier ones are in the past, the second marks every visit type of the clinic bookable, 2 future bookings each, labelled demo):
+```powershell
+cd E:\Claude\careflow-run
+.\.venv\Scripts\python.exe scripts\seed_dev_demo_data.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
+.\.venv\Scripts\python.exe scripts\seed_demo_placeholders.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
+```
+- **The public complaint form** needs the clinic to be the published one (`scripts\dev_clinic.py publish --clinic-id ...`, checked by the smoke check), the category words and the per-address limits (the demo pack gives one category, `demo_category`, and the limits) and the owner-managed hourly cap row (entered by `seed_demo_placeholders.py`). To show plain neutral category names instead, add ONE line to `.env` (an explicit value wins over the pack; it is a demo suggestion from `docs/approval-pack/clinic-proposed-values.md`, **not approved by counsel**): `CAREFLOW_GRIEVANCE_CATEGORIES=access_to_my_data,correction_of_my_data,erasure_of_my_data,nominee,complaint_about_care,complaint_about_staff,complaint_about_the_system,other`.
+
 **4. Take everything out again** (labelled rows only; a row without the label is never touched):
 ```powershell
 .\.venv\Scripts\python.exe scripts\seed_demo_placeholders.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2 --remove
