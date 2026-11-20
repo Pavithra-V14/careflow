@@ -28,6 +28,9 @@ For the owner or a new engineer. This page is an **index**: it points at the doc
 | `docs/config-reference.md` | Every setting and secret NAME the code reads: meaning, default, profile, what refuses. Tested for completeness | Engineer, operator |
 | `docs/demo-runbook.md` | The demo, step by step, with what you should see | Owner, demonstrator |
 | `docs/demo-placeholders.md` | What is entered as a labelled placeholder, what stays blocked, and by whom | Owner |
+| `docs/first-real-patient-readiness.md` | Everything between today and the first real patient, grouped by owner, with what blocks and unblocks each item, and the shape of a limited pilot's first week | Owner, everyone |
+| `docs/external-services-decisions.md` | One section per open external-service decision: what it unlocks, what the code does without it, the data-protection consequences, and the exact approval line to write. Nothing was added | Owner |
+| `docs/demo-evidence.md` | A ledger of what has really been shown live on the dev system, with dates, and what has not and why | Owner, auditor |
 | `docs/mfa-live-pass.md` | The second-factor live pass: enrolment, expected 200s and 403s | Owner, tester |
 | `docs/ops-runbook.md` | Backup and restore, key rotation, provider outages, the audit log, the first-patient checks | Operator |
 | `docs/runbooks/` | Incident runbooks (breach, overdue red flag, dead letters, model outage, wrong merge, key rotation, restore and rollback drills, SMS registration, staff accounts); drafts, none rehearsed | Operator, on-call |
@@ -122,5 +125,7 @@ Each is a new service or dependency, so by `CLAUDE.md` rule 13 none is added wit
 - **Production hosting in an India region, a secret manager, backups with point-in-time recovery.** Unlocks a real deployment and the drills; needs your yes because it is the largest commitment and the region cannot change later (`docs/ops-runbook.md`, checklist rows 27, 28, 54, 75).
 - **Hosted observability (Langfuse, Grafana) and alert delivery (chat, e-mail).** Unlocks traces and dashboards beyond the in-app watchdog; needs your yes because they are third parties that must receive metadata only (spec 13; today the in-app alerts are real and the rest are fakes).
 - **A malware scanner for uploads (self-operated ClamAV).** Unlocks real document uploads; needs your yes on where the worker machine lives and a new component to install and keep updated (`docs/design/malware-scanner-options.md`, checklist rows 2 and 18).
+
+The detail for each (options, data-protection consequences, India points to verify, what to do, the safest default and the exact approval line) is in `docs/external-services-decisions.md`; everything between today and a first real patient, by owner, is in `docs/first-real-patient-readiness.md`; what has actually been shown live is in `docs/demo-evidence.md`.
 
 Also decided by you rather than built: an approved LLM and vision route for the clinical profile (`docs/design/hosted-providers.md`, `docs/design/phase10-pre-launch.md`), and a local decision model.
