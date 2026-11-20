@@ -404,6 +404,9 @@ A third machine first pass over the Tamil strings (2026-11-20) covered the 20 st
 ### 45. The demo patient's search name (2026-11-20, `scripts/seed_dev_portal_patient.py`)
 The seed script now refuses to create a second record with the same name and date of birth. With `--remove-legacy` the older record is blanked (an erased record never matches a search) and the new one keeps the name `DEMO Portal Patient`, born `1990-01-01`: the frontend search and the claim form need NO change. Only if the owner seeds with `--name "DEMO <another name>"` must the walk search for and claim with that name (born `1990-01-01`); the front desk search must still stop unless exactly one record matches, as it does now. The claim, confirm-identity and resolve steps are unchanged.
 
+### 46. Why the booking list is empty (2026-11-20, migration 0099)
+`GET /v1/portal/booking/slots` now also returns `empty_reason`, only when `slots` is empty: `"no_open_times"` (booking is set up, but no open time exists right now: show "No open times at the moment. Please check again later.") or `"not_set_up"` (the clinic has not set booking up: show "Online booking is not set up for this clinic yet."). The words are fixed; show those sentences, nothing more (no count, no name). When `slots` is not empty `empty_reason` is null and the Book button is offered as before. No change for the booking call itself.
+
 ## Decisions recorded here for later readers
 
 - **TypeScript 7 is not used yet** because typescript-eslint (`<6.1.0`) and openapi-typescript (`^5.x`) do not support it;

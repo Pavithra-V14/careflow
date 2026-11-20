@@ -6246,6 +6246,7 @@ class PatientSlotOut(_Out):
 
 class PatientSlotList(_Out):
     slots: list[PatientSlotOut]
+    empty_reason: Literal["no_open_times", "not_set_up"] | None = None  # only when `slots` is empty: no open times right now, or booking is not set up for this clinic (fixed words; migration 0099)
 
 
 class PatientBookedOut(_Out):
@@ -6289,7 +6290,14 @@ async def list_bookable_slots(clinic_id: uuid.UUID, conn: TxConnAllGrants, claim
         rows = await portal_booking_sql.open_slots(conn, clinic_id, limit)
     except portal_booking_sql.Refused:
         raise HTTPException(status_code=403, detail="your role may not do this") from None
-    return PatientSlotList(slots=[PatientSlotOut(slot_id=r.slot_id, starts_at=r.starts_at, ends_at=r.ends_at, visit_type_id=r.visit_type_id, visit_type_name=r.visit_type_name, location_name=r.location_name) for r in rows])
+    reason = None
+    if not rows:
+        try:
+            state = await portal_booking_sql.booking_state(conn, clinic_id)
+        except portal_booking_sql.Refused:
+            raise HTTPException(status_code=403, detail="your role may not do this") from None
+        reason = state if state in ("no_open_times", "not_set_up") else None
+    return PatientSlotList(empty_reason=reason, slots=[PatientSlotOut(slot_id=r.slot_id, starts_at=r.starts_at, ends_at=r.ends_at, visit_type_id=r.visit_type_id, visit_type_name=r.visit_type_name, location_name=r.location_name) for r in rows])
 
 
 @portal.post("/booking/slots/{slot_id}/book", response_model=PatientBookedOut, status_code=201)

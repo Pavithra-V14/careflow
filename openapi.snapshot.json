@@ -6483,6 +6483,21 @@
       "PatientSlotList": {
         "additionalProperties": false,
         "properties": {
+          "empty_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "no_open_times",
+                  "not_set_up"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Empty Reason"
+          },
           "slots": {
             "items": {
               "$ref": "#/components/schemas/PatientSlotOut"

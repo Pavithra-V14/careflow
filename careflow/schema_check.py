@@ -26,6 +26,7 @@ REQUIRED: Final = (
     ("0090", "kb.knowledge_draft_decide(uuid,uuid,text,text,text)", "proc"),
     ("0091", "iam.family_link_decide(uuid,uuid,text,uuid,integer,boolean,text,text)", "proc"),
     ("0096", "ops.demo_placeholder_rows()", "proc"),
+    ("0099", "sched.patient_booking_state(uuid)", "proc"),
 )
 
 
