@@ -25,7 +25,7 @@ const profile = (over: Partial<PublicClinicProfile> = {}): PublicClinicProfile =
   languages: ['en', 'ta'],
   ...over,
 });
-const info = (p: PublicClinicProfile | null, name: string | null = 'Demo Clinic'): ClinicInfo => ({ name, profile: p, settled: true });
+const info = (p: PublicClinicProfile | null, name: string | null = 'Demo Clinic'): ClinicInfo => ({ name, profile: p, status: p ? 'ok' : 'failed' });
 const COMING = { en: en.common.comingSoon, ta: ta.common.comingSoon };
 
 beforeEach(async () => {
@@ -127,5 +127,60 @@ describe('the hospital name in the header and the page title', () => {
     render(<App page="privacy" portal={{ auth: null, apiBaseUrl: 'http://api.test' }} />);
     expect(within(screen.getByRole('banner')).queryByText('Demo Clinic')).toBeNull();
     expect(calls.filter((c) => c.path.startsWith('/public/clinic'))).toHaveLength(0); // only the home page reads the hospital's details
+  });
+});
+
+// Found live (20 Nov 2026): in the development build the API base is an empty string (same origin, through the dev proxy). The home page treated that as "not
+// configured" and never asked, so it stayed on placeholders although the backend had published the profile. An empty base means the page's own origin.
+describe('the hospital details are read even when the API base is empty (same origin)', () => {
+  it('asks the page\'s own origin for the name and the profile', async () => {
+    const calls = stubApi((req) => {
+      if (req.path === '/public/clinic') return json({ clinic_id: '3f2b8c1e-6a4d-4e1b-9d0a-1c2d3e4f5a6b', name: 'Demo Clinic' });
+      if (req.path === '/public/clinic/profile') return json(profile({ about: 'Text from the profile.', features: { booking: true, messaging: false, offers: false, records: false, visit_preparation: false, family_links: false } }));
+      return json({ detail: 'x' }, 404);
+    });
+    render(<App portal={{ auth: null, apiBaseUrl: '' }} />);
+    await waitFor(() => expect(within(screen.getByRole('banner')).getByRole('heading', { level: 1 }).textContent).toBe('Demo Clinic'));
+    expect(await screen.findByText('Text from the profile.')).toBeInTheDocument();
+    expect(calls.map((c) => c.path).sort()).toEqual(['/public/clinic', '/public/clinic/profile']);
+  });
+});
+
+describe('a failed read of the hospital details is said, in fixed words, never silently', () => {
+  const failing = (status: number) => stubApi((req) => (req.path === '/public/clinic' || req.path === '/public/clinic/profile' ? json({ detail: 'LEAK-SENTINEL' }, status) : json({ detail: 'x' }, 404)));
+
+  it.each([
+    [404, "The hospital's details are not available yet."],
+    [503, "The hospital's details could not be loaded."],
+    [429, "The hospital's details could not be loaded."],
+    [500, "The hospital's details could not be loaded."],
+  ])('says the right fixed sentence when the profile answers %i, keeps the placeholders, and never shows backend text', async (status, sentence) => {
+    failing(status);
+    render(<App portal={{ auth: null, apiBaseUrl: 'http://api.test' }} />);
+    expect(await screen.findByText(sentence)).toBeInTheDocument();
+    expect(screen.getByText(en.placeholder.about)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('LEAK-SENTINEL');
+  });
+
+  it('says it also when the connection fails, and says nothing when the details loaded', async () => {
+    stubApi(() => {
+      throw new TypeError('network down');
+    });
+    const { unmount } = render(<App portal={{ auth: null, apiBaseUrl: 'http://api.test' }} />);
+    expect(await screen.findByText("The hospital's details could not be loaded.")).toBeInTheDocument();
+    unmount();
+    stubApi((req) => (req.path === '/public/clinic/profile' ? json(profile()) : json({ clinic_id: '3f2b8c1e-6a4d-4e1b-9d0a-1c2d3e4f5a6b', name: 'Demo Clinic' })));
+    render(<App portal={{ auth: null, apiBaseUrl: 'http://api.test' }} />);
+    await waitFor(() => expect(within(screen.getByRole('banner')).getByRole('heading', { level: 1 }).textContent).toBe('Demo Clinic'));
+    expect(screen.queryByText(/could not be loaded|not available yet/)).toBeNull();
+  });
+
+  it('says the sentences in Tamil too', async () => {
+    await setLanguage('ta');
+    failing(503);
+    render(<App portal={{ auth: null, apiBaseUrl: 'http://api.test' }} />);
+    expect(await screen.findByText(i18n.t('landing.profileFailed'))).toBeInTheDocument();
+    expect(i18n.t('landing.profileFailed')).not.toBe('landing.profileFailed');
+    expect(i18n.t('landing.profileUnpublished')).not.toBe('landing.profileUnpublished');
   });
 });

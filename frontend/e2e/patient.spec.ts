@@ -94,11 +94,15 @@ test('landing: the emergency banner is present and dialable even with JavaScript
   await context.close();
 });
 
-test('landing: the page makes no request outside its own origin', async ({ page }) => {
+// The home page reads the hospital's public details from the API it is configured for (GET /public/clinic and GET /public/clinic/profile): no sign-in, no
+// cookie, no body. Those two reads are the ONLY requests it may make outside its own origin, and only to the one configured API host.
+test('landing: the page makes no request outside its own origin except the two public reads to the configured API', async ({ page }) => {
   const foreign: string[] = [];
   page.on('request', (r) => {
     const u = new URL(r.url());
-    if (!['127.0.0.1', 'localhost'].includes(u.hostname) && u.protocol.startsWith('http')) foreign.push(u.hostname);
+    if (['127.0.0.1', 'localhost'].includes(u.hostname) || !u.protocol.startsWith('http')) return;
+    const allowed = u.hostname === 'mock-api.invalid' && r.method() === 'GET' && ['/public/clinic', '/public/clinic/profile'].includes(u.pathname) && !r.headers()['authorization'];
+    if (!allowed) foreign.push(`${r.method()} ${u.hostname}${u.pathname}`);
   });
   await open(page, '/patient/', 'ta');
   await page.waitForLoadState('networkidle');

@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-2045 of 2045 strings are unreviewed.
+2047 of 2047 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -1087,6 +1087,8 @@ Terms standardised: proposal, resolve / resolved.
 | `landing.location.phone` | Phone | தொலைபேசி | ok |
 | `landing.privacy.heading` | Our privacy promise | எங்கள் தனியுரிமை உறுதிமொழி | ok |
 | `landing.privacy.readNotice` | Read the privacy notice | தனியுரிமை அறிவிப்பைப் படிக்கவும் | ok |
+| `landing.profileFailed` | The hospital's details could not be loaded. | மருத்துவமனையின் விவரங்களை ஏற்ற முடியவில்லை. | ok |
+| `landing.profileUnpublished` | The hospital's details are not available yet. | மருத்துவமனையின் விவரங்கள் இன்னும் கிடைக்கவில்லை. | ok |
 | `languages.en` | English | English | kept in English by design |
 | `languages.ta` | தமிழ் | தமிழ் | kept in English by design |
 | `medications.code` | Code | குறியீடு | ok |

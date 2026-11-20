@@ -21,6 +21,9 @@ export function Landing({ info }: { info?: ClinicInfo } = {}) {
   const departments = profile?.departments ?? null;
   return (
     <>
+      {/* A read that did not work is said in fixed words (404: nothing published yet; anything else: could not be loaded); the placeholders below stay. */}
+      {info?.status === 'unpublished' && <p role="status">{t('landing.profileUnpublished')}</p>}
+      {info?.status === 'failed' && <p role="status">{t('landing.profileFailed')}</p>}
       {profile?.placeholder === true && (
         <p role="status">
           <span className="badge">{t('landing.demoContent')}</span>

@@ -26,6 +26,8 @@ export interface PortalScenario {
   noSlots?: boolean;
   /** The hospital's public profile is published (GET /public/clinic/profile answers 200 instead of 404): name, some text, some features on, demo content. */
   profile?: boolean;
+  /** The profile read fails (503) instead of answering 200 or 404. */
+  profileDown?: boolean;
 }
 
 const b64url = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
@@ -80,6 +82,7 @@ export async function installPortalMock(page: Page, scenario: PortalScenario = {
     if (method === 'GET' && path === '/public/grievance-categories') return reply(route, 200, { categories: ['access', 'service_quality'] });
     if (method === 'POST' && path === '/public/grievances') return reply(route, 201, { created: true, grievance_id: '33333333-3333-4333-8333-333333333333' });
     if (method === 'GET' && path === '/public/clinic/profile') {
+      if (scenario.profileDown) return refuse(route, 503);
       return scenario.profile
         ? reply(route, 200, { name: 'Demo Clinic', about: 'A plain line about the hospital, entered by its admin.', departments: [{ name: 'General medicine', doctors: ['Dr Demo One', 'Dr Demo Two'] }, { name: 'Eye care', doctors: [] }], address: null, opening_hours: 'Monday to Friday, 9 am to 5 pm', phone: null, privacy_promise: null, placeholder: true, features: { booking: true, messaging: false, offers: false, records: false, visit_preparation: false, family_links: true }, languages: ['en', 'ta'] })
         : refuse(route, 404);

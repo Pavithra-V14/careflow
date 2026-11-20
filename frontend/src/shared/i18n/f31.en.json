@@ -242,6 +242,8 @@
     "approvedAs": "Approved as version {{version}}."
   },
   "landing": {
-    "demoContent": "Demo content"
+    "demoContent": "Demo content",
+    "profileUnpublished": "The hospital's details are not available yet.",
+    "profileFailed": "The hospital's details could not be loaded."
   }
 }

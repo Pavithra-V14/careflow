@@ -95,7 +95,18 @@ for (const lang of LANGS) {
     await open(page, lang, {}, '/patient/');
     await expect(page.locator('.feature-list li .badge')).toHaveCount(5);
     await expect(page.locator('.placeholder').first()).toBeVisible();
+    await expect(page.locator('main > [role=status]').first()).toBeVisible(); // "The hospital's details are not available yet." (404: nothing published)
     await sweep(page, 'public-home-static', lang);
+  });
+
+  test(`public home page when the profile cannot be read says so in fixed words, never silently [${lang}]`, async ({ page }) => {
+    await open(page, lang, { profileDown: true }, '/patient/');
+    const note = page.locator('main > [role=status]').first();
+    await expect(note).toBeVisible();
+    if (lang === 'en') await expect(note).toHaveText("The hospital's details could not be loaded.");
+    await expect(page.locator('.feature-list li .badge')).toHaveCount(5); // nothing is claimed available
+    expect(await page.locator('body').innerText()).not.toContain(LEAK);
+    await sweep(page, 'public-home-failed', lang);
   });
 
   test(`sign in: the demo email and password form, with its banner, beside the phone form [${lang}]`, async ({ page }) => {
