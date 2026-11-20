@@ -346,3 +346,30 @@ Walk-tool fixes in this pass: each write now waits up to 30 seconds for its dial
 The care-delivery consent write's status code was **not captured**: the run that clicked Grant closed the browser before the answer arrived, and the walk tool only recorded answered calls. The next run showed the notice's Grant button disabled, so the decision was recorded, but the code is unknown. The walk tool now remembers every write when it is **sent** and lists any whose answer had not arrived (or whose request failed) in the report under "Writes sent with no answer received (status unknown)", and in `unanswered-writes<label>.md`; answered writes already list their status code and, for a 403, the reason sentence.
 
 Also from this round: the backend now has `activation_required` and `identity_not_confirmed` answers on the claim path, and the patient record offers "Confirm identity" on a verified record with no confirmation on record (backend request 44, built).
+
+## Demo link, after the account reset (20 Nov 2026): identity confirmed, claim blocked on the clinic code
+
+Writes this round, both on the synthetic patient: (1) **identity confirmation**: `POST /v1/staff/patients/{patient_id}/confirm-identity` **200** (the front desk record page said "Verified", "Latest identity event: None"; the new rule showed the button anyway); no 403, no unanswered writes. (2) No claim yet.
+
+**Frontend defect found and fixed on the way:** with the stage "New patient" the portal showed only the consent section and "Claiming a record ... become available once your account is active": the claim form (and profile, notices, requests, bookings, messages, family section) was hidden for every stage except `active`. The stages are registered (invited), new_patient (activated, no claim yet), pending_activation (a claim waits for a person) and active (a record is linked), so a new_patient account could never reach the claim form. Fixed (commit 50b1bd6): only `registered` is held back; a pending_activation account sees the claim section with its button off. Unit tests cover all three stages.
+
+**Claim: not made. Stopped by design.** After a fresh sign-in and a fresh page load the stage reads "New patient", and the claim form now shows, but it asks for a **clinic code** (the fallback when the public clinic read answers 404: "the owner has marked no clinic public"). The walk was not given a clinic code, so no claim was made. Needed from the owner: either mark the demo clinic public so `GET /public/clinic` answers it, or give the demo clinic code to type into the form.
+
+Portal screens as seen on that visit (stage "New patient", read-only; 24 calls on the second and third loads, **0 schema mismatches, no 403, no write**):
+
+| Portal screen | Result | Exact screen text and calls |
+|---|---|---|
+| Home / account | pass | "Where your account is: New patient", "Linked to a record: No". `GET /v1/portal/me` 200 on both loads. |
+| Notices and decisions | pass | One notice "DEMO ONLY - Care · version 1" (already granted). `GET /v1/portal/consents` 200. |
+| Profile | pass | "Name on your record: Not available"; "The hospital has not set up a list of choices yet." `GET /v1/portal/profile` 200. |
+| Notices (notifications) | pass on load | `GET /v1/portal/notifications` 200 (list content not recorded). |
+| Requests | pass on load | `GET /v1/portal/requests` 200. |
+| Appointments and booking list | not tested live: the switch is off | `GET /v1/portal/booking/bookings` 503. The screen said "Booking online is not turned on at this hospital yet." No 403, so no refusal reason. |
+| Messages | not tested live: the switch is off | `GET /v1/portal/messages/threads` 503. The screen said "Messages are not turned on at this hospital yet." |
+| Visit preparation | not tested live | No appointment to open it from (the booking list answered 503). |
+| Family section | pass on load | `GET /v1/portal/family-links` 200 on the fresh load; no request made. |
+| Complaints | pass on load | `GET /v1/portal/grievance-categories` 200, `GET /v1/portal/grievances` 200. The public complaint form's `GET /public/grievance-categories` answered 404. |
+| Voice | pass on load | `GET /v1/portal/voice/preference` 200. |
+| Claim | not done | See above: blocked on the clinic code. |
+
+The two stage readings: the activation earlier said "Your account is active" for the result word `activated` (not for the HTTP 200; `consent_required` is also a 200).
