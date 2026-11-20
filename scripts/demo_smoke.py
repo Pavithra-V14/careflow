@@ -35,7 +35,12 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 
 Refused = seed.Refused
-Result = tuple[str, bool, str]
+# `ok` is True (PASS), False (FAIL: stops the start), "warn" (WARN: shown, does not stop the start) or "skip" (SKIP: not applicable here, does not stop the start)
+Result = tuple[str, "bool | str", str]
+STATUS_WORDS = {True: "PASS", False: "FAIL", "warn": "WARN", "skip": "SKIP"}
+# tables that earlier seed scripts fill WITHOUT a demo label (they write the owner's own values, or the demo pack's, through the owner-run scripts): an unlabelled row there is a WARN, anywhere else a FAIL
+KNOWN_UNLABELLED_SEEDS = {"iam.break_glass_reasons": "seed_break_glass_reasons.py", "iam.break_glass_settings": "seed_break_glass_reasons.py"}
+HOSTED_SEARCH_CHECKED = "2026-11-14, 10 of 10, docs/spec-compliance.md row 10.1"
 
 REQUIRED_ROLES = ("front_desk", "nurse", "doctor", "admin", "queue_worker")
 LABELLED_TABLES = (
@@ -50,23 +55,23 @@ SWITCHES = (
 
 
 SCREEN_SWITCHES = ("CAREFLOW_PATIENT_VISIT_PREP", "CAREFLOW_FAMILY_LINKS", "CAREFLOW_KNOWLEDGE_EDITOR")  # section 13 of docs/demo-runbook.md
-AAL2_SCREENS = ("CAREFLOW_FAMILY_LINKS", "CAREFLOW_KNOWLEDGE_EDITOR", "CAREFLOW_PATIENT_VISIT_PREP", "CAREFLOW_DEMO_EMAIL_SIGNIN")  # their database functions (or the claim approval) need a real second factor
+AAL2_SCREENS = ("CAREFLOW_FAMILY_LINKS", "CAREFLOW_KNOWLEDGE_EDITOR", "CAREFLOW_PATIENT_VISIT_PREP")  # staff screens whose database functions need a real second factor (the patient e-mail sign-in is not one)
 
 # One plain-language "what to do" line per check, in fixed words, printed under every FAIL (never a value).
 FIXES = {
     "migrations are applied": "run the migrations (python -m careflow.migrate), then run this again",
     "the clinic is published": "publish it (scripts/dev_clinic.py publish --clinic-id <the clinic id>), then run this again",
     "staff roles exist": "create the missing staff accounts with scripts/seed_dev_staff.py (demo runbook section 3), then run this again",
-    "demo placeholders carry their labels": "run scripts/seed_demo_placeholders.py (demo runbook section 14); an unlabelled row is a real value or an unlabelled seed: leave it and tell the owner",
+    "demo placeholders carry their labels": "run scripts/seed_demo_placeholders.py (demo runbook section 14); an unlabelled row in a table no known seed writes is a real value or something unknown: leave it and tell the owner; a WARN for an earlier seed needs nothing",
     "the six demo cards are indexed": "run scripts/index_demo_cards.py --clinic-id <the clinic id>, then run this again",
-    "a knowledge search returns a card": "set CAREFLOW_KNOWLEDGE_SEARCH=on, check the retrieval settings come from the demo pack, and re-index the demo cards without --real",
+    "a knowledge search returns a card": "set CAREFLOW_KNOWLEDGE_SEARCH=on and check the retrieval settings come from the demo pack; if no card is indexed run scripts/index_demo_cards.py --clinic-id <the clinic id>",
     "provider keys are present": "run scripts/set_provider_keys.ps1 (it never shows a key), or turn CAREFLOW_DEMO_REAL_MODELS off in .env",
     "spend ceilings are set": "run scripts/set_provider_keys.ps1 to set the ceilings, or turn CAREFLOW_DEMO_REAL_MODELS off in .env",
     "rules run before any model": "stop: this is a code fault, not a setting; tell the engineer and do not run the demo",
     "the .env switches are consistent with section 14": "fix the .env line named above (exactly on or off, profile demo, data policy synthetic_only) and run this again",
     "no backend runs without the demo profile": "stop that backend (Ctrl+C in its window) and start it only with scripts/run_demo_backend.ps1, then run this again",
     "portal accounts have the demo origin": "run scripts/reset_dev_portal_account.py --account-id <the user's UID> --dry-run, then without --dry-run (demo runbook section 15)",
-    "the second factor matches the screens switched on": "turn CAREFLOW_REQUIRE_AAL2 back on and enrol the accounts (docs/mfa-live-pass.md), or switch those screens off",
+    "the second factor matches the screens switched on": "for the real second-factor pass turn CAREFLOW_REQUIRE_AAL2 back on and enrol the accounts (docs/mfa-live-pass.md); for password-only demo walks leave it and expect a 403 on those screens",
     "the three screen switches are on": "add the switch named above as NAME=on to .env and run this again",
 }
 
@@ -85,13 +90,20 @@ def judge_roles(counts: Mapping[str, int]) -> Result:
 
 
 def judge_labels(per_table: Mapping[str, tuple[int, int]]) -> Result:
+    name = "demo placeholders carry their labels"
     labelled = sum(v[0] for v in per_table.values())
-    unlabelled = sum(v[1] for v in per_table.values())
-    if unlabelled:
-        return ("demo placeholders carry their labels", False, f"{unlabelled} row(s) in the owner-managed tables have no demo label (a real value, or an unlabelled seed); {labelled} labelled")
+    unlabelled = {t: v[1] for t, v in per_table.items() if v[1]}
+    unknown = {t: n for t, n in unlabelled.items() if t not in KNOWN_UNLABELLED_SEEDS}
+    if unknown:
+        listing = ", ".join(f"{t} ({n})" for t, n in sorted(unknown.items()))
+        return (name, False, f"unlabelled row(s) in: {listing}; no known seed script writes them there (a real value, or something unknown): look before you continue; {labelled} labelled")
     if not labelled:
-        return ("demo placeholders carry their labels", False, "no demo placeholder is entered (run scripts/seed_demo_placeholders.py, section 14 of the runbook)")
-    return ("demo placeholders carry their labels", True, f"{labelled} labelled row(s), 0 unlabelled")
+        return (name, False, "no demo placeholder is entered (run scripts/seed_demo_placeholders.py, section 14 of the runbook)")
+    if unlabelled:
+        listing = ", ".join(f"{t} ({n})" for t, n in sorted(unlabelled.items()))
+        scripts = ", ".join(sorted({KNOWN_UNLABELLED_SEEDS[t] for t in unlabelled}))
+        return (name, "warn", f"unlabelled row(s) in: {listing}; these are earlier seeds ({scripts}), not placeholders from this pass; {labelled} labelled")
+    return (name, True, f"{labelled} labelled row(s), 0 unlabelled")
 
 
 def judge_cards(indexed: set[str], expected: set[str], models: set[str]) -> Result:
@@ -100,9 +112,12 @@ def judge_cards(indexed: set[str], expected: set[str], models: set[str]) -> Resu
     return ("the six demo cards are indexed", True, f"{len(expected)} of {len(expected)} indexed, {len(models)} embedding model(s)")
 
 
-def judge_search(found_card: bool, abstained: bool, indexed_with_fake_only: bool) -> Result:
+def judge_search(found_card: bool, abstained: bool, indexed_with_fake_only: bool, models: "Sequence[str] | frozenset[str]" = ()) -> Result:
+    name = "a knowledge search returns a card"
     if not indexed_with_fake_only:
-        return ("a knowledge search returns a card", False, "the cards are indexed under a hosted model and this check searches with the local embedder: re-index without --real, or check by hand")
+        if not models:
+            return (name, False, "no card is indexed, so there is nothing to search")
+        return (name, "skip", f"indexed under {', '.join(sorted(models))}; searched by hand ({HOSTED_SEARCH_CHECKED}); this check searches only with the local embedder, so nothing was searched now")
     if abstained:
         return ("a knowledge search returns a card", False, "the search abstained (are the retrieval thresholds set? the demo pack supplies them)")
     return ("a knowledge search returns a card", found_card, "1 card returned" if found_card else "no card was returned")
@@ -170,14 +185,19 @@ def judge_live_accounts(env: Mapping[str, str | None], live_patient_accounts: in
     return (name, True, "0 patient accounts have origin live")
 
 
-def judge_second_factor(env: Mapping[str, str | None]) -> Result:
+def judge_second_factor(env: Mapping[str, str | None], factors: "Mapping[str, tuple[int, int]] | None" = None) -> Result:
+    """WARN, never FAIL: the demo may run password-only on purpose. `factors` is role -> (accounts with a verified authenticator, accounts), when the database could tell; None when it could not."""
     name = "the second factor matches the screens switched on"
     if (env.get("CAREFLOW_REQUIRE_AAL2") or "").strip().lower() not in ("false", "0", "off", "no"):
         return (name, True, "the second factor is required")
     needing = [n for n in AAL2_SCREENS if is_on(env, n)]
-    if needing:
-        return (name, False, f"CAREFLOW_REQUIRE_AAL2 is off but the database still needs a real second factor for: {', '.join(needing)}")
-    return (name, True, "the second factor is off and no switched-on screen needs it at the database")
+    if not needing:
+        return (name, True, "the second factor is off and no switched-on staff screen needs it at the database")
+    if factors is None:
+        have = "whether the accounts have an authenticator could not be read from the database here"
+    else:
+        have = "staff accounts with a verified authenticator: " + ", ".join(f"{role} {with_factor} of {total}" for role, (with_factor, total) in sorted(factors.items()))
+    return (name, "warn", f"CAREFLOW_REQUIRE_AAL2 is off but the database still needs a real second factor for: {', '.join(needing)}; {have}")
 
 
 def judge_screen_switches(env: Mapping[str, str | None]) -> Result:
@@ -228,8 +248,9 @@ def judge_rules_before_models() -> Result:
 # ---- reads (every statement is a select) ---------------------------------------------------------------------------------------------------------------------------------------------
 
 
-async def read_checks(env: Mapping[str, str], clinic: uuid.UUID) -> list[Result]:
+async def read_checks(env: Mapping[str, str], clinic: uuid.UUID) -> tuple[list[Result], "dict[str, tuple[int, int]] | None"]:
     live_accounts = 0
+    factors: dict[str, tuple[int, int]] | None = None
     from careflow import demo_cards, demo_phase4, knowledge, schema_check
     from careflow.db import make_app_engine
     from careflow.embeddings import FAKE_MODEL_ID, HashingEmbedding
@@ -252,6 +273,20 @@ async def read_checks(env: Mapping[str, str], clinic: uuid.UUID) -> list[Result]
             roles = {r.role: r.n for r in (await conn.execute(text("select role, count(*) as n from iam.staff_roles where clinic_id = :c and revoked_at is null group by role"), {"c": clinic})).all()}
             out.append(judge_roles(roles))
             live_accounts = (await conn.execute(text("select count(*) from iam.accounts where account_type = 'patient' and origin = 'live'"))).scalar_one()
+            try:  # whether staff accounts have a verified authenticator: counts by role, no ids; the auth schema may not be readable here, then it is simply not known
+                async with conn.begin_nested():
+                    rows = (
+                        await conn.execute(
+                            text(
+                                "select sr.role, count(distinct sr.account_id) as total, count(distinct sr.account_id) filter (where exists (select 1 from auth.mfa_factors f where f.user_id = sr.account_id and f.status = 'verified')) as with_factor "
+                                "from iam.staff_roles sr where sr.clinic_id = :c and sr.revoked_at is null group by sr.role"
+                            ),
+                            {"c": clinic},
+                        )
+                    ).all()
+                    factors = {r.role: (r.with_factor, r.total) for r in rows}
+            except Exception:  # noqa: BLE001 - not knowable without more rights: said so, never guessed
+                factors = None
             per_table: dict[str, tuple[int, int]] = {}
             for table in LABELLED_TABLES:
                 r = (await conn.execute(text(f"select count(*) filter (where provenance like 'DEMO PLACEHOLDER%') as l, count(*) filter (where provenance is null or provenance not like 'DEMO PLACEHOLDER%') as u from {table} where clinic_id = :c"), {"c": clinic})).one()
@@ -278,22 +313,25 @@ async def read_checks(env: Mapping[str, str], clinic: uuid.UUID) -> list[Result]
         elif fake_only:
             out.append(("a knowledge search returns a card", False, "DATABASE_URL_APP or CAREFLOW_WORKER_ACCOUNT_ID is not set in the env file"))
         else:
-            out.append(judge_search(False, False, False))
+            out.append(judge_search(False, False, False, {e.model_id for e in embedded}))
     finally:
         await admin.dispose()
     out.append(judge_live_accounts(env, live_accounts))
-    return out
+    return out, factors
 
 
 def render(results: Sequence[Result], say=print) -> int:
-    failed = 0
+    failed = warned = skipped = 0
     for name, ok, detail in results:
-        say(f"{'PASS' if ok else 'FAIL'} {name}: {detail}")
-        if not ok:
+        word = STATUS_WORDS[ok]
+        say(f"{word} {name}: {detail}")
+        if ok is False or ok == "warn":
             say(f"  what to do: {FIXES.get(name, 'see docs/demo-runbook.md and fix the line above, then run this again')}")
-        failed += 0 if ok else 1
-    say(f"{len(results) - failed} passed, {failed} failed")
-    return 1 if failed else 0
+        failed += ok is False
+        warned += ok == "warn"
+        skipped += ok == "skip"
+    say(f"{len(results) - failed - warned - skipped} passed, {warned} warned, {skipped} skipped, {failed} failed")
+    return 1 if failed else 0  # only a FAIL stops the demo from starting
 
 
 async def main() -> int:
@@ -314,7 +352,8 @@ async def main() -> int:
         except EOFError:
             raise Refused("refusing: no host was typed") from None
         seed.confirm_target(typed, host)
-        results = [*await read_checks(env, args.clinic_id), judge_keys(env), judge_ceilings(env), judge_rules_before_models(), judge_switches(env), judge_backend(*probe_backend(args.port)), judge_second_factor(env), judge_screen_switches(env)]
+        checked, factors = await read_checks(env, args.clinic_id)
+        results = [*checked, judge_keys(env), judge_ceilings(env), judge_rules_before_models(), judge_switches(env), judge_backend(*probe_backend(args.port)), judge_second_factor(env, factors), judge_screen_switches(env)]
         return render(results)
     except Refused as exc:
         print(str(exc))

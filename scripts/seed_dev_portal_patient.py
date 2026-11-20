@@ -2,6 +2,8 @@
 
     uv run python scripts/seed_dev_portal_patient.py --account-id <the auth user's UID> --clinic-id <uuid> [--env-file .env] [--dry-run]
     uv run python scripts/seed_dev_portal_patient.py --account-id <the same UID> --clinic-id <uuid> --remove
+    uv run python scripts/seed_dev_portal_patient.py --account-id <UID> --clinic-id <uuid> --remove-legacy [--dry-run]    (blank the OLDER records this script made before, then seed)
+    uv run python scripts/seed_dev_portal_patient.py --account-id <UID> --clinic-id <uuid> --name "DEMO Portal Patient Two"    (a different demo name, nothing removed)
 
 DEMO CONVENIENCE ONLY (docs/demo-runbook.md section 15). Phone-code sign-in needs a paid SMS provider, which is a new external service and is not approved. Create the auth user yourself in the Supabase dashboard
 (Authentication, Users, add user, auto-confirm), copy its **User UID** (not the e-mail, never the password), set `CAREFLOW_DEMO_EMAIL_SIGNIN=on`, then run this once. It does NOT bind the account: it creates the
@@ -16,6 +18,10 @@ What it refuses, before any connection is opened (the rules of scripts/seed_dev_
 names the DEV project; unless YOU TYPE THE PROJECT HOST; unless the clinic is a `test` clinic; unless the encryption keys are in the env file. It prints COUNTS ONLY: never an id of yours, a phone, a key or a password. It
 does not call the Supabase Auth admin API, so it cannot tell whether the id you typed is a real user: a wrong id makes a record nobody can claim (--remove takes it away).
 
+NO DUPLICATES. Before it creates anything it looks for a live record of the clinic with the same name and date of birth (bound or not) that this account's own seed did not make, and if there is one it STOPS
+and says what exists and what to do: `--remove-legacy` (blank the older UNBOUND records this script itself made, found by the key it gives them, then seed) or `--name` (a different demo name, nothing
+removed). A bound record is never touched. Two records with one name and birth date would break the front desk's search (it needs exactly one match) and make the claim's matching ambiguous.
+
 --remove is a DEV CLEAN-UP, not the audited two-person erasure: it blanks the identifying fields of the synthetic record this script made (the row, its identity tokens and the audit trail stay, as with any erasure), and
 only for a record of origin `test` that is NOT bound to a portal account. A record that was already removed cannot be seeded again for the same account: the script says so and stops (use a new auth user).
 """
@@ -23,6 +29,7 @@ only for a record of origin `test` that is NOT bound to a portal account. A reco
 import argparse
 import asyncio
 import hashlib
+import re
 import sys
 import uuid
 from pathlib import Path
@@ -39,16 +46,36 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from careflow.crypto import DemographicVault
 from careflow.demo_email_signin import phone_for_account
-from careflow.mpi import PatientIngestionPipeline
+from careflow.mpi import NAME_DOB, PatientIngestionPipeline
 
 Refused = seed.Refused
 NAME = "DEMO Portal Patient"
 DOB = "1990-01-01"
+KEY_PREFIX = "demo-portal-patient:"
+_NAME_OK = re.compile(r"^DEMO [A-Za-z0-9 ]{1,55}$")
+
+
+def check_name(value: str) -> str:
+    name = " ".join(value.split())
+    if not _NAME_OK.fullmatch(name):
+        raise Refused("refusing: --name must start with DEMO and use only letters, digits and spaces (at most 60 characters)")
+    return name
+
+
+def duplicate_words(unbound: int, bound: int) -> str | None:
+    """Fixed words for the duplicate rule, or None when there is no duplicate."""
+    if not unbound and not bound:
+        return None
+    what = f"{unbound} unbound and {bound} bound"
+    return (
+        f"refusing: a live record with this name and date of birth already exists in the clinic ({what}) that this account's seed did not make; a second one would break the front desk's search and make the claim ambiguous. "
+        "To keep the name: run again with --remove-legacy (it blanks the older UNBOUND records this script made, then seeds). To keep the old record: run again with --name \"DEMO <another name>\" and search for that name."
+    )
 
 
 def key_for(account_id: uuid.UUID, clinic: uuid.UUID) -> str:
     """The idempotency key of the record: a hash of the account id, so a second run is the same record and no id of the person is stored in the key."""
-    return f"demo-portal-patient:{clinic}:{hashlib.sha256(str(account_id).lower().encode('utf-8')).hexdigest()[:24]}"
+    return f"{KEY_PREFIX}{clinic}:{hashlib.sha256(str(account_id).lower().encode('utf-8')).hexdigest()[:24]}"
 
 
 def decide(existing: dict | None, *, remove: bool) -> tuple[str, str]:
@@ -68,7 +95,9 @@ def decide(existing: dict | None, *, remove: bool) -> tuple[str, str]:
     return "exists", "the synthetic record is already there"
 
 
-async def run(env: dict[str, str], account_id: uuid.UUID, clinic: uuid.UUID, vault: DemographicVault, key_version: int, *, remove: bool, dry_run: bool, say=print) -> int:
+async def run(
+    env: dict[str, str], account_id: uuid.UUID, clinic: uuid.UUID, vault: DemographicVault, key_version: int, *, remove: bool, dry_run: bool, name: str = NAME, remove_legacy: bool = False, say=print
+) -> int:
     engine = create_async_engine(make_url(env["DATABASE_URL_MIGRATOR"].replace("postgresql://", "postgresql+asyncpg://", 1)), connect_args={"statement_cache_size": 0})
     key = key_for(account_id, clinic)
     try:
@@ -96,8 +125,35 @@ async def run(env: dict[str, str], account_id: uuid.UUID, clinic: uuid.UUID, vau
                     ).rowcount
                     say(f"records blanked: {gone}")
                 elif action == "create":
+                    if remove_legacy:
+                        legacy = (
+                            await conn.execute(
+                                text(
+                                    "update mpi.patients set erased_at = clock_timestamp(), name_ct = null, dob_ct = null, phone_ct = null, name_key_version = null, dob_key_version = null, phone_key_version = null "
+                                    "where clinic_id = :c and origin = 'test' and account_id is null and erased_at is null and idempotency_key like :p and idempotency_key <> :k"
+                                ),
+                                {"c": clinic, "p": f"{KEY_PREFIX}{clinic}:%", "k": key},
+                            )
+                        ).rowcount
+                        say(f"older unbound records this script made, blanked: {legacy}")
+                    token = vault.identity_token(NAME_DOB, f"{name} {DOB}", key_version=key_version)
+                    rows = (
+                        await conn.execute(
+                            text(
+                                "select (p.account_id is not null) as bound, count(*) as n from mpi.patients p join mpi.identity_tokens t on t.patient_id = p.id and t.clinic_id = p.clinic_id "
+                                "where p.clinic_id = :c and p.erased_at is null and t.kind = 'name_dob' and t.key_version = :kv and t.token = :t and p.idempotency_key <> :k group by 1"
+                            ),
+                            {"c": clinic, "kv": key_version, "t": token, "k": key},
+                        )
+                    ).all()
+                    unbound, bound = sum(r.n for r in rows if not r.bound), sum(r.n for r in rows if r.bound)
+                    words = duplicate_words(unbound, bound)
+                    if words:
+                        raise Refused(words)
                     pipeline = PatientIngestionPipeline(vault, key_version=key_version, registrar="direct")
-                    await pipeline.ingest(conn, clinic_id=clinic, origin="test", name=NAME, dob=DOB, phone=phone_for_account(account_id), idempotency_key=key)
+                    result = await pipeline.ingest(conn, clinic_id=clinic, origin="test", name=name, dob=DOB, phone=phone_for_account(account_id), idempotency_key=key)
+                    if result.outcome != "created":
+                        raise Refused("refusing: the registration did not create a clean record (it was matched or flagged as a possible duplicate); nothing was kept")
                     say("records created: 1")
                 if action in ("create", "exists"):
                     say("the account is bound by the patient's own claim in the portal (consent, then name and date of birth), after front desk confirms the identity; nothing was bound here")
@@ -121,6 +177,8 @@ async def main() -> int:
     ap.add_argument("--account-id", required=True, type=uuid.UUID, help="the auth user's UID (Supabase dashboard, Authentication, Users)")
     ap.add_argument("--clinic-id", required=True, type=uuid.UUID)
     ap.add_argument("--env-file", default=".env")
+    ap.add_argument("--name", default=NAME, help="the demo name of the record (must start with DEMO); the default is the usual one")
+    ap.add_argument("--remove-legacy", action="store_true", help="before seeding, blank the OLDER unbound records this script made (a different key), so the name stays unique")
     ap.add_argument("--remove", action="store_true", help="blank the synthetic record this script made for that account (dev clean-up, not the audited erasure)")
     ap.add_argument("--dry-run", action="store_true", help="do everything, then roll it back")
     args = ap.parse_args()
@@ -141,7 +199,7 @@ async def main() -> int:
             key_version = int(env.get("CAREFLOW_ACTIVE_KEY_VERSION") or max(vault.key_versions))
         except Exception:  # noqa: BLE001 - fixed words, never the key material
             raise Refused("refusing: the encryption keys (CAREFLOW_ENC_SECRET_V1 / CAREFLOW_HMAC_SECRET_V1) or CAREFLOW_ACTIVE_KEY_VERSION are missing or malformed in the env file") from None
-        return await run(env, args.account_id, args.clinic_id, vault, key_version, remove=args.remove, dry_run=args.dry_run)
+        return await run(env, args.account_id, args.clinic_id, vault, key_version, remove=args.remove, dry_run=args.dry_run, name=check_name(args.name), remove_legacy=args.remove_legacy)
     except Refused as exc:
         print(str(exc))
         return 1
