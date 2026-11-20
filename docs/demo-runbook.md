@@ -199,6 +199,16 @@ cd E:\Claude\careflow-run
 .\.venv\Scripts\python.exe scripts\seed_dev_demo_data.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
 .\.venv\Scripts\python.exe scripts\seed_demo_placeholders.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
 ```
+- **Still `no_open_times`? Ask the database which condition hides the slots** (read-only; it asks you to type the project host; it prints counts and fixed words only, no ids, names or times except the earliest and latest date of the open future slots). The patient's account id is the auth user id of the DEMO Portal Patient sign-in (optional; without it the origin check is shown per origin word):
+```powershell
+cd E:\Claude\careflow-run
+.\.venv\Scripts\python.exe scripts\diagnose_patient_slots.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2 --account-id <the patient's auth user id>
+```
+  Its last line says which condition explains the empty list: past or not-open slots, a visit type not in the bookable list or not active, an inactive location, or another origin. If the cause is simply that no usable open slot exists, add some (open, from tomorrow evening, for every bookable visit type at every active location; run the placeholder seed first because it lists the types as bookable; idempotent the same day):
+```powershell
+.\.venv\Scripts\python.exe scripts\seed_demo_placeholders.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2
+.\.venv\Scripts\python.exe scripts\seed_dev_demo_data.py --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2 --add-bookable-slots
+```
 - **The signed-out home page** (`GET /public/clinic/profile`) shows the hospital's about, departments, address, opening hours and phone from `iam.clinic_public_profile`. In the dev clinic the same command (`seed_demo_placeholders.py`, above) enters obviously fake DEMO values for those five; the privacy promise is deliberately NOT entered (it stays null: counsel's wording). The clinic must be the published one (`scripts\dev_clinic.py publish --clinic-id b230e20e-655f-410d-8398-d2eadcb44dd2`, checked by the smoke check). Preview first with `--dry-run`; take the rows out with `--remove` (below). The `features` in the same answer are true only when the switch is on and the route would work (booking needs the bookable visit types the same script enters).
 - **The public complaint form** needs the clinic to be the published one (`scripts\dev_clinic.py publish --clinic-id ...`, checked by the smoke check), the category words and the per-address limits (the demo pack gives one category, `demo_category`, and the limits) and the owner-managed hourly cap row (entered by `seed_demo_placeholders.py`). To show plain neutral category names instead, add ONE line to `.env` (an explicit value wins over the pack; it is a demo suggestion from `docs/approval-pack/clinic-proposed-values.md`, **not approved by counsel**): `CAREFLOW_GRIEVANCE_CATEGORIES=access_to_my_data,correction_of_my_data,erasure_of_my_data,nominee,complaint_about_care,complaint_about_staff,complaint_about_the_system,other`.
 
