@@ -85,10 +85,10 @@ async def test_the_application_role_still_cannot_read_or_write_the_owner_managed
     await db.exec_driver_sql("set local role careflow_app")
     try:
         for table in ("iam.break_glass_reasons", "iam.break_glass_settings", "iam.public_grievance_limits", "docs.canary_settings", "ops.spend_limits", "sched.patient_bookable_visit_types"):
-            async with db.begin_nested():
-                with pytest.raises(DBAPIError) as info:
+            with pytest.raises(DBAPIError) as info:
+                async with db.begin_nested():
                     await db.execute(text(f"select provenance from {table}"))
-                assert getattr(info.value.orig, "sqlstate", None) == "42501", table
+            assert getattr(info.value.orig, "sqlstate", None) == "42501", table
     finally:
         await db.exec_driver_sql("reset role")
 
