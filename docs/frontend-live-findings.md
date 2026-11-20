@@ -319,3 +319,24 @@ To finish: a second-factor-capable pass (or a backend with the second-factor che
 ### Patient portal walk: waiting on a demo sign-in (20 Nov 2026)
 
 Phone codes need a paid SMS provider that is not approved, so the patient portal walk is waiting for the demo email and password sign-in (build-time switch `VITE_DEV_PATIENT_PASSWORD_LOGIN=1`, dev server only, banner "Demo sign-in"; see the checklist). It runs once the backend has linked a synthetic patient and the user has created the sign-in. Until then every portal screen stays "not tested live: phone sign-in could not send a code".
+
+## Demo link of the synthetic portal patient (20 Nov 2026): in progress, stopped at the stage check
+
+The user types every password and code. The only writes authorised were the demo claim path on the synthetic patient (DEMO Portal Patient, born 1990-01-01), the identity confirmation if one was needed, and the claim. What each screen said is in `live-report/link-*.md` (not committed; they hold screen wording only).
+
+| Step | Result | Exact screen text and calls |
+|---|---|---|
+| Portal demo sign-in (email and password form) | pass | The form under the "Demo sign-in" banner opened a session on four attempts. Account page: "Where your account is: Created", "Linked to a record: No", one notice "DEMO ONLY - Care · version 1". |
+| Care-delivery consent (write 1) | recorded, status code not captured | The run that clicked Grant closed before the answer arrived (my script waited about a second). The next run showed the notice's Grant button disabled, so the decision was recorded. This write was made on the synthetic patient only. |
+| Activate account (write 2) | pass | "Your account is active." `POST /v1/portal/activate` 200. The screen still read "Where your account is: Created" afterwards, and no fresh read of the account followed; not explained. |
+| Front desk sign-in with the authenticator code | pass | Front desk (second factor enrolled): `GET /v1/iam/me` 200. |
+| Find the demo patient (front desk) | pass | `POST /v1/staff/patients/search` 200: exactly one record. |
+| Identity confirmation | not needed, no write | The record page says "Verified", "Registered via Front desk", "Latest identity event: None". There is no "Confirm identity" button on a verified record, so nothing was confirmed. 3 calls, all 200, no 403. |
+| Patient stage on a fresh page load | **finding (backend)** | After a fresh sign-in and a second fresh page load the stage reads **"New patient"**, not Active (and not "Created" as before): "Where your account is: New patient", "Linked to a record: No". `GET /v1/portal/me` 200 and `GET /v1/portal/consents` 200 both times, no refusal. The claim was NOT made (stopped by design when the stage is not Active). The earlier activation had said "Your account is active." |
+| Claim (write 3) | not done | Not attempted: the stage check stopped the run. |
+| Read-only portal walk | not tested live | Waits for the stage to read Active and the claim; no portal call beyond the two reads above has been made. |
+| Front desk family links page | not tested live | Not run yet. |
+
+Writes made so far, all on the synthetic patient: (1) the care-delivery consent, (2) `POST /v1/portal/activate` 200. No claim, no identity confirmation, no approval.
+
+Walk-tool fixes in this pass: each write now waits up to 30 seconds for its dialog to close; steps already done are skipped; the claim step checks the stage on a fresh page load first; every 403's reason sentence is stored.
