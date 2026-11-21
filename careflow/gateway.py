@@ -30,6 +30,7 @@ gateway has no text to log.
 """
 
 import asyncio
+import contextlib
 import random
 import re
 import time
@@ -178,6 +179,8 @@ class SpendEntry:
     usd_shadow: Decimal
     origin: str
     idempotency_key: str
+    attempts: int = 1  # how many calls the gateway made on this route for the request (a count of attempts, never money)
+    outcome: str = "answered"  # answered | failed (a failed route records usd 0: its real bill is unknown to us)
 
 
 class SpendLedger(Protocol):
@@ -411,7 +414,7 @@ class Gateway:
                 breaker.success()
                 actual, shadow = row.cost(out.usage)
                 await self.ledger.record(
-                    SpendEntry(clinic_id, row.role, row.provider, row.model_id, call_class.value, actual, shadow, self.origin, f"gw-{uuid.uuid4()}")
+                    SpendEntry(clinic_id, row.role, row.provider, row.model_id, call_class.value, actual, shadow, self.origin, f"gw-{uuid.uuid4()}", attempts=calls)
                 )
                 attempts.append(RouteAttempt(row.provider, row.model_id, "ok", calls))
                 if self.role_ceilings is not None:
@@ -422,4 +425,7 @@ class Gateway:
             if n < MAX_ATTEMPTS_PER_ROUTE:
                 await self.sleep(self.base_delay * (2 ** (n - 1)) * (0.5 + self.jitter()))
         attempts.append(RouteAttempt(row.provider, row.model_id, last, calls, tuple(history), detail))
+        if calls > 0:  # the provider WAS called: record the attempts (a count, usd 0). A ledger that cannot record it never hides the failure from the caller.
+            with contextlib.suppress(Exception):  # best effort, and the gateway never logs (it has no text to log): the failure itself is what the caller must see
+                await self.ledger.record(SpendEntry(clinic_id, row.role, row.provider, row.model_id, call_class.value, Decimal(0), Decimal(0), self.origin, f"gw-{uuid.uuid4()}", attempts=calls, outcome="failed"))
         return None

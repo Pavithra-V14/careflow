@@ -484,7 +484,7 @@ async def retries_repeat_nothing() -> list[Check]:
 
 
 async def spend_is_recorded_once_and_the_ceiling_stops_calls() -> list[Check]:
-    """Spend is recorded once per SUCCESSFUL call, however many failed tries came before it; once the ceiling is reached the provider is not called again. (A failed try records nothing: the provider's own bill for it is unknown to us; see the threat model.)"""
+    """Spend is recorded once per answered call, however many failed tries came before it; a route that failed every try records its attempt COUNT and no money (the provider's own bill for a failed try is unknown to us); once the ceiling is reached the provider is not called again."""
     flaky = Provider("transient")
     gw, ledger = gateway("decision", flaky, price="0.001", ceiling="1")
     request = DecisionRequest("drill", "DRILL", ("a", "b"), DataClass.SYNTHETIC)
@@ -492,7 +492,8 @@ async def spend_is_recorded_once_and_the_ceiling_stops_calls() -> list[Check]:
         await gw.call("decision", request, data_class=DataClass.SYNTHETIC, clinic_id=CLINIC)
     except AllRoutesFailed:
         pass
-    nothing_when_failed = len(ledger.entries) == 0
+    (failed_entry,) = ledger.entries
+    counted_not_costed = (failed_entry.outcome, failed_entry.attempts, failed_entry.usd_actual, failed_entry.usd_shadow) == ("failed", flaky.calls, 0, 0) and failed_entry.attempts == 3 and await ledger.spent_today(CLINIC, "test") == 0
     answering = Provider("ok", DecisionResult("a", {"a": 0.9, "b": 0.1}, 0.9, "drill"), Usage(1000, 1000))
     gw, ledger = gateway("decision", answering, price="0.001", ceiling="0.0035")
     results = []
@@ -508,7 +509,7 @@ async def spend_is_recorded_once_and_the_ceiling_stops_calls() -> list[Check]:
     await gw.call("decision", request, data_class=DataClass.SYNTHETIC, clinic_id=CLINIC, call_class=CallClass.SAFETY)
     safety_goes_through = safety.calls == 1 and len(ledger.entries) == 1
     return [
-        Check("spend.failed_tries", "tries that failed record no spend entry (unknown, stated), and no entry is made for a call that never answered", nothing_when_failed),
+        Check("spend.failed_tries", "a route that failed every try records one entry with the attempt count and no money (a failed try has no known cost)", counted_not_costed),
         Check("spend.once_and_ceiling", "each answered call records exactly one spend entry, and after the ceiling the provider is not called again", stops),
         Check("spend.safety_not_budgeted", "the safety class is never stopped by the ordinary ceiling, and its spend is still recorded once", safety_goes_through),
     ]

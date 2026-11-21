@@ -7,7 +7,7 @@ that raises is a FAIL naming the exception CLASS only), then `drill result: PASS
 
 What it proves (careflow/outage_drill.py has the checks; tests/test_outage_drills.py runs the same ones and a negative control for each kind): a failure or timeout of the vision, decision, translation, embedding or database edge ends in a
 human-review outcome or a fixed-words refusal, never a guess; the rules run before any model and a model outage never blocks a red-flag nurse task; no side effect comes from a stage that failed or paused; a retry with the same idempotency key
-repeats no effect; spend is recorded once per answered call and the ceiling stops further calls; a restart mid-run resumes from its checkpoint without repeating a step.
+repeats no effect; spend is recorded once per answered call (a failed route records its attempt count and no money) and the ceiling stops further calls; a restart mid-run resumes from its checkpoint without repeating a step.
 """
 
 import asyncio

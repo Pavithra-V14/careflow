@@ -28,6 +28,7 @@ REQUIRED: Final = (
     ("0096", "ops.demo_placeholder_rows()", "proc"),
     ("0099", "sched.patient_booking_state(uuid)", "proc"),
     ("0100", "iam.set_clinic_public_profile(uuid,text,jsonb,text,text,text,text,text)", "proc"),
+    ("0101", "ops.spend_ledger_failed_idx", "rel"),
 )
 
 

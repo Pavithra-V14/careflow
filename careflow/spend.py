@@ -39,9 +39,9 @@ class PostgresSpendLedger:
             await set_request_claims(conn, {"sub": str(self._account), "role": "authenticated"})
             await conn.execute(
                 text(
-                    "insert into ops.spend_ledger (clinic_id, role, provider, model_id, call_class, usd_actual, usd_shadow, origin, idempotency_key) "
-                    "values (:c, :r, :p, :m, :k, :a, :s, :o, :i)"
+                    "insert into ops.spend_ledger (clinic_id, role, provider, model_id, call_class, usd_actual, usd_shadow, origin, idempotency_key, attempts, outcome) "
+                    "values (:c, :r, :p, :m, :k, :a, :s, :o, :i, :n, :o2)"
                 ),
                 {"c": entry.clinic_id, "r": entry.role, "p": entry.provider, "m": entry.model_id, "k": entry.call_class,
-                 "a": entry.usd_actual, "s": entry.usd_shadow, "o": entry.origin, "i": entry.idempotency_key},
+                 "a": entry.usd_actual, "s": entry.usd_shadow, "o": entry.origin, "i": entry.idempotency_key, "n": entry.attempts, "o2": entry.outcome},
             )
