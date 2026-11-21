@@ -56,7 +56,7 @@ settings:
     value: '{"care_delivery": {"version": 1, "body": "DEMO ONLY - NOT A LEGAL NOTICE. Placeholder text for a synthetic demonstration. Counsel owns the real consent wording."}, "voice_session": {"version": 1, "body": "DEMO ONLY - NOT A LEGAL NOTICE. Placeholder for the notice counsel will supply about recording and processing your voice during a session. It says nothing about your rights."}}'
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
   visit_readiness_content:
-    value: '{"facts": {"demo_fact_one": "DEMO ONLY - NOT A CLINICAL QUESTION. Placeholder question one?"}, "visit_types": {"DEMO visit type": {"intake": ["demo_fact_one"], "checklist": [{"id": "demo_item_one", "text": "DEMO ONLY - NOT A CLINICAL INSTRUCTION. Placeholder checklist item one: please confirm."}]}}}'
+    value: '{"facts": {"demo_fact_one": "DEMO ONLY - NOT A CLINICAL QUESTION. Placeholder question one?"}, "visit_types": {"DEMO visit type": {"intake": ["demo_fact_one"], "checklist": [{"id": "demo_item_one", "text": "DEMO ONLY - NOT A CLINICAL INSTRUCTION. Placeholder checklist item one: please confirm."}]}, "Demo Visit Type A (30 min, invented)": {"intake": ["demo_fact_one"], "checklist": [{"id": "demo_item_one", "text": "DEMO ONLY - NOT A CLINICAL INSTRUCTION. Placeholder checklist item one: please confirm."}]}, "Demo Visit Type B (45 min, invented)": {"intake": ["demo_fact_one"], "checklist": [{"id": "demo_item_one", "text": "DEMO ONLY - NOT A CLINICAL INSTRUCTION. Placeholder checklist item one: please confirm."}]}}}'
     label: "DEMO ONLY - NOT A CLINICAL DECISION"
   visit_readiness_task_priority:
     value: "standard"

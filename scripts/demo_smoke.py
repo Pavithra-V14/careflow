@@ -75,6 +75,7 @@ FIXES = {
     "the second factor matches the screens switched on": "for the real second-factor pass turn CAREFLOW_REQUIRE_AAL2 back on and enrol the accounts (docs/mfa-live-pass.md); for password-only demo walks leave it and expect a 403 on those screens",
     "patient booking and messaging are on": "add the switch named above as NAME=on to .env and run this again; for booking also run scripts/seed_dev_demo_data.py (fresh open slots) and scripts/seed_demo_placeholders.py (the bookable visit types) with --clinic-id <the clinic id>",
     "the three screen switches are on": "add the switch named above as NAME=on to .env and run this again",
+    "visit readiness (nurse and doctor) can start": "add FEATURE_VISIT_READINESS as NAME=on to .env and make sure the demo pack is on (CAREFLOW_DEMO_PHASE4, demo runbook section 14), restart the backend, then run this again",
 }
 
 
@@ -215,6 +216,22 @@ def judge_screen_switches(env: Mapping[str, str | None]) -> Result:
     name = "the three screen switches are on"
     off = [n for n in SCREEN_SWITCHES if not is_on(env, n)]
     return (name, not off, f"{len(SCREEN_SWITCHES) - len(off)} of {len(SCREEN_SWITCHES)} on" + (f"; off: {', '.join(off)}" if off else ""))
+
+
+def judge_visit_readiness(env: Mapping[str, str | None]) -> Result:
+    """WARN, never FAIL (the nurse and doctor readiness run is optional): the staff readiness routes answer 503 until the SWITCH is on, and the checklist content and its task priority exist (the demo pack supplies both)."""
+    name = "visit readiness (nurse and doctor) can start"
+    switch = (env.get("FEATURE_VISIT_READINESS") or "").strip().lower() in {"1", "true", "yes", "on"}
+    pack = (env.get("CAREFLOW_DEMO_PHASE4") or "").strip().lower() in {"1", "true", "yes", "on"}
+    own = bool((env.get("CAREFLOW_VISIT_READINESS_CONTENT") or "").strip()) and bool((env.get("CAREFLOW_VISIT_READINESS_TASK_PRIORITY") or "").strip())
+    if switch and (pack or own):
+        return (name, True, "the switch is on and the checklist content and task priority are supplied")
+    missing = []
+    if not switch:
+        missing.append("FEATURE_VISIT_READINESS is not on")
+    if not (pack or own):
+        missing.append("no checklist content or task priority (CAREFLOW_DEMO_PHASE4=1 supplies a labelled demo checklist)")
+    return (name, "warn", "the readiness routes will answer 503: " + "; ".join(missing))
 
 
 def probe_backend(port: int, timeout: float = 2.0) -> tuple[bool, bool | None]:
@@ -364,7 +381,7 @@ async def main() -> int:
             raise Refused("refusing: no host was typed") from None
         seed.confirm_target(typed, host)
         checked, factors = await read_checks(env, args.clinic_id)
-        results = [*checked, judge_keys(env), judge_ceilings(env), judge_rules_before_models(), judge_switches(env), judge_backend(*probe_backend(args.port)), judge_second_factor(env, factors), judge_screen_switches(env), judge_patient_switches(env)]
+        results = [*checked, judge_keys(env), judge_ceilings(env), judge_rules_before_models(), judge_switches(env), judge_backend(*probe_backend(args.port)), judge_second_factor(env, factors), judge_screen_switches(env), judge_patient_switches(env), judge_visit_readiness(env)]
         return render(results)
     except Refused as exc:
         print(str(exc))

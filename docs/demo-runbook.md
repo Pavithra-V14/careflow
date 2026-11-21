@@ -178,11 +178,19 @@ The first enters the break-glass reasons and limits, the public-grievance cap, t
 | Patient messaging | `CAREFLOW_PATIENT_MESSAGING=on` (also needs `CAREFLOW_MESSAGE_MAX_PER_MINUTE`, which the demo pack supplies) |
 | Patient booking (the visit types the script marked bookable) | `CAREFLOW_PATIENT_BOOKING=on` |
 | Visit preparation | `CAREFLOW_PATIENT_VISIT_PREP=on` |
+| Visit readiness for a nurse or doctor (`GET /v1/staff/visits/{id}/readiness`; the screen "Visit readiness is not set up yet" means this is off) | `FEATURE_VISIT_READINESS=on` **and** `CAREFLOW_DEMO_PHASE4=1` (the pack supplies the labelled checklist and its task priority; the pack never supplies the switch). A second factor is needed to use it. The checklist is keyed by the visit type's exact name: the pack now names the two seeded demo visit types ("Demo Visit Type A (30 min, invented)" and "...B (45 min, invented)"); a visit of any other type answers 409 "no readiness content". |
 | Family links | `CAREFLOW_FAMILY_LINKS=on` |
 | Card and template editor | `CAREFLOW_KNOWLEDGE_EDITOR=on` |
 | Break-glass | none (a grant needs the reasons and limits from step 2, a second factor, and a patient of the clinic) |
 | Public grievance form | none beyond the demo pack and the clinic being published (`scripts\dev_clinic.py publish --clinic-id <id>`) |
 | The checkpoint-retention report | optional line: `CAREFLOW_RETENTION_CHECKPOINT_DAYS=90` (the specification's starting value, **not approved**; report only, deletes nothing) |
+
+**3a. Make the nurse and doctor readiness run work** (the live 503 of 2026-11-21 was the missing switch): add these two lines to `E:\Claude\careflow-run\.env` if they are not there, then `git pull` the run folder (the demo pack now names the seeded visit types) and restart the backend with `scripts\demo_up.ps1`:
+```
+FEATURE_VISIT_READINESS=on
+CAREFLOW_DEMO_PHASE4=1
+```
+No seed command is needed: the checklist comes from the demo pack. `demo_up.ps1` shows a yellow WARN "visit readiness (nurse and doctor) can start" while the switch is off or the pack is missing. Walk it as the nurse or doctor with a second factor on the visit of DEMO Portal Patient (start the run, then read it back).
 
 **3b. Check that everything is in place** (read-only, prints PASS, WARN, SKIP or FAIL lines and counts only, never a value; **only a FAIL stops `demo_up.ps1` from starting the backend**: a `WARN` (yellow) is something to know, for example unlabelled rows left by the older seed scripts or the second factor being off while a staff screen needs it, and a `SKIP` (grey) is a check that does not apply here, for example the knowledge search when the cards are indexed under the hosted model; asks you to TYPE the project host; exit status 0 only if every check passes):
 ```powershell
