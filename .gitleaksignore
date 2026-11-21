@@ -20,3 +20,8 @@ a5c5067291b175627f16838f15edc2d4cbe21ab6:careflow/app.py:generic-api-key:3994
 b467d89d29fef5c4002d5fff39ac5a0a29d63ba9:careflow/app.py:generic-api-key:3922
 # Reviewed 2026-11-14: the comment above this entry in an earlier version of this file, not a credential
 08332d49535dc2c6240c9f5c566e958f8aea319b:.gitleaksignore:generic-api-key:19
+# Reviewed 2026-11-21 (CI run on 41e10fc): three false positives in frontend/scripts/verify-production-build.mjs. They are deliberately planted CANARY values (invented, split into two string fragments that are
+# joined at run time) that the production-build proof puts in the build environment to check that none of them reaches the bundle. Not credentials: none opens anything.
+440a594b4d198a86df34287dae1e357ad72d2c24:frontend/scripts/verify-production-build.mjs:generic-api-key:22
+440a594b4d198a86df34287dae1e357ad72d2c24:frontend/scripts/verify-production-build.mjs:generic-api-key:23
+440a594b4d198a86df34287dae1e357ad72d2c24:frontend/scripts/verify-production-build.mjs:generic-api-key:24
