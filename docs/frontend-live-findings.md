@@ -574,3 +574,32 @@ Not touched: DEMO Portal Patient's booking and consent; anything switched off in
 **Patient portal:** withdrawing consent, cancelling the booking, marking a preparation item done, sending a complaint while signed in, a family-link request or withdrawal, downloading my data, opening a voice session, sending a message or opening a conversation, phone-code sign-in (no approved SMS provider).
 
 **All Tamil wording:** machine-checked only; no human reviewer has approved a string.
+
+## Write walk, continued (21 Nov 2026): front desk request status done; nurse stopped at "Start readiness" (no answer in 30 s)
+
+The upload and run were skipped by the owner's decision (storage is not set up in the dev project; the owner does that separately). Same rules: demo data only, one action per write, no retries, stop at the first unexpected error. The user typed every password and code.
+
+### Front desk (second factor): tasks, alerts, request status
+
+| Screen | Result | Exact screen text and calls |
+|---|---|---|
+| Tasks | **not tested live: none exist** | `GET /v1/staff/review-tasks` **200**, 0 rows; "There are no tasks to show." Nothing was acknowledged or resolved. |
+| Alerts | **not tested live: none exist** | `GET /v1/staff/console/alerts` **200**, 0 rows; "There are no alerts." |
+| Patient requests: change ONE status | **pass** | `GET /v1/staff/patient-requests` 200; the first row (the nominee request DEMO Portal Patient sent earlier) offered **3** status buttons from `allowed_next`; the first was pressed once: `POST /v1/staff/patient-requests/{request_id}/status` **200** with a key; "Recorded. The patient has been told." |
+
+5 calls, 0 schema mismatches, no 403, no unanswered write.
+
+### Nurse (second factor): visit readiness (the switch is now on)
+
+| Screen | Result | Exact screen text and calls |
+|---|---|---|
+| Visit readiness, upcoming visits | **pass** | `GET /v1/staff/visits/upcoming` **200** |
+| Visit readiness for DEMO Portal Patient's visit | **pass: now reachable (switch on)** | `GET /v1/staff/visits/{visit_id}/readiness` **404** (it was 503 "not set up" before the switch): "There is no readiness run for this visit yet." A 404 here means no run exists, which is the normal state before one is started. |
+| "Start readiness" (pressed ONCE, as authorised) | **finding: no answer within 30 seconds** | The button was offered and pressed once: `POST /v1/staff/visits/{visit_id}/readiness/start` was **sent and had not answered after 30 seconds**; the dialog stayed open and the script stopped there (no retry). **The status code is unknown.** The server may still have started the run; whether it did is not known from this walk. For the backend: does the start call take long (it may call a model), or hang? A read-only look at the visit's readiness screen (one nurse sign-in) would show whether a run now exists. |
+| Screen for red flags | **not tested live: not reached** | The walk stopped before the messages step. |
+
+4 calls recorded, 0 schema mismatches, no 403; one write sent with no answer received (the start).
+
+### Not started (stopped at the first unexpected error)
+
+Doctor: the referral decision with the optional escalation question left empty, and rejecting the demo draft with a reason word. Nurse: the screen-for-red-flags check.

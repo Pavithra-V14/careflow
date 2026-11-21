@@ -989,16 +989,113 @@ test('DEMO write walk, front desk: register, upload and run a referral, task, sc
   }
 });
 
+test('DEMO write walk, front desk: resolve ONE task, acknowledge ONE alert, change ONE patient request status', async ({ page }) => {
+  test.skip(LINK !== 'w-fd-tasks', 'start with LIVE_LINK=w-fd-tasks');
+  test.setTimeout(30 * 60_000);
+  const calls: Call[] = [];
+  const phase = { current: 'sign-in' };
+  watch(page, calls, phase);
+  const { log, snap, stop, confirmAndWait, finish } = linkTools(page, calls, 'write-fd-tasks');
+  const go = async (name: string, hash: string) => {
+    phase.current = name;
+    await page.evaluate((h) => (window.location.hash = h), hash);
+    await settle(page);
+    await page.waitForTimeout(2000);
+  };
+  try {
+    await signInByHand(page);
+    await settle(page);
+
+    // tasks: acknowledge (if the screen requires it) then resolve ONE task, never a red-flag or unassessable one
+    await go('tasks', '#/tasks');
+    await snap('tasks');
+    const taskRow = page.locator('main tbody tr').filter({ hasText: /Open/ }).filter({ hasNotText: /Red flag|Unassessable|Urgent/ }).first();
+    if ((await taskRow.count()) === 0) {
+      log.push('## tasks: no open, non-urgent task; not tested live', '');
+    } else {
+      await taskRow.getByRole('link').first().click();
+      await settle(page);
+      await snap('the task, opened');
+      const ack = page.getByRole('button', { name: /^Acknowledge$/ });
+      if ((await ack.count()) > 0) {
+        phase.current = 'acknowledge ONE task (write)';
+        await ack.first().click();
+        await confirmAndWait('"Acknowledge" the task');
+      }
+      const resolve = page.getByRole('button', { name: /^Resolve$/ });
+      if ((await resolve.count()) === 0) {
+        log.push('## this task cannot be closed on this screen (its kind is closed through its own screen); not resolved', '');
+      } else {
+        phase.current = 'resolve ONE task (write)';
+        await resolve.first().click();
+        await confirmAndWait('"Resolve" the task');
+      }
+    }
+
+    // alerts: acknowledge ONE if any exists
+    await go('alerts', '#/alerts');
+    await snap('alerts');
+    const ackAlert = page.locator('main').getByRole('button', { name: /^Acknowledge/ });
+    if ((await ackAlert.count()) === 0) {
+      log.push('## alerts: none to acknowledge; not tested live', '');
+    } else {
+      phase.current = 'acknowledge ONE alert (write)';
+      await ackAlert.first().click();
+      await confirmAndWait('"Acknowledge" the alert');
+    }
+
+    // patient requests: ONE status change, only with a button the row's allowed_next gave
+    await go('patient requests', '#/requests');
+    await snap('patient requests');
+    const reqBtn = page.locator('main tbody tr').first().getByRole('button');
+    if ((await reqBtn.count()) === 0) {
+      log.push('## patient requests: no request with an allowed next status; not tested live', '');
+    } else {
+      log.push(`## the first request offers ${await reqBtn.count()} status button(s) (its allowed_next)`, '');
+      phase.current = 'change ONE patient request status (write)';
+      await reqBtn.first().click();
+      await confirmAndWait('the first status button the row offered');
+    }
+    if (!log.length) await stop('nothing happened');
+  } finally {
+    await finish('Demo write walk, front desk (tasks, alert, request)');
+  }
+});
+
 test('DEMO write walk, nurse: ONE screen-for-red-flags check on a message', async ({ page }) => {
   test.skip(LINK !== 'w-nurse', 'start with LIVE_LINK=w-nurse');
   test.setTimeout(25 * 60_000);
   const calls: Call[] = [];
   const phase = { current: 'sign-in' };
   watch(page, calls, phase);
-  const { snap, stop, confirmAndWait, finish } = linkTools(page, calls, 'write-nurse');
+  const { log, snap, stop, confirmAndWait, finish } = linkTools(page, calls, 'write-nurse');
   try {
     await signInByHand(page);
     await settle(page);
+    // visit readiness for DEMO Portal Patient's visit (the switch is now on): record 200 or 503; read-only unless it offers a start button, which is pressed once
+    phase.current = 'visit readiness (upcoming visits)';
+    await page.evaluate(() => (window.location.hash = '#/readiness'));
+    await settle(page);
+    await page.waitForTimeout(2000);
+    await snap('visit readiness');
+    const visitBtn = page.locator('main tbody tr').first().getByRole('button');
+    if ((await visitBtn.count()) > 0) {
+      phase.current = 'visit readiness (open the visit)';
+      await visitBtn.first().click();
+      await settle(page);
+      await page.waitForTimeout(2000);
+      await snap('visit readiness, the visit opened');
+      const start = page.getByRole('button', { name: /^Start readiness$/ });
+      if ((await start.count()) > 0) {
+        phase.current = 'start readiness ONCE (write)';
+        await start.first().click();
+        await confirmAndWait('"Start readiness"');
+      } else {
+        log.push('## no "Start readiness" button is offered; nothing was started', '');
+      }
+    } else {
+      log.push('## no upcoming visit row to open', '');
+    }
     phase.current = 'messages (list)';
     await page.evaluate(() => (window.location.hash = '#/messages'));
     await settle(page);
