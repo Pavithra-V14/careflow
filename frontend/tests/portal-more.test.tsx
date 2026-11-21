@@ -273,7 +273,7 @@ describe('a complaint without signing in', () => {
   it.each([
     [404, 'No hospital is set up to receive this right now. Nothing was sent.'],
     [422, "That category is not on the hospital's list. Nothing was sent."],
-    [503, 'This is not available right now. Nothing was sent.'],
+    [503, 'Complaints without signing in are not set up at this hospital yet. Nothing can be sent.'],
   ])('tells a %s in fixed words', async (status, words) => {
     const user = userEvent.setup();
     stubApi(backend({ publicGrievance: json({ detail: LEAK }, status) }));
@@ -284,6 +284,50 @@ describe('a complaint without signing in', () => {
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Send' }));
     expect(await within(screen.getByRole('dialog')).findByText(words)).toBeInTheDocument();
     expect(document.body.textContent).not.toContain(LEAK);
+  });
+
+  it('never tells a signed-out person to sign in: a 401 is said as "cannot be done right now", in fixed words', async () => {
+    const user = userEvent.setup();
+    stubApi(backend({ publicGrievance: json({ detail: LEAK }, 401) }));
+    await mount('en', false);
+    await user.selectOptions(await screen.findByLabelText('Category'), 'access');
+    await user.type(screen.getByLabelText('What you want to tell us'), 'x');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Send' }));
+    const dialog = screen.getByRole('dialog');
+    expect(await within(dialog).findByText('This cannot be done right now. Nothing was sent.')).toBeInTheDocument();
+    expect(dialog.textContent).not.toMatch(/sign in/i);
+    expect(document.body.textContent).not.toContain(LEAK);
+  });
+
+  it('sends its own random key of 32 to 128 characters, a fresh one for each attempt and the same one when the same attempt is retried', async () => {
+    const user = userEvent.setup();
+    let n = 0;
+    const calls = stubApi((req) => {
+      if (req.path === '/public/grievances') return n++ === 0 ? json({ detail: LEAK }, 503) : json({ created: true, grievance_id: RID }, 201);
+      return backend()(req);
+    });
+    await mount('en', false);
+    await user.selectOptions(await screen.findByLabelText('Category'), 'access');
+    await user.type(screen.getByLabelText('What you want to tell us'), 'first');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    const go = () => within(screen.getByRole('dialog')).getByRole('button', { name: 'Send' });
+    await user.click(go());
+    await within(screen.getByRole('dialog')).findByText(/not set up|not available/);
+    await user.click(go()); // a retry of the same attempt
+    expect(await screen.findByText('Your message was sent.')).toBeInTheDocument();
+    const sent = posts(calls, '/public/grievances');
+    expect(sent).toHaveLength(2);
+    const [a, b] = [sent[0]?.key ?? '', sent[1]?.key ?? ''];
+    for (const k of [a, b]) expect(k.length >= 32 && k.length <= 128, k.length.toString()).toBe(true);
+    expect(b).toBe(a); // reused on the retry of the same attempt
+    expect(sent.every((c) => c.auth === null)).toBe(true); // no Authorization header, ever
+    // a new attempt (new text) gets a fresh key
+    await user.type(screen.getByLabelText('What you want to tell us'), 'second');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await user.click(go());
+    await waitFor(() => expect(posts(calls, '/public/grievances')).toHaveLength(3));
+    expect(posts(calls, '/public/grievances')[2]?.key).not.toBe(a);
   });
 
   it('says a 429 in the fixed "too many requests" words', async () => {

@@ -731,6 +731,33 @@ for (const role of ['nurse', 'doctor'] as const) {
   });
 }
 
+test('DEMO complaint without signing in: ONE demo complaint (one write, no sign-in needed)', async ({ page }) => {
+  test.skip(LINK !== 'complaint', 'start with LIVE_LINK=complaint');
+  test.setTimeout(10 * 60_000);
+  const calls: Call[] = [];
+  const phase = { current: 'the signed-out page' };
+  watch(page, calls, phase);
+  const { log, snap, stop, confirmAndWait, finish } = linkTools(page, calls, 'link-complaint');
+  try {
+    await page.goto('/patient/sign-in/');
+    await settle(page);
+    await page.waitForTimeout(3000);
+    await snap('the signed-out page');
+    const category = page.locator('#pg-category');
+    if ((await category.evaluate((el) => el.tagName).catch(() => '')) !== 'SELECT') await stop('the category list is not on the page (it is not set up or did not load); nothing was sent');
+    const values = await category.locator('option').evaluateAll((els) => els.map((e) => (e as HTMLOptionElement).value).filter(Boolean));
+    log.push(`## categories offered: ${values.join(', ')}`, '');
+    if (!values.includes('other')) await stop('the category "other" is not in the list; nothing was sent');
+    phase.current = 'ONE demo complaint (write)';
+    await category.selectOption('other');
+    await page.locator('#pg-text').fill('DEMO complaint, not a real complaint');
+    await page.locator('section[aria-labelledby=portal-public-grievance] button[type=submit]').click();
+    await confirmAndWait('"Send" the demo complaint');
+  } finally {
+    await finish('Demo complaint without signing in');
+  }
+});
+
 test('DEMO link, front desk: the family links page, read-only (second factor)', async ({ page }) => {
   test.skip(LINK !== 'family', 'start with LIVE_LINK=family');
   test.setTimeout(20 * 60_000);

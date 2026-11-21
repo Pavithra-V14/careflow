@@ -13,7 +13,7 @@ export interface paths {
         };
         /**
          * Public Clinic
-         * @description The hospital's clinic id and name, for the forms of a patient who is not signed in yet (a claim or a grievance needs the clinic id). 404 while the owner has marked no clinic public. Nothing else is returned.
+         * @description The hospital's clinic id and name, for the forms of a patient who is not signed in yet (a claim or a grievance needs the clinic id). 404 while the owner has marked no clinic public, 503 until the per-address limit (CAREFLOW_PUBLIC_READ_IP_PER_MINUTE, required, no default) is set, 429 over it. Nothing else is returned.
          */
         get: operations["public_clinic_public_clinic_get"];
         put?: never;
@@ -78,7 +78,7 @@ export interface paths {
         /**
          * File Public Grievance
          * @description File a grievance WITHOUT signing in, to the hospital's published clinic: a category from the clinic's list and the text (stored encrypted, same handling as a signed-in grievance; the clinic's admin sees and works it). Needs an X-Idempotency-Key. 404 while no clinic is
-         *     published, 422 for a category not on the list, 429 over the per-address or the clinic's hourly limit (both required settings or owner-managed numbers; with either missing the route answers 503, never an unlimited door). The key must be 32 to 300 characters (use a random uuid): a short or guessable key is a 422. The per-address limit counts `request.client.host`: behind a proxy that is the proxy's address unless the deployment forwards the real one, 503 while the category list, the limits or the keys are not configured.
+         *     published, 422 for a category not on the list, 429 over the per-address or the clinic's hourly limit (both required settings or owner-managed numbers; with either missing the route answers 503, never an unlimited door). The key must be 32 to 128 characters (use a random uuid): a short or guessable key is a 422. The per-address limit counts `request.client.host`: behind a proxy that is the proxy's address unless the deployment forwards the real one, 503 while the category list, the limits or the keys are not configured.
          */
         post: operations["file_public_grievance_public_grievances_post"];
         delete?: never;
@@ -7805,7 +7805,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Required on every write. */
+                /** @description Required on every write; a random value of 32 to 128 characters (a uuid). */
                 "X-Idempotency-Key": string;
             };
             path?: never;

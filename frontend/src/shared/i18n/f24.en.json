@@ -66,7 +66,6 @@
       "confirmBody": "This sends your message to the hospital. It is stored encrypted.",
       "filed": "Your message was sent.",
       "noClinic": "No hospital is set up to receive this right now. Nothing was sent.",
-      "unavailable": "This is not available right now. Nothing was sent.",
       "refused": "This cannot be done right now. Nothing was sent."
     }
   }

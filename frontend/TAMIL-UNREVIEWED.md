@@ -7,7 +7,7 @@ Not translated on purpose, pending a clinician or a native reviewer: the clinica
 `tasks.kind.screening_unassessable`, `tasks.kind.triage_proposal`), the referral decision words (`referrals.decision.*`), the
 identity-revoke reason words (`patients.revoke.reasons.*`) and every `placeholder.*` string stay in English.
 
-2047 of 2047 strings are unreviewed.
+2046 of 2046 strings are unreviewed.
 
 ## AI-reviewed, pending native review
 
@@ -1539,7 +1539,6 @@ Terms standardised: proposal, resolve / resolved.
 | `portal.publicGrievance.notSetUp` | Complaints without signing in are not set up at this hospital yet. Nothing can be sent. | இந்த மருத்துவமனையில் உள்நுழையாமல் புகார் அனுப்புவது இன்னும் அமைக்கப்படவில்லை. எதுவும் அனுப்ப முடியாது. | ok |
 | `portal.publicGrievance.refused` | This cannot be done right now. Nothing was sent. | இதை இப்போது செய்ய முடியாது. எதுவும் அனுப்பப்படவில்லை. | ok |
 | `portal.publicGrievance.title` | Send a complaint without signing in | உள்நுழையாமல் ஒரு புகாரை அனுப்புங்கள் | ok |
-| `portal.publicGrievance.unavailable` | This is not available right now. Nothing was sent. | இது இப்போது கிடைக்கவில்லை. எதுவும் அனுப்பப்படவில்லை. | ok |
 | `portal.register.body` | You are signed in, but you do not have a patient account here yet. Creating it does not link you to any record. | நீங்கள் உள்நுழைந்துள்ளீர்கள், ஆனால் இங்கு உங்களுக்கு இன்னும் நோயாளிக் கணக்கு இல்லை. அதை உருவாக்குவது உங்களை எந்தப் பதிவுடனும் இணைக்காது. | ok |
 | `portal.register.create` | Create my account | என் கணக்கை உருவாக்கு | ok |
 | `portal.register.refused` | This sign-in cannot be used for a patient account. | இந்த உள்நுழைவை நோயாளிக் கணக்குக்குப் பயன்படுத்த முடியாது. | ok |

@@ -427,7 +427,8 @@ export function PublicGrievanceSection({ api }: { api: Api }) {
             <WriteProblem
               problem={send.error}
               forbidden={t('portal.publicGrievance.refused')}
-              calm={{ not_found: t('portal.publicGrievance.noClinic'), invalid: t('portal.grievance.categoryRefused'), unavailable: t('portal.publicGrievance.unavailable') }}
+              // A signed-out person is never told to sign in (a 401 here is a refusal of the request, said as "cannot be done right now"); a 503 is the not-set-up sentence.
+              calm={{ not_found: t('portal.publicGrievance.noClinic'), invalid: t('portal.grievance.categoryRefused'), unavailable: t('portal.publicGrievance.notSetUp'), unauthorized: t('portal.publicGrievance.refused') }}
             />
           }
         >
