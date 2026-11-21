@@ -31,7 +31,9 @@ dev = [
 pythonpath = ["."]
 testpaths = ["tests"]
 # Built in, no plugin: a test that runs longer than this dumps every thread's stack to stderr, so a hang in CI names its own cause.
-faulthandler_timeout = 300
+# 600, not 300 (2026-11-21): the live 200-concurrent-booking test is a SERIAL chain behind one slot row lock (about 1.4 s per attempt over the hosted CI database; 293 s in run 44737235379) and printed a harmless dump just past 300 s in an
+# earlier run. Every live test is also wrapped in tests.bounds.bounded (300 s, or 900 s for that one), so a real stall still fails by its own bound and a hang past 600 s still dumps. See docs/design/ci-sharding.md.
+faulthandler_timeout = 600
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI's dependency-injection idiom: Depends(...) in a parameter default is intended, not a bug.

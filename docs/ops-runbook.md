@@ -60,6 +60,17 @@ The rule everywhere: **the red-flag rules never use a model** and keep running f
 
 The fixed-words failures (the same words every time, never a value or a reason): the single 401 for any credential problem, the single 403 for any wrong role or missing second factor, one 404 for another's or a missing record, the 503 "not set up" answers for a switch or a required setting that is unset, and the family-link and patient-feature "not configured" words.
 
+### The outage drill (2026-11-21): prove it before you need it
+
+`scripts/drill_outages.py` breaks each dependency on purpose, on **fakes only**: no provider is called, no connection is opened, no key is read, nothing is spent. It runs in the synthetic demo only and refuses anywhere else. Run it from the repository (or the run folder) with the demo environment:
+
+```powershell
+$env:CAREFLOW_PROFILE = "demo"; $env:CAREFLOW_DATA_POLICY = "synthetic_only"
+.\.venv\Scripts\python.exe scripts\drill_outages.py
+```
+
+It prints one fixed-words line per check (`PASS <id>: ...` or `FAIL <id>: ...`) and `drill result: PASS` only when every check held (exit code 0). What it proves, per row of the table above: a vision, decision, translation, embedding or database failure or timeout ends in a human-review outcome or a fixed-words refusal, never a guess; the rules run before any model and a model outage never blocks a red-flag nurse task; a stage that failed or paused wrote nothing it should not; a retry with the same idempotency key repeats no effect; spend is recorded once per answered call and a spent ceiling stops further calls without calling the provider; a restart mid-run resumes from its checkpoint without repeating a step. The same checks run in the offline test suite (`tests/test_outage_drills.py`, with a negative control that breaks the code under test and requires the drill to say FAIL). A FAIL line names the check; nothing in the output is a secret or patient text. **It proves the code's reaction to a failed edge; it does not prove a real provider's behaviour** (the live provider checks are `scripts/provider_live_check.py`, and the restore and rollback drills in `docs/runbooks/` need real hosting).
+
 ## 4. Reading the audit log for an incident
 
 **Who may read it:** an account holding the `auditor` role at a clinic (`GET /v1/staff/audit`). Others get a 403; a clinic you do not audit gets a 404. Checklist row 77: create a REAL auditor account and test this live before launch; it has not been exercised with a real auditor sign-in yet.
