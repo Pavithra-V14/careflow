@@ -190,5 +190,30 @@ Scope: `careflow/demo_email_signin.py` and its use in the claim route, migration
 
 Not found: any way the e-mail path works in the clinical profile or with the switch off (three independent gates: the switch, profile + data policy per request, the startup refusal), an e-mail-only token reaching staff routes or another patient's data, a secret or an address in a printed line, or a leak about another account in the origin or activation answers. Open decision recorded for the owner: whether the dev project should keep open sign-up switched off while the e-mail path is used.
 
+## 16. The public surface: every route reachable without a sign-in (2026-11-21, "break it on purpose")
+
+The list is closed and tested (`tests/test_public_surface.py` reads the application's routes: a route that needs no sign-in and is not on this list fails the build, and a listed route that DOES need one fails it too). Everything else (`/v1/staff/...`, `/v1/portal/...`, `/v1/iam/me`) needs a verified token.
+
+| Route | Rate limit (fails closed when unset) | Errors | Data returned | Cache | Body size | Verdict |
+|---|---|---|---|---|---|---|
+| `GET /readyz` | None, by design (a load balancer polls it); the answer and the registry read behind it are reused for 5 seconds, so it cannot be used to load the database | A boolean only; the reasons are logged, never returned | `{"ready": bool}` | `no-store` | none (GET) | FIXED (was: one registry read per anonymous call) |
+| `GET /public/clinic` | `CAREFLOW_PUBLIC_READ_IP_PER_MINUTE`, no default: 503 unset, 429 over | 404 "not found" when nothing is published | the published clinic's id and name only | success: none; every failure `no-store` | none | FIXED (was: no limit at all, one database read per call) |
+| `GET /public/clinic/profile` | same setting | same | the profile fields and `features` (no id, no count, no label text) | `public, max-age=60`; failures `no-store` | none | no defect (reviewed 2026-11-20) |
+| `GET /public/grievance-categories` | same setting; 503 until the list is set | fixed words | the category words only; the database is not touched | failures `no-store` | none | no defect |
+| `POST /public/grievances` | per-address (`CAREFLOW_PUBLIC_GRIEVANCE_IP_PER_HOUR`) and the clinic's owner-managed hourly cap; 503 if either is missing | 422 "request rejected" for a category not on the list or a short key; 404 if nothing is published; 409 for a key used by a different request | the new grievance id and whether it was created; nothing else | `no-store` | 32 KiB, 413 before the body is read | FIXED (see 1 and 4) |
+| `/docs`, `/redoc`, `/openapi.json`, `/docs/oauth2-redirect` | none | 404 | the whole API schema, in the synthetic demo only | n/a | n/a | FIXED (were served in every profile) |
+
+**Real defects found and fixed, each test-first**
+1. **The public complaint form could never have worked.** `POST /public/grievances` took its idempotency key through the signed-in dependency, which demands a token, so a signed-out person got 401. The offline test called the function directly and so never saw it; the live walk had not filed a complaint. It now has its own header dependency (32 to 128 characters, no token). Regression: the route list test and `test_the_public_complaint_route_does_not_ask_for_a_token`.
+2. **`GET /public/clinic` had no rate limit** and read the database on every call. It now fails closed (503 unset, 429 over) like its siblings.
+3. **The API schema and interactive docs were public in every profile**, handing an anonymous caller the full list of staff routes and their shapes. They are served only in the synthetic demo.
+4. **No request size limit on anonymous bodies.** A multi-megabyte POST would have been read in full before any field check. `/public/...` bodies are limited to 32 KiB, by `Content-Length` before anything is read and by counting chunks for an unsized body (413, `no-store`).
+5. **`/readyz` amplified into the database** in the clinical profile (one registry read per anonymous call); the result is reused for 5 seconds.
+6. **Cache headers.** Failed public reads (a 404 can be cached by a shared cache) and every public write now carry `Cache-Control: no-store`; the readiness probe too.
+
+**Checked, no defect:** no public route takes an id of a record, a patient, an account or another clinic, so none can reveal whether one exists; a validation error returns the rule that failed, never the value; no public route logs a body (a test posts a marker string and checks no log line carries it); there is no claim or sign-up helper without a token (`/v1/portal/claims`, `/register` and `/activate` all verify the token); CORS allows no origin unless one is configured, and a wildcard is refused in the clinical profile.
+
+**Left, stated:** the per-address limit counts `request.client.host`, so behind a reverse proxy on another host every visitor shares one bucket (one noisy caller can lock the rest out for a minute) unless the deployment forwards the real address; trusting a forwarded header is a deployment decision (checklist rows 27 and 75). The limiters are in memory and per process (a restart resets them; several processes multiply the allowance). A public complaint is unauthenticated by design: the limits, the category list and the size cap are the only controls, and the admin who reads the list sees only what a stranger typed.
+
 ## What this note does NOT claim
 That the system is secure against a compromised API process, a stolen database password or a hostile operator. Those depend on hosting, secrets management and monitoring that do not exist yet (items 26 to 28). The review of all migrations (`rls-security-reviewer`) and the spec review are separate passes; their findings are recorded where they are reported, not here.

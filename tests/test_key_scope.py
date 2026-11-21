@@ -34,6 +34,8 @@ def test_the_openapi_header_keeps_its_description_and_the_new_limit():
     from pathlib import Path
 
     snap = json.loads((Path(__file__).resolve().parent.parent / "openapi.snapshot.json").read_text(encoding="utf8"))
-    headers = [p for path in snap["paths"].values() for op in path.values() if isinstance(op, dict) for p in op.get("parameters", []) if p.get("name") == "X-Idempotency-Key"]
+    headers = [p for route, path in snap["paths"].items() if route != "/public/grievances" for op in path.values() if isinstance(op, dict) for p in op.get("parameters", []) if p.get("name") == "X-Idempotency-Key"]
+    public = [p for op in snap["paths"]["/public/grievances"].values() for p in op.get("parameters", []) if p.get("name") == "X-Idempotency-Key"]
+    assert len(public) == 1 and public[0]["schema"]["minLength"] == 32 and public[0]["schema"]["maxLength"] == 128 and public[0]["required"]  # the signed-out complaint route has its own, unguessable-key header
     assert headers, "no route documents the idempotency header"
     assert all(h["schema"].get("maxLength") == IDEMPOTENCY_KEY_MAX and h["required"] for h in headers)
