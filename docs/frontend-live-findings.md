@@ -476,3 +476,22 @@ Both accounts now have an authenticator. The user typed every password and fresh
 | Cards and templates: write a draft, submit, approve or reject | not tested live: no draft was written (it needs the user's go-ahead: `LIVE_DRAFT=yes`) | not tested live: there is no draft to look at, so the Look and the Approve dialog were not reached |
 
 7 calls each, 0 schema mismatches, no 403, no write, no unanswered write. The earlier "not tested live: needs second factor" for these screens is now answered for the reads: the second factor is what opens them (the password-only sessions were refused). **For the backend:** visit readiness answers 503 "not set up" for the demo visit: its content or switch is not set up; that is a setting, not a frontend defect.
+
+## The editor write test: one message template draft, submitted, looked at by a doctor (21 Nov 2026)
+
+The user typed every password and fresh code. Limits as decided: ONE message **template** draft (never a card), its title and its text exactly "DEMO PLACEHOLDER, not a clinical template, not approved" and nothing else; save it, submit it for approval; the doctor opens it, opens the Approve dialog and **cancels** it; nothing approved, nothing rejected.
+
+**The only writes, both by the nurse (pavithra.v2022ece@sece.ac.in, role Nurse, second factor), both with an idempotency key, no 403:**
+1. The draft: `POST /v1/staff/knowledge/drafts` **201**. The screen said "The draft was saved."
+2. The submit for approval: `POST /v1/staff/knowledge/drafts/{draft_id}/submit` **200**. The screen said "It was recorded."
+
+| Screen | Result | Exact screen text and calls |
+|---|---|---|
+| Nurse: write a template draft | **pass** | 201, "The draft was saved." (kind Template, code `demo.walk.draft`). Right after the save the list line still said "There are no drafts. Nothing is supplied by the system: every card and template is typed by staff." (it is replaced on the next read; a brief stale line, noted, not a failure of the write). |
+| Nurse: submit it | **pass** | 200, "It was recorded." The page then offered **0** Approve buttons to the author: a nurse cannot approve by role. The rule that a doctor who wrote a draft cannot approve it ("You wrote this draft. A different doctor must decide.") was **not tested live** (it needs a doctor to author a draft; none was authorised). |
+| Doctor: the drafts list | **pass** | `GET /v1/staff/knowledge/drafts` 200, **1 row** (the nurse's draft); `GET /v1/staff/knowledge/items` 200, "There are no approved cards or templates." |
+| Doctor: look at the draft | **pass** | The draft opened (its detail block shows the Synonyms, Phrases patients use and May be read by labels, empty for a template). |
+| Doctor: the Approve dialog | **pass, cancelled** | The Approve button was offered to the doctor (not the author) and its dialog opened; it was **cancelled**. **No approve and no reject was made**; the draft is still waiting for approval. |
+| Visit readiness (both) | finding, unchanged | The run answers 503 "Visit readiness is not set up yet. Nothing was written." (a backend setting); the upcoming-visits list and the empty preparation answer 200. |
+
+Nurse run: 15 calls; doctor run: 7 calls; 0 schema mismatches, no 403, no unanswered write. **The draft is still on the demo clinic, submitted and undecided.** It is plainly marked as not a clinical template and not approved; it should be rejected or left, by a doctor's decision, not by this walk.

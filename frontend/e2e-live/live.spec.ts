@@ -709,10 +709,19 @@ for (const role of ['nurse', 'doctor'] as const) {
         await page.locator('main .toolbar button').first().click();
         await page.locator('#kn-kind').selectOption('template');
         await page.locator('#kn-code').fill('demo.walk.draft');
-        await page.locator('#kn-title-in').fill('DEMO ONLY draft');
-        await page.locator('#kn-body').fill('DEMO ONLY - placeholder text for a walk, not clinical content, not for use.');
+        // ONE message template draft (never a card). Its title and its text are exactly this one plainly marked sentence and nothing else.
+        await page.locator('#kn-title-in').fill('DEMO PLACEHOLDER, not a clinical template, not approved');
+        await page.locator('#kn-body').fill('DEMO PLACEHOLDER, not a clinical template, not approved');
         await page.getByRole('button', { name: /^Save the draft$/ }).click();
         await confirmAndWait('"Save the draft"');
+        // then submit it for approval (the second and last write); the author sees no Approve on it
+        phase.current = 'cards and templates (submit the demo draft for approval, write)';
+        await page.getByRole('button', { name: 'Submit demo.walk.draft' }).click();
+        await confirmAndWait('"Submit this draft for approval"');
+        await page.waitForTimeout(1500);
+        const approveButtons = await page.getByRole('button', { name: /^Approve/ }).count();
+        log.push(`## Approve buttons on the page after submitting (the author, a nurse): ${approveButtons}`, '');
+        await snap('the drafts list after the submit');
       } else if (role === 'nurse') {
         log.push('## no draft was written (LIVE_DRAFT is not "yes")', '');
       }
