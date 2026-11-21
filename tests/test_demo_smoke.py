@@ -118,7 +118,7 @@ def test_every_check_has_a_fixed_words_fix_line_that_names_a_command_or_a_settin
     names = {
         "migrations are applied", "the clinic is published", "staff roles exist", "demo placeholders carry their labels", "the six demo cards are indexed", "a knowledge search returns a card",
         "provider keys are present", "spend ceilings are set", "rules run before any model", "the .env switches are consistent with section 14", "no backend runs without the demo profile",
-        "portal accounts have the demo origin", "the second factor matches the screens switched on", "the three screen switches are on", "patient booking and messaging are on",
+        "portal accounts have the demo origin", "the second factor matches the screens switched on", "the three screen switches are on", "patient booking and messaging are on", "visit readiness (nurse and doctor) can start",
     }
     assert set(smoke.FIXES) == names
     for name, fix in smoke.FIXES.items():

@@ -63,6 +63,7 @@ from careflow.rules import PLACEHOLDER
 
 DEMO_LABEL = "DEMO ONLY - NOT A CLINICAL DECISION"
 IST = timezone(timedelta(hours=5, minutes=30))
+VISIT_TYPES = (("Demo Visit Type A (30 min, invented)", 30), ("Demo Visit Type B (45 min, invented)", 45))  # the demo pack's readiness content (config/demo-phase4.yaml) is keyed by these exact names
 TABLES = {"location": "locations", "provider": "providers", "visit-type": "visit_types"}  # fixed names, never user input
 SEED = "demo-seed-v1"
 NAMESPACE = uuid.UUID("5f1c7c2e-8f0a-4a52-9d6e-2b1d0c3a9e11")
@@ -191,7 +192,7 @@ async def seed(conn: AsyncConnection, clinic: uuid.UUID, vault: DemographicVault
         await conn.execute(text("insert into sched.locations (clinic_id, name, origin, idempotency_key) values (:c, :n, 'test', :k) on conflict (idempotency_key) do nothing"), {"c": clinic, "n": name, "k": f"{k}:location:{i}"})
     for i, name in enumerate(("Demo Provider One", "Demo Provider Two"), start=1):
         await conn.execute(text("insert into sched.providers (clinic_id, display_name, origin, idempotency_key) values (:c, :n, 'test', :k) on conflict (idempotency_key) do nothing"), {"c": clinic, "n": name, "k": f"{k}:provider:{i}"})
-    for i, (name, minutes) in enumerate((("Demo Visit Type A (30 min, invented)", 30), ("Demo Visit Type B (45 min, invented)", 45)), start=1):
+    for i, (name, minutes) in enumerate(VISIT_TYPES, start=1):
         await conn.execute(text("insert into sched.visit_types (clinic_id, name, duration_minutes, origin, idempotency_key) values (:c, :n, :d, 'test', :k) on conflict (idempotency_key) do nothing"), {"c": clinic, "n": name, "d": minutes, "k": f"{k}:visit-type:{i}"})
     for rank, letter in enumerate("ABC", start=1):  # the DEMO-LEVEL names of config/demo-phase3.yaml; approved_by is the placeholder account, not a person
         await conn.execute(
