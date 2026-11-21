@@ -211,6 +211,7 @@ from careflow.queue import NotPermitted as QueueNotPermitted
 from careflow.queue import PostgresQueue
 from careflow.readiness import check_readiness, parse_required_roles
 from careflow.registry import RegistryError, load_registry
+from careflow.request_limits import PublicBodyLimitMiddleware
 from careflow.request_timing import RequestTimingMiddleware
 from careflow.review_console import (
     DeadlinePolicy,
@@ -511,6 +512,18 @@ async def _scoped_idempotency_key(
 
 
 IdempotencyKey = Annotated[str, Depends(_scoped_idempotency_key)]
+
+PUBLIC_KEY_MIN, PUBLIC_KEY_MAX = 32, 128  # an anonymous caller's key must be unguessable (a random uuid is 36); "public:" + the key stays inside the 200 the database function accepts
+
+
+async def _public_idempotency_key(
+    x_idempotency_key: Annotated[str, Header(alias="X-Idempotency-Key", min_length=PUBLIC_KEY_MIN, max_length=PUBLIC_KEY_MAX, pattern=r"\S", description="Required on every write; a random value of 32 to 128 characters (a uuid).")],
+) -> str:
+    """The idempotency key of a route with NO sign-in. It must not depend on `verified_claims` (the scoped key of the signed-in routes does): the public complaint form once required a token and so could never work for a signed-out person."""
+    return x_idempotency_key
+
+
+PublicIdempotencyKey = Annotated[str, Depends(_public_idempotency_key)]
 
 
 class _Body(BaseModel):
@@ -2051,8 +2064,14 @@ async def unmerge(
 health = APIRouter(tags=["health"])
 
 
+READYZ_CACHE_SECONDS = 5.0  # an anonymous caller can ask as often as they like: the answer (and the registry read behind it) is reused for a few seconds
+
+
 @health.get("/readyz")
 async def readyz(request: Request) -> JSONResponse:
+    cached = getattr(request.app.state, "readyz_cache", None)
+    if cached is not None and time.monotonic() - cached[0] < READYZ_CACHE_SECONDS:
+        return JSONResponse({"ready": cached[1]}, status_code=200 if cached[1] else 503)
     profile = resolve_profile()
     required = parse_required_roles(request.app.state.required_roles)
     rows = None
@@ -2070,6 +2089,7 @@ async def readyz(request: Request) -> JSONResponse:
     )
     if not result.ready:
         log.warning("not ready (profile=%s missing_roles=%s reasons=%s)", result.profile, list(result.missing_roles), list(result.reasons))
+    request.app.state.readyz_cache = (time.monotonic(), result.ready)
     return JSONResponse({"ready": result.ready}, status_code=200 if result.ready else 503)
 
 
@@ -5961,7 +5981,12 @@ class PublicClinicOut(_Out):
 
 @public_config.get("/public/clinic", response_model=PublicClinicOut)
 async def public_clinic(request: Request) -> PublicClinicOut:
-    """The hospital's clinic id and name, for the forms of a patient who is not signed in yet (a claim or a grievance needs the clinic id). 404 while the owner has marked no clinic public. Nothing else is returned."""
+    """The hospital's clinic id and name, for the forms of a patient who is not signed in yet (a claim or a grievance needs the clinic id). 404 while the owner has marked no clinic public, 503 until the per-address limit (CAREFLOW_PUBLIC_READ_IP_PER_MINUTE, required, no default) is set, 429 over it. Nothing else is returned."""
+    limiter = _public_read_limiter(_effective_environ(request))
+    if limiter is None:
+        raise HTTPException(status_code=503, detail="unavailable")  # a required setting with no default: never an unlimited door
+    if not limiter.allow(request.client.host if request.client else "unknown"):
+        raise HTTPException(status_code=429, detail="too many requests; wait and try again")
     async with request.app.state.engine.connect() as conn:
         row = (await conn.execute(text("select clinic_id, name from iam.public_clinic()"))).first()
     if row is None:
@@ -6515,16 +6540,16 @@ def _public_limiter(environ: "Mapping[str, str] | None" = None) -> "portal_extra
 
 
 @public_config.post("/public/grievances", response_model=GrievanceFiledOut, status_code=201)
-async def file_public_grievance(body: PublicGrievanceIn, request: Request, idempotency_key: IdempotencyKey) -> GrievanceFiledOut:
+async def file_public_grievance(body: PublicGrievanceIn, request: Request, idempotency_key: PublicIdempotencyKey) -> GrievanceFiledOut:
     """File a grievance WITHOUT signing in, to the hospital's published clinic: a category from the clinic's list and the text (stored encrypted, same handling as a signed-in grievance; the clinic's admin sees and works it). Needs an X-Idempotency-Key. 404 while no clinic is
-    published, 422 for a category not on the list, 429 over the per-address or the clinic's hourly limit (both required settings or owner-managed numbers; with either missing the route answers 503, never an unlimited door). The key must be 32 to 300 characters (use a random uuid): a short or guessable key is a 422. The per-address limit counts `request.client.host`: behind a proxy that is the proxy's address unless the deployment forwards the real one, 503 while the category list, the limits or the keys are not configured."""
+    published, 422 for a category not on the list, 429 over the per-address or the clinic's hourly limit (both required settings or owner-managed numbers; with either missing the route answers 503, never an unlimited door). The key must be 32 to 128 characters (use a random uuid): a short or guessable key is a 422. The per-address limit counts `request.client.host`: behind a proxy that is the proxy's address unless the deployment forwards the real one, 503 while the category list, the limits or the keys are not configured."""
     categories = request.app.state.grievance_categories
     vault: DemographicVault | None = request.app.state.vault
     key_version = _active_key_version(request)
     limiter = _public_limiter(_effective_environ(request))
     if categories is None or vault is None or key_version is None or limiter is None:
         raise HTTPException(status_code=503, detail="grievances are unavailable: the category list, the limits or the encryption keys are not configured")
-    if body.category not in categories or not 32 <= len(idempotency_key) <= 300:  # an anonymous caller's key must be unguessable (a random uuid): see migration 0080
+    if body.category not in categories or not PUBLIC_KEY_MIN <= len(idempotency_key) <= PUBLIC_KEY_MAX:  # an anonymous caller's key must be unguessable (a random uuid): see migration 0080
         raise HTTPException(status_code=422, detail="request rejected")
     if not limiter.allow(request.client.host if request.client else "unknown"):
         raise HTTPException(status_code=429, detail="too many requests; wait and try again")
@@ -6843,7 +6868,10 @@ def create_app(
             if jwks is None:
                 await app.state.jwks.aclose()
 
-    app = FastAPI(title="CareFlow", lifespan=lifespan)
+    # The interactive API documentation and the schema are served only in the synthetic demo: in any other profile an anonymous caller gets a 404 (the schema file for the frontend is generated from `app.openapi()`, not fetched).
+    docs_on = demo_allowed(resolve_profile(), _data_policy(os.environ))
+    app = FastAPI(title="CareFlow", lifespan=lifespan, docs_url="/docs" if docs_on else None, redoc_url="/redoc" if docs_on else None, openapi_url="/openapi.json" if docs_on else None)
+    app.add_middleware(PublicBodyLimitMiddleware)
     # CORS is decided when the app is BUILT, so a misconfigured deployment refuses to start (careflow/cors.py). Unset means no origin is allowed.
     raw_origins = settings.cors_allowed_origins if settings is not None else (os.environ.get("CORS_ALLOWED_ORIGINS") or dotenv_values(".env").get("CORS_ALLOWED_ORIGINS"))
     origins = parse_origins(raw_origins, resolve_profile())
@@ -6863,8 +6891,11 @@ def create_app(
     async def no_store_for_patient_routes(request: Request, call_next):
         """Every response under /v1/staff/patients (errors and refusals included) is `Cache-Control: no-store`: these routes can carry a person's demographics."""
         response = await call_next(request)
-        if request.url.path.startswith("/v1/staff/patients"):
+        path = request.url.path
+        if path.startswith("/v1/staff/patients"):
             response.headers["Cache-Control"] = "no-store"
+        elif path == "/readyz" or (path.startswith("/public/") and (request.method != "GET" or response.status_code >= 400)):
+            response.headers["Cache-Control"] = "no-store"  # a public write, a failed public read and the probe are never cached (a cached 404 would outlive the clinic being published)
         return response
 
     app.include_router(router)
