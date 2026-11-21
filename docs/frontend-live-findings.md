@@ -495,3 +495,18 @@ The user typed every password and fresh code. Limits as decided: ONE message **t
 | Visit readiness (both) | finding, unchanged | The run answers 503 "Visit readiness is not set up yet. Nothing was written." (a backend setting); the upcoming-visits list and the empty preparation answer 200. |
 
 Nurse run: 15 calls; doctor run: 7 calls; 0 schema mismatches, no 403, no unanswered write. **The draft is still on the demo clinic, submitted and undecided.** It is plainly marked as not a clinical template and not approved; it should be rejected or left, by a doctor's decision, not by this walk.
+
+## Combined walk, step 1: the signed-out demo complaint answered 401; the running backend is older than main (21 Nov 2026)
+
+**Stopped at the first unexpected error, as instructed. No retry. Steps 2 and 3 were not started.**
+
+- Frontend (commit ba5731c, test first): the public complaint form sends its own fresh random key (a uuid, 36 characters) once per attempt and the same one when that attempt is retried, and never an Authorization header; a 401 is now said "This cannot be done right now. Nothing was sent." (never "sign in"); a 503 as the not-set-up sentence; a 429 as "Too many requests. Wait a moment and try again." Unit tests pin all of it.
+- Live, with no sign-in, ONE demo complaint ("DEMO complaint, not a real complaint", category "other", chosen from the eight the list offered; the list read answered 200): **`POST /public/grievances` → 401.** The screen said, in the new fixed words, **"This cannot be done right now. Nothing was sent."** (not "sign in"). Nothing was filed. **The one write attempted, refused: no complaint exists.** It was not retried.
+- **Cause (read-only check, no write):** the running backend is an older build than main. Its own `/openapi.json` documents the complaint's key header as 1 to 173 characters; main's snapshot (after the public-surface review, backend request 50) says 32 to 128. So the process still runs the code that demands a token on this route. **Command for the user:** restart the demo backend from current main, `scripts\demo_up.ps1` (the handover's first command), then tell me; I will re-send the one demo complaint (no sign-in needed) and continue with steps 2 and 3.
+
+| Screen | Result | Exact screen text and calls |
+|---|---|---|
+| Public complaint form, categories | pass | `GET /public/grievance-categories` 200: access_to_my_data, complaint_about_care, complaint_about_staff, complaint_about_the_system, correction_of_my_data, erasure_of_my_data, nominee, other |
+| Public complaint form, send | **finding (backend not restarted on main)** | `POST /public/grievances` **401**; screen "This cannot be done right now. Nothing was sent."; the walk's 30-second wait for the dialog to close ended with the dialog open, as it should after a refusal. |
+
+Writes this combined walk: **one attempted and refused (the complaint, 401); none succeeded.**
