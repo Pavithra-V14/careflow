@@ -35,6 +35,7 @@ from careflow.ports import (
     AdapterResult,
     DataClass,
     DecisionRequest,
+    DecisionResult,
     PermanentError,
     RerankRequest,
     TransientError,
@@ -565,3 +566,74 @@ async def test_the_postgres_ledger_asks_the_database_for_today_in_india_time_and
     await ledger.record(SpendEntry(CLINIC, "decision", "p", "m", "safety", D("0.5"), D("0.7"), "live", "k-1"))
     sql, params = next((s, p) for s, p in seen if "insert into ops.spend_ledger" in str(s))
     assert "day" not in sql and params["i"] == "k-1" and params["k"] == "safety"  # the day is never supplied by the caller
+    assert params["n"] == 1 and params["o2"] == "answered" and "attempts" in sql and "outcome" in sql  # the attempt count and the outcome word are stored with the row
+
+
+# ---- failed tries are recorded as a COUNT of attempts, never as money (owner decision 2026-11-21; migration 0101) ------------------------------------------------
+
+
+class _Flaky:
+    """An adapter that fails `fail_times` times with a transient error, then answers."""
+
+    def __init__(self, fail_times):
+        self.fail_times, self.calls = fail_times, 0
+
+    async def __call__(self, request):
+        self.calls += 1
+        if self.calls <= self.fail_times:
+            raise TransientError("the provider is unavailable")
+        return AdapterResult(DecisionResult("a", {"a": 0.9, "b": 0.1}, 0.9, "drill"), Usage(1000, 1000))
+
+
+@pytest.mark.asyncio
+async def test_a_route_that_failed_every_try_records_one_entry_with_the_attempt_count_and_no_money():
+    paid = row(provider="paid", price=("1", "1"))
+    flaky = _Flaky(99)
+    rig = Rig([paid], {paid.key: flaky}, daily="100", per_request="100")
+    with pytest.raises(AllRoutesFailed):
+        await rig.decide()
+    (entry,) = rig.ledger.entries
+    assert (entry.outcome, entry.attempts, entry.usd_actual, entry.usd_shadow, entry.call_class, entry.role, entry.provider) == ("failed", flaky.calls, 0, 0, "ordinary", "decision", "paid")
+    assert entry.attempts == 3  # the three tries the gateway makes on one route
+    assert await rig.ledger.spent_today(CLINIC, "test") == 0  # no cost is invented for a failed try
+
+
+@pytest.mark.asyncio
+async def test_an_answer_after_failed_tries_records_one_entry_whose_attempts_include_the_failed_ones():
+    paid = row(provider="paid", price=("1", "1"))
+    flaky = _Flaky(2)
+    rig = Rig([paid], {paid.key: flaky}, daily="100", per_request="100")
+    await rig.decide()
+    (entry,) = rig.ledger.entries
+    assert (entry.outcome, entry.attempts) == ("answered", 3) and entry.usd_actual > 0
+
+
+@pytest.mark.asyncio
+async def test_a_skipped_route_that_was_never_called_records_nothing():
+    paid = row(provider="paid", price=("1", "1"))
+    rig = Rig([paid], {paid.key: _Flaky(99)}, daily="100", per_request="100")
+    for _ in range(10):  # open the breaker (ten failures)
+        with pytest.raises(AllRoutesFailed):
+            await rig.decide()
+    before = len(rig.ledger.entries)
+    with pytest.raises(AllRoutesFailed):
+        await rig.decide()  # breaker open: skipped, no call made
+    assert len(rig.ledger.entries) == before
+
+
+@pytest.mark.asyncio
+async def test_a_ledger_that_cannot_record_a_failed_try_never_hides_the_failure():
+    paid = row(provider="paid", price=("1", "1"))
+    rig = Rig([paid], {paid.key: _Flaky(99)}, daily="100", per_request="100")
+
+    async def broken(entry):
+        raise OSError("the ledger is down")
+
+    rig.gw.ledger.record = broken  # type: ignore[method-assign]
+    with pytest.raises(AllRoutesFailed):  # the caller still learns the call failed, in the gateway's own words
+        await rig.decide()
+
+
+def test_a_spend_entry_defaults_to_one_answered_call_so_older_callers_are_unchanged():
+    entry = SpendEntry(CLINIC, "decision", "p", "m", "ordinary", D(1), D(1), "test", "k")
+    assert (entry.attempts, entry.outcome) == (1, "answered")

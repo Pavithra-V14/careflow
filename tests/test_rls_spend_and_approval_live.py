@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 MIGRATOR = os.environ.get("DATABASE_URL_MIGRATOR") or dotenv_values(ROOT / ".env").get("DATABASE_URL_MIGRATOR")
 SQL_0015 = (ROOT / "db" / "migrations" / "0015_ai_model_registry.sql").read_text(encoding="utf-8")
 SQL_0016 = (ROOT / "db" / "migrations" / "0016_spend_ledger_and_registry_approval.sql").read_text(encoding="utf-8")
+SQL_0101 = (ROOT / "db" / "migrations" / "0101_spend_ledger_attempts.sql").read_text(encoding="utf-8")
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.skipif(not MIGRATOR, reason="DATABASE_URL_MIGRATOR not configured")]
 
@@ -300,3 +301,50 @@ async def test_the_translation_role_is_accepted_for_the_worker_and_other_unknown
     assert await outcome(db, ledger_sql(w.a, role="llm_huge")) == "23514"
     assert await outcome(db, ledger_sql(w.a, role="translation")) is None  # a row of our own, so the update below has something to refuse (an update of no rows fires no row guard)
     assert await outcome(db, "update ops.spend_ledger set usd_actual = 0") == "23001"  # still append-only
+
+
+# ---- migration 0101: a failed call is a COUNT of attempts and no money -------------------------------------------------------------------------------------------
+
+
+FAILED = ("insert into ops.spend_ledger (clinic_id, role, provider, model_id, call_class, usd_actual, usd_shadow, origin, idempotency_key, attempts, outcome) "
+          "values ('{clinic}', 'decision', 'p', 'm-1', 'ordinary', {actual}, {shadow}, 'test', '{key}', {attempts}, '{outcome}')")
+
+
+async def _with_0101(db):
+    if not await db.fetchval("select exists (select 1 from information_schema.columns where table_schema = 'ops' and table_name = 'spend_ledger' and column_name = 'attempts')"):
+        await db.execute(SQL_0101)  # inside this test's rolled-back transaction: the file is verified without being applied
+
+
+async def test_a_failed_attempt_is_stored_as_a_count_with_no_money_and_old_writers_get_the_defaults(db):
+    await _with_0101(db)
+    w = await world(db)
+    worker = w.people["worker_a"]
+    assert await as_app(db, worker, FAILED.format(clinic=w.a, actual="0", shadow="0", key=f"k-{_u()}", attempts=3, outcome="failed")) == "INSERT 0 1"
+    assert await as_app(db, worker, ledger_sql(w.a)) == "INSERT 0 1"  # a writer that names neither column (the session spend function of 0075 is one)
+    rows = await db.fetch("select outcome, attempts, usd_actual from ops.spend_ledger where clinic_id = $1 order by created_at", w.a)
+    assert [(r["outcome"], r["attempts"]) for r in rows[-2:]] == [("failed", 3), ("answered", 1)]
+    failed = next(r for r in rows if r["outcome"] == "failed")
+    assert failed["usd_actual"] == 0  # the failed row added nothing to the day's money
+
+
+async def test_the_database_refuses_a_failed_row_that_claims_money_a_zero_attempt_count_and_a_stray_outcome_word(db):
+    await _with_0101(db)
+    w = await world(db)
+    worker = w.people["worker_a"]
+    for bad in (
+        FAILED.format(clinic=w.a, actual="0.5", shadow="0", key=f"k-{_u()}", attempts=1, outcome="failed"),
+        FAILED.format(clinic=w.a, actual="0", shadow="0.1", key=f"k-{_u()}", attempts=1, outcome="failed"),
+        FAILED.format(clinic=w.a, actual="0", shadow="0", key=f"k-{_u()}", attempts=0, outcome="failed"),
+        FAILED.format(clinic=w.a, actual="0", shadow="0", key=f"k-{_u()}", attempts=21, outcome="failed"),
+        FAILED.format(clinic=w.a, actual="0", shadow="0", key=f"k-{_u()}", attempts=1, outcome="skipped"),
+    ):
+        assert await as_app(db, worker, bad) == "23514", bad
+
+
+async def test_the_new_columns_are_insertable_by_the_application_role_and_the_ledger_stays_append_only(db):
+    await _with_0101(db)
+    for column in ("attempts", "outcome"):
+        assert await db.fetchval("select has_column_privilege('careflow_app', 'ops.spend_ledger', $1, 'INSERT')", column), column
+        assert not await db.fetchval("select has_column_privilege('careflow_app', 'ops.spend_ledger', $1, 'UPDATE')", column), column
+    w = await world(db)
+    assert await as_app(db, w.people["worker_a"], f"update ops.spend_ledger set attempts = 9 where clinic_id = '{w.a}'") == "42501"

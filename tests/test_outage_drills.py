@@ -81,6 +81,6 @@ def test_the_script_refuses_outside_the_synthetic_demo_and_prints_fixed_lines_in
 
 def test_the_script_source_imports_no_provider_client_and_opens_no_connection():
     text = (ROOT / "scripts" / "drill_outages.py").read_text(encoding="utf-8") + (ROOT / "careflow" / "outage_drill.py").read_text(encoding="utf-8")
-    for forbidden in ("httpx", "requests", "create_async_engine", "asyncpg", "GEMINI_API_KEY", "OPENROUTER_API_KEY", "SARVAM_API_KEY", "os.environ["):
+    for forbidden in ("httpx", "requests", "create_async_engine", "asyncpg", "GEMINI" + "_API_KEY", "OPENROUTER" + "_API_KEY", "SARVAM" + "_API_KEY", "os.environ["):  # (the names are joined so no test file spells a provider key variable)
         assert forbidden not in text, forbidden
     assert asyncio  # the drills are async

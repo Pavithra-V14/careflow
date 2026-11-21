@@ -120,7 +120,7 @@ async def measured_costs(conn: AsyncConnection, clinic_id: uuid.UUID, days: int)
     spend = (
         await conn.execute(
             text(
-                "select count(*) as calls, count(distinct day) as days, coalesce(sum(usd_actual), 0) as actual, coalesce(sum(usd_shadow), 0) as shadow "
+                "select count(*) filter (where outcome = 'answered') as calls, count(distinct day) as days, coalesce(sum(usd_actual), 0) as actual, coalesce(sum(usd_shadow), 0) as shadow "
                 "from ops.spend_ledger where clinic_id = :c and origin = 'live' and created_at >= clock_timestamp() - make_interval(days => :d)"
             ),
             {"c": clinic_id, "d": days},
