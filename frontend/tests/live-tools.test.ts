@@ -150,7 +150,7 @@ describe('the live run cannot run from CI or by accident', () => {
     // The demo steps fill in only fixed, non-secret demo values: the synthetic patient's name and date of birth, and the plainly marked demo draft (a nurse's one optional template).
     const fills = spec.split('\n').filter((l) => /\.fill\(/.test(l));
     expect(fills.length).toBeGreaterThan(0);
-    for (const l of fills) expect(l, 'a fill() of anything but the two fixed demo values').toMatch(/'DEMO Portal Patient'|'1990-01-01'|'demo\.walk\.draft'|'DEMO PLACEHOLDER, not a clinical template, not approved'|'DEMO complaint, not a real complaint'/);
+    for (const l of fills) expect(l, 'a fill() of anything but the two fixed demo values').toMatch(/'DEMO Portal Patient'|'1990-01-01'|'demo\.walk\.draft'|'DEMO PLACEHOLDER, not a clinical template, not approved'|'DEMO complaint, not a real complaint'|'Demo Zulu Sample'|'1985-04-04'|'10'|'demo_placeholder'/);
     expect(fills.join('\n')).not.toMatch(/password|email|one-time-code|numeric/i);
     expect(spec).toContain('the read-only walk made a write');
   });

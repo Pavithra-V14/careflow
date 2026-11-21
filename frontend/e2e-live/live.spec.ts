@@ -758,6 +758,321 @@ test('DEMO complaint without signing in: ONE demo complaint (one write, no sign-
   }
 });
 
+test('DEMO admin walk, read-only (second factor): every admin tab', async ({ page }) => {
+  test.skip(LINK !== 'admin', 'start with LIVE_LINK=admin');
+  test.setTimeout(25 * 60_000);
+  const calls: Call[] = [];
+  const phase = { current: 'sign-in' };
+  watch(page, calls, phase);
+  const { log, snap, finish } = linkTools(page, calls, 'link-admin');
+  try {
+    await signInByHand(page);
+    await settle(page);
+    log.push(`## the shell showed: ${(await page.locator('.session-bar').innerText().catch(() => '')).replace(/s+/g, ' ').slice(0, 160)}`, '');
+    for (const [name, hash] of [
+      ['dashboard', '#/dashboard'],
+      ['admin: accounts', '#/admin/accounts'],
+      ['admin: autonomy (and its history)', '#/admin/autonomy'],
+      ['admin: red-flag rules', '#/admin/rules'],
+      ['admin: reviewer stats', '#/admin/reviewer'],
+      ['admin: cost', '#/admin/cost'],
+      ['admin: voice', '#/admin/voice'],
+      ['admin: recovery', '#/admin/recovery'],
+      ['admin: grievances', '#/admin/grievances'],
+    ] as const) {
+      phase.current = name;
+      await page.evaluate((h) => (window.location.hash = h), hash);
+      await settle(page);
+      await page.waitForTimeout(2000);
+      await snap(name);
+    }
+    log.push('## the clinic public-profile screen: there is no such staff screen (the backend asked for none; the write is PUT /v1/staff/clinic/public-profile); not tested live', '');
+  } finally {
+    await finish('Demo admin walk, read-only');
+  }
+});
+
+// ---- the authorised WRITE walk (21 Nov 2026), synthetic demo data only, ONE action per write, no retries, stop at the first unexpected problem ----
+// Every write is on the demo clinic's made-up data. Nothing switched off in the build is touched (erasure, merge approve and unmerge), and DEMO Portal Patient's
+// booking and consent are never touched. The user signs in by hand each time. Each step logs the screen's words and every write's status code.
+// A small valid PDF (objects, a cross-reference table, a trailer) whose one line says it is synthetic. No real data.
+function dummyPdf(): Buffer {
+  const content = 'BT /F1 12 Tf 10 60 Td (DEMO synthetic referral letter. Not real data.) Tj ET';
+  const objects = [
+    '<</Type/Catalog/Pages 2 0 R>>',
+    '<</Type/Pages/Kids[3 0 R]/Count 1>>',
+    '<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 120]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>',
+    `<</Length ${content.length}>>
+stream
+${content}
+endstream`,
+    '<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>',
+  ];
+  let out = `%PDF-1.4
+`;
+  const offsets: number[] = [];
+  objects.forEach((o, i) => {
+    offsets.push(out.length);
+    out += `${i + 1} 0 obj
+${o}
+endobj
+`;
+  });
+  const xref = out.length;
+  out += `xref
+0 ${objects.length + 1}
+0000000000 65535 f 
+${offsets.map((o) => `${String(o).padStart(10, '0')} 00000 n 
+`).join('')}trailer
+<</Size ${objects.length + 1}/Root 1 0 R>>
+startxref
+${xref}
+%%EOF
+`;
+  return Buffer.from(out, 'latin1');
+}
+
+test('DEMO write walk, patient: ONE "ask the hospital" request (a closed word, no free text)', async ({ page }) => {
+  test.skip(LINK !== 'w-portal', 'start with LIVE_LINK=w-portal');
+  test.setTimeout(20 * 60_000);
+  const calls: Call[] = [];
+  const phase = { current: 'sign-in' };
+  watch(page, calls, phase);
+  const { log, snap, stop, confirmAndWait, finish } = linkTools(page, calls, 'write-portal');
+  try {
+    await page.goto('/patient/sign-in/');
+    console.log('\n>>> Sign in yourself with the "Demo sign-in" form (email and password). Nothing is typed for you and no credential reaches this script.');
+    await expect(page.locator('main dl.facts')).toBeVisible({ timeout: 10 * 60_000 });
+    await settle(page);
+    await page.waitForTimeout(3000);
+    await snap('after sign-in');
+    if ((await page.locator('#rq-kind').count()) === 0) await stop('the request form is not on the page; nothing was sent');
+    phase.current = 'ONE ask-the-hospital request (write)';
+    await page.locator('#rq-kind').selectOption('nominee');
+    await page.getByRole('button', { name: 'Send request' }).click();
+    await confirmAndWait('"Send request" (a nominee request, a closed word)');
+    log.push(`## the portal's own list of requests now holds: ${(await page.locator('#portal-requests').locator('xpath=ancestor::section[1]//ul/li').count())} item(s)`, '');
+  } finally {
+    await finish('Demo write walk, patient');
+  }
+});
+
+test('DEMO write walk, front desk: register, upload and run a referral, task, scheduling, alert, request status', async ({ page }) => {
+  // 'w-fd-rest' resumes AFTER the register and the hold (already done) on the slot that is still held (LIVE_SLOT_WHEN = its start text): nothing is repeated.
+  const REST = LINK === 'w-fd-rest';
+  test.skip(LINK !== 'w-frontdesk' && !REST, 'start with LIVE_LINK=w-frontdesk (or w-fd-rest to resume)');
+  test.setTimeout(40 * 60_000);
+  const calls: Call[] = [];
+  const phase = { current: 'sign-in' };
+  watch(page, calls, phase);
+  const { log, snap, stop, confirmAndWait, finish } = linkTools(page, calls, 'write-frontdesk');
+  let bookingId = '';
+  page.on('response', (res) => {
+    if (res.request().method() === 'POST' && /\/v1\/staff\/scheduling\/slots\/[^/]+\/book$/.test(new URL(res.url()).pathname)) {
+      void res.json().then((b: { booking_id?: string }) => { if (typeof b.booking_id === 'string') bookingId = b.booking_id; }).catch(() => undefined);
+    }
+  });
+  const go = async (name: string, hash: string) => {
+    phase.current = name;
+    await page.evaluate((h) => (window.location.hash = h), hash);
+    await settle(page);
+    await page.waitForTimeout(1500);
+  };
+  try {
+    await signInByHand(page);
+    await settle(page);
+
+    if (!REST) {
+      // 1. register ONE synthetic patient (no phone)
+      await go('patients (register one synthetic patient)', '#/patients');
+      await page.getByLabel('Name to register').fill('Demo Zulu Sample');
+      await page.getByLabel('Date of birth to register').fill('1985-04-04');
+      phase.current = 'register ONE synthetic patient (write)';
+      await page.getByRole('button', { name: /^Register$/ }).click();
+      await confirmAndWait('"Register" Demo Zulu Sample');
+    }
+
+    // 2. scheduling: hold one open slot, book it for the new patient, cancel THAT booking
+    await go('scheduling (slots)', '#/scheduling/slots');
+    let slotText = REST ? (process.env.LIVE_SLOT_WHEN ?? '').trim() : '';
+    if (!REST) {
+      const openRow = page.locator('main tbody tr').filter({ has: page.getByRole('button', { name: /^Hold/ }).and(page.locator(':not([disabled])')) }).first();
+      if ((await openRow.count()) === 0) await stop('no open slot to hold; nothing was held');
+      slotText = ((await openRow.locator('th').first().innerText()) || '').replace(/\s+/g, ' ').trim();
+      log.push(`## the slot used starts: ${slotText}`, '');
+      phase.current = 'hold ONE slot (write)';
+      await openRow.getByRole('button', { name: /^Hold/ }).click();
+      await page.locator('#hold-minutes').fill('10');
+      await confirmAndWait('"Hold" one slot for 10 minutes');
+    }
+    if (slotText === '') await stop('the slot to book is not known (set LIVE_SLOT_WHEN when resuming); nothing was booked');
+    const heldRow = page.locator('main tbody tr').filter({ hasText: slotText }).filter({ hasText: /Held/ }).first();
+    if ((await heldRow.count()) === 0) await stop('the held slot is not on the page as Held (its hold may have expired); nothing was booked');
+    phase.current = 'book that slot (write)';
+    await heldRow.getByRole('button', { name: /^Book/ }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.locator('input[type=text]').first().fill('Demo Zulu Sample');
+    await dialog.locator('input[type=date]').first().fill('1985-04-04');
+    await dialog.locator('input[type=date] ~ button[type=button]').first().click();
+    await settle(page);
+    const hits = dialog.getByRole('radio');
+    await hits.first().waitFor({ timeout: 25_000 }).catch(() => undefined); // the search answers after a moment: wait for it, never count early
+    await page.waitForTimeout(800);
+    if ((await hits.count()) !== 1) await stop(`the patient search found ${await hits.count()} records for Demo Zulu Sample, not exactly one; nothing was booked`);
+    await hits.first().check();
+    await confirmAndWait('"Book" the held slot for Demo Zulu Sample');
+    if (!bookingId) await stop('the booking answered but its id was not seen, so the booking to cancel cannot be told apart from DEMO Portal Patient\'s; nothing was cancelled');
+    await go('scheduling (bookings)', '#/scheduling/bookings');
+    phase.current = 'cancel THAT booking (write)';
+    await page.getByRole('button', { name: `Cancel booking ${bookingId.slice(0, 8)}` }).click();
+    await confirmAndWait('"Cancel booking" (the one just made)');
+
+    // 3. referral: upload ONE dummy synthetic letter, then run it
+    await go('referrals (upload)', '#/referrals/upload');
+    await page.locator('main select').first().selectOption('referral');
+    await page.locator('main input[type=file]').setInputFiles({ name: 'demo-referral.pdf', mimeType: 'application/pdf', buffer: dummyPdf() });
+    phase.current = 'upload ONE dummy referral letter (write)';
+    await page.getByRole('button', { name: /^Upload$/ }).click();
+    await page.getByRole('link', { name: 'Open the referral' }).waitFor({ timeout: 90_000 }).catch(() => undefined);
+    await snap('after the upload');
+    if ((await page.getByRole('link', { name: 'Open the referral' }).count()) === 0) await stop('the upload did not finish with an "Open the referral" link; see the screen words above');
+    await page.getByRole('link', { name: 'Open the referral' }).click();
+    await settle(page);
+    phase.current = 'run the uploaded referral (write)';
+    await page.getByRole('button', { name: 'Run the referral' }).click();
+    await confirmAndWait('"Run the referral"');
+
+    // 4. tasks: acknowledge then resolve ONE task (never a red-flag or unassessable one)
+    await go('tasks', '#/tasks');
+    const taskRow = page.locator('main tbody tr').filter({ hasText: /Open/ }).filter({ hasNotText: /Red flag|Unassessable|Urgent/ }).first();
+    if ((await taskRow.count()) === 0) {
+      log.push('## tasks: no open, non-urgent task to acknowledge; not tested live', '');
+    } else {
+      await taskRow.getByRole('link').first().click();
+      await settle(page);
+      phase.current = 'acknowledge ONE task (write)';
+      await page.getByRole('button', { name: /^Acknowledge$/ }).click();
+      await confirmAndWait('"Acknowledge" the task');
+      const resolve = page.getByRole('button', { name: /^Resolve$/ });
+      if ((await resolve.count()) === 0) {
+        log.push('## the task cannot be closed on this screen (its kind is closed through its own screen); only the acknowledge was made', '');
+      } else {
+        phase.current = 'resolve THAT task (write)';
+        await resolve.first().click();
+        await confirmAndWait('"Resolve" the task');
+      }
+    }
+
+    // 5. alerts: acknowledge ONE if any exists
+    await go('alerts', '#/alerts');
+    const ack = page.locator('main').getByRole('button', { name: /^Acknowledge/ });
+    if ((await ack.count()) === 0) {
+      log.push('## alerts: none to acknowledge; not tested live', '');
+    } else {
+      phase.current = 'acknowledge ONE alert (write)';
+      await ack.first().click();
+      await confirmAndWait('"Acknowledge" the alert');
+    }
+
+    // 6. patient requests: ONE status change, only with a button allowed_next gave
+    await go('patient requests', '#/requests');
+    const reqBtn = page.locator('main tbody tr').first().getByRole('button');
+    if ((await reqBtn.count()) === 0) {
+      log.push('## patient requests: no request with an allowed next status; not tested live', '');
+    } else {
+      phase.current = 'change ONE patient request status (write)';
+      await reqBtn.first().click();
+      await confirmAndWait('the first status button the row offered');
+    }
+  } finally {
+    await finish('Demo write walk, front desk');
+  }
+});
+
+test('DEMO write walk, nurse: ONE screen-for-red-flags check on a message', async ({ page }) => {
+  test.skip(LINK !== 'w-nurse', 'start with LIVE_LINK=w-nurse');
+  test.setTimeout(25 * 60_000);
+  const calls: Call[] = [];
+  const phase = { current: 'sign-in' };
+  watch(page, calls, phase);
+  const { snap, stop, confirmAndWait, finish } = linkTools(page, calls, 'write-nurse');
+  try {
+    await signInByHand(page);
+    await settle(page);
+    phase.current = 'messages (list)';
+    await page.evaluate(() => (window.location.hash = '#/messages'));
+    await settle(page);
+    await page.waitForTimeout(2000);
+    await snap('messages');
+    const open = page.locator('main tbody tr').first().getByRole('button');
+    if ((await open.count()) === 0) await stop('there is no conversation to open; not tested live');
+    await open.first().click();
+    await settle(page);
+    // reaching the screen action needs one audited read of a message first (a confirmation, recorded under the nurse's name)
+    const read = page.locator('main table').nth(1).locator('tbody tr').first().getByRole('button').first();
+    if ((await read.count()) === 0) await stop('the conversation has no message to read; not tested live');
+    phase.current = 'read ONE message (an audited read, needed to reach the screening button)';
+    await read.click();
+    await confirmAndWait('the read of one message');
+    const screenBtn = page.getByRole('button', { name: /^Screen for red flags$/ });
+    if ((await screenBtn.count()) === 0) await stop('the messages screen does not offer "Screen for red flags" here; not tested live');
+    phase.current = 'screen ONE message for red flags (write)';
+    await screenBtn.first().click();
+    await confirmAndWait('"Screen for red flags"');
+  } finally {
+    await finish('Demo write walk, nurse');
+  }
+});
+
+test('DEMO write walk, doctor: ONE referral decision (reject) and REJECT the leftover demo draft', async ({ page }) => {
+  test.skip(LINK !== 'w-doctor', 'start with LIVE_LINK=w-doctor');
+  test.setTimeout(30 * 60_000);
+  const calls: Call[] = [];
+  const phase = { current: 'sign-in' };
+  watch(page, calls, phase);
+  const { log, snap, stop, confirmAndWait, finish } = linkTools(page, calls, 'write-doctor');
+  try {
+    await signInByHand(page);
+    await settle(page);
+    phase.current = 'referrals (find the proposal with the real engine fields)';
+    await page.evaluate(() => (window.location.hash = '#/referrals'));
+    await settle(page);
+    await page.waitForTimeout(2500);
+    const links = await page.locator('main tbody a').evaluateAll((els) => els.map((e) => (e as HTMLAnchorElement).getAttribute('href') ?? ''));
+    log.push(`## referrals on the list: ${links.length}`, '');
+    let found = false;
+    for (const href of links.slice(0, 20)) {
+      await page.evaluate((h) => (window.location.hash = h), href.replace(/^#?\/?/, '#/'));
+      await settle(page);
+      await page.waitForTimeout(1500);
+      const text = await page.locator('main').innerText().catch(() => '');
+      if (/jev/i.test(text) && /\b0\.5\b/.test(text) && /Record a decision/.test(text)) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) await stop('no open referral proposal with the engine "jev" and confidence 0.5 and a decision form was found; nothing was decided');
+    await snap('the referral with the real engine fields');
+    phase.current = 'record ONE referral decision (write): Reject';
+    await page.getByRole('radio', { name: 'Reject' }).check();
+    await page.getByRole('button', { name: /^Record decision$/ }).click();
+    await confirmAndWait('"Record decision": Reject');
+
+    phase.current = 'cards and templates (the leftover demo draft)';
+    await page.evaluate(() => (window.location.hash = '#/knowledge'));
+    await settle(page);
+    await page.waitForTimeout(2000);
+    const row = page.locator('main tbody tr').filter({ hasText: 'demo.walk.draft' }).first();
+    if ((await row.count()) === 0) await stop('the demo draft (demo.walk.draft) is not on the page; nothing was rejected');
+    phase.current = 'REJECT the demo draft (write)';
+    await row.getByRole('button', { name: /^Reject/ }).click();
+    await page.getByLabel('Reason word').fill('demo_placeholder');
+    await confirmAndWait('"Reject" the demo draft, reason word demo_placeholder');
+  } finally {
+    await finish('Demo write walk, doctor');
+  }
+});
+
 test('DEMO link, front desk: the family links page, read-only (second factor)', async ({ page }) => {
   test.skip(LINK !== 'family', 'start with LIVE_LINK=family');
   test.setTimeout(20 * 60_000);

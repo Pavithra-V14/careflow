@@ -510,3 +510,67 @@ Nurse run: 15 calls; doctor run: 7 calls; 0 schema mismatches, no 403, no unansw
 | Public complaint form, send | **finding (backend not restarted on main)** | `POST /public/grievances` **401**; screen "This cannot be done right now. Nothing was sent."; the walk's 30-second wait for the dialog to close ended with the dialog open, as it should after a refusal. |
 
 Writes this combined walk: **one attempted and refused (the complaint, 401); none succeeded.**
+
+## Combined walk (21 Nov 2026): complaint sent, admin read, partial write walk, stopped at the document upload (503)
+
+The backend was restarted on current main (process started 08:36, after the public-surface commit; `/openapi.json` now documents the complaint key header as 32 to 128 characters; `/readyz` ready; the clinic profile answers 200). The user typed every password and code. Every write is on the demo clinic's made-up data, ONE action each, no retries. **Stopped at the first unexpected error, as instructed.**
+
+### Writes made, with status codes (the full list)
+
+| # | Write | Who | Status | Screen text |
+|---|---|---|---|---|
+| 1 | `POST /public/grievances` (the demo complaint "DEMO complaint, not a real complaint", category "other", signed out) | nobody signed in | **201** | "Your message was sent." (an earlier attempt, before the backend restart, answered 401 and filed nothing) |
+| 2 | `POST /v1/portal/requests` (a nominee request: a closed word, no free text) | DEMO Portal Patient | **201** | "Your request was sent." |
+| 3 | `POST /v1/staff/patients` (register Demo Zulu Sample, born 1985-04-04, no phone) | front desk | **200** | "A new record was created. Open record 6498999a…" (the registration-outcome wording is still the clinic's placeholder box) |
+| 4 | `POST /v1/staff/scheduling/slots/{slot_id}/hold` (one open slot, 10 minutes) | front desk | **200** | "The slot is held." |
+| 5 | `POST /v1/staff/scheduling/slots/{slot_id}/book` (that slot, for Demo Zulu Sample) | front desk | **200** | "The slot is booked." |
+| 6 | `POST /v1/staff/scheduling/bookings/{booking_id}/cancel` (that booking only; DEMO Portal Patient's 9:00 booking was not touched) | front desk | **200** | "The booking was cancelled and the slot is free." plus the ranked waitlist for the freed slot (2 candidates) and "Prepare offer for this slot" (nothing was prepared or sent) |
+| 7 | `POST /v1/staff/documents/uploads` (ONE dummy synthetic referral letter) | front desk | **503, refused: nothing was uploaded** | "This is not available right now. Try again in a moment." |
+
+Not touched: DEMO Portal Patient's booking and consent; anything switched off in the build (erasure, merge approve and unmerge). The earlier hold-then-book run was split in two by my own script's timing (the patient search had not answered yet when the script counted the results, so it stopped before the booking): the second run resumed at the booking on the same still-held slot, so no step was repeated.
+
+### The stop: document upload answers 503
+
+`POST /v1/staff/documents/uploads` → **503** on the first and only attempt (a key was sent; no retry). The screen said "This is not available right now. Try again in a moment." (the fixed wording for a switched-off service, no backend text). **Cause (from the configuration reference, not confirmed by a call):** real intake is built only if `CAREFLOW_STORAGE_BUCKET`, `CAREFLOW_STORAGE_VERIFIED` (a date on which `scripts/storage_spike.py` was run against the project) and a secret key all hold; otherwise the upload routes answer 503. `demo_up.ps1` does not set them. **For the owner:** run the storage spike against the dev project and set those two settings (the secret key is the backend's, never the frontend's); then the upload and the referral run can be walked. Not run, so not tested live: uploading a referral, running it, and everything after it in the sequence.
+
+### Admin read-only walk with the second factor (the nurse/admin login, role Admin): all pass
+
+12 calls, **0 schema mismatches, no 403, no write.** The shell said "Active role: Admin, Clinic: Demo Clinic, TEST, Operating profile: Demo".
+
+| Screen | Result | Exact screen text and calls |
+|---|---|---|
+| Dashboard | pass | `GET /v1/staff/console/dashboard` 200 |
+| Accounts | pass | `GET /v1/staff/accounts` 200, 4 rows |
+| Autonomy and its history | pass | `.../autonomy` 200, `.../autonomy/proposals` 200, `.../autonomy/history` 200 (0 rows). "Mode Shadow (never set, so shadow)", "There are no pending proposals.", "There is no history yet." |
+| Red-flag rules | pass | `GET /v1/staff/console/red-flag-rules` 200: a demo draft version "Draft, not approved" (phrases zzdemoalpha, zzdemobravo; no patterns, token sets or vital-sign criteria) |
+| Reviewer stats | pass | `GET /v1/staff/console/reviewer-stats` 200 |
+| Cost | pass | `GET /v1/staff/console/cost-canvas` 200: "State Not enough data", "Amplification over the ceiling No" |
+| Voice | pass | `GET /v1/staff/voice/sessions` 200: "There are no voice sessions." |
+| Recovery | pass | `GET /v1/staff/recovery` 200: "There are no recovery requests." |
+| Grievances | pass | `GET /v1/staff/grievances` 200 (the list loaded; the screen shows its rows as plain text, not recorded here) |
+| The clinic public-profile screen | not tested live: no such staff screen exists | The backend asked for none; the admin write is `PUT /v1/staff/clinic/public-profile` |
+
+### Per screen, this combined walk
+
+| Screen | Result |
+|---|---|
+| Public complaint form (send) | **pass** (201, after the backend restart) |
+| Patient: ask the hospital (send a request) | **pass** (201) |
+| Front desk: register a patient | **pass** (200) |
+| Front desk: hold, book, cancel a slot | **pass** (200, 200, 200) |
+| Front desk: upload a referral | **finding (backend storage not set up)**: 503 |
+| Front desk: run an uploaded referral, acknowledge and resolve a task, acknowledge an alert, change a patient request's status | **not tested live**: not reached (the walk stopped at the upload) |
+| Nurse: screen a message for red flags | **not tested live**: not started (the walk stopped earlier) |
+| Doctor: record a referral decision, reject the demo draft | **not tested live**: not started (the walk stopped earlier) |
+
+### Screens still "not tested live", and why (updated)
+
+**Staff, front desk:** upload a referral (503: storage not set up) and run it (needs the upload); acknowledge and resolve a task, acknowledge an alert, change a patient request's status (stopped before them; the nominee request sent by the patient is waiting for it); revoke an identity confirmation; every other scheduling write (waitlist join, mark an offer delivered, add a provider, location, visit type or slot, an offer run); family link verify, reject, revoke (no family request exists); portal claim approval (the demo claim linked directly, none pending); break-glass open and review; messages: reading one and screening one for red flags (not run). Switched off in the build, never touched: erasure ask, approve and cancel; identity merge approve and unmerge.
+
+**Staff, nurse and doctor:** the screen-for-red-flags check; recording a referral decision; rejecting or approving the demo draft; care plans, results, care gaps, notes and medications writes; red-flag rule drafts and approvals; the visit readiness run (503: not set up) and so starting it or relaying a reply; a doctor-authored draft (author cannot approve).
+
+**Staff, admin and auditor:** every admin write (invite, suspend, reinstate, grant, revoke, autonomy change or proposal, voice read and purge, recovery, grievance acknowledge and resolve, break-glass review); the clinic public-profile write (no screen); the auditor's audit log (no auditor walk run).
+
+**Patient portal:** withdrawing consent, cancelling the booking, marking a preparation item done, sending a complaint while signed in, a family-link request or withdrawal, downloading my data, opening a voice session, sending a message or opening a conversation, phone-code sign-in (no approved SMS provider).
+
+**All Tamil wording:** machine-checked only; no human reviewer has approved a string.
