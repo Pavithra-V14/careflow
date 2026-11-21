@@ -36,7 +36,13 @@ from dataclasses import dataclass, field
 from typing import Final, Literal, Protocol
 
 from careflow.grounding import words
-from careflow.ports import EmbeddingPort, TransientError, VectorHit, VectorStorePort
+from careflow.ports import (
+    EmbeddingPort,
+    PermanentError,
+    TransientError,
+    VectorHit,
+    VectorStorePort,
+)
 
 BM25_K1: Final = 1.5  # textbook defaults (Robertson and Zaragoza); algorithmic, not clinical
 BM25_B: Final = 0.75
@@ -193,8 +199,8 @@ class CardRetriever:
         try:
             embedded = await self.embedder.embed([query])
             dense = await self.store.search(tuple(embedded.value.vectors[0]), limit=CANDIDATES_PER_LIST, scope=scope)
-        except TransientError:
-            dense = None  # unknown, not empty
+        except (TransientError, PermanentError):
+            dense = None  # unknown, not empty. A PERMANENT embedder failure (a letter too long to embed, a mis-registered route) is unknown too: it ends in an abstention for a person, never in an exception that ends the run
         if dense is None:
             return Retrieval(True, "dense_unavailable")
 

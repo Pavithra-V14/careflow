@@ -280,6 +280,19 @@ It asks you to type the project host, refuses outside dev + demo + synthetic, ch
 
 ---
 
+## 16. Show that an outage is safe (the outage drill, no provider needed)
+
+Say out loud: "These are fakes; nothing is called and nothing is spent." In PowerShell, from the repository or the run folder:
+
+```powershell
+$env:CAREFLOW_PROFILE = "demo"; $env:CAREFLOW_DATA_POLICY = "synthetic_only"
+.\.venv\Scripts\python.exe scripts\drill_outages.py
+```
+
+*You should see:* a list of `PASS` lines (vision, decision, translation, embedding, database, rules first, no effect from a failed stage, retries and restarts repeat nothing, spend recorded once, the ceiling stops calls) and the last line `drill result: PASS`. Any `FAIL` line names what broke; stop and tell the backend window. It refuses outside the demo profile with synthetic data. Details: `docs/ops-runbook.md` section 3.
+
+---
+
 ## If something goes wrong: the fixed causes
 1. **Window B not running or stopped:** every page fails; start step 1.
 2. **Database behind the code:** the backend refuses to start; run the migrations (step 0.1).
