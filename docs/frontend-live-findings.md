@@ -461,3 +461,18 @@ The user reloaded the signed-out home page and it still showed every placeholder
 | Front desk: message screen | **pass** | `GET /v1/staff/messages/threads` **200**, 1 conversation listed, none opened. |
 
 Patient walk: 31 calls, 0 schema mismatches, no 403, no write, no unanswered write. Front desk walk: 12 calls, 0 schema mismatches, one 403 (visit readiness, above), no write, no unanswered write.
+
+## Nurse and doctor second-factor walks (21 Nov 2026)
+
+Both accounts now have an authenticator. The user typed every password and fresh code. Read-only: **no write was made** (no draft was written, because the user did not say so; nothing was approved or rejected).
+
+| Screen | Nurse (pavithra.v2022ece@sece.ac.in, role Nurse) | Doctor (pavithravenkatesh1974@gmail.com, role Doctor) |
+|---|---|---|
+| Sign-in with the second factor | pass: `GET /v1/iam/me` 200 | pass: `GET /v1/iam/me` 200 |
+| Visit readiness: the list of upcoming visits | **pass**: `GET /v1/staff/visits/upcoming` **200** (the front desk is refused here with 403) | **pass**: 200 |
+| Visit readiness: the run for a visit | **finding (backend setting)**: `GET /v1/staff/visits/{visit_id}/readiness` **503**; the screen said "Visit readiness is not set up yet. Nothing was written." (a calm fixed state, no 403) | same: 503, same sentence |
+| Visit preparation, staff view | **pass**: `GET /v1/staff/visits/{visit_id}/prep` **200**, an empty checklist (the clinic supplied no items) | **pass**: 200, empty |
+| Cards and templates: the lists | **pass**: `GET /v1/staff/knowledge/drafts` **200** and `GET /v1/staff/knowledge/items` **200**; the screen said "There are no drafts. Nothing is supplied by the system: every card and template is typed by staff." and "There are no approved cards or templates." | same: 200, 200, same sentences |
+| Cards and templates: write a draft, submit, approve or reject | not tested live: no draft was written (it needs the user's go-ahead: `LIVE_DRAFT=yes`) | not tested live: there is no draft to look at, so the Look and the Approve dialog were not reached |
+
+7 calls each, 0 schema mismatches, no 403, no write, no unanswered write. The earlier "not tested live: needs second factor" for these screens is now answered for the reads: the second factor is what opens them (the password-only sessions were refused). **For the backend:** visit readiness answers 503 "not set up" for the demo visit: its content or switch is not set up; that is a setting, not a frontend defect.

@@ -32,8 +32,8 @@ This guide describes what the staff console screens do, as built on 20 November 
 | Front desk: visit readiness | the backend refused it ("your role may not do this"): it is a nurse and doctor section |
 | Supervisor (also holding front desk) | walked live earlier, read-only |
 | Nurse and doctor: referral review (read), tasks, patients, messages, scheduling and care reads | walked live earlier, read-only, on a password-only session |
-| Nurse and doctor: visit readiness, the staff view of a visit's preparation, cards and templates | **not tested live: needs second factor** (these two accounts have no authenticator yet; walks are prepared) |
-| Nurse and doctor: recording a referral decision, writing a draft, approving or rejecting | not tested live |
+| Nurse and doctor: visit readiness list, the staff view of a visit's preparation, cards and templates lists | walked live with the second factor (read-only): they load. The readiness run for the demo visit said "Visit readiness is not set up yet"; the preparation view and both card lists were empty because nothing had been supplied |
+| Nurse and doctor: recording a referral decision, writing a draft, submitting, approving or rejecting | not tested live |
 | Admin: the plain lists | walked live earlier, read-only |
 | Admin: accounts, voice, recovery, grievances, break-glass review, autonomy changes | not tested live (needs second factor) |
 | Auditor: audit log | not tested live |
